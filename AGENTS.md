@@ -60,14 +60,18 @@ Three consumers of the same captured data:
 - Killing the daemon mid-session leaves the app unaffected; reconnecting resumes the same
   session folder; a relaunch gets a new one.
 - Retention prunes by count and by bytes, never the active session.
+- **The web UI renders.** `scripts/render-web-ui.js` runs the real `app.js` against the real
+  `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
+  marker dividers, session picker, detail pane, attempt chain, console errors. Last run: 109
+  rows, 2 marker dividers, 6 detail sections, 4 chain rows, zero errors.
 
 ### Not verified
 
 - **The overlay has never been seen on a phone.** Verification so far is desktop-only. There is
   no Android app module and no Xcode project. UI code compiles for all targets.
-- **The web UI has never been looked at.** Its resources are served, `app.js` parses, and every
-  id it touches exists in the HTML — but no human or agent has seen it render. The browser pane
-  is blocked from localhost by policy here.
+- **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
+  above), but no human has assessed spacing, colour or density. The browser pane is blocked from
+  localhost by policy in this environment, so only a static snapshot has ever been produced.
 - Redirect behaviour against engines other than CIO. Some engines follow redirects internally,
   which would collapse a chain into a single row. Unresolved for the target app's engine.
 
@@ -75,15 +79,30 @@ Three consumers of the same captured data:
 
 ## What is next (Phase 3)
 
-From `docs/implementation-plan.md` §10:
+Ordered by value. Full detail in `docs/implementation-plan.md` §10 (Phase 3).
 
-1. **MCP server** (`inspector mcp`, stdio) wrapping `SessionRepository`: `list_sessions`,
-   `session_summary`, `list_transactions(filter, limit, offset)`, `get_transaction`, `get_body`,
-   `add_marker`. Tool descriptions must steer the model to call `session_summary` first — it
-   answers most questions in ~1 KB — and to filter rather than read everything.
-2. Look at the web UI and fix whatever is wrong with it.
-3. Android + iOS sample shells, to finally see the overlay on a device.
-4. Stretch: HAR export.
+**1. MCP server — the main remaining piece.**
+`inspector mcp` (stdio) wrapping `SessionRepository`, which already has every read the tools
+need. Add to `:inspector-daemon` with the MCP Kotlin SDK; wire a new `"mcp"` branch in
+`Main.kt` alongside `serve`/`query`/`summary`.
+
+Tools: `list_sessions`, `session_summary(sessionId="latest")`,
+`list_transactions(filter, limit, offset)`, `get_transaction(txnId)`,
+`get_body(txnId, side, maxBytes)`, `add_marker(label)`.
+
+The tool *descriptions* matter as much as the code: steer the model to call `session_summary`
+first (it answers most questions in ~1 KB — `SessionSummary` is already shaped for exactly this)
+and to filter rather than read everything. Document the filter grammar inside the
+`list_transactions` description. Acceptance: an agent with only these tools answers "what failed
+after the 'tapped checkout' marker and what did the server return?" in ≤4 calls.
+
+**2. Someone should look at the web UI** and say what is ugly. It renders correctly; nobody has
+judged it.
+
+**3. Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
+module and an Xcode project; the UI module already compiles for both.
+
+**4. Stretch:** HAR export (`GET /api/sessions/{id}/har`).
 
 ---
 
@@ -212,6 +231,7 @@ every release build clean:
 ./gradlew build                                   # everything, all targets
 ./gradlew :inspector-daemon:installDist           # then: inspector-daemon/build/install/inspector/bin/inspector serve
 ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
+npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
@@ -246,6 +266,19 @@ Changing the public API is deliberately high-friction, because it is a contract:
 
 ---
 
+## Reproducing the full stack locally
+
+```bash
+./gradlew :inspector-daemon:installDist
+inspector-daemon/build/install/inspector/bin/inspector serve --data /tmp/demo &
+./gradlew :sample:desktop:run -Dinspector.sample.autofire=true
+open http://127.0.0.1:8099
+```
+
+Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
+
+---
+
 ## Key files
 
 | Path | Why it matters |
@@ -258,3 +291,6 @@ Changing the public API is deliberately high-friction, because it is a contract:
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
+| `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
+| `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
+| `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |
