@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inspector</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header id="topbar">
+    <span class="brand">inspector</span>
+    <span class="sep">·</span>
+    <span id="session-app" class="muted">loading…</span>
+    <select id="session-picker" title="Session"></select>
+    <span id="counts" class="muted mono"></span>
+    <span class="spacer"></span>
+    <label class="live-toggle" title="Follow new traffic as it arrives">
+      <input type="checkbox" id="live-tail" checked>
+      <span id="live-dot" class="dot"></span> live
+    </label>
+  </header>
+
+  <main id="panes">
+    <aside id="rail">
+      <label class="rail-label" for="filter">Filter</label>
+      <input id="filter" type="text" spellcheck="false" autocomplete="off"
+             placeholder="status&gt;=400  path:/v2  slower:500ms">
+      <div id="filter-error" class="filter-error" hidden></div>
+
+      <div class="chips" id="chips">
+        <button class="chip" data-filter="has:error">errors</button>
+        <button class="chip" data-filter="status&gt;=500">5xx</button>
+        <button class="chip" data-filter="status&gt;=400 status&lt;500">4xx</button>
+        <button class="chip" data-filter="slower:500ms">slow</button>
+        <button class="chip" data-filter="method:POST">POST</button>
+        <button class="chip" data-filter="attempt&gt;1">retries</button>
+      </div>
+
+      <div class="rail-label">Markers</div>
+      <ul id="markers" class="markers"><li class="muted">none</li></ul>
+
+      <div class="rail-label">Keys</div>
+      <ul class="keys muted">
+        <li><kbd>j</kbd>/<kbd>k</kbd> move</li>
+        <li><kbd>/</kbd> filter</li>
+        <li><kbd>c</kbd> copy cURL</li>
+        <li><kbd>g</kbd>/<kbd>G</kbd> top/bottom</li>
+        <li><kbd>Esc</kbd> clear</li>
+      </ul>
+    </aside>
+
+    <section id="list-pane">
+      <div id="list" role="listbox" aria-label="Transactions"></div>
+      <div id="list-empty" class="empty muted">no transactions</div>
+    </section>
+
+    <section id="detail-pane">
+      <div id="detail-empty" class="empty muted">select a transaction</div>
+      <div id="detail" hidden></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

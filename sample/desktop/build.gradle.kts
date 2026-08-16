@@ -25,11 +25,16 @@ dependencies {
     } else {
         implementation(project(":inspector-core"))
         implementation(project(":inspector-ui"))
+        implementation(project(":inspector-stream"))
     }
 }
 
 compose.desktop {
     application {
         mainClass = "dev.inspector.sample.MainKt"
+        // ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true
+        System.getProperty("inspector.sample.autofire")?.let {
+            jvmArgs += "-Dinspector.sample.autofire=$it"
+        }
     }
 }

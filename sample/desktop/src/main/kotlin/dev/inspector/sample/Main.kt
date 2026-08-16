@@ -17,6 +17,9 @@ import androidx.compose.ui.window.application
 import dev.inspector.Inspector
 import dev.inspector.InspectorConfig
 import dev.inspector.Redaction
+import dev.inspector.model.ClientInfo
+import dev.inspector.model.Platforms
+import dev.inspector.stream.StreamSink
 import dev.inspector.ui.InspectorOverlay
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -42,12 +45,51 @@ fun main() {
     // to see the other behaviour.
     Inspector.init(InspectorConfig())
 
+    // External mode: also stream to the host daemon, if one is listening. Nothing here depends
+    // on the daemon existing — with no daemon the sink simply stays disconnected and drops.
+    val stream = StreamSink(
+        client = ClientInfo(
+            appId = "dev.inspector.sample",
+            appVersion = "0.1.0",
+            platform = Platforms.DESKTOP,
+            device = System.getProperty("os.name") ?: "desktop",
+            osVersion = System.getProperty("os.version") ?: "?",
+            buildType = "debug",
+        ),
+    )
+    stream.start()
+    Inspector.addSink(stream)
+
     val client = HttpClient(CIO) {
         install(HttpRequestRetry) {
             retryOnServerErrors(maxRetries = 3)
             constantDelay(millis = 50, randomizationMs = 0)
         }
         Inspector.install(this)
+    }
+
+    // Scripted traffic for verification and demos: covers every endpoint plus a retry chain,
+    // a marker, a burst and a transport failure, without anyone clicking a button.
+    if (System.getProperty("inspector.sample.autofire") == "true") {
+        kotlinx.coroutines.GlobalScope.launch {
+            kotlinx.coroutines.delay(1500)
+            suspend fun hit(path: String) = runCatching {
+                client.get(DemoServer.url(path)).bodyAsBytes()
+            }
+            hit("/json"); hit("/status/404"); hit("/status/500")
+            hit("/redirect"); hit("/flaky"); hit("/secret")
+            hit("/binary"); hit("/large?kb=512"); hit("/slow?ms=700")
+            runCatching {
+                client.post(DemoServer.url("/echo")) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"hello":"world"}""")
+                }.bodyAsBytes()
+            }
+            Inspector.mark("tapped checkout")
+            repeat(20) { hit("/json") }
+            runCatching { client.get("http://127.0.0.1:1/dead").bodyAsBytes() }
+            println("inspector-sample: autofire complete")
+        }
     }
 
     application {

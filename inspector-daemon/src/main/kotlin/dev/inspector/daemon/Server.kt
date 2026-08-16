@@ -1,0 +1,328 @@
+package dev.inspector.daemon
+
+import dev.inspector.model.Bye
+import dev.inspector.model.FilterParseException
+import dev.inspector.model.Hello
+import dev.inspector.model.HelloAck
+import dev.inspector.model.InspectorJson
+import dev.inspector.model.Marker
+import dev.inspector.model.MarkerSource
+import dev.inspector.model.MarkerMsg
+import dev.inspector.model.SessionMeta
+import dev.inspector.model.Txn
+import dev.inspector.model.WireMsg
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.cio.CIO
+import io.ktor.server.engine.EmbeddedServer
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.request.receiveText
+import io.ktor.server.response.respondBytes
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.routing
+import io.ktor.server.websocket.WebSockets
+import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import java.util.Base64
+
+/**
+ * The host daemon.
+ *
+ * Binds to 127.0.0.1 only. There is no authentication and the archive contains unredacted
+ * credentials by default, so the loopback bind is the security boundary — do not widen it
+ * without adding auth first.
+ */
+class InspectorDaemon(private val config: DaemonConfig) {
+
+    private val repository = SessionRepository(config)
+    private val retention = Retention(config, repository)
+    private val manager = SessionManager(config, repository, retention)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private var server: EmbeddedServer<*, *>? = null
+
+    fun start(wait: Boolean = true) {
+        config.sessionsDir.toFile().mkdirs()
+
+        // Sweep on start: a daemon that crashed mid-session leaves the archive over its ceiling.
+        val pruned = retention.prune()
+        if (pruned.prunedSessionIds.isNotEmpty()) {
+            println("inspector: pruned ${pruned.prunedSessionIds.size} session(s) on start")
+        }
+
+        scope.launch {
+            while (isActive) {
+                delay(30_000)
+                manager.flushMeta()
+            }
+        }
+
+        Runtime.getRuntime().addShutdownHook(Thread { manager.closeAll() })
+
+        val engine = embeddedServer(CIO, port = config.port, host = "127.0.0.1") { module() }
+        server = engine
+        println("inspector: archive at ${config.dataDir}")
+        println("inspector: listening on http://127.0.0.1:${config.port}")
+        println("inspector: retention ${config.maxSessions} sessions / ${config.maxTotalBytes / 1024 / 1024} MB")
+        engine.start(wait = wait)
+    }
+
+    fun stop() {
+        manager.closeAll()
+        server?.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
+    }
+
+    private fun Application.module() {
+        install(WebSockets)
+
+        routing {
+            ingestRoute()
+            liveRoute()
+            apiRoutes()
+            webUiRoutes()
+        }
+    }
+
+    // --- ingest ----------------------------------------------------------------------------
+
+    private fun io.ktor.server.routing.Route.ingestRoute() = webSocket("/ingest") {
+        var sessionId: String? = null
+        try {
+            for (frame in incoming) {
+                if (frame !is Frame.Text) continue
+                val message = runCatching {
+                    InspectorJson.decodeFromString<WireMsg>(frame.readText())
+                }.getOrElse {
+                    System.err.println("inspector: dropping unparseable frame: ${it.message}")
+                    continue
+                }
+
+                when (message) {
+                    is Hello -> {
+                        val opened = manager.openSession(message)
+                        sessionId = opened.sessionId
+                        send(
+                            Frame.Text(
+                                InspectorJson.encodeToString<WireMsg>(
+                                    HelloAck(opened.sessionId, opened.resumed)
+                                )
+                            )
+                        )
+                        println(
+                            "inspector: ${if (opened.resumed) "resumed" else "started"} " +
+                                "session ${opened.sessionId}"
+                        )
+                    }
+
+                    is Txn -> {
+                        val id = sessionId ?: continue
+                        manager.append(
+                            id,
+                            message.txn,
+                            decodeBody(message.reqBody, message.reqBodyB64),
+                            decodeBody(message.resBody, message.resBodyB64),
+                        )
+                    }
+
+                    is MarkerMsg -> sessionId?.let { manager.append(it, message.marker) }
+
+                    Bye -> break
+
+                    // Daemon-to-client only; a client sending it is simply ignored.
+                    is HelloAck -> Unit
+                }
+            }
+        } finally {
+            sessionId?.let {
+                manager.closeSession(it)
+                println("inspector: closed session $it")
+            }
+        }
+    }
+
+    private fun decodeBody(encoded: String?, base64: Boolean): ByteArray? {
+        if (encoded == null) return null
+        return if (base64) {
+            runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
+        } else {
+            encoded.toByteArray()
+        }
+    }
+
+    // --- live fan-out ------------------------------------------------------------------------
+
+    private fun io.ktor.server.routing.Route.liveRoute() = webSocket("/api/live") {
+        manager.live.collect { event ->
+            val payload = when (event) {
+                is LiveEvent.Transaction -> """{"type":"txn","sessionId":"${event.sessionId}","txn":${
+                    InspectorJson.encodeToString(event.txn)
+                }}"""
+                is LiveEvent.MarkerAdded -> """{"type":"marker","sessionId":"${event.sessionId}","marker":${
+                    InspectorJson.encodeToString(event.marker)
+                }}"""
+                is LiveEvent.SessionStarted -> """{"type":"sessionStarted","meta":${
+                    InspectorJson.encodeToString(event.meta)
+                }}"""
+                is LiveEvent.SessionEnded -> """{"type":"sessionEnded","sessionId":"${event.sessionId}"}"""
+            }
+            send(Frame.Text(payload))
+        }
+    }
+
+    /**
+     * Resolves the `{id}` path parameter to a session directory, responding 404 and returning
+     * null when it is unknown or unsafe. Callers `?: return@get`.
+     */
+    private suspend fun io.ktor.server.application.ApplicationCall.resolveSession(): java.nio.file.Path? {
+        val id = parameters["id"].orEmpty()
+        val dir = repository.resolve(id)
+        if (dir == null) {
+            respondError(HttpStatusCode.NotFound, "no session '$id'")
+            return null
+        }
+        return dir
+    }
+
+    // --- web UI ---------------------------------------------------------------------------------
+
+    private fun io.ktor.server.routing.Route.webUiRoutes() {
+        get("/") { call.respondResource("index.html", ContentType.Text.Html) }
+        get("/app.js") { call.respondResource("app.js", ContentType.Text.JavaScript) }
+        get("/style.css") { call.respondResource("style.css", ContentType.Text.CSS) }
+    }
+
+    private suspend fun io.ktor.server.application.ApplicationCall.respondResource(
+        name: String,
+        contentType: ContentType,
+    ) {
+        val bytes = this@InspectorDaemon.javaClass.classLoader
+            .getResourceAsStream("web/$name")?.readBytes()
+        if (bytes == null) {
+            respondError(HttpStatusCode.NotFound, "missing bundled resource web/$name")
+            return
+        }
+        respondBytes(bytes, contentType)
+    }
+
+    // --- REST ---------------------------------------------------------------------------------
+
+    private fun io.ktor.server.routing.Route.apiRoutes() {
+        get("/api/sessions") {
+            call.respondJson(
+                InspectorJson.encodeToString(
+                    ListSerializer(SessionMeta.serializer()),
+                    repository.listSessions(),
+                )
+            )
+        }
+
+        get("/api/sessions/{id}/summary") {
+            val dir = call.resolveSession() ?: return@get
+            val summary = repository.summarize(dir)
+                ?: return@get call.respondError(HttpStatusCode.NotFound, "session has no metadata")
+            call.respondJson(InspectorJson.encodeToString(SessionSummary.serializer(), summary))
+        }
+
+        get("/api/sessions/{id}/transactions") {
+            val dir = call.resolveSession() ?: return@get
+            val filter = call.request.queryParameters["filter"].orEmpty()
+            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
+            try {
+                val page = repository.queryTransactions(dir, filter, offset, limit)
+                call.respondJson(InspectorJson.encodeToString(TransactionPage.serializer(), page))
+            } catch (e: FilterParseException) {
+                // The parser's message names the fix; pass it through untouched.
+                call.respondError(HttpStatusCode.BadRequest, e.message ?: "invalid filter")
+            }
+        }
+
+        get("/api/sessions/{id}/transactions/{txnId}") {
+            val dir = call.resolveSession() ?: return@get
+            val txnId = call.parameters["txnId"].orEmpty()
+            val txn = repository.readTransaction(dir, txnId)
+                ?: return@get call.respondError(HttpStatusCode.NotFound, "no transaction $txnId")
+            call.respondJson(InspectorJson.encodeToString(txn))
+        }
+
+        get("/api/sessions/{id}/transactions/{txnId}/body/{side}") {
+            val dir = call.resolveSession() ?: return@get
+            val txnId = call.parameters["txnId"].orEmpty()
+            val side = call.parameters["side"].orEmpty()
+            val bytes = repository.readBody(dir, txnId, side)
+                ?: return@get call.respondError(HttpStatusCode.NotFound, "no $side body for $txnId")
+            val contentType = repository.readTransaction(dir, txnId)?.let {
+                if (side == "req") it.reqContentType else it.resContentType
+            }
+            call.respondBytes(
+                bytes,
+                runCatching { ContentType.parse(contentType ?: "") }.getOrNull()
+                    ?: ContentType.Application.OctetStream,
+            )
+        }
+
+        get("/api/sessions/{id}/markers") {
+            val dir = call.resolveSession() ?: return@get
+            call.respondJson(
+                InspectorJson.encodeToString(ListSerializer(Marker.serializer()), repository.readMarkers(dir))
+            )
+        }
+
+        post("/api/sessions/{id}/markers") {
+            val id = call.parameters["id"].orEmpty()
+            val body = call.receiveText()
+            val label = runCatching {
+                InspectorJson.decodeFromString<Map<String, String>>(body)["label"]
+            }.getOrNull()
+                ?: return@post call.respondError(HttpStatusCode.BadRequest, "expected {\"label\":\"…\"}")
+
+            val resolvedId = if (id == "latest") {
+                repository.resolve("latest")?.fileName?.toString()
+            } else id
+            val active = manager.activeSessionIds()
+            if (resolvedId == null || resolvedId !in active) {
+                return@post call.respondError(
+                    HttpStatusCode.Conflict,
+                    "markers can only be added to a session that is currently recording",
+                )
+            }
+            manager.append(
+                resolvedId,
+                Marker(
+                    ts = java.time.Instant.now().toString(),
+                    mono = 0,
+                    label = label,
+                    source = MarkerSource.AGENT,
+                ),
+            )
+            call.respondJson("""{"ok":true}""")
+        }
+    }
+}
+
+private suspend fun io.ktor.server.application.ApplicationCall.respondJson(json: String) {
+    respondText(json, ContentType.Application.Json)
+}
+
+private suspend fun io.ktor.server.application.ApplicationCall.respondError(
+    status: HttpStatusCode,
+    message: String,
+) {
+    respondText(
+        InspectorJson.encodeToString(mapOf("error" to message)),
+        ContentType.Application.Json,
+        status,
+    )
+}

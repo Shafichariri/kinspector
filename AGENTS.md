@@ -36,10 +36,10 @@ Three consumers of the same captured data:
 |---|---|---|
 | **0** | Schema, filter grammar, API contract, release guard | ✅ done |
 | **1** | Capture, ring buffer, redaction, overlay + inspector UI | ✅ done |
-| **2** | Host daemon, session archive, stream sink, web UI | ⬜ next |
-| **3** | CLI + MCP server, session summaries, polish | ⬜ |
+| **2** | Host daemon, session archive, stream sink, web UI | ✅ done |
+| **3** | MCP server, richer CLI, polish | ⬜ next |
 
-**97 tests, 0 failures** across JVM, iOS simulator and Android host.
+**127 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### Verified
 
@@ -52,29 +52,38 @@ Three consumers of the same captured data:
 - Canary guard fails when capture code is present and passes when it is not — **both directions
   proven**.
 - `./gradlew :sample:desktop:run` launches and serves traffic.
+- End-to-end: sample streams to the daemon, 40 transactions archived to
+  `~/.inspector/sessions/<ts>_<app>_<device>_<build>/`, `latest` symlink correct, bodies written
+  to `bodies/`, `index.jsonl` greppable from a terminal.
+- REST filters evaluate server-side with the shared grammar; a bad filter returns 400 carrying
+  the parser's own message.
+- Killing the daemon mid-session leaves the app unaffected; reconnecting resumes the same
+  session folder; a relaunch gets a new one.
+- Retention prunes by count and by bytes, never the active session.
 
 ### Not verified
 
 - **The overlay has never been seen on a phone.** Verification so far is desktop-only. There is
   no Android app module and no Xcode project. UI code compiles for all targets.
+- **The web UI has never been looked at.** Its resources are served, `app.js` parses, and every
+  id it touches exists in the HTML — but no human or agent has seen it render. The browser pane
+  is blocked from localhost by policy here.
 - Redirect behaviour against engines other than CIO. Some engines follow redirects internally,
   which would collapse a chain into a single row. Unresolved for the target app's engine.
 
 ---
 
-## What is next (Phase 2)
+## What is next (Phase 3)
 
-In order, from `docs/implementation-plan.md` §10:
+From `docs/implementation-plan.md` §10:
 
-1. Daemon skeleton — `serve`, config, data dir, session folders, `latest` symlink.
-2. `WS /ingest` + disk writer + meta + retention pruning (100 sessions / 300 MB, configurable,
-   never prune the active session).
-3. `:inspector-stream` sink with reconnect and session resume (5 min grace).
-4. REST API + `SessionRepository` + server-side filter evaluation.
-5. Web UI — three-pane, dark, keyboard-driven.
-
-`:inspector-stream/StreamSink.kt` and `:inspector-daemon/Daemon.kt` are placeholder files whose
-KDoc already records the contract each must satisfy. Read them before starting.
+1. **MCP server** (`inspector mcp`, stdio) wrapping `SessionRepository`: `list_sessions`,
+   `session_summary`, `list_transactions(filter, limit, offset)`, `get_transaction`, `get_body`,
+   `add_marker`. Tool descriptions must steer the model to call `session_summary` first — it
+   answers most questions in ~1 KB — and to filter rather than read everything.
+2. Look at the web UI and fix whatever is wrong with it.
+3. Android + iOS sample shells, to finally see the overlay on a device.
+4. Stretch: HAR export.
 
 ---
 
@@ -86,8 +95,8 @@ KDoc already records the contract each must satisfy. Read them before starting.
 :inspector-noop      KMP  Identical public API, does nothing. Release builds.
 :inspector-ui        KMP  Compose overlay pill + inspector screens.
 :inspector-noop-ui   KMP  Passthrough overlay. Release builds.
-:inspector-stream    KMP  WebSocket sink to the daemon.          [Phase 2]
-:inspector-daemon    JVM  Archive, REST, web UI, CLI, MCP.       [Phase 2/3]
+:inspector-stream    KMP  WebSocket sink to the daemon.
+:inspector-daemon    JVM  Archive, REST, live WS, web UI, CLI.   MCP is Phase 3.
 sample/desktop       JVM  Runnable reference integration.
 ```
 
@@ -137,6 +146,14 @@ becoming "no filter" is the more dangerous failure while debugging.
 **No eager `Redaction.Default`.** `On`'s default args read `DEFAULT_HEADERS` off the companion,
 so constructing one during the companion's own init deadlocks `<clinit>`. Use `Redaction.On()`.
 
+**Session resume is decided from `endedAt` on disk, not memory.** An in-memory "recently closed"
+map is empty after a daemon restart — which is one of the very cases the grace period exists to
+cover — so it silently refused every resume. The round-trip test caught it.
+
+**The daemon binds 127.0.0.1 only.** There is no auth and the archive holds unredacted
+credentials by default. The loopback bind *is* the security boundary; do not widen it without
+adding authentication first.
+
 **Kotlin block comments nest.** A `/*` inside KDoc (e.g. the example `path:/v2/users/*`) swallows
 the rest of the file. Write `&#42;` or avoid the sequence.
 
@@ -183,6 +200,8 @@ every release build clean:
 
 ```bash
 ./gradlew build                                   # everything, all targets
+./gradlew :inspector-daemon:installDist           # then: inspector-daemon/build/install/inspector/bin/inspector serve
+./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
