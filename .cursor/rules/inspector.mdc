@@ -1,0 +1,10 @@
+---
+description: Inspector project context — architecture, status, and non-obvious decisions
+alwaysApply: true
+---
+
+Read `AGENTS.md` at the repository root before making changes. It is the single source of
+truth for this project: what it is, where we are, what is next, and the non-obvious decisions
+that must not be "fixed".
+
+`CLAUDE.md` is a symlink to the same file. Keep `AGENTS.md` current; never duplicate it.

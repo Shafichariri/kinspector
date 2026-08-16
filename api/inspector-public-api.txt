@@ -1,0 +1,47 @@
+# Generated. Public API shared by :inspector-core and :inspector-noop.
+# Regenerate: ./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true
+
+dev.inspector.Inspector: fun addSink(sink: dev.inspector.InspectorSink): Unit
+dev.inspector.Inspector: fun clear(): Unit
+dev.inspector.Inspector: fun init(config: dev.inspector.InspectorConfig = ...): Unit
+dev.inspector.Inspector: fun install(config: HttpClientConfig<*>): Unit
+dev.inspector.Inspector: fun mark(label: String): Unit
+dev.inspector.Inspector: fun requestBody(txn: NetworkTransaction): ByteArray?
+dev.inspector.Inspector: fun responseBody(txn: NetworkTransaction): ByteArray?
+dev.inspector.Inspector: val latest: StateFlow<NetworkTransaction?>
+dev.inspector.Inspector: val markers: StateFlow<List<Marker>>
+dev.inspector.Inspector: val transactions: StateFlow<List<NetworkTransaction>>
+dev.inspector.Inspector: var canary: String (restricted set)
+dev.inspector.InspectorConfig: fun component1(): Long
+dev.inspector.InspectorConfig: fun component2(): Int
+dev.inspector.InspectorConfig: fun component3(): List<String>
+dev.inspector.InspectorConfig: fun component4(): dev.inspector.Redaction
+dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCaptureMaxBytes: Int = ..., captureContentTypes: List<String> = ..., redaction: dev.inspector.Redaction = ...): dev.inspector.InspectorConfig
+dev.inspector.InspectorConfig: fun equals(other: Any?): Boolean
+dev.inspector.InspectorConfig: fun hashCode(): Int
+dev.inspector.InspectorConfig: fun toString(): String
+dev.inspector.InspectorConfig: val bodyCaptureMaxBytes: Int
+dev.inspector.InspectorConfig: val captureContentTypes: List<String>
+dev.inspector.InspectorConfig: val redaction: dev.inspector.Redaction
+dev.inspector.InspectorConfig: val ringBufferMaxBytes: Long
+dev.inspector.InspectorSink: fun onMarker(marker: Marker): Unit
+dev.inspector.InspectorSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
+dev.inspector.Redaction$Companion: val DEFAULT_BODY_KEY_PATTERN: String
+dev.inspector.Redaction$Companion: val DEFAULT_HEADERS: List<String>
+dev.inspector.Redaction$Companion: val DEFAULT_QUERY_KEY_PATTERN: String
+dev.inspector.Redaction$Companion: val PLACEHOLDER: String
+dev.inspector.Redaction$Off: fun equals(other: Any?): Boolean
+dev.inspector.Redaction$Off: fun hashCode(): Int
+dev.inspector.Redaction$Off: fun toString(): String
+dev.inspector.Redaction$On: fun component1(): List<String>
+dev.inspector.Redaction$On: fun component2(): String
+dev.inspector.Redaction$On: fun component3(): String
+dev.inspector.Redaction$On: fun copy(headers: List<String> = ..., bodyKeyPattern: String = ..., queryKeyPattern: String = ...): dev.inspector.Redaction.On
+dev.inspector.Redaction$On: fun equals(other: Any?): Boolean
+dev.inspector.Redaction$On: fun hashCode(): Int
+dev.inspector.Redaction$On: fun toString(): String
+dev.inspector.Redaction$On: val bodyKeyPattern: String
+dev.inspector.Redaction$On: val bodyKeys: Regex
+dev.inspector.Redaction$On: val headers: List<String>
+dev.inspector.Redaction$On: val queryKeyPattern: String
+dev.inspector.Redaction$On: val queryKeys: Regex
