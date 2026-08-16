@@ -72,6 +72,17 @@ class StreamSink(
     private val _dropped = MutableStateFlow(0L)
     val dropped: StateFlow<Long> = _dropped.asStateFlow()
 
+    /**
+     * Why the last connection attempt failed, or null once connected.
+     *
+     * Surfaced rather than swallowed because "the web UI is empty" is otherwise undiagnosable
+     * from inside the app: the most common causes — Android blocking cleartext, nothing
+     * listening on the port — are invisible unless the reason is reported.
+     */
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
+    private var reportedError: String? = null
     private var resumeSessionId: String? = null
     private var http: HttpClient? = null
 
@@ -102,12 +113,28 @@ class StreamSink(
         var backoffMs = MIN_BACKOFF_MS
         while (scope.isActive) {
             _state.value = StreamState.Connecting
-            val connected = runCatching { connectAndPump() }.isSuccess
+            val outcome = runCatching { connectAndPump() }
             _state.value = StreamState.Disconnected
+
+            val failure = outcome.exceptionOrNull()
+            if (failure != null) {
+                val described = "${failure::class.simpleName}: ${failure.message}"
+                _lastError.value = described
+                // Report each distinct reason once. Reconnect attempts repeat forever, and a
+                // message printed every 250ms is one nobody reads.
+                if (described != reportedError) {
+                    reportedError = described
+                    println("inspector: cannot reach daemon at $host:$port — $described")
+                    println("inspector: $TROUBLESHOOTING")
+                }
+            } else {
+                _lastError.value = null
+                reportedError = null
+            }
 
             // A clean close still means the daemon went away; back off either way rather than
             // spinning a reconnect loop against a host that is not there.
-            backoffMs = if (connected) MIN_BACKOFF_MS else (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
+            backoffMs = if (failure == null) MIN_BACKOFF_MS else (backoffMs * 2).coerceAtMost(MAX_BACKOFF_MS)
             delay(backoffMs)
         }
     }
@@ -126,6 +153,9 @@ class StreamSink(
                 if (message is HelloAck) resumeSessionId = message.sessionId
             }
             _state.value = StreamState.Connected
+            _lastError.value = null
+            reportedError = null
+            println("inspector: connected to daemon at $host:$port")
 
             // Two concurrent jobs, each cancelling the other on completion.
             //
@@ -171,6 +201,9 @@ class StreamSink(
     private companion object {
         const val MIN_BACKOFF_MS = 250L
         const val MAX_BACKOFF_MS = 5_000L
+        const val TROUBLESHOOTING =
+            "is `inspector serve` running? On Android the app must also permit cleartext " +
+                "traffic to 10.0.2.2 — see docs/INTEGRATION.md section 6d."
     }
 }
 

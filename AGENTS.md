@@ -179,6 +179,15 @@ which is the exact thing the noop artifacts exist to prevent.
 UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
 Nobody should be told to "open the desktop app".
 
+**Android blocks cleartext by default; the daemon connection is cleartext.** `ws://10.0.2.2:8099`
+fails silently on API 28+ without a debug-only `network_security_config.xml`. This is the most
+common reason an Android app records nothing, and the integration guide claiming "no manifest
+entries, no permissions" was wrong until it was corrected — see `docs/INTEGRATION.md` 6d.
+
+**StreamSink reports why it failed.** Connection errors used to be swallowed by `runCatching`,
+leaving "the web UI is empty" undiagnosable from inside the app. Each distinct reason is now
+printed once (not per retry) and exposed as `lastError`. Keep it that way.
+
 **The daemon binds 127.0.0.1 only.** There is no auth and the archive holds unredacted
 credentials by default. The loopback bind *is* the security boundary; do not widen it without
 adding authentication first.

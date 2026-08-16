@@ -184,8 +184,10 @@ fun Root() {
 Wrap the outermost composable you own, inside your theme or outside it — either works, the
 overlay carries its own colours deliberately so it stays readable over any screen.
 
-That's the entire integration. No `Context` to thread through, no platform-specific code, no
-manifest entries, no permissions.
+That's the entire integration for the overlay. No `Context` to thread through, no
+platform-specific code, no manifest entries, no permissions.
+
+(The web UI in section 6 *does* need one Android manifest change — see 6e.)
 
 ---
 
@@ -272,7 +274,41 @@ inspector-daemon/build/install/inspector/bin/inspector serve
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
 past 100 sessions or 300 MB.
 
-### 6d. Note for physical devices
+### 6d. Android: permit cleartext to the daemon
+
+**Android 9+ blocks cleartext traffic by default, and the daemon connection is cleartext
+`ws://10.0.2.2:8099`.** Without this the socket fails and nothing reaches the web UI. This is the
+single most common reason an Android app records nothing.
+
+Add a debug-only network security config. Create
+`src/debug/res/xml/network_security_config.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The Android emulator's alias for your Mac's loopback. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
+```
+
+And reference it from `src/debug/AndroidManifest.xml`:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
+```
+
+Putting both under `src/debug/` means the release manifest is untouched — the exemption cannot
+reach production, matching how the rest of the tool is gated.
+
+If you prefer the blunt instrument, `android:usesCleartextTraffic="true"` in the debug manifest
+works too, but it permits cleartext to *everywhere* rather than just your Mac.
+
+### 6e. Note for physical devices
 
 `10.0.2.2` and `127.0.0.1` only work on emulators and simulators. On a real phone the daemon is
 not reachable at those addresses, so the overlay works but the web UI gets nothing. Physical
@@ -371,9 +407,23 @@ Expected. The overlay lives inside your Compose hierarchy, so it cannot draw abo
 possible later addition — say if you need it.
 
 **Web UI shows no sessions**
-The daemon is running but your app never connected. Check the daemon's console — it prints
-`started session …` on connect. If nothing appears: the `stream` module is missing, `start()` was
-never called, or you are on a physical device (see 6d).
+Your app never connected. Work through these in order:
+
+1. **Look at your app's log.** The sink prints `inspector: connected to daemon at …` on success,
+   or `inspector: cannot reach daemon at … — <reason>` with the actual exception. That line
+   usually names the problem outright.
+2. **Android: cleartext.** See 6e. This is the most common cause by a wide margin, and it fails
+   silently without the log line above.
+3. **Is the port free?** `lsof -nP -iTCP:8099 -sTCP:LISTEN`. If something else holds 8099,
+   `inspector serve` fails to bind — check its output rather than assuming it started.
+4. **Check the daemon's console.** It prints `inspector: started session …` on every connect.
+   Nothing there means nothing reached it.
+5. `stream.start()` was never called, or `Inspector.addSink(stream)` was missed.
+6. You are on a physical device (see 6e).
+
+**Web UI shows an old session that is not yours**
+You are looking at an archive from a different daemon run. Check which directory it is using —
+the daemon prints `inspector: archive at …` on startup, and `--data DIR` overrides it.
 
 **Web UI shows a session but no new traffic**
 Traffic captured while the daemon was down is not backfilled — it stays in the device ring buffer
