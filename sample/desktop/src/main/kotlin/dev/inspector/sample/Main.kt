@@ -17,6 +17,7 @@ import androidx.compose.ui.window.application
 import dev.inspector.Inspector
 import dev.inspector.InspectorConfig
 import dev.inspector.Redaction
+import dev.inspector.okHttpInterceptor
 import dev.inspector.model.ClientInfo
 import dev.inspector.model.Platforms
 import dev.inspector.stream.StreamSink
@@ -68,6 +69,12 @@ fun main() {
         Inspector.install(this)
     }
 
+    // A client that is not Ktor at all, wired the way a consuming app wires Auth0 or Retrofit.
+    // Its calls must land in the same list, archive and web UI as everything above.
+    val okHttp = okhttp3.OkHttpClient.Builder()
+        .addInterceptor(Inspector.okHttpInterceptor())
+        .build()
+
     // Scripted traffic for verification and demos: covers every endpoint plus a retry chain,
     // a marker, a burst and a transport failure, without anyone clicking a button.
     if (System.getProperty("inspector.sample.autofire") == "true") {
@@ -88,6 +95,14 @@ fun main() {
             Inspector.mark("tapped checkout")
             repeat(20) { hit("/json") }
             runCatching { client.get("http://127.0.0.1:1/dead").bodyAsBytes() }
+
+            // The non-Ktor path, exercised for real. The query marks it so the row is easy to
+            // pick out of the list next to the Ktor ones.
+            runCatching {
+                okHttp.newCall(
+                    okhttp3.Request.Builder().url(DemoServer.url("/json?via=okhttp")).build()
+                ).execute().use { it.body?.bytes() }
+            }
             println("inspector-sample: autofire complete")
         }
     }

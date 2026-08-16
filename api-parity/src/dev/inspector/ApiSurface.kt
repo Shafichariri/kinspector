@@ -1,9 +1,11 @@
 package dev.inspector
 
+import java.lang.reflect.Modifier
 import kotlin.reflect.KClass
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
 import kotlin.reflect.full.declaredMemberProperties
+import kotlin.reflect.full.staticFunctions
 import kotlin.reflect.jvm.isAccessible
 
 /**
@@ -26,6 +28,11 @@ object ApiSurface {
         "dev.inspector.Redaction\$Off",
         "dev.inspector.Redaction\$On",
         "dev.inspector.Redaction\$Companion",
+        // The JVM/Android-only OkHttp entry point. Listed explicitly because this guard only
+        // sees classes it is told about: a top-level function added to one module and forgotten
+        // in the other would otherwise drift unnoticed, which is the exact failure this file
+        // exists to prevent.
+        "dev.inspector.OkHttpCaptureKt",
     )
 
     fun dump(): List<String> = CONTRACT_CLASSES.flatMap { name ->
@@ -34,7 +41,10 @@ object ApiSurface {
     }.sorted()
 
     private fun signaturesOf(klass: KClass<*>): List<String> {
-        val functions = klass.declaredMemberFunctions
+        // staticFunctions is what surfaces top-level declarations on a file facade class such as
+        // OkHttpCaptureKt; declaredMemberFunctions alone reports a facade as having no API at
+        // all, which would let the guard pass while seeing nothing.
+        val functions = (klass.declaredMemberFunctions + klass.staticFunctions)
             .filter { it.visibility == KVisibility.PUBLIC }
             .map { fn ->
                 val params = fn.parameters
@@ -59,8 +69,26 @@ object ApiSurface {
                 "${if (mutable) "var" else "val"} ${prop.name}: ${render(prop.returnType.toString())}$setter"
             }
 
-        return (functions + properties).sorted()
+        return (functions + properties + staticJavaSignatures(klass)).distinct().sorted()
     }
+
+    /**
+     * Public static methods, read through Java reflection.
+     *
+     * Needed for top-level *extension* functions on a file facade — `fun Inspector.foo()` in
+     * OkHttpCapture.kt appears in neither `declaredMemberFunctions` nor `staticFunctions`, so
+     * Kotlin reflection alone reports the facade as having no API and the guard silently checks
+     * nothing. Parameter names are unavailable here, which is fine: both modules render this
+     * identically, and identical is the whole test.
+     */
+    private fun staticJavaSignatures(klass: KClass<*>): List<String> =
+        klass.java.declaredMethods
+            .filter { Modifier.isPublic(it.modifiers) && Modifier.isStatic(it.modifiers) }
+            .filterNot { it.isSynthetic }
+            .map { method ->
+                val params = method.parameterTypes.joinToString(", ") { render(it.name) }
+                "fun ${method.name}($params): ${render(method.returnType.name)}"
+            }
 
     /**
      * Normalises type strings so the two modules produce identical text. Kotlin renders some

@@ -25,10 +25,10 @@ the overlay working is how you know capture works before adding a second moving 
 headers, query, status, timing, request and response bodies. Redirects and retries appear as
 separate rows so you can see the whole chain.
 
-**You don't get:** traffic from anything that isn't your Ktor client. **Auth0 in particular is
-invisible** — its SDK owns its own transport on both platforms. Likewise Firebase, analytics,
-image loaders with their own clients, WebView traffic, and native `NSURLSession` calls. No
-WebSocket or SSE frames. See section 11 for why, and what is planned about it.
+**You don't get, by default:** traffic from anything that isn't your Ktor client — Auth0,
+Firebase, analytics, image loaders with their own clients, WebViews, native `NSURLSession`. No
+WebSocket or SSE frames. **Anything built on OkHttp can be added with one line** (section 11);
+iOS-native transports cannot yet.
 
 **It must never ship to production.** Section 3 is not optional — it is how that is enforced.
 
@@ -510,25 +510,67 @@ Point it at a different archive with `--data /path/to/dir`, or a non-default dae
 
 ---
 
-## 11. Known gap: traffic that never touches your Ktor client
+## 11. Capturing traffic that never touches your Ktor client
 
-Capture is a **Ktor client plugin**. It sees exactly what flows through an `HttpClient` you
-configured, and nothing else. In particular it does **not** see:
+`Inspector.install(...)` is a Ktor plugin, so it sees Ktor and nothing else. SDKs that own their
+transport — Auth0, Retrofit, Coil — are invisible to it, and their absence looks exactly like
+"no traffic happened".
 
-- **Auth0.** The Android SDK builds its own OkHttp internally; on iOS it uses `URLSession`.
-  Neither goes through Ktor, so login and token-refresh calls do not appear.
-- Anything else with its own transport: WebViews, Firebase, analytics SDKs, native image loaders.
+For anything built on **OkHttp**, add one interceptor and its calls land in the same list, the
+same archive and the same web UI, indistinguishable from Ktor's once recorded:
 
-If your app→backend calls appear but your Auth0 calls do not, that is this, not a
-misconfiguration — nothing in the setup above will change it.
+```kotlin
+import dev.inspector.Inspector
+import dev.inspector.okHttpInterceptor
 
-Closing it is Phase 4. The planned first step is a small `:inspector-okhttp` interceptor, which
-covers OkHttp-based libraries where you control the client (Retrofit, Coil, Ktor's OkHttp
-engine). Auth0 additionally needs a short adapter in *your* code, because
-`com.auth0.android` accepts a `NetworkingClient` rather than an `OkHttpClient` — that adapter
-will be documented here once the module exists. The universal fix for iOS and for SDKs that hide
-their transport entirely is proxy-based capture, which is a larger piece of work and has not
-been started. See `AGENTS.md` → "What is next (Phase 4)".
+val client = OkHttpClient.Builder()
+    .addInterceptor(Inspector.okHttpInterceptor())   // add it, don't addNetworkInterceptor
+    .build()
+```
+
+Available on Android and JVM only. No extra module and no new dependency: OkHttp is `compileOnly`,
+so you keep whatever version you already have. Under `-Pinspector=off` the same call returns a
+pass-through interceptor, so this line is safe to leave in shared code.
+
+Three things behave differently from the Ktor path, all by design:
+
+| | Ktor | OkHttp |
+|---|---|---|
+| Redirects and retries | one row per hop, shared `callId` | one row per call, `attempt = 1` — OkHttp retries *below* an application interceptor |
+| Headers | as sent | as sent, **minus** the ones OkHttp adds later (`User-Agent`, `Accept-Encoding`, `Host`, `Connection`) — those are attached below this interceptor |
+| Response body | decompressed | decompressed |
+
+If you want a row per hop, register it with `addNetworkInterceptor` instead — you will then see
+OkHttp's own headers, but bodies arrive gzipped.
+
+### Auth0 on Android
+
+`com.auth0.android` builds its OkHttp internally and won't take one from you, but it does accept
+a `NetworkingClient`. Delegate through an inspected client:
+
+```kotlin
+import com.auth0.android.request.DefaultClient
+
+val auth0 = Auth0.getInstance(clientId, domain).apply {
+    if (BuildConfig.DEBUG) {
+        networkingClient = DefaultClient(enableLogging = false)   // your existing config
+        // See the Auth0 docs for the NetworkingClient interface; implement it over an
+        // OkHttpClient carrying Inspector.okHttpInterceptor() and delegate every call to it.
+    }
+}
+```
+
+> Not verified against a real Auth0 integration — the exact `NetworkingClient` surface varies by
+> SDK version, so treat the shape above as the approach rather than copy-paste code. If you wire
+> it up, tell me what the interface actually looked like and this section gets replaced with the
+> real thing.
+
+### Still not covered
+
+iOS `URLSession`, WebViews, and any SDK that hides its transport entirely. The universal answer
+is proxy-based capture — the daemon running a local proxy with a generated CA that the simulator
+trusts. That is a substantially larger piece of work and has not been started; see `AGENTS.md`
+→ "What is next".
 
 ---
 

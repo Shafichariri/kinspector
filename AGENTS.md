@@ -38,9 +38,10 @@ Three consumers of the same captured data:
 | **1** | Capture, ring buffer, redaction, overlay + inspector UI | ✅ done |
 | **2** | Host daemon, session archive, stream sink, web UI | ✅ done |
 | **3** | MCP server over the archive | ✅ done |
-| **4** | Capture traffic from non-Ktor SDKs (Auth0, native) | ⬜ next |
+| **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
+| **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**146 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**156 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -87,8 +88,21 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
   marker dividers, session picker, detail pane, attempt chain, console errors. Last run: 109
   rows, 2 marker dividers, 6 detail sections, 4 chain rows, zero errors.
+- **A live viewer receives body refs**, so bodies are fetchable without a page reload
+  (`LiveTest`). This is the defect the first real user hit.
+- **OkHttp capture, end to end.** The sample makes one call through a plain `OkHttpClient` with no
+  Ktor anywhere in its path; it reaches the archive as
+  `GET /json?via=okhttp → 200` with its body on disk and header case preserved. The app receives
+  byte-identical bodies with and without the interceptor across json, gzip, binary, 4 MB chunked
+  and empty.
+- **The MCP server answers the acceptance question in three calls**, verified both as a unit test
+  and by piping JSON-RPC frames into the built binary against the real recorded session.
 
 ### Not verified
+
+- **The Auth0 `NetworkingClient` adapter in `docs/INTEGRATION.md` §11 is untested.** The OkHttp
+  interceptor it delegates to is well covered; the adapter shape around it is written from the
+  SDK's documented surface, not from a working integration.
 
 - **The overlay has never been seen on a phone.** Verification so far is desktop-only. There is
   no Android app module and no Xcode project. UI code compiles for all targets.
@@ -100,48 +114,41 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ---
 
-## What is next (Phase 4) — capturing what Ktor cannot see
+## Capturing what Ktor cannot see
 
-**The problem, stated precisely.** Capture is a Ktor *client plugin*. It sees exactly the traffic
-that flows through an `HttpClient` the app configured. It cannot see:
+Capture is a Ktor *client plugin*: it sees exactly the traffic flowing through an `HttpClient`
+the app configured. SDKs that own their transport do not appear, and their absence reads as "no
+traffic happened" — which is what the first real user hit, seeing app→backend calls but no Auth0
+calls.
 
-- SDKs that own their transport. Auth0's Android SDK builds its own OkHttp internally; on iOS it
-  uses `URLSession`. Neither passes through Ktor, so neither appears — which is what the first
-  real user hit, seeing app→backend calls but no Auth0 calls.
-- Anything native: WebViews, Firebase, analytics SDKs, the platform image loaders.
+**4a — OkHttp capture. Done.** `Inspector.okHttpInterceptor()` in `:inspector-core`'s
+`jvmAndAndroidMain`, recording into the same `Recorder` so rows are indistinguishable from Ktor's.
+Covers every OkHttp-based library where the app controls the client. Verified end to end: the
+sample app makes one non-Ktor call and it lands in the archive with its body.
 
-Three mechanisms can close this, at increasing cost and increasing coverage. **They are not
-alternatives to each other; 4a is worth doing regardless of whether 4c ever happens.**
+It deliberately does **not** live in its own `:inspector-okhttp` module, which is what the
+original plan said. A separate module cannot see `Recorder` or `Redactor` — they are `internal` —
+so it would have forced either a permanent public recording API into existence or a second copy of
+the redaction logic, and a second copy is how two capture paths quietly stop agreeing. The cost of
+keeping it in core is a `compileOnly` OkHttp dependency on the jvm and android source sets, which
+consumers never inherit.
 
-**4a. `:inspector-okhttp` — an OkHttp `Interceptor` (small, Android only, partial coverage).**
-Recording into the same `Recorder`, so rows are indistinguishable from Ktor's. Immediately covers
-every OkHttp-based library where the app controls the client: Retrofit, Coil, and Ktor's own
-OkHttp engine. For Auth0 specifically it needs an adapter, because `com.auth0.android` does not
-accept an injected `OkHttpClient` — it accepts a `NetworkingClient`, so the app implements that
-interface, delegates to an inspected OkHttp client, and passes it via `Auth0.networkingClient`.
-That adapter is ~15 lines of app code and belongs in `docs/INTEGRATION.md`, not in the library:
-`:inspector-okhttp` must not depend on Auth0.
+Auth0 still needs a small adapter in *app* code, because `com.auth0.android` accepts a
+`NetworkingClient` rather than an `OkHttpClient`. That belongs in `docs/INTEGRATION.md` §11, not
+in the library — nothing here may depend on Auth0. **The adapter shape in the docs is unverified**
+against a real Auth0 integration.
 
-Reuses `teeBody`, `Redactor` and `CallState` unchanged. The one genuinely new piece is that
-OkHttp's `Interceptor` is blocking, so the body tee needs a blocking variant — do **not** make
-the app wait on a coroutine.
+**4b — report what we know we cannot see.** Even with 4a, some traffic is invisible and the
+failure mode is silence. A session-level note listing hosts seen in connection logs but never
+captured would fix that. Not designed; may not be worth it.
 
-**4b. Blocking the leak, cheaply: report what we know we cannot see.** Even with 4a, some traffic
-is invisible, and the current failure mode is silence, which reads as "no traffic happened". Cheap
-mitigation: a session-level note listing hosts seen in DNS/connection logs but never captured. Not
-designed yet; may not be worth it.
-
-**4c. Proxy capture (large, universal).** The daemon runs a local HTTP proxy; the emulator or
-simulator is pointed at it. Catches everything including native SDKs and WebViews, and is the only
-mechanism that works on iOS for non-Ktor traffic. Cost is real: HTTPS requires a generated CA
-installed in the emulator's trust store, and on Android 7+ apps must additionally opt in via
-`network_security_config.xml` — which is acceptable here, because that file is already a
-debug-only artifact in this project's integration guide. This is the mitmproxy model and should be
-scoped as its own phase, not bolted onto 4a.
-
-**Recommendation:** do 4a next. It is a day's work, covers the common Android cases, and does not
-foreclose 4c. Do not start 4c without the user explicitly choosing it — it changes the tool from a
-library into a piece of network infrastructure.
+**4c — proxy capture (large, universal). Not started.** The daemon runs a local HTTP proxy and the
+emulator or simulator is pointed at it. Catches everything, including native SDKs and WebViews,
+and is the only mechanism that reaches iOS `URLSession`. HTTPS needs a generated CA in the
+emulator's trust store, plus a `network_security_config.xml` opt-in on Android 7+ — acceptable,
+since that file is already a debug-only artifact here. This is the mitmproxy model. **Do not start
+it without the user explicitly choosing it**: it turns the tool from a library into a piece of
+network infrastructure.
 
 ### Also outstanding
 
@@ -263,6 +270,31 @@ for protocol problems like an unknown method.
 
 **`inspector mcp` owns stdout.** Anything printed there that is not a JSON-RPC frame
 desynchronises the client. Diagnostics go to stderr.
+
+**OkHttp capture tees, it does not peek.** `Response.peekBody` looks like the obvious way to copy
+a response body, and it blocks until the requested count arrives — on a `text/event-stream` or any
+long-lived response that stalls the app until the cap fills. `TeeingResponseBody` forwards lazily
+as the app reads instead. Observing a stream must not consume or delay it.
+
+**`okhttp3.Headers.toMultimap()` lowercases every name.** Use the local `asMultimap()`, which
+preserves the case as sent — otherwise an OkHttp row displays `authorization` where the Ktor row
+for the same header displays `Authorization`, and the two paths feed one list.
+
+**An OkHttp application interceptor does not see OkHttp's own headers.** `User-Agent`,
+`Accept-Encoding`, `Host` and `Connection` are attached by `BridgeInterceptor`, which runs below
+it. Do not write a test that identifies an OkHttp-originated row by its `User-Agent` — there
+isn't one.
+
+**`OkHttpClient` must be shut down in tests.** Each one owns a dispatcher thread pool and a
+connection pool that outlive the test. Leaking them made *unrelated* Ktor test classes fail
+intermittently: a 1 MB response arriving empty, a redirect chain losing a hop. Call
+`dispatcher.executorService.shutdown()` and `connectionPool.evictAll()` in teardown.
+
+**`ApiSurface` only sees classes it is named.** It reflects over an explicit `CONTRACT_CLASSES`
+list, so a new public declaration is unguarded until it is added there. Top-level *extension*
+functions need the Java-reflection fallback as well — Kotlin's `declaredMemberFunctions` and
+`staticFunctions` both miss them, and the guard reports a file facade as having no API at all.
+Prove any change to this file catches divergence in both directions before trusting it.
 
 ---
 

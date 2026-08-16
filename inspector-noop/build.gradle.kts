@@ -19,6 +19,15 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
+        // Mirrors :inspector-core's jvm+android source set so `Inspector.okHttpInterceptor()`
+        // still resolves under -Pinspector=off, returning a pass-through interceptor.
+        val jvmAndAndroidMain by creating {
+            dependsOn(commonMain.get())
+            dependencies { compileOnly(libs.okhttp) }
+        }
+        jvmMain.get().dependsOn(jvmAndAndroidMain)
+        androidMain.get().dependsOn(jvmAndAndroidMain)
+
         commonMain.dependencies {
             // Must mirror :inspector-core's exposed dependencies exactly, or swapping the two
             // would change what compiles in the consuming app.
@@ -31,6 +40,9 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(kotlin("reflect"))
+            // OkHttp is compileOnly for consumers, but ApiParityTest reflects over the facade
+            // class and needs okhttp3.Interceptor loadable at test runtime.
+            implementation(libs.okhttp)
         }
     }
 

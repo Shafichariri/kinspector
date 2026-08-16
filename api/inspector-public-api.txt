@@ -28,6 +28,7 @@ dev.inspector.InspectorConfig: val redaction: dev.inspector.Redaction
 dev.inspector.InspectorConfig: val ringBufferMaxBytes: Long
 dev.inspector.InspectorSink: fun onMarker(marker: Marker): Unit
 dev.inspector.InspectorSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
+dev.inspector.OkHttpCaptureKt: fun okHttpInterceptor(dev.inspector.Inspector): okhttp3.Interceptor
 dev.inspector.Redaction$Companion: val DEFAULT_BODY_KEY_PATTERN: String
 dev.inspector.Redaction$Companion: val DEFAULT_HEADERS: List<String>
 dev.inspector.Redaction$Companion: val DEFAULT_QUERY_KEY_PATTERN: String

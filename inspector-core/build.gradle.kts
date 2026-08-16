@@ -19,6 +19,21 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
+        // OkHttp capture lives in this module rather than its own so it can reuse `Recorder`,
+        // `Redactor` and the id/clock helpers as internals. A separate module would have forced
+        // either a public recording API into existence or a second copy of the redaction logic,
+        // and a second copy is how two capture paths quietly stop agreeing.
+        val jvmAndAndroidMain by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                // compileOnly: a consuming app keeps whatever OkHttp it already has, and an app
+                // with no OkHttp is unaffected because it never references the interceptor.
+                compileOnly(libs.okhttp)
+            }
+        }
+        jvmMain.get().dependsOn(jvmAndAndroidMain)
+        androidMain.get().dependsOn(jvmAndAndroidMain)
+
         commonMain.dependencies {
             // `api`, not `implementation`: consumers call Inspector.install inside their own
             // HttpClient { } block, and read NetworkTransaction off the exposed StateFlows.
@@ -42,6 +57,7 @@ kotlin {
             implementation(libs.ktor.server.compression)
             implementation(libs.ktor.client.cio)
             implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.okhttp)
         }
     }
 
