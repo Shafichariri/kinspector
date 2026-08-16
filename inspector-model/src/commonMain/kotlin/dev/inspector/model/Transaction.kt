@@ -58,6 +58,16 @@ data class NetworkTransaction(
     val reqContentType: String? = null,
     val resContentType: String? = null,
     /**
+     * Why a body is absent, when it is. Null means nothing was withheld — either the body was
+     * captured or there was none to capture.
+     *
+     * Recorded because a viewer cannot infer the reason from a missing body, and guessing it
+     * produces confident wrong answers: the first version of the UI told users their JSON was
+     * "outside the capture allowlist" when it had in fact been captured and written to disk.
+     */
+    val reqBodyOmitted: String? = null,
+    val resBodyOmitted: String? = null,
+    /**
      * What redaction removed, e.g. `header:authorization`, `query:token`, `body:$.password`.
      * Present so consumers can say "this was redacted" rather than "this was absent" — an agent
      * told nothing will otherwise report the request carried no credentials.
@@ -97,6 +107,24 @@ data class Marker(
     /** `app`, `agent`, or `user`. */
     val source: String,
 )
+
+/**
+ * [NetworkTransaction.reqBodyOmitted] / [NetworkTransaction.resBodyOmitted] values.
+ *
+ * Strings rather than an enum for the same reason [MarkerSource] is: the archive outlives the
+ * binary that wrote it, and a reader from an older build must be able to read a session
+ * containing a reason it has never heard of rather than fail to decode the row.
+ */
+object BodyOmission {
+    /** The content type was not on [dev.inspector.InspectorConfig.captureContentTypes]. */
+    const val CONTENT_TYPE = "contentType"
+
+    /**
+     * The body was streamed, not held in memory. Buffering it in order to inspect it is exactly
+     * the cost the efficiency contract forbids, so its size is reported and its bytes are not.
+     */
+    const val STREAMING = "streaming"
+}
 
 /** Marker [Marker.source] values. */
 object MarkerSource {

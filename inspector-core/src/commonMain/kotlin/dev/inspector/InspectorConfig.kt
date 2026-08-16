@@ -20,7 +20,10 @@ data class InspectorConfig(
     val bodyCaptureMaxBytes: Int = 256 * 1024,
     /**
      * Content types whose bodies are captured. Anything else contributes a byte count only.
-     * Matching is by prefix, so `text/` covers `text/plain` and `text/html`.
+     *
+     * Matching is by prefix, so `text/` covers `text/plain` and `text/html`, and additionally by
+     * structured-syntax suffix, so `application/vnd.api+json` and `application/hal+json` need no
+     * entry here.
      */
     val captureContentTypes: List<String> = listOf(
         "application/json",
@@ -28,7 +31,21 @@ data class InspectorConfig(
         "application/xml",
         "application/x-www-form-urlencoded",
         "application/problem+json",
+        "application/graphql",
+        "application/x-ndjson",
+        "application/javascript",
+        "application/jwt",
     ),
+    /**
+     * Capture every body regardless of content type, up to [bodyCaptureMaxBytes].
+     *
+     * Off by default: the allowlist is what stops an image-heavy or file-downloading app from
+     * paying to have its payloads buffered and shipped to the host. Turn it on when you would
+     * rather see a body you did not anticipate than have it silently counted — the same "show me
+     * everything" stance as [Redaction.Off], with the same caveat that it all lands in the host
+     * archive. Bodies that are not valid UTF-8 still round trip; they travel base64-encoded.
+     */
+    val captureAllBodies: Boolean = false,
     /**
      * What, if anything, to strip before a transaction reaches any sink.
      *

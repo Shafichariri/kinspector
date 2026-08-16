@@ -77,8 +77,9 @@ class SessionManager(
 
     fun append(sessionId: String, txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
         val writer = synchronized(lock) { open[sessionId] } ?: return
-        synchronized(writer) { writer.append(txn, reqBody, resBody) }
-        _live.tryEmit(LiveEvent.Transaction(sessionId, txn))
+        // Broadcast what was stored, not what arrived: only the stored row carries the body refs.
+        val stored = synchronized(writer) { writer.append(txn, reqBody, resBody) }
+        _live.tryEmit(LiveEvent.Transaction(sessionId, stored))
     }
 
     fun append(sessionId: String, marker: Marker) {

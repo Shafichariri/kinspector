@@ -74,10 +74,11 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
         val ts = nowIso()
         val startMono = monoMs()
 
-        val snapshot = request.snapshotRequest()
         val config = recorder.config
+        val outgoing = request.body as? OutgoingContent
+        val snapshot = request.snapshotRequest(outgoing)
         val redactor = Redactor(config.redaction)
-        val reqCapture = captureRequestBody(request.body as? OutgoingContent, config)
+        val reqCapture = captureRequestBody(outgoing, config)
 
         try {
             val call: HttpClientCall = proceed(request)
@@ -105,6 +106,8 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
                         reqBytes = reqCapture.totalBytes,
                         reqBodyTruncated = reqCapture.truncated,
                         resBodyTruncated = captured.truncated,
+                        reqBodyOmitted = reqCapture.omitted,
+                        resBodyOmitted = captured.omitted,
                         reqHeaders = redactor.headers(snapshot.headers, hits),
                         query = redactor.query(snapshot.query, hits),
                         redacted = hits,
@@ -137,6 +140,7 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
                     error = cause.describe(),
                     reqBytes = reqCapture.totalBytes,
                     reqBodyTruncated = reqCapture.truncated,
+                    reqBodyOmitted = reqCapture.omitted,
                     reqHeaders = redactor.headers(snapshot.headers, hits),
                     query = redactor.query(snapshot.query, hits),
                     redacted = hits,
@@ -164,17 +168,26 @@ internal class RequestSnapshot(
     val contentLength: Long,
 )
 
-internal fun HttpRequestBuilder.snapshotRequest(): RequestSnapshot {
+/**
+ * [content] is the rendered outgoing body. It is needed because Ktor carries a request's content
+ * type on the body rather than in the builder's headers: reading headers alone reported
+ * `reqContentType = null` for every request that had one, which in turn silently disabled
+ * request-body redaction, since that bails on anything not declared JSON.
+ */
+internal fun HttpRequestBuilder.snapshotRequest(content: OutgoingContent? = null): RequestSnapshot {
     val url = url.build()
+    val built = headers.build()
     return RequestSnapshot(
         method = method.value.uppercase(),
         scheme = url.protocol.name,
         host = url.host,
         path = url.encodedPath,
         query = url.encodedQuery.takeIf { it.isNotEmpty() },
-        headers = headers.build().toMultimap(),
-        contentType = headers[io.ktor.http.HttpHeaders.ContentType],
-        contentLength = headers[io.ktor.http.HttpHeaders.ContentLength]?.toLongOrNull() ?: 0L,
+        headers = built.toMultimap(),
+        contentType = built[HttpHeaders.ContentType] ?: content?.contentType?.toString(),
+        contentLength = built[HttpHeaders.ContentLength]?.toLongOrNull()
+            ?: content?.contentLength
+            ?: 0L,
     )
 }
 
@@ -193,6 +206,8 @@ internal fun RequestSnapshot.toTransaction(
     reqBytes: Long = contentLength,
     reqBodyTruncated: Boolean = false,
     resBodyTruncated: Boolean = false,
+    reqBodyOmitted: String? = null,
+    resBodyOmitted: String? = null,
     reqHeaders: Map<String, List<String>> = headers,
     query: String? = this.query,
     redacted: List<String> = emptyList(),
@@ -216,6 +231,8 @@ internal fun RequestSnapshot.toTransaction(
     resHeaders = resHeaders,
     reqBodyTruncated = reqBodyTruncated,
     resBodyTruncated = resBodyTruncated,
+    reqBodyOmitted = reqBodyOmitted,
+    resBodyOmitted = resBodyOmitted,
     reqContentType = contentType,
     resContentType = resContentType,
     redacted = redacted,

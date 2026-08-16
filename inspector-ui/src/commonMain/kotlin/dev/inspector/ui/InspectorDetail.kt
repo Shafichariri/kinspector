@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
+import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
 
 internal enum class DetailTab { Overview, Request, Response }
@@ -92,6 +93,7 @@ internal fun InspectorDetail(
                     contentType = txn.reqContentType,
                     truncated = txn.reqBodyTruncated,
                     totalBytes = txn.reqBytes,
+                    omitted = txn.reqBodyOmitted,
                 )
                 DetailTab.Response -> BodySection(
                     headers = txn.resHeaders,
@@ -99,6 +101,7 @@ internal fun InspectorDetail(
                     contentType = txn.resContentType,
                     truncated = txn.resBodyTruncated,
                     totalBytes = txn.resBytes,
+                    omitted = txn.resBodyOmitted,
                 )
             }
         }
@@ -158,6 +161,7 @@ private fun BodySection(
     contentType: String?,
     truncated: Boolean,
     totalBytes: Long,
+    omitted: String?,
 ) {
     val colors = LocalInspectorColors.current
 
@@ -186,7 +190,7 @@ private fun BodySection(
     SectionTitle("Body")
     when {
         body == null && totalBytes > 0 -> Text(
-            "${formatBytes(totalBytes)} not captured — content type is outside the capture allowlist",
+            bodyAbsenceReason(omitted, contentType, totalBytes),
             color = colors.onSurfaceMuted,
             fontSize = 12.sp,
         )
@@ -220,6 +224,28 @@ private fun BodySection(
                 )
             }
         }
+    }
+}
+
+/**
+ * Explains an absent body from what capture recorded, rather than assuming a cause.
+ *
+ * The single hardcoded "outside the capture allowlist" line this replaces was wrong often enough
+ * to send someone hunting a content-type problem that did not exist.
+ */
+private fun bodyAbsenceReason(omitted: String?, contentType: String?, totalBytes: Long): String {
+    val size = formatBytes(totalBytes)
+    return when (omitted) {
+        BodyOmission.CONTENT_TYPE -> {
+            val named = contentType?.let { "content type $it is" }
+                ?: "no content type was declared, so it is"
+            "$size not captured — $named not on the capture allowlist " +
+                "(set captureAllBodies = true to capture it anyway)"
+        }
+
+        BodyOmission.STREAMING -> "$size not captured — streamed body, never held in memory"
+
+        else -> "$size recorded, but the body is no longer in the device buffer"
     }
 }
 

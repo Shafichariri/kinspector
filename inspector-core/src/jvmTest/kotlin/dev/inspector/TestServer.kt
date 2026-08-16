@@ -118,6 +118,15 @@ class TestServer {
                     call.respondBytes(bytes, ContentType.Application.OctetStream)
                 }
 
+                // A structured-syntax suffix type. Real APIs serve these and the first version
+                // of the allowlist dropped their bodies as if they were binary.
+                get("/vendor-json") {
+                    call.respondText(
+                        """{"data":{"type":"user","id":"1"}}""",
+                        ContentType.parse("application/vnd.api+json"),
+                    )
+                }
+
                 get("/empty") {
                     call.respond(HttpStatusCode.NoContent)
                 }

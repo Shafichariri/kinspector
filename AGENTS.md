@@ -37,9 +37,32 @@ Three consumers of the same captured data:
 | **0** | Schema, filter grammar, API contract, release guard | ✅ done |
 | **1** | Capture, ring buffer, redaction, overlay + inspector UI | ✅ done |
 | **2** | Host daemon, session archive, stream sink, web UI | ✅ done |
-| **3** | MCP server, richer CLI, polish | ⬜ next |
+| **3** | MCP server over the archive | ✅ done |
+| **4** | Capture traffic from non-Ktor SDKs (Auth0, native) | ⬜ next |
 
-**127 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**146 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+
+### First real-app findings (2026-08-16, a consuming app on an Android emulator)
+
+The first session recorded from a real app surfaced four defects. All are fixed; they are listed
+because each was invisible to the suite at the time, and the shape of each gap matters more than
+the fix.
+
+1. **Live viewers saw every body as missing.** `SessionWriter.append` returned Unit and
+   `SessionManager` broadcast the row *as received*, where `*BodyRef` is null by wire contract.
+   The bodies were on disk the whole time. Nothing tested the live payload — `LiveTest` now does.
+2. **The UI invented a reason.** Any null body rendered as "content type outside the capture
+   allowlist", which was flatly wrong for the case above. Capture now records
+   `reqBodyOmitted`/`resBodyOmitted` and both UIs render what was recorded, never a guess.
+3. **`reqContentType` was null on every request.** It was read from the builder's headers, but
+   Ktor keeps it on the `OutgoingContent`. This also silently disabled request-body redaction,
+   which bails on anything not declared JSON — so `Redaction.On` was not redacting request bodies
+   at all.
+4. **Two dead daemons.** A failed bind left the JVM alive still printing "listening on …". The
+   port is now probed before anything is printed.
+
+The lesson worth keeping: **the live path and the REST path are two renderings of one row, and
+only the REST one was tested.** Any new field on `NetworkTransaction` needs a check on both.
 
 ### Verified
 
@@ -77,32 +100,56 @@ Three consumers of the same captured data:
 
 ---
 
-## What is next (Phase 3)
+## What is next (Phase 4) — capturing what Ktor cannot see
 
-Ordered by value. Full detail in `docs/implementation-plan.md` §10 (Phase 3).
+**The problem, stated precisely.** Capture is a Ktor *client plugin*. It sees exactly the traffic
+that flows through an `HttpClient` the app configured. It cannot see:
 
-**1. MCP server — the main remaining piece.**
-`inspector mcp` (stdio) wrapping `SessionRepository`, which already has every read the tools
-need. Add to `:inspector-daemon` with the MCP Kotlin SDK; wire a new `"mcp"` branch in
-`Main.kt` alongside `serve`/`query`/`summary`.
+- SDKs that own their transport. Auth0's Android SDK builds its own OkHttp internally; on iOS it
+  uses `URLSession`. Neither passes through Ktor, so neither appears — which is what the first
+  real user hit, seeing app→backend calls but no Auth0 calls.
+- Anything native: WebViews, Firebase, analytics SDKs, the platform image loaders.
 
-Tools: `list_sessions`, `session_summary(sessionId="latest")`,
-`list_transactions(filter, limit, offset)`, `get_transaction(txnId)`,
-`get_body(txnId, side, maxBytes)`, `add_marker(label)`.
+Three mechanisms can close this, at increasing cost and increasing coverage. **They are not
+alternatives to each other; 4a is worth doing regardless of whether 4c ever happens.**
 
-The tool *descriptions* matter as much as the code: steer the model to call `session_summary`
-first (it answers most questions in ~1 KB — `SessionSummary` is already shaped for exactly this)
-and to filter rather than read everything. Document the filter grammar inside the
-`list_transactions` description. Acceptance: an agent with only these tools answers "what failed
-after the 'tapped checkout' marker and what did the server return?" in ≤4 calls.
+**4a. `:inspector-okhttp` — an OkHttp `Interceptor` (small, Android only, partial coverage).**
+Recording into the same `Recorder`, so rows are indistinguishable from Ktor's. Immediately covers
+every OkHttp-based library where the app controls the client: Retrofit, Coil, and Ktor's own
+OkHttp engine. For Auth0 specifically it needs an adapter, because `com.auth0.android` does not
+accept an injected `OkHttpClient` — it accepts a `NetworkingClient`, so the app implements that
+interface, delegates to an inspected OkHttp client, and passes it via `Auth0.networkingClient`.
+That adapter is ~15 lines of app code and belongs in `docs/INTEGRATION.md`, not in the library:
+`:inspector-okhttp` must not depend on Auth0.
 
-**2. Someone should look at the web UI** and say what is ugly. It renders correctly; nobody has
-judged it.
+Reuses `teeBody`, `Redactor` and `CallState` unchanged. The one genuinely new piece is that
+OkHttp's `Interceptor` is blocking, so the body tee needs a blocking variant — do **not** make
+the app wait on a coroutine.
 
-**3. Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
-module and an Xcode project; the UI module already compiles for both.
+**4b. Blocking the leak, cheaply: report what we know we cannot see.** Even with 4a, some traffic
+is invisible, and the current failure mode is silence, which reads as "no traffic happened". Cheap
+mitigation: a session-level note listing hosts seen in DNS/connection logs but never captured. Not
+designed yet; may not be worth it.
 
-**4. Stretch:** HAR export (`GET /api/sessions/{id}/har`).
+**4c. Proxy capture (large, universal).** The daemon runs a local HTTP proxy; the emulator or
+simulator is pointed at it. Catches everything including native SDKs and WebViews, and is the only
+mechanism that works on iOS for non-Ktor traffic. Cost is real: HTTPS requires a generated CA
+installed in the emulator's trust store, and on Android 7+ apps must additionally opt in via
+`network_security_config.xml` — which is acceptable here, because that file is already a
+debug-only artifact in this project's integration guide. This is the mitmproxy model and should be
+scoped as its own phase, not bolted onto 4a.
+
+**Recommendation:** do 4a next. It is a day's work, covers the common Android cases, and does not
+foreclose 4c. Do not start 4c without the user explicitly choosing it — it changes the tool from a
+library into a piece of network infrastructure.
+
+### Also outstanding
+
+- **Someone should look at the web UI** and say what is ugly. It renders correctly; nobody has
+  judged it.
+- **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
+  module and an Xcode project; the UI module already compiles for both.
+- **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
 
 ---
 
@@ -195,6 +242,28 @@ adding authentication first.
 **Kotlin block comments nest.** A `/*` inside KDoc (e.g. the example `path:/v2/users/*`) swallows
 the rest of the file. Write `&#42;` or avoid the sequence.
 
+**A request's content type lives on the body, not the headers.** `HttpRequestBuilder.headers`
+does not carry `Content-Type`; Ktor puts it on the rendered `OutgoingContent`. Read both, always.
+Getting this wrong reports `reqContentType = null` *and* silently turns off request-body
+redaction, because `Redactor.body` only touches bodies declared JSON.
+
+**Never guess why a body is absent — read `reqBodyOmitted`/`resBodyOmitted`.** Those exist
+precisely because a UI that guessed sent someone chasing a content-type bug that did not exist.
+If a new code path can drop a body, give it a `BodyOmission` constant.
+
+**The two module test frameworks differ.** `:inspector-core` and the KMP modules run **JUnit 4**
+(`kotlin("test")` on JVM), where a test method must return `Unit` — `fun x() = runBlocking { … }`
+fails at class-init with "should be void" if the block's last expression returns a value, and
+`assertNotNull` returns its argument. `:inspector-daemon` runs **JUnit 5**
+(`useJUnitPlatform()`), where a value-returning `@BeforeEach` is rejected instead.
+
+**MCP tool failures are results, not JSON-RPC errors.** An agent can read `isError: true` with a
+message and correct itself; a transport-level error just ends its turn. Reserve JSON-RPC errors
+for protocol problems like an unknown method.
+
+**`inspector mcp` owns stdout.** Anything printed there that is not a JSON-RPC frame
+desynchronises the client. Diagnostics go to stderr.
+
 ---
 
 ## Efficiency contract
@@ -246,6 +315,15 @@ npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
 ./gradlew build -Pinspector=off                   # release swap
+```
+
+Driving the MCP server by hand, which is the fastest way to check a tool change:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"session_summary","arguments":{}}}' \
+  | inspector-daemon/build/install/inspector/bin/inspector mcp
 ```
 
 Changing the public API is deliberately high-friction, because it is a contract:

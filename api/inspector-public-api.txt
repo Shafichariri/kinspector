@@ -15,12 +15,14 @@ dev.inspector.Inspector: var canary: String (restricted set)
 dev.inspector.InspectorConfig: fun component1(): Long
 dev.inspector.InspectorConfig: fun component2(): Int
 dev.inspector.InspectorConfig: fun component3(): List<String>
-dev.inspector.InspectorConfig: fun component4(): dev.inspector.Redaction
-dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCaptureMaxBytes: Int = ..., captureContentTypes: List<String> = ..., redaction: dev.inspector.Redaction = ...): dev.inspector.InspectorConfig
+dev.inspector.InspectorConfig: fun component4(): Boolean
+dev.inspector.InspectorConfig: fun component5(): dev.inspector.Redaction
+dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCaptureMaxBytes: Int = ..., captureContentTypes: List<String> = ..., captureAllBodies: Boolean = ..., redaction: dev.inspector.Redaction = ...): dev.inspector.InspectorConfig
 dev.inspector.InspectorConfig: fun equals(other: Any?): Boolean
 dev.inspector.InspectorConfig: fun hashCode(): Int
 dev.inspector.InspectorConfig: fun toString(): String
 dev.inspector.InspectorConfig: val bodyCaptureMaxBytes: Int
+dev.inspector.InspectorConfig: val captureAllBodies: Boolean
 dev.inspector.InspectorConfig: val captureContentTypes: List<String>
 dev.inspector.InspectorConfig: val redaction: dev.inspector.Redaction
 dev.inspector.InspectorConfig: val ringBufferMaxBytes: Long

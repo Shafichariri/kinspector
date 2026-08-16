@@ -1,5 +1,7 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.mcp.McpServer
+import dev.inspector.daemon.mcp.McpTools
 import kotlin.io.path.Path
 import kotlin.system.exitProcess
 
@@ -8,6 +10,7 @@ inspector — host daemon for the Compose Multiplatform network inspector
 
 Usage:
   inspector serve [--port N] [--data DIR] [--max-sessions N] [--max-mb N]
+  inspector mcp   [--data DIR] [--port N]
   inspector sessions
   inspector summary  [--session ID]
   inspector query    '<filter>' [--session ID] [--limit N] [--offset N]
@@ -39,7 +42,25 @@ fun main(args: Array<String>) {
     val repository = SessionRepository(config)
 
     when (args[0]) {
-        "serve" -> InspectorDaemon(config).start(wait = true)
+        "serve" -> try {
+            InspectorDaemon(config).start(wait = true)
+        } catch (e: PortUnavailableException) {
+            fail(
+                "port ${e.port} is already in use — another daemon is probably still running.\n" +
+                    "  find it:  lsof -nP -iTCP:${e.port} -sTCP:LISTEN\n" +
+                    "  or pick another port:  inspector serve --port ${e.port + 1}"
+            )
+        }
+
+        "mcp" -> {
+            // stdout is the protocol channel from here on; diagnostics go to stderr only.
+            McpServer(
+                tools = McpTools(config),
+                input = System.`in`.bufferedReader(),
+                output = System.out,
+                log = System.err,
+            ).run()
+        }
 
         "sessions" -> {
             val sessions = repository.listSessions()

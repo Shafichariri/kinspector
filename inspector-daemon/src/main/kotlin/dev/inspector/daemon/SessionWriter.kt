@@ -50,8 +50,12 @@ class SessionWriter(
      * Persists one attempt, writing its bodies to `bodies/` and rewriting the `*BodyRef` fields
      * so the stored row points at them. Bodies arrive inline over the wire specifically so the
      * device never has to touch a filesystem.
+     *
+     * Returns the row **as stored**, refs included. Callers must broadcast this rather than the
+     * incoming [txn]: the wire contract sends `*BodyRef` as null, so a live viewer handed the
+     * incoming row sees every body as absent even though it is already on disk.
      */
-    fun append(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
+    fun append(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): NetworkTransaction {
         var stored = txn
 
         if (reqBody != null) {
@@ -70,6 +74,8 @@ class SessionWriter(
         txnCount++
         if (stored.isError) errorCount++
         dirtySinceFlush = true
+
+        return stored
     }
 
     fun append(marker: Marker) {

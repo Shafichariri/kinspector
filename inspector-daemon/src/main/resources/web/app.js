@@ -239,11 +239,44 @@
       }
     }
 
-    appendSide(pane, 'Request', txn.reqHeaders, reqBody, txn.reqBytes, txn.reqBodyTruncated, txn.reqContentType);
-    appendSide(pane, 'Response', txn.resHeaders, resBody, txn.resBytes, txn.resBodyTruncated, txn.resContentType);
+    appendSide(pane, 'Request', txn, 'req', reqBody);
+    appendSide(pane, 'Response', txn, 'res', resBody);
   }
 
-  function appendSide(pane, title, headers, body, totalBytes, truncated, contentType) {
+  /**
+   * Explains an absent body, using what the capture layer recorded rather than assuming.
+   * Returns null when there is a body to show.
+   *
+   * Every branch here was once collapsed into a single "content type outside the capture
+   * allowlist" line, which confidently misreported bodies that had been captured and stored.
+   */
+  function bodyAbsenceReason(txn, side, body) {
+    if (body !== null) return null;
+    const totalBytes = side === 'req' ? txn.reqBytes : txn.resBytes;
+    if (!totalBytes) return 'empty';
+
+    const omitted = side === 'req' ? txn.reqBodyOmitted : txn.resBodyOmitted;
+    const contentType = side === 'req' ? txn.reqContentType : txn.resContentType;
+    const size = fmtBytes(totalBytes);
+
+    if (omitted === 'contentType') {
+      const named = contentType ? `content type ${contentType} is` : 'no content type was declared, so it is';
+      return `${size} not captured — ${named} not on the capture allowlist (set captureAllBodies = true to capture it anyway)`;
+    }
+    if (omitted === 'streaming') {
+      return `${size} not captured — streamed body, never held in memory`;
+    }
+    const ref = side === 'req' ? txn.reqBodyRef : txn.resBodyRef;
+    if (!ref) return `${size} recorded on device, but no body reached the archive`;
+    return `${size} captured, but ${ref} could not be read`;
+  }
+
+  function appendSide(pane, title, txn, side, body) {
+    const headers = side === 'req' ? txn.reqHeaders : txn.resHeaders;
+    const truncated = side === 'req' ? txn.reqBodyTruncated : txn.resBodyTruncated;
+    const contentType = side === 'req' ? txn.reqContentType : txn.resContentType;
+    const totalBytes = side === 'req' ? txn.reqBytes : txn.resBytes;
+
     pane.appendChild(el('div', 'section-title', `${title} headers`));
     const box = el('div', 'headers');
     const entries = Object.entries(headers || {});
@@ -260,12 +293,9 @@
     pane.appendChild(box);
 
     pane.appendChild(el('div', 'section-title', `${title} body`));
-    if (body === null) {
-      pane.appendChild(
-        el('div', 'muted', totalBytes
-          ? `${fmtBytes(totalBytes)} not captured — content type outside the capture allowlist`
-          : 'empty'),
-      );
+    const absent = bodyAbsenceReason(txn, side, body);
+    if (absent !== null) {
+      pane.appendChild(el('div', 'muted', absent));
       return;
     }
     if (truncated) {

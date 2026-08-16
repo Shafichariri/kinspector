@@ -25,9 +25,10 @@ the overlay working is how you know capture works before adding a second moving 
 headers, query, status, timing, request and response bodies. Redirects and retries appear as
 separate rows so you can see the whole chain.
 
-**You don't get:** traffic from anything that isn't your Ktor client. No third-party SDKs
-(Firebase, analytics, image loaders with their own clients), no WebView traffic, no native iOS
-`NSURLSession` calls. No WebSocket or SSE frames.
+**You don't get:** traffic from anything that isn't your Ktor client. **Auth0 in particular is
+invisible** — its SDK owns its own transport on both platforms. Likewise Firebase, analytics,
+image loaders with their own clients, WebView traffic, and native `NSURLSession` calls. No
+WebSocket or SSE frames. See section 11 for why, and what is planned about it.
 
 **It must never ship to production.** Section 3 is not optional — it is how that is enforced.
 
@@ -328,11 +329,36 @@ Inspector.init(
         captureContentTypes = listOf(            // everything else gets a byte count, no buffer
             "application/json", "text/", "application/xml",
             "application/x-www-form-urlencoded", "application/problem+json",
+            "application/graphql", "application/x-ndjson",
+            "application/javascript", "application/jwt",
         ),
+        captureAllBodies = false,                // see below
         redaction = Redaction.Off,
     )
 )
 ```
+
+`+json` and `+xml` suffix types are captured without being listed, so `application/vnd.api+json`
+and `application/hal+json` work out of the box.
+
+### If a body says it wasn't captured
+
+The detail pane names the actual reason, and the reason decides the fix:
+
+| What it says | What happened | Fix |
+|---|---|---|
+| `content type X is not on the capture allowlist` | Working as configured | Add `X` to `captureContentTypes`, or set `captureAllBodies = true` |
+| `no content type was declared` | The server sent no `Content-Type` | `captureAllBodies = true` |
+| `streamed body, never held in memory` | A streaming upload | Nothing — buffering it is the one cost this tool refuses to impose |
+| `empty` | There genuinely was no body | Nothing |
+
+```kotlin
+InspectorConfig(captureAllBodies = true)   // capture every content type, up to the byte cap
+```
+
+This is the same "show me everything" stance as redaction being off. Binary bodies survive intact
+(they travel base64-encoded) and `bodyCaptureMaxBytes` still applies, so an image-heavy screen
+costs at most that per response.
 
 ### Redaction is off by default
 
@@ -436,19 +462,78 @@ known open question.
 
 ---
 
-## 10. What to report back
+## 10. Letting an AI agent read your sessions (MCP)
 
-Useful feedback for the next phase:
+`inspector mcp` exposes the archive over the Model Context Protocol, so an agent answers
+questions about a recorded session directly instead of you pasting logs. It reads the archive
+straight off disk, so it works on old sessions with no daemon running. It needs **no change to
+the app integration above**.
 
-1. **Your Ktor engine per target** — settles the redirect-chain question.
-2. **Whether the overlay looks right on a real phone.** It has been verified on desktop only; it
-   has never been seen on an Android or iOS device.
-3. Anything that felt slow, any body that came back wrong, any call that didn't appear.
+Tools: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
+`get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`. The last one needs a running
+daemon, since a marker has to land in a session that is currently recording.
+
+Register it once, using the absolute path to the built binary:
+
+```bash
+claude mcp add inspector -- /Users/you/development/tools/inspector/inspector-daemon/build/install/inspector/bin/inspector mcp
+```
+
+**Cursor** — `.cursor/mcp.json`, or the global `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "inspector": {
+      "command": "/absolute/path/to/inspector-daemon/build/install/inspector/bin/inspector",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Codex** — `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.inspector]
+command = "/absolute/path/to/inspector-daemon/build/install/inspector/bin/inspector"
+args = ["mcp"]
+```
+
+Then ask, in plain language: *"What failed after the 'tapped checkout' marker, and what did the
+server return?"* The agent calls `session_summary`, filters with
+`since:marker("tapped checkout") has:error`, and reads the one body that matters — three calls,
+about two kilobytes of context.
+
+Point it at a different archive with `--data /path/to/dir`, or a non-default daemon port for
+`add_marker` with `--port N`.
 
 ---
 
-## 11. What's coming
+## 11. Known gap: traffic that never touches your Ktor client
 
-Phase 3 adds an MCP server, so an AI agent can query a recorded session directly — "what failed
-after the 'tapped checkout' marker and what did the server return?" — without you pasting
-anything. It needs no change to the integration above.
+Capture is a **Ktor client plugin**. It sees exactly what flows through an `HttpClient` you
+configured, and nothing else. In particular it does **not** see:
+
+- **Auth0.** The Android SDK builds its own OkHttp internally; on iOS it uses `URLSession`.
+  Neither goes through Ktor, so login and token-refresh calls do not appear.
+- Anything else with its own transport: WebViews, Firebase, analytics SDKs, native image loaders.
+
+If your app→backend calls appear but your Auth0 calls do not, that is this, not a
+misconfiguration — nothing in the setup above will change it.
+
+Closing it is Phase 4. The planned first step is a small `:inspector-okhttp` interceptor, which
+covers OkHttp-based libraries where you control the client (Retrofit, Coil, Ktor's OkHttp
+engine). Auth0 additionally needs a short adapter in *your* code, because
+`com.auth0.android` accepts a `NetworkingClient` rather than an `OkHttpClient` — that adapter
+will be documented here once the module exists. The universal fix for iOS and for SDKs that hide
+their transport entirely is proxy-based capture, which is a larger piece of work and has not
+been started. See `AGENTS.md` → "What is next (Phase 4)".
+
+---
+
+## 12. What to report back
+
+1. **Your Ktor engine per target** — settles the redirect-chain question.
+2. **Whether the overlay looks right on a real phone.** Verified on desktop only.
+3. Anything that felt slow, any body that came back wrong, any call that didn't appear.

@@ -17,7 +17,12 @@ data class InspectorConfig(
         "application/xml",
         "application/x-www-form-urlencoded",
         "application/problem+json",
+        "application/graphql",
+        "application/x-ndjson",
+        "application/javascript",
+        "application/jwt",
     ),
+    val captureAllBodies: Boolean = false,
     val redaction: Redaction = Redaction.Off,
 )
 

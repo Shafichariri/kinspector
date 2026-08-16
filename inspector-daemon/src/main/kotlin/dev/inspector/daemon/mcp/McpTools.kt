@@ -1,0 +1,332 @@
+package dev.inspector.daemon.mcp
+
+import dev.inspector.daemon.DaemonConfig
+import dev.inspector.daemon.SessionRepository
+import dev.inspector.daemon.SessionSummary
+import dev.inspector.daemon.TransactionPage
+import dev.inspector.model.FilterParseException
+import dev.inspector.model.InspectorJsonPretty
+import dev.inspector.model.NetworkTransaction
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.builtins.ListSerializer
+
+/** Lenient on input, strict on output — agents send approximate JSON. */
+internal val McpJson: Json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+/** A tool either produced text for the agent, or a message explaining why it could not. */
+sealed interface ToolOutcome {
+    data class Ok(val text: String) : ToolOutcome
+    data class Failed(val message: String) : ToolOutcome
+}
+
+/**
+ * The archive as agent-callable tools.
+ *
+ * Reads go straight to disk through [SessionRepository], so an agent can inspect yesterday's
+ * session with no daemon running. Only [addMarker] needs the daemon, because a marker has to
+ * land in a session that is currently recording and the daemon owns those writers.
+ *
+ * Every tool is sized for a context window rather than a screen: summaries before rows, rows
+ * before bodies, and bodies truncated unless asked otherwise.
+ */
+class McpTools(
+    private val config: DaemonConfig,
+    private val repository: SessionRepository = SessionRepository(config),
+    private val markerPoster: MarkerPoster = HttpMarkerPoster(config),
+) {
+
+    fun descriptors(): JsonArray = buildJsonArray {
+        add(
+            tool(
+                name = "list_sessions",
+                description = "List recorded sessions, newest first: id, app, device, " +
+                    "transaction and error counts. Use this to find a session id; " +
+                    "'latest' always works without calling it.",
+            ) {
+                put("limit", intProperty("Maximum sessions to return. Default 20."))
+            }
+        )
+        add(
+            tool(
+                name = "session_summary",
+                description = "Compact digest of one session: counts by status class and host, " +
+                    "the slowest calls, every error, and the marker labels. About a kilobyte. " +
+                    "Start here — it answers most questions without reading any transactions.",
+            ) {
+                put("session", sessionProperty())
+            }
+        )
+        add(
+            tool(
+                name = "list_transactions",
+                description = "Transactions matching a filter, newest first. Bodies are NOT " +
+                    "included; call get_body for those. Filter grammar: " +
+                    "status:404, status>=400, method:POST, host:api.example.com, path:/v2/users, " +
+                    "slower:500ms, larger:10kb, has:error, text:refund, attempt>1, " +
+                    "since:marker(\"label\"). Terms separated by spaces are ANDed; '|' ORs.",
+            ) {
+                put("session", sessionProperty())
+                put("filter", stringProperty("Filter expression. Empty matches everything."))
+                put("limit", intProperty("Maximum rows to return. Default 25, maximum 200."))
+                put("offset", intProperty("Rows to skip, for paging. Default 0."))
+            }
+        )
+        add(
+            tool(
+                name = "get_transaction",
+                description = "One transaction in full, including every header. " +
+                    "Bodies are referenced but not inlined; call get_body for those.",
+                required = listOf("id"),
+            ) {
+                put("session", sessionProperty())
+                put("id", stringProperty("Transaction id, as returned by list_transactions."))
+            }
+        )
+        add(
+            tool(
+                name = "get_body",
+                description = "The captured request or response body of one transaction. " +
+                    "Truncated by default because bodies are large and context is not.",
+                required = listOf("id", "side"),
+            ) {
+                put("session", sessionProperty())
+                put("id", stringProperty("Transaction id."))
+                put("side", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray { add(JsonPrimitive("req")); add(JsonPrimitive("res")) })
+                    put("description", "Which body to read.")
+                })
+                put("maxBytes", intProperty("Truncate beyond this. Default 8192, maximum 262144."))
+            }
+        )
+        add(
+            tool(
+                name = "add_marker",
+                description = "Drop a labelled marker into the timeline of the session that is " +
+                    "recording right now, so later calls can be filtered with " +
+                    "since:marker(\"label\"). Requires a running daemon.",
+                required = listOf("label"),
+            ) {
+                put("session", sessionProperty())
+                put("label", stringProperty("Short human-readable label."))
+            }
+        )
+    }
+
+    fun call(name: String, args: JsonObject): ToolOutcome = try {
+        when (name) {
+            "list_sessions" -> listSessions(args)
+            "session_summary" -> sessionSummary(args)
+            "list_transactions" -> listTransactions(args)
+            "get_transaction" -> getTransaction(args)
+            "get_body" -> getBody(args)
+            "add_marker" -> addMarker(args)
+            else -> ToolOutcome.Failed("unknown tool '$name'")
+        }
+    } catch (e: FilterParseException) {
+        // The parser's message names the fix; an agent can correct itself from it.
+        ToolOutcome.Failed(e.message ?: "invalid filter")
+    } catch (e: Exception) {
+        ToolOutcome.Failed("${e::class.simpleName}: ${e.message}")
+    }
+
+    // --- tools -----------------------------------------------------------------------------
+
+    private fun listSessions(args: JsonObject): ToolOutcome {
+        val limit = args.int("limit", default = 20, min = 1, max = 200)
+        val sessions = repository.listSessions().take(limit)
+        if (sessions.isEmpty()) {
+            return ToolOutcome.Ok(
+                "No sessions in ${config.sessionsDir}. An app records only while `inspector serve` " +
+                    "is running and the app is built with the inspector wired in."
+            )
+        }
+        return ToolOutcome.Ok(
+            InspectorJsonPretty.encodeToString(
+                ListSerializer(dev.inspector.model.SessionMeta.serializer()),
+                sessions,
+            )
+        )
+    }
+
+    private fun sessionSummary(args: JsonObject): ToolOutcome {
+        val dir = resolve(args) ?: return noSuchSession(args)
+        val summary = repository.summarize(dir)
+            ?: return ToolOutcome.Failed("session has no metadata; it may still be initialising")
+        return ToolOutcome.Ok(InspectorJsonPretty.encodeToString(SessionSummary.serializer(), summary))
+    }
+
+    private fun listTransactions(args: JsonObject): ToolOutcome {
+        val dir = resolve(args) ?: return noSuchSession(args)
+        val page = repository.queryTransactions(
+            sessionDir = dir,
+            filterText = args.string("filter").orEmpty(),
+            offset = args.int("offset", default = 0, min = 0, max = Int.MAX_VALUE),
+            limit = args.int("limit", default = 25, min = 1, max = 200),
+        )
+        return ToolOutcome.Ok(InspectorJsonPretty.encodeToString(TransactionPage.serializer(), page))
+    }
+
+    private fun getTransaction(args: JsonObject): ToolOutcome {
+        val dir = resolve(args) ?: return noSuchSession(args)
+        val id = args.string("id") ?: return ToolOutcome.Failed("'id' is required")
+        val txn = repository.readTransaction(dir, id)
+            ?: return ToolOutcome.Failed("no transaction '$id' in this session")
+        return ToolOutcome.Ok(InspectorJsonPretty.encodeToString(NetworkTransaction.serializer(), txn))
+    }
+
+    private fun getBody(args: JsonObject): ToolOutcome {
+        val dir = resolve(args) ?: return noSuchSession(args)
+        val id = args.string("id") ?: return ToolOutcome.Failed("'id' is required")
+        val side = args.string("side") ?: return ToolOutcome.Failed("'side' must be 'req' or 'res'")
+        if (side != "req" && side != "res") return ToolOutcome.Failed("'side' must be 'req' or 'res'")
+
+        val bytes = repository.readBody(dir, id, side)
+        if (bytes == null) {
+            // Say why, rather than leaving the agent to conclude the request had no body.
+            val txn = repository.readTransaction(dir, id)
+                ?: return ToolOutcome.Failed("no transaction '$id' in this session")
+            return ToolOutcome.Ok(explainMissingBody(txn, side))
+        }
+
+        val max = args.int("maxBytes", default = 8192, min = 1, max = 262_144)
+        val text = bytes.decodeToString()
+        return ToolOutcome.Ok(
+            if (bytes.size <= max) text
+            else text.take(max) + "\n\n[truncated: showing $max of ${bytes.size} bytes; " +
+                "call get_body again with a larger maxBytes to see the rest]"
+        )
+    }
+
+    private fun addMarker(args: JsonObject): ToolOutcome {
+        val label = args.string("label") ?: return ToolOutcome.Failed("'label' is required")
+        val session = args.string("session") ?: "latest"
+        return markerPoster.post(session, label)
+    }
+
+    // --- helpers ---------------------------------------------------------------------------
+
+    private fun explainMissingBody(txn: NetworkTransaction, side: String): String {
+        val omitted = if (side == "req") txn.reqBodyOmitted else txn.resBodyOmitted
+        val bytes = if (side == "req") txn.reqBytes else txn.resBytes
+        val contentType = if (side == "req") txn.reqContentType else txn.resContentType
+        return when {
+            bytes == 0L -> "This $side had no body."
+            omitted == dev.inspector.model.BodyOmission.CONTENT_TYPE ->
+                "The $side body was not captured: content type ${contentType ?: "was not declared"} " +
+                    "is outside the capture allowlist. $bytes bytes were sent. " +
+                    "Set captureAllBodies = true in InspectorConfig to capture it."
+            omitted == dev.inspector.model.BodyOmission.STREAMING ->
+                "The $side body ($bytes bytes) was streamed and never held in memory, so it was " +
+                    "counted rather than captured."
+            else -> "The $side body ($bytes bytes) is not in the archive."
+        }
+    }
+
+    private fun resolve(args: JsonObject) = repository.resolve(args.string("session") ?: "latest")
+
+    private fun noSuchSession(args: JsonObject): ToolOutcome {
+        val requested = args.string("session") ?: "latest"
+        val known = repository.listSessions().take(5).joinToString(", ") { it.sessionId }
+        return ToolOutcome.Failed(
+            if (known.isEmpty()) "no session '$requested'; the archive is empty"
+            else "no session '$requested'. Known sessions: $known"
+        )
+    }
+}
+
+/** Posting a marker needs the daemon; split out so tests do not need one running. */
+interface MarkerPoster {
+    fun post(session: String, label: String): ToolOutcome
+}
+
+/**
+ * Posts through the daemon's own HTTP API rather than writing the file directly, because the
+ * daemon holds the open writer for a recording session and two writers would interleave.
+ *
+ * Uses the JDK client: adding an HTTP client dependency to reach a loopback port would be
+ * disproportionate.
+ */
+class HttpMarkerPoster(private val config: DaemonConfig) : MarkerPoster {
+    override fun post(session: String, label: String): ToolOutcome {
+        val client = java.net.http.HttpClient.newHttpClient()
+        val body = buildJsonObject { put("label", label) }
+        val request = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create("http://127.0.0.1:${config.port}/api/sessions/$session/markers"))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body.toString()))
+            .build()
+
+        return try {
+            val response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString())
+            if (response.statusCode() in 200..299) {
+                ToolOutcome.Ok("Marker '$label' added to session '$session'.")
+            } else {
+                ToolOutcome.Failed("daemon refused the marker (${response.statusCode()}): ${response.body()}")
+            }
+        } catch (e: java.io.IOException) {
+            ToolOutcome.Failed(
+                "could not reach the daemon on 127.0.0.1:${config.port} — markers can only be " +
+                    "added while `inspector serve` is running and the app is recording. (${e.message})"
+            )
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            ToolOutcome.Failed("interrupted while posting the marker")
+        }
+    }
+}
+
+// --- schema and argument plumbing ------------------------------------------------------------
+
+private fun tool(
+    name: String,
+    description: String,
+    required: List<String> = emptyList(),
+    properties: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit,
+): JsonObject = buildJsonObject {
+    put("name", name)
+    put("description", description)
+    put(
+        "inputSchema",
+        buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject(properties))
+            put("required", buildJsonArray { required.forEach { add(JsonPrimitive(it)) } })
+        },
+    )
+}
+
+private fun sessionProperty() = stringProperty(
+    "Session id, or 'latest' for the most recent. Defaults to 'latest'."
+)
+
+private fun stringProperty(description: String) = buildJsonObject {
+    put("type", "string")
+    put("description", description)
+}
+
+private fun intProperty(description: String) = buildJsonObject {
+    put("type", "integer")
+    put("description", description)
+}
+
+private fun JsonObject.string(key: String): String? =
+    (this[key] as? JsonPrimitive)?.takeIf { it.isString || it !is kotlinx.serialization.json.JsonNull }
+        ?.content?.takeIf { it.isNotBlank() && it != "null" }
+
+/** Agents routinely send numbers as strings, so accept both rather than failing the call. */
+private fun JsonObject.int(key: String, default: Int, min: Int, max: Int): Int {
+    val primitive = this[key] as? JsonPrimitive ?: return default
+    val value = primitive.intOrNull ?: primitive.content.toIntOrNull() ?: return default
+    return value.coerceIn(min, max)
+}

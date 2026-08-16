@@ -41,9 +41,10 @@ catching usually live in the attempts a "one row per call" view would hide.
 | `callId` | string | Groups attempts of one logical call. |
 | `reqBytes` / `resBytes` | long | **True** body size, counted even when the body was not captured. |
 | `reqHeaders` / `resHeaders` | map<string, list<string>> | Post-redaction. |
-| `reqBodyRef` / `resBodyRef` | string? | Host-relative, e.g. `bodies/7f3a.req`. Null on the wire; the daemon fills it in. |
+| `reqBodyRef` / `resBodyRef` | string? | Host-relative, e.g. `bodies/7f3a.req`. Null on the wire; the daemon fills it in — **and must be filled in before the row is broadcast to live viewers**, or they see the body as absent. |
 | `reqBodyTruncated` / `resBodyTruncated` | bool | Body hit `bodyCaptureMaxBytes`. |
-| `reqContentType` / `resContentType` | string? | |
+| `reqBodyOmitted` / `resBodyOmitted` | string? | Why a body is absent: `contentType`, `streaming`. Null when the body was captured or there was none. Consumers must render this rather than guessing a reason. |
+| `reqContentType` / `resContentType` | string? | For requests, read from the outgoing body when the header is absent — Ktor keeps it there, not in the builder's headers. |
 | `redacted` | list<string> | e.g. `header:authorization`, `query:token`, `body:$.password`. |
 
 ### Redaction is off by default

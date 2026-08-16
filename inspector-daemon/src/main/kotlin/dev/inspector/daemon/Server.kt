@@ -35,7 +35,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.util.Base64
+
+/**
+ * Thrown when the daemon's port is already held. Carries the port so the CLI can print the
+ * command that finds the culprit.
+ */
+class PortUnavailableException(val port: Int, cause: Throwable) :
+    IOException("port $port is already in use", cause)
 
 /**
  * The host daemon.
@@ -55,6 +65,7 @@ class InspectorDaemon(private val config: DaemonConfig) {
 
     fun start(wait: Boolean = true) {
         config.sessionsDir.toFile().mkdirs()
+        requirePortAvailable()
 
         // Sweep on start: a daemon that crashed mid-session leaves the archive over its ceiling.
         val pruned = retention.prune()
@@ -77,6 +88,32 @@ class InspectorDaemon(private val config: DaemonConfig) {
         println("inspector: listening on http://127.0.0.1:${config.port}")
         println("inspector: retention ${config.maxSessions} sessions / ${config.maxTotalBytes / 1024 / 1024} MB")
         engine.start(wait = wait)
+    }
+
+    /**
+     * Refuses to start when the port is taken, before anything is printed.
+     *
+     * CIO surfaces a failed bind asynchronously, so without this the daemon announced
+     * "listening on …" and then sat there alive and serving nothing. That is how three
+     * `inspector serve` processes ended up on one machine with only one of them working, all
+     * three looking healthy in the terminal that launched them.
+     *
+     * A pre-flight bind can in principle lose a race to another process between the probe and
+     * the real bind. That is a far better failure than the silent one it replaces.
+     */
+    private fun requirePortAvailable() {
+        try {
+            ServerSocket().use { probe ->
+                // Matches what the server itself will do. SO_REUSEADDR still refuses a port
+                // with a live listener, but permits one left in TIME_WAIT by a daemon that just
+                // exited — so restarting right after Ctrl-C works, while a genuine collision
+                // with a running daemon does not.
+                probe.reuseAddress = true
+                probe.bind(InetSocketAddress("127.0.0.1", config.port))
+            }
+        } catch (cause: IOException) {
+            throw PortUnavailableException(config.port, cause)
+        }
     }
 
     fun stop() {

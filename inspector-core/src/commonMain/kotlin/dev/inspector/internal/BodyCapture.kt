@@ -1,6 +1,7 @@
 package dev.inspector.internal
 
 import dev.inspector.InspectorConfig
+import dev.inspector.model.BodyOmission
 import io.ktor.http.content.OutgoingContent
 import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
@@ -11,24 +12,36 @@ import kotlinx.coroutines.launch
 
 /** Result of teeing one body. */
 internal class CapturedBody(
-    /** Captured prefix, or null when the content type was not on the allowlist. */
+    /** Captured prefix, or null when nothing was captured — [omitted] says why. */
     val bytes: ByteArray?,
     /** True size in bytes, counted past the cap. */
     val totalBytes: Long,
     val truncated: Boolean,
+    /** A [BodyOmission] constant when [bytes] is null despite there being a body. */
+    val omitted: String? = null,
 )
 
 /**
  * True when bodies of this content type should be buffered.
  *
- * Prefix match, so `text/` covers `text/plain` and `text/html`. A null content type is treated
- * as not capturable: guessing wrong here means buffering binary.
+ * Prefix match, so `text/` covers `text/plain` and `text/html`, plus RFC 6838 structured-syntax
+ * suffixes so `application/vnd.api+json` and `application/hal+json` are treated as the JSON they
+ * are. Real APIs serve those and the first version silently dropped their bodies.
+ *
+ * A null content type is capturable only under [InspectorConfig.captureAllBodies]; otherwise
+ * guessing wrong here means buffering binary.
  */
 internal fun InspectorConfig.capturesBody(contentType: String?): Boolean {
+    if (captureAllBodies) return true
     if (contentType == null) return false
     val normalized = contentType.substringBefore(';').trim().lowercase()
-    return captureContentTypes.any { normalized.startsWith(it.lowercase()) }
+    if (captureContentTypes.any { normalized.startsWith(it.lowercase()) }) return true
+    val subtype = normalized.substringAfter('/', "")
+    return TEXT_LIKE_SUFFIXES.any { subtype.endsWith(it) }
 }
+
+/** Structured-syntax suffixes whose payload is text worth rendering. */
+private val TEXT_LIKE_SUFFIXES = listOf("+json", "+xml")
 
 /**
  * Returns a channel carrying exactly the bytes of [source], while capturing a capped copy.
@@ -68,7 +81,14 @@ internal fun CoroutineScope.teeBody(
             // Propagate the failure to the app rather than handing it a silently short body.
             forwarded.cancel(cause)
         } finally {
-            onComplete(CapturedBody(accumulator?.toByteArray(), total, truncated))
+            onComplete(
+                CapturedBody(
+                    bytes = accumulator?.toByteArray(),
+                    totalBytes = total,
+                    truncated = truncated,
+                    omitted = if (accumulator == null && total > 0) BodyOmission.CONTENT_TYPE else null,
+                )
+            )
         }
     }
 
@@ -100,14 +120,20 @@ internal fun captureRequestBody(
                 bytes = if (allowed) bytes.copyOf(minOf(bytes.size, cap)) else null,
                 totalBytes = bytes.size.toLong(),
                 truncated = allowed && bytes.size > cap,
+                omitted = if (allowed || bytes.isEmpty()) null else BodyOmission.CONTENT_TYPE,
             )
         }
 
-        else -> CapturedBody(
-            bytes = null,
-            totalBytes = content.contentLength ?: 0L,
-            truncated = false,
-        )
+        else -> {
+            val length = content.contentLength ?: 0L
+            CapturedBody(
+                bytes = null,
+                totalBytes = length,
+                truncated = false,
+                // Not a content-type decision: this body was never in memory to begin with.
+                omitted = if (length > 0) BodyOmission.STREAMING else null,
+            )
+        }
     }
 }
 
