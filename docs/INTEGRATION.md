@@ -1,5 +1,10 @@
 # Integrating Inspector into a Compose Multiplatform app
 
+**Document version: v6 — 2026-08-17.**
+Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
+what changed and, for each version, what you actually have to do about it. Most upgrades are a
+rebuild and nothing else.
+
 Self-contained guide. You do not need to have read anything else about this project.
 
 **Inspector** is a network debugger for CMP apps that use Ktor. It gives you two independent
@@ -27,8 +32,8 @@ separate rows so you can see the whole chain.
 
 **You don't get, by default:** traffic from anything that isn't your Ktor client — Auth0,
 Firebase, analytics, image loaders with their own clients, WebViews, native `NSURLSession`. No
-WebSocket or SSE frames. **Anything built on OkHttp can be added with one line** (section 11);
-iOS-native transports cannot yet.
+WebSocket or SSE frames. **Anything built on OkHttp can be added with one line, and Auth0 on
+Android with one small class** (section 11); iOS-native transports cannot yet.
 
 **It must never ship to production.** Section 3 is not optional — it is how that is enforced.
 
@@ -188,7 +193,7 @@ overlay carries its own colours deliberately so it stays readable over any scree
 That's the entire integration for the overlay. No `Context` to thread through, no
 platform-specific code, no manifest entries, no permissions.
 
-(The web UI in section 6 *does* need one Android manifest change — see 6e.)
+(The web UI in section 6 *does* need one Android manifest change — see 6d.)
 
 ---
 
@@ -438,7 +443,7 @@ Your app never connected. Work through these in order:
 1. **Look at your app's log.** The sink prints `inspector: connected to daemon at …` on success,
    or `inspector: cannot reach daemon at … — <reason>` with the actual exception. That line
    usually names the problem outright.
-2. **Android: cleartext.** See 6e. This is the most common cause by a wide margin, and it fails
+2. **Android: cleartext.** See 6d. This is the most common cause by a wide margin, and it fails
    silently without the log line above.
 3. **Is the port free?** `lsof -nP -iTCP:8099 -sTCP:LISTEN`. If something else holds 8099,
    `inspector serve` fails to bind — check its output rather than assuming it started.
@@ -545,25 +550,136 @@ OkHttp's own headers, but bodies arrive gzipped.
 
 ### Auth0 on Android
 
-`com.auth0.android` builds its OkHttp internally and won't take one from you, but it does accept
-a `NetworkingClient`. Delegate through an inspected client:
+`com.auth0.android` builds its OkHttp client internally and will not take one from you. Its
+`DefaultClient` keeps that `OkHttpClient` in an `internal` field, so there is nothing to add an
+interceptor to. What Auth0 *does* expose is the seam one level up: `Auth0.networkingClient` is a
+public `var` of type `NetworkingClient`, a one-method interface.
+
+So you supply your own `NetworkingClient` whose OkHttp client carries the interceptor. The class
+below mirrors `DefaultClient` from **auth0-android 3.12.0** — same URL/body/header construction,
+same stream ownership — with the interceptor added.
+
+> Verified: this compiles against `com.auth0.android:auth0:3.12.0`, OkHttp 4.12.0 and Gson, with
+> no dependency you do not already have (Auth0 brings OkHttp and Gson at compile scope). It has
+> not been run against a live Auth0 tenant — read the two caveats below before adopting it.
+
+Put it in `src/debug/`, or guard its use with `BuildConfig.DEBUG`:
 
 ```kotlin
-import com.auth0.android.request.DefaultClient
+package com.example.debug
 
-val auth0 = Auth0.getInstance(clientId, domain).apply {
-    if (BuildConfig.DEBUG) {
-        networkingClient = DefaultClient(enableLogging = false)   // your existing config
-        // See the Auth0 docs for the NetworkingClient interface; implement it over an
-        // OkHttpClient carrying Inspector.okHttpInterceptor() and delegate every call to it.
+import com.auth0.android.request.HttpMethod
+import com.auth0.android.request.NetworkingClient
+import com.auth0.android.request.RequestOptions
+import com.auth0.android.request.ServerResponse
+import com.google.gson.Gson
+import dev.inspector.Inspector
+import dev.inspector.okHttpInterceptor
+import okhttp3.Headers.Companion.toHeaders
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+/**
+ * An Auth0 [NetworkingClient] whose OkHttp client carries the Inspector interceptor, so Auth0's
+ * traffic lands in the same list, archive and web UI as the rest of the app.
+ *
+ * Mirrors `DefaultClient` from auth0-android 3.12.0. Debug builds only.
+ */
+class InspectedAuth0Client(
+    connectTimeoutSeconds: Long = 10,
+    readTimeoutSeconds: Long = 10,
+    private val defaultHeaders: Map<String, String> = emptyMap(),
+) : NetworkingClient {
+
+    private val gson = Gson()
+
+    private val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
+        .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+        .addInterceptor(Inspector.okHttpInterceptor())
+        .build()
+
+    @Throws(IOException::class)
+    override fun load(url: String, options: RequestOptions): ServerResponse {
+        val urlBuilder = url.toHttpUrl().newBuilder()
+        val requestBuilder = Request.Builder()
+
+        // Auth0 puts a GET's parameters in the query string and everything else in a JSON body.
+        if (options.method is HttpMethod.GET) {
+            options.parameters
+                .filterValues { it is String }
+                .forEach { (key, value) -> urlBuilder.addQueryParameter(key, value as String) }
+            requestBuilder.method("GET", null)
+        } else {
+            val body = gson.toJson(options.parameters).toRequestBody(APPLICATION_JSON_UTF8)
+            requestBuilder.method(options.method.toString(), body)
+        }
+
+        val response = client.newCall(
+            requestBuilder
+                .url(urlBuilder.build())
+                // Per-request headers win over defaults, matching DefaultClient.
+                .headers(defaultHeaders.plus(options.headers).toHeaders())
+                .build(),
+        ).execute()
+
+        // ServerResponse takes ownership of the stream and Auth0 closes it. Do not wrap this call
+        // in `use {}` — closing here would hand Auth0 an already-consumed body.
+        return ServerResponse(
+            response.code,
+            response.body!!.byteStream(),
+            response.headers.toMultimap(),
+        )
+    }
+
+    private companion object {
+        private val APPLICATION_JSON_UTF8 = "application/json; charset=utf-8".toMediaType()
     }
 }
 ```
 
-> Not verified against a real Auth0 integration — the exact `NetworkingClient` surface varies by
-> SDK version, so treat the shape above as the approach rather than copy-paste code. If you wire
-> it up, tell me what the interface actually looked like and this section gets replaced with the
-> real thing.
+Then install it where you build your `Auth0` instance:
+
+```kotlin
+val auth0 = Auth0.getInstance(clientId, domain).apply {
+    if (BuildConfig.DEBUG) {
+        networkingClient = InspectedAuth0Client()
+    }
+}
+```
+
+`AuthenticationAPIClient`, `UsersAPIClient` and `MyAccountAPIClient` all read
+`auth0.networkingClient` and route every call through it, so all three become visible — and with
+them `SecureCredentialsManager`, which renews tokens through an `AuthenticationAPIClient`. With
+redaction off (the default) you see the real `client_id`, `code_verifier`, `refresh_token` and
+returned JWTs, which is normally the point of looking.
+
+**Order matters.** Those clients capture `networkingClient` once, when they are constructed. Set
+it on the `Auth0` instance *before* you build any API client from it, or the ones built earlier
+keep the default and stay invisible.
+
+**Two caveats, both real:**
+
+1. **You lose Auth0's DPoP nonce retry.** `DefaultClient` installs an internal `RetryInterceptor`
+   that stores the DPoP nonce from each response and re-signs a request once when the server
+   demands a fresh one. That class and `DPoP.storeNonce` are both `internal`, so no external
+   `NetworkingClient` can reproduce them. If your tenant uses DPoP (sender-constrained tokens),
+   this adapter will fail the calls that need a nonce retry. If you use ordinary bearer tokens —
+   most integrations — this costs you nothing.
+2. **You lose the browser leg.** `WebAuthProvider` hands off to a Custom Tab, and that traffic
+   belongs to Chrome, not your process. You see the `/oauth/token` exchange that follows, not the
+   `/authorize` page. Nothing can change that short of a proxy.
+
+Both are reasons to keep this to debug builds, which the `BuildConfig.DEBUG` guard already does.
+
+If you are on an Auth0 version other than 3.12.0, check `DefaultClient.kt` in that version's
+sources jar before trusting the body-construction logic above; the `NetworkingClient` interface
+itself has been stable, but the parameter-to-body mapping is the part worth re-reading.
 
 ### Still not covered
 
@@ -579,3 +695,91 @@ trusts. That is a substantially larger piece of work and has not been started; s
 1. **Your Ktor engine per target** — settles the redirect-chain question.
 2. **Whether the overlay looks right on a real phone.** Verified on desktop only.
 3. Anything that felt slow, any body that came back wrong, any call that didn't appear.
+4. **If you wire up the Auth0 adapter** — whether it worked, and whether your tenant uses DPoP.
+
+---
+
+## 13. Changelog
+
+Find the version you integrated from, then read downward. Everything below your row applies to you.
+
+If your copy has no version line at the top, identify it by what it contains:
+
+| Your copy | You have |
+|---|---|
+| Overlay only, no daemon or web UI | **v1** |
+| Has a "web UI and session archive" section | **v2** |
+| That section mentions Android **cleartext** / `network_security_config.xml` | **v3** |
+| Has an **MCP** section and a `captureAllBodies` option | **v4** |
+| Has an **OkHttp interceptor** section | **v5** |
+
+### v6 — 2026-08-17 (this document)
+
+- **Real Auth0 adapter** (§11). Replaces the "here is roughly the approach" placeholder with a
+  complete `NetworkingClient` implementation, verified to compile against
+  `com.auth0.android:auth0:3.12.0`. Documents the two things it costs you (DPoP nonce retry, the
+  Custom Tab leg) and the construction-order trap.
+- This changelog, and a version line at the top.
+
+**Action:** none required. Adopt §11 only if you want Auth0 traffic captured.
+
+### v5 — Capturing non-Ktor traffic
+
+- `Inspector.okHttpInterceptor()` (§11): one line puts any OkHttp-based SDK's calls into the same
+  list, archive and web UI. Android and JVM only. No new dependency — OkHttp is `compileOnly`, so
+  you keep whatever version you already have, and under `-Pinspector=off` it returns a
+  pass-through interceptor.
+
+**Action:** rebuild. Optionally add `.addInterceptor(Inspector.okHttpInterceptor())` to your own
+OkHttp clients.
+
+### v4 — Body capture fixes, and MCP
+
+This is the version that fixes bodies reporting themselves as absent when they had in fact been
+captured. If your web UI is showing *"not captured — content type outside the capture allowlist"*
+on bodies you know exist, this is your row.
+
+- **Fixed:** the live stream to the web UI dropped body references, so a body already written to
+  disk showed as missing in a live session. The archive was always correct; the live view was not.
+- **Fixed:** the UI printed a guessed reason for an absent body. It now reports the reason the
+  capture side actually recorded — see the table in §7, which is new.
+- **Fixed:** request `Content-Type` was never read, because Ktor keeps it on the outgoing body
+  rather than in the header map. This also silently disabled request-body redaction.
+- **Widened** the default content-type allowlist, and `+json` / `+xml` suffix types
+  (`application/vnd.api+json`, `application/hal+json`) are now captured without being listed.
+- **New** `captureAllBodies = true` — capture every content type up to the byte cap (§7).
+- **New** `inspector mcp` (§10): read your sessions from Claude Code, Cursor or Codex. Needs no
+  change to the app integration.
+- The daemon now fails loudly when port 8099 is already held, instead of starting a process that
+  quietly serves nothing.
+
+**Action:** rebuild the app, **and rebuild the daemon** (`./gradlew :inspector-daemon:installDist`)
+— the live-view fix is daemon-side, so an old daemon keeps showing bodies as missing.
+
+> One source-compatibility note: `captureAllBodies` was added to `InspectorConfig` *before*
+> `redaction`, which shifts the positional parameters. If you construct the config with named
+> arguments — as every example in this document does — nothing changes. If you construct it
+> positionally, or destructure it, you get a compile error naming the type mismatch. Switch to
+> named arguments.
+
+### v3 — Android cleartext
+
+- **Android 9+ blocks the daemon connection by default** (§6d). This was the single most common
+  reason an Android app recorded nothing, and it failed silently.
+- The stream sink now logs `inspector: connected to daemon at …` or
+  `inspector: cannot reach daemon at … — <reason>`, so the failure names itself.
+
+**Action:** add the debug-only `network_security_config.xml` from §6d if you have not already.
+Without it, Android records nothing to the web UI.
+
+### v2 — Web UI and session archive
+
+- `inspector-stream` module, the daemon, the browser UI at `http://127.0.0.1:8099`, and the
+  on-disk archive under `~/.inspector/sessions/`.
+- `inspector-noop-stream`, so the startup wiring compiles unchanged in release builds.
+
+**Action:** §6, all of it.
+
+### v1 — Overlay
+
+- In-app overlay, Ktor plugin, the `-Pinspector=off` release swap.

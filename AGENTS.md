@@ -100,9 +100,10 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
-- **The Auth0 `NetworkingClient` adapter in `docs/INTEGRATION.md` §11 is untested.** The OkHttp
-  interceptor it delegates to is well covered; the adapter shape around it is written from the
-  SDK's documented surface, not from a working integration.
+- **The Auth0 adapter in `docs/INTEGRATION.md` §11 compiles but has never run.** It is now
+  written against the real `auth0-android` 3.12.0 sources (read out of the Gradle cache) and
+  compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the
+  body-construction logic are right. What is unproven is behaviour against a live tenant.
 
 - **The overlay has never been seen on a phone.** Verification so far is desktop-only. There is
   no Android app module and no Xcode project. UI code compiles for all targets.
@@ -135,8 +136,23 @@ consumers never inherit.
 
 Auth0 still needs a small adapter in *app* code, because `com.auth0.android` accepts a
 `NetworkingClient` rather than an `OkHttpClient`. That belongs in `docs/INTEGRATION.md` §11, not
-in the library — nothing here may depend on Auth0. **The adapter shape in the docs is unverified**
-against a real Auth0 integration.
+in the library — nothing here may depend on Auth0.
+
+What reading `auth0-android` 3.12.0 actually established, so nobody has to re-derive it:
+
+- `Auth0.networkingClient` is a public `var`; `NetworkingClient` is one method,
+  `load(url: String, options: RequestOptions): ServerResponse`.
+- `DefaultClient` keeps its `OkHttpClient` in an `internal` field, so there is no way to add an
+  interceptor to the client Auth0 builds. Replacing `NetworkingClient` is the only seam.
+- Replacing it **drops DPoP nonce retry**. `RetryInterceptor` and `DPoP.storeNonce` are both
+  `internal`, so no external adapter can reproduce them. Harmless for bearer tokens, fatal for a
+  DPoP tenant — which is why §11 says debug builds only, in bold, twice.
+- `AuthenticationAPIClient`, `UsersAPIClient` and `MyAccountAPIClient` each read
+  `auth0.networkingClient` **once, at construction**. Set it before building any of them.
+- Auth0 declares OkHttp and Gson at compile scope, so the adapter needs no new dependency.
+
+The sources jar is in the Gradle cache (`~/.gradle/caches/modules-2/files-2.1/com.auth0.android/`)
+whenever the consuming app has resolved Auth0 — read it rather than guessing at the API.
 
 **4b — report what we know we cannot see.** Even with 4a, some traffic is invisible and the
 failure mode is silence. A session-level note listing hosts seen in connection logs but never
@@ -403,7 +419,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | Path | Why it matters |
 |---|---|
 | `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
-| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. |
+| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a §13 changelog entry saying what they must *do*, not just what changed. |
 | `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
