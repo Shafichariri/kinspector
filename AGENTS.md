@@ -95,6 +95,7 @@ From `docs/implementation-plan.md` §10:
 :inspector-noop      KMP  Identical public API, does nothing. Release builds.
 :inspector-ui        KMP  Compose overlay pill + inspector screens.
 :inspector-noop-ui   KMP  Passthrough overlay. Release builds.
+:inspector-noop-stream KMP  No-op stream sink. Release builds.
 :inspector-stream    KMP  WebSocket sink to the daemon.
 :inspector-daemon    JVM  Archive, REST, live WS, web UI, CLI.   MCP is Phase 3.
 sample/desktop       JVM  Runnable reference integration.
@@ -149,6 +150,15 @@ so constructing one during the companion's own init deadlocks `<clinit>`. Use `R
 **Session resume is decided from `endedAt` on disk, not memory.** An in-memory "recently closed"
 map is empty after a daemon restart — which is one of the very cases the grace period exists to
 cover — so it silently refused every resume. The round-trip test caught it.
+
+**Every real module needs a noop twin.** `core`→`noop`, `ui`→`noop-ui`, `stream`→`noop-stream`.
+Adding a module the consuming app calls into, without its twin, breaks `-Pinspector=off`
+compilation and pushes users into `if (BuildConfig.DEBUG)` guards around their own wiring —
+which is the exact thing the noop artifacts exist to prevent.
+
+**There are four surfaces, and only two are for users.** The in-app overlay and the browser web
+UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
+Nobody should be told to "open the desktop app".
 
 **The daemon binds 127.0.0.1 only.** There is no auth and the archive holds unredacted
 credentials by default. The loopback bind *is* the security boundary; do not widen it without

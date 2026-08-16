@@ -22,6 +22,7 @@ dependencies {
     if (inspectorOff) {
         implementation(project(":inspector-noop"))
         implementation(project(":inspector-noop-ui"))
+        implementation(project(":inspector-noop-stream"))
     } else {
         implementation(project(":inspector-core"))
         implementation(project(":inspector-ui"))

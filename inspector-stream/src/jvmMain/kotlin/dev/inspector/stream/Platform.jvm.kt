@@ -1,10 +1,21 @@
 package dev.inspector.stream
 
+import dev.inspector.model.ClientInfo
+import dev.inspector.model.Platforms
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.WebSockets
 import java.nio.charset.CodingErrorAction
 import java.util.Base64
+
+actual fun defaultClientInfo(appId: String, appVersion: String, buildType: String) = ClientInfo(
+    appId = appId,
+    appVersion = appVersion,
+    platform = Platforms.DESKTOP,
+    device = System.getProperty("os.name") ?: "desktop",
+    osVersion = System.getProperty("os.version") ?: "unknown",
+    buildType = buildType,
+)
 
 actual fun defaultDaemonHost(): String = "127.0.0.1"
 

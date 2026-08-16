@@ -1,8 +1,26 @@
 package dev.inspector.stream
 
+import dev.inspector.model.ClientInfo
+import dev.inspector.model.Platforms
 import io.ktor.client.HttpClient
+import platform.Foundation.NSProcessInfo
+import platform.UIKit.UIDevice
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.plugins.websocket.WebSockets
+
+actual fun defaultClientInfo(appId: String, appVersion: String, buildType: String): ClientInfo {
+    // SIMULATOR_DEVICE_NAME is only present in a simulator's environment.
+    val environment = NSProcessInfo.processInfo.environment
+    val simulatorName = environment["SIMULATOR_DEVICE_NAME"] as? String
+    return ClientInfo(
+        appId = appId,
+        appVersion = appVersion,
+        platform = if (simulatorName != null) Platforms.IOS_SIMULATOR else "ios-device",
+        device = simulatorName ?: UIDevice.currentDevice.name,
+        osVersion = UIDevice.currentDevice.systemVersion,
+        buildType = buildType,
+    )
+}
 
 /** The iOS simulator shares the host's network stack, so loopback reaches the daemon directly. */
 actual fun defaultDaemonHost(): String = "127.0.0.1"

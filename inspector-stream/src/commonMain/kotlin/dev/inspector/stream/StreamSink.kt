@@ -175,6 +175,18 @@ class StreamSink(
 }
 
 /**
+ * Builds a [ClientInfo] with platform, device and OS version filled in.
+ *
+ * Exists so integrating an app is three arguments rather than six, and so the platform string
+ * is decided by code that can actually detect a simulator instead of by whoever is wiring it up.
+ */
+expect fun defaultClientInfo(
+    appId: String,
+    appVersion: String,
+    buildType: String = "debug",
+): ClientInfo
+
+/**
  * Default daemon host per platform. v1 is simulator/emulator only, so these are fixed rather
  * than discovered: the iOS simulator and desktop share the host's loopback, while the Android
  * emulator reaches it through 10.0.2.2.

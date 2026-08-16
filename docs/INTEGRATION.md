@@ -2,9 +2,20 @@
 
 Self-contained guide. You do not need to have read anything else about this project.
 
-**Inspector** is a network debugger for CMP apps that use Ktor. Once integrated you get a small
-draggable pill floating over your app showing the most recent call (`GET /users · 200 · 143ms`),
-which taps open into a full request/response inspector with filtering and copy-as-cURL.
+**Inspector** is a network debugger for CMP apps that use Ktor. It gives you two independent
+surfaces, and you can take either or both:
+
+| Surface | What you see | What it costs you |
+|---|---|---|
+| **In-app overlay** | A draggable pill over your app (`GET /users · 200 · 143ms`), tapping into a full inspector | one module, one wrapper composable |
+| **Web UI** | Your app's traffic in a browser on your Mac, with every session archived to disk | one more module, plus running a daemon |
+
+There is **no desktop viewer application**. The web UI is a page served by the daemon at
+`http://127.0.0.1:8099`. (The `sample/desktop` project in the Inspector repo is a demo app, not
+a tool — ignore it.)
+
+Sections 1–5 give you the overlay. Section 6 adds the web UI and the archive. Do them in order;
+the overlay working is how you know capture works before adding a second moving part.
 
 ---
 
@@ -118,8 +129,8 @@ Verify the swap actually works:
 ./gradlew :shared:dependencies --configuration commonMainResolvableDependenciesMetadata -Pinspector=off | grep inspector
 ```
 
-You should see only `inspector-noop` and `inspector-noop-ui`. If you see `inspector-core`, the
-property isn't reaching this module and release builds would ship capture code.
+You should see only the `inspector-noop*` modules. If you see `inspector-core`, the property
+isn't reaching this module and release builds would ship capture code.
 
 > Inspector also has its own canary guard (`scripts/check-release-clean.sh`) that greps built
 > binaries for a marker string. Wiring it into your release CI is worth it — the Gradle property
@@ -201,7 +212,75 @@ If you have a desktop target, run that first — it is the configuration most th
 
 ---
 
-## 6. Configuration
+## 6. Adding the web UI and session archive
+
+Optional, and independent of the overlay. This is what puts your app's traffic in a browser on
+your Mac and keeps every session on disk.
+
+### 6a. One more module
+
+Add it to **both** branches of the if/else from section 3:
+
+```kotlin
+if (inspectorOff) {
+    implementation("dev.inspector:inspector-noop:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-noop-ui:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-noop-stream:0.1.0-SNAPSHOT")
+} else {
+    implementation("dev.inspector:inspector-core:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-ui:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-stream:0.1.0-SNAPSHOT")
+}
+```
+
+`inspector-noop-stream` has the identical API doing nothing, so the startup code below compiles
+unchanged in release builds — no `if (BuildConfig.DEBUG)` guards needed around your own wiring.
+
+### 6b. Two lines at startup
+
+```kotlin
+import dev.inspector.stream.StreamSink
+import dev.inspector.stream.defaultClientInfo
+
+val stream = StreamSink(defaultClientInfo(appId = "com.example.app", appVersion = "1.4.2"))
+stream.start()
+Inspector.addSink(stream)
+```
+
+`defaultClientInfo` fills in platform, device name and OS version, and detects whether you are on
+a simulator or emulator. The daemon host defaults correctly per platform too — `127.0.0.1` on the
+iOS simulator and desktop, `10.0.2.2` on the Android emulator, which is how the emulator reaches
+your Mac.
+
+If no daemon is running, the sink stays disconnected and drops what it cannot send. Your app is
+unaffected either way — this is never on your app's critical path.
+
+### 6c. Run the daemon on your Mac
+
+Once, from the Inspector repo:
+
+```bash
+./gradlew :inspector-daemon:installDist
+```
+
+Then whenever you want to watch traffic:
+
+```bash
+inspector-daemon/build/install/inspector/bin/inspector serve
+```
+
+Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
+past 100 sessions or 300 MB.
+
+### 6d. Note for physical devices
+
+`10.0.2.2` and `127.0.0.1` only work on emulators and simulators. On a real phone the daemon is
+not reachable at those addresses, so the overlay works but the web UI gets nothing. Physical
+device support is deliberately out of scope for v1.
+
+---
+
+## 7. Configuration
 
 Defaults are sensible; you likely need none of this.
 
@@ -247,7 +326,7 @@ Inspector.mark("tapped checkout")
 
 ---
 
-## 7. Performance
+## 8. Performance
 
 The design contract is that your app never blocks on, waits for, or meaningfully allocates
 because of the inspector:
@@ -265,7 +344,7 @@ by tests for 10 MB, gzipped, chunked, empty and binary responses.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 **Klib / metadata / "was compiled with an incompatible version of Kotlin"**
 Version mismatch. Check section 1. This is the most likely failure by a wide margin.
@@ -291,6 +370,15 @@ Expected. The overlay lives inside your Compose hierarchy, so it cannot draw abo
 `Dialog`s or native iOS view controllers presented over Compose. A real floating window is a
 possible later addition — say if you need it.
 
+**Web UI shows no sessions**
+The daemon is running but your app never connected. Check the daemon's console — it prints
+`started session …` on connect. If nothing appears: the `stream` module is missing, `start()` was
+never called, or you are on a physical device (see 6d).
+
+**Web UI shows a session but no new traffic**
+Traffic captured while the daemon was down is not backfilled — it stays in the device ring buffer
+only. Fire a fresh request.
+
 **Redirects show as one row instead of a chain**
 Some Ktor engines follow redirects internally, below the level the inspector observes. Report
 which engine you use (`ktor-client-okhttp`, `ktor-client-darwin`, `ktor-client-cio`) — this is a
@@ -298,7 +386,7 @@ known open question.
 
 ---
 
-## 9. What to report back
+## 10. What to report back
 
 Useful feedback for the next phase:
 
@@ -309,10 +397,8 @@ Useful feedback for the next phase:
 
 ---
 
-## 10. What's coming
+## 11. What's coming
 
-Phase 2 adds a host-side daemon: your app streams transactions over a WebSocket to your Mac,
-which archives every session to `~/.inspector/sessions/<timestamp>_<app>_<device>/` as readable
-JSONL and serves a web UI. That's what makes "see my app's traffic in a window on my laptop"
-work, plus lets an AI agent read a whole session. It needs no change to the integration above —
-one extra module and one line.
+Phase 3 adds an MCP server, so an AI agent can query a recorded session directly — "what failed
+after the 'tapped checkout' marker and what did the server return?" — without you pasting
+anything. It needs no change to the integration above.
