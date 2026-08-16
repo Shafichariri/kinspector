@@ -222,6 +222,7 @@ Changing the public API is deliberately high-friction, because it is a contract:
 | Path | Why it matters |
 |---|---|
 | `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
+| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. |
 | `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |

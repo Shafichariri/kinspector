@@ -9,6 +9,8 @@ Redirects and retries each produce their own row, bodies are teed without alteri
 receives, redaction is a setting (off by default), and the release guard is enforced in CI.
 Phase 2 adds the host daemon, session archive and web UI.
 
+Integrating into your own app? See [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+
 See [`docs/schema.md`](docs/schema.md) for the data contract and
 [the implementation plan](docs/implementation-plan.md) for the full build order.
 

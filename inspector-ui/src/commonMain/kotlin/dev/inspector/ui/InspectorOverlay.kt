@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import dev.inspector.Inspector
 
 /**
@@ -47,6 +49,10 @@ fun InspectorOverlay(
     var collapsed by remember { mutableStateOf(false) }
     var markCounter by remember { mutableStateOf(0) }
 
+    // Compose's own clipboard works on Android, iOS and desktop, so copy-as-cURL needs no
+    // platform code and — more importantly — nothing for the consuming app to wire up.
+    val clipboard = LocalClipboardManager.current
+
     Box(Modifier.fillMaxSize()) {
         content()
 
@@ -84,7 +90,7 @@ fun InspectorOverlay(
                             requestBody = Inspector.requestBody(txn),
                             responseBody = Inspector.responseBody(txn),
                             onSelectSibling = { screen = Screen.Detail(it.id) },
-                            onCopyCurl = { copyToClipboard(it) },
+                            onCopyCurl = { clipboard.setText(AnnotatedString(it)) },
                             onBack = { screen = Screen.List },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -100,6 +106,3 @@ private sealed interface Screen {
     data object List : Screen
     data class Detail(val id: String) : Screen
 }
-
-/** Platform clipboard. Copying a cURL command is the main reason to reach outside Compose here. */
-internal expect fun copyToClipboard(text: String)
