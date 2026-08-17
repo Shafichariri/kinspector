@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v9 — 2026-08-17.**
+**Document version: v10 — 2026-08-17.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -724,8 +724,23 @@ If your copy has no version line at the top, identify it by what it contains:
 | Has a real **Auth0 adapter** class in §11 | **v6** |
 | Overlay insets itself, system back works, bodies are copyable | **v7** |
 | Web UI has stop/restart buttons and coloured methods | **v8** |
+| Methods are badges; web UI has a sort toggle | **v9** |
 
-### v9 — 2026-08-17 (this document)
+### v10 — 2026-08-17 (this document)
+
+- **Corrected: §1 said Kotlin 2.3.21. The real pin is 2.3.20.** The version catalog pins 2.3.20 and
+  the build resolves 2.3.20; the table had been wrong since v1. This is the one number in this
+  document that most needs to be right, because §1 tells you it must match your app's and a
+  mismatch surfaces as a klib/metadata error that never names the real cause.
+- Also corrected in the repo's other docs: AGP is 9.2.1, not 9.3.1.
+
+**Action:** almost certainly none. **If your app already builds against Inspector, your Kotlin
+version is already compatible** — this was a documentation error, not a change to what the code
+requires. It only matters when someone reads §1 to decide what to align to. If you pinned your app
+to 2.3.21 *because this document said so*, and it builds, leave it; if it does not build, 2.3.20 is
+the number to match.
+
+### v9 — Method badges and sort order
 
 - **Methods are badges, not coloured text**, in both the web UI and the overlay — a tinted chip in
   the method's colour. A hue change alone was too easy to miss at a glance, which is the only job
