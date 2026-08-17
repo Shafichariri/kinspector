@@ -49,9 +49,17 @@ fun InspectorOverlay(
     var collapsed by remember { mutableStateOf(false) }
     var markCounter by remember { mutableStateOf(0) }
 
-    // Compose's own clipboard works on Android, iOS and desktop, so copy-as-cURL needs no
-    // platform code and — more importantly — nothing for the consuming app to wire up.
+    // Compose's own clipboard works on Android, iOS and desktop, so copying needs no platform
+    // code and — more importantly — nothing for the consuming app to wire up.
     val clipboard = LocalClipboardManager.current
+    val copy: (String) -> Unit = { clipboard.setText(AnnotatedString(it)) }
+
+    // System back unwinds the inspector one screen at a time, and only while it is open. Without
+    // this the overlay is a trap on Android: it covers the app, and back goes to the app's own
+    // previous screen (or leaves the app) with the inspector still on top of it.
+    InspectorBackHandler(enabled = screen != Screen.Hidden) {
+        screen = if (screen is Screen.Detail) Screen.List else Screen.Hidden
+    }
 
     Box(Modifier.fillMaxSize()) {
         content()
@@ -90,8 +98,9 @@ fun InspectorOverlay(
                             requestBody = Inspector.requestBody(txn),
                             responseBody = Inspector.responseBody(txn),
                             onSelectSibling = { screen = Screen.Detail(it.id) },
-                            onCopyCurl = { clipboard.setText(AnnotatedString(it)) },
+                            onCopy = copy,
                             onBack = { screen = Screen.List },
+                            onClose = { screen = Screen.Hidden },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }

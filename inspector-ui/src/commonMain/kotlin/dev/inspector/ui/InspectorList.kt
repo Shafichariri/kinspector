@@ -65,7 +65,7 @@ internal fun InspectorList(
         transactions.filter { filter.matches(it, context) }
     }
 
-    Column(modifier.fillMaxSize().background(colors.surface)) {
+    Column(modifier.inspectorScreen(colors.surface)) {
         Row(
             Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -86,7 +86,9 @@ internal fun InspectorList(
             )
             ToolbarButton("mark", onMark)
             ToolbarButton("clear", onClear)
-            ToolbarButton("close", onClose)
+            // The way back to the app. Prominent because on a phone this is the only exit that
+            // is always present — system back also works, but nothing on screen says so.
+            ToolbarButton("✕ close", onClose, prominent = true)
         }
 
         Column(Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -208,16 +210,22 @@ private fun TransactionRow(txn: NetworkTransaction, onClick: () -> Unit) {
     }
 }
 
+/**
+ * @param prominent draws the button filled, for the one action on a screen that is the way out.
+ *   Touch target is padded to stay tappable on a phone regardless.
+ */
 @Composable
-internal fun ToolbarButton(label: String, onClick: () -> Unit) {
+internal fun ToolbarButton(label: String, onClick: () -> Unit, prominent: Boolean = false) {
     val colors = LocalInspectorColors.current
     Text(
         label,
-        color = colors.accent,
+        color = if (prominent) colors.surface else colors.accent,
         fontSize = 12.sp,
+        fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+            .then(if (prominent) Modifier.background(colors.accent) else Modifier)
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     )
 }

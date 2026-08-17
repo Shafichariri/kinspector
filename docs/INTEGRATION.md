@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v6 — 2026-08-17.**
+**Document version: v7 — 2026-08-17.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -204,7 +204,11 @@ Run your app, trigger a network call, and look for a small pill near the left ed
 - **Tap** it → full inspector list
 - **Drag** it → moves, snapping to the nearest edge
 - **Long-press** it → collapses to a dot; tap the dot to restore
-- In the list, tap a row → Overview / Request / Response tabs, plus **copy cURL**
+- In the list, tap a row → Overview / Request / Response tabs
+- **Getting back to your app:** system back, or `✕ close`. Back unwinds one screen at a time and
+  only while the inspector is open, so your app's own back behaviour is untouched.
+- **Copying:** `cURL` in the detail toolbar, plus a `copy` next to the URL, the error, the header
+  block and each body. Each one shows `copied` for a moment to confirm.
 
 Try a filter in the list's filter bar:
 
@@ -712,10 +716,33 @@ If your copy has no version line at the top, identify it by what it contains:
 | That section mentions Android **cleartext** / `network_security_config.xml` | **v3** |
 | Has an **MCP** section and a `captureAllBodies` option | **v4** |
 | Has an **OkHttp interceptor** section | **v5** |
+| Has a real **Auth0 adapter** class in §11 | **v6** |
 
-### v6 — 2026-08-17 (this document)
+### v7 — 2026-08-17 (this document)
 
-- **Real Auth0 adapter** (§11). Replaces the "here is roughly the approach" placeholder with a
+First round of fixes from running the overlay on a real Android phone. All four were reported
+from one screenshot, and all four are overlay-only — capture, the daemon and the archive are
+untouched.
+
+- **Fixed: the inspector drew under the status bar and the camera cutout.** The list and detail
+  screens now inset themselves against system bars, cutout and keyboard. The background still
+  bleeds edge to edge, so it looks intentional rather than clipped. Apps that are not edge-to-edge
+  report zero insets and are unaffected.
+- **Fixed: no way back to the app.** System back now unwinds the inspector one screen at a time —
+  detail → list → closed — and only while it is open, so it never steals back from your app. On
+  Android this uses `androidx.activity`'s back handler.
+- **Fixed: nothing could be copied except cURL.** There are now copy buttons on the URL, the error,
+  the header block, and the request and response bodies. Each confirms with `copied` for a moment,
+  because on iOS and desktop nothing else tells you the tap registered.
+- **Also:** the close button is now a filled `✕ close`, and detail has its own `✕` so leaving takes
+  one tap from anywhere instead of two.
+
+**Action:** rebuild. Android picks up `androidx.activity:activity-compose` transitively, which
+your app already has — nothing to add.
+
+### v6 — Auth0
+
+- **Real Auth0 adapter** (§11). Replaced the "here is roughly the approach" placeholder with a
   complete `NetworkingClient` implementation, verified to compile against
   `com.auth0.android:auth0:3.12.0`. Documents the two things it costs you (DPoP nonce retry, the
   Custom Tab leg) and the construction-order trap.

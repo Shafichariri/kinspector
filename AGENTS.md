@@ -105,8 +105,12 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the
   body-construction logic are right. What is unproven is behaviour against a live tenant.
 
-- **The overlay has never been seen on a phone.** Verification so far is desktop-only. There is
-  no Android app module and no Xcode project. UI code compiles for all targets.
+- **The overlay has now been seen on a phone once**, and every one of the four things that came
+  back was a real defect: it drew under the status bar and camera cutout, there was no way back to
+  the app, and nothing but cURL could be copied. All four are fixed; **the fixes themselves have
+  only been compiled and exercised on desktop**, where insets are zero and there is no back
+  gesture, so the parts that matter most are still unverified on a device.
+- There is still no Android app module and no Xcode project. UI code compiles for all targets.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
   localhost by policy in this environment, so only a static snapshot has ever been produced.
@@ -217,6 +221,22 @@ body the app abandons still produces a row.
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
 Revisit on upgrade.
+
+**`InspectorBackHandler` is `expect`/`actual`, not Compose Multiplatform's `BackHandler`.** Do not
+"simplify" it back. CMP's common `BackHandler` resolves a dispatcher owner from the composition
+and calls `error(...)` when there is none — so on any host that does not provide one, installing
+the overlay crashes the app at startup. That is an unacceptable failure mode for a debugging aid
+that wraps somebody's entire root composable. It is also `@Deprecated` in 1.11.1, pointing at
+`NavigationEventHandler` in navigationevent-compose, which is at `1.1.0-beta01` — this module does
+not push a beta transitive dependency onto consumers. So: Android uses `androidx.activity`'s
+handler (guaranteed by `ComponentActivity`), desktop and iOS no-op, because neither has a system
+back gesture for a full-screen overlay.
+
+**Overlay screens inset themselves; the host is not asked to.** `Modifier.inspectorScreen` applies
+`background` *before* `windowInsetsPadding(safeDrawing)`, so colour bleeds edge to edge while
+content stays clear of the status bar, cutout, nav bar and keyboard. Reversing that order leaves a
+strip of the host app visible behind the status bar, which reads as a rendering bug. Non
+edge-to-edge hosts report zero insets, so this is a no-op there rather than a double margin.
 
 **Redaction is OFF by default.** This is a debugging tool for debuggable builds whose capture
 code cannot reach production. A debugger that hides the auth header is useless when the bug *is*

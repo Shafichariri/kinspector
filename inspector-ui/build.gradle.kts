@@ -28,5 +28,10 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
         }
+        androidMain.dependencies {
+            // Only for InspectorBackHandler. Every Compose Android app already has this — it is
+            // what provides ComponentActivity.setContent.
+            implementation(libs.androidx.activity.compose)
+        }
     }
 }

@@ -1,10 +1,16 @@
 package dev.inspector.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -78,3 +84,21 @@ fun InspectorTheme(
         content = content,
     )
 }
+
+/**
+ * Fills the screen with [background], then keeps content clear of the status bar, the display
+ * cutout, the navigation bar and the keyboard.
+ *
+ * Modifier order carries the intent and is not incidental: `background` runs before the inset
+ * padding, so the colour still bleeds edge to edge while only the content is pushed inward. The
+ * alternative — padding first — leaves the app visible in a strip behind the status bar, which
+ * reads as a rendering bug.
+ *
+ * Host apps that are not edge-to-edge report zero insets, so this is a no-op there rather than a
+ * double margin.
+ */
+@Composable
+internal fun Modifier.inspectorScreen(background: Color): Modifier =
+    fillMaxSize()
+        .background(background)
+        .windowInsetsPadding(WindowInsets.safeDrawing)

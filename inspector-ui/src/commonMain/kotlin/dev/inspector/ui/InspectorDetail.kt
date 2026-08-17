@@ -9,17 +9,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
+import kotlinx.coroutines.delay
 
 internal enum class DetailTab { Overview, Request, Response }
 
@@ -43,20 +49,21 @@ internal fun InspectorDetail(
     requestBody: ByteArray?,
     responseBody: ByteArray?,
     onSelectSibling: (NetworkTransaction) -> Unit,
-    onCopyCurl: (String) -> Unit,
+    onCopy: (String) -> Unit,
     onBack: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalInspectorColors.current
     var tab by remember { mutableStateOf(DetailTab.Overview) }
 
-    Column(modifier.fillMaxSize().background(colors.surface)) {
+    Column(modifier.inspectorScreen(colors.surface)) {
         Row(
             Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ToolbarButton("back", onBack)
+            ToolbarButton("‹ back", onBack)
             Text(
                 "${txn.method} ${pathTail(txn.path)}",
                 color = colors.onSurface,
@@ -65,7 +72,8 @@ internal fun InspectorDetail(
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
             )
-            ToolbarButton("copy cURL") { onCopyCurl(toCurl(txn, requestBody)) }
+            ToolbarButton("cURL", onClick = { onCopy(toCurl(txn, requestBody)) })
+            ToolbarButton("✕", onClose, prominent = true)
         }
 
         Row(
@@ -86,7 +94,7 @@ internal fun InspectorDetail(
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
             when (tab) {
-                DetailTab.Overview -> Overview(txn, siblings, onSelectSibling)
+                DetailTab.Overview -> Overview(txn, siblings, onSelectSibling, onCopy)
                 DetailTab.Request -> BodySection(
                     headers = txn.reqHeaders,
                     body = requestBody,
@@ -94,6 +102,7 @@ internal fun InspectorDetail(
                     truncated = txn.reqBodyTruncated,
                     totalBytes = txn.reqBytes,
                     omitted = txn.reqBodyOmitted,
+                    onCopy = onCopy,
                 )
                 DetailTab.Response -> BodySection(
                     headers = txn.resHeaders,
@@ -102,6 +111,7 @@ internal fun InspectorDetail(
                     truncated = txn.resBodyTruncated,
                     totalBytes = txn.resBytes,
                     omitted = txn.resBodyOmitted,
+                    onCopy = onCopy,
                 )
             }
         }
@@ -113,12 +123,13 @@ private fun Overview(
     txn: NetworkTransaction,
     siblings: List<NetworkTransaction>,
     onSelectSibling: (NetworkTransaction) -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     val colors = LocalInspectorColors.current
 
-    Field("URL", txn.url)
+    Field("URL", txn.url, onCopy = { onCopy(txn.url) })
     Field("Status", txn.status?.toString() ?: "transport failure")
-    txn.error?.let { Field("Error", it) }
+    txn.error?.let { Field("Error", it, onCopy = { onCopy(it) }) }
     Field("Duration", formatDuration(txn.ms))
     Field("Request size", formatBytes(txn.reqBytes))
     Field("Response size", formatBytes(txn.resBytes))
@@ -162,10 +173,16 @@ private fun BodySection(
     truncated: Boolean,
     totalBytes: Long,
     omitted: String?,
+    onCopy: (String) -> Unit,
 ) {
     val colors = LocalInspectorColors.current
 
-    SectionTitle("Headers")
+    SectionTitle(
+        "Headers",
+        onCopy = if (headers.isEmpty()) null else {
+            { onCopy(headers.entries.joinToString("\n") { "${it.key}: ${it.value.joinToString(", ")}" }) }
+        },
+    )
     if (headers.isEmpty()) {
         Text("none", color = colors.onSurfaceMuted, fontSize = 12.sp)
     } else {
@@ -187,7 +204,15 @@ private fun BodySection(
         }
     }
 
-    SectionTitle("Body")
+    // Decoded once here rather than inside the branch, so the copy button in the section title
+    // can offer exactly the text the pane is showing.
+    val rendered = remember(body, contentType) {
+        body?.takeIf { it.isNotEmpty() }?.decodeToString()?.let {
+            if (looksLikeJson(contentType, it)) prettyJson(it) else it
+        }
+    }
+
+    SectionTitle("Body", onCopy = rendered?.let { { onCopy(it) } })
     when {
         body == null && totalBytes > 0 -> Text(
             bodyAbsenceReason(omitted, contentType, totalBytes),
@@ -195,20 +220,16 @@ private fun BodySection(
             fontSize = 12.sp,
         )
 
-        body == null || body.isEmpty() -> Text("empty", color = colors.onSurfaceMuted, fontSize = 12.sp)
+        rendered == null -> Text("empty", color = colors.onSurfaceMuted, fontSize = 12.sp)
 
         else -> {
             if (truncated) {
                 Text(
-                    "truncated at ${formatBytes(body.size.toLong())} of ${formatBytes(totalBytes)}",
+                    "truncated at ${formatBytes((body?.size ?: 0).toLong())} of ${formatBytes(totalBytes)}",
                     color = colors.clientError,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
-            }
-            val text = remember(body) { body.decodeToString() }
-            val rendered = remember(text, contentType) {
-                if (looksLikeJson(contentType, text)) prettyJson(text) else text
             }
             Box(
                 Modifier.fillMaxWidth()
@@ -250,22 +271,70 @@ private fun bodyAbsenceReason(omitted: String?, contentType: String?, totalBytes
 }
 
 @Composable
-private fun Field(label: String, value: String) {
+private fun Field(label: String, value: String, onCopy: (() -> Unit)? = null) {
     val colors = LocalInspectorColors.current
     Column(Modifier.padding(vertical = 4.dp)) {
-        Text(label, color = colors.onSurfaceMuted, fontSize = 11.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = colors.onSurfaceMuted, fontSize = 11.sp)
+            if (onCopy != null) {
+                Spacer(Modifier.width(8.dp))
+                CopyButton(onCopy)
+            }
+        }
         Text(value, color = colors.onSurface, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
     }
 }
 
 @Composable
-private fun SectionTitle(title: String) {
+private fun SectionTitle(title: String, onCopy: (() -> Unit)? = null) {
     val colors = LocalInspectorColors.current
+    Row(
+        Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            color = colors.onSurfaceMuted,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (onCopy != null) {
+            Spacer(Modifier.width(8.dp))
+            CopyButton(onCopy)
+        }
+    }
+}
+
+/**
+ * Copy affordance for one block of text.
+ *
+ * Confirms in place for a moment after a tap. On Android 13+ the system shows its own clipboard
+ * toast, but iOS and desktop show nothing at all, and a copy button that gives no feedback reads
+ * as broken — which is exactly how the first phone tester read the toolbar.
+ */
+@Composable
+private fun CopyButton(onCopy: () -> Unit) {
+    val colors = LocalInspectorColors.current
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1200)
+            copied = false
+        }
+    }
+
     Text(
-        title,
-        color = colors.onSurfaceMuted,
+        if (copied) "copied" else "copy",
+        color = if (copied) colors.success else colors.accent,
         fontSize = 11.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .clickable {
+                onCopy()
+                copied = true
+            }
+            // Generous relative to the text so it stays tappable on a phone.
+            .padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }
