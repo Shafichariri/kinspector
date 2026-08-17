@@ -46,6 +46,19 @@ jobs:
       - name: Release guard — noop must be clean
         run: ./scripts/check-release-clean.sh
 
+      # A CI-only failure is diagnosed from CI or not at all. The console log carries the assertion
+      # message; these reports carry the full per-test output and stack traces.
+      - name: Keep test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-build
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
   release-swap:
     # Proves -Pinspector=off is wired end to end, independently of the artifact scan above.
     runs-on: macos-latest
@@ -59,3 +72,14 @@ jobs:
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       - name: Build with capture disabled
         run: ./gradlew build -Pinspector=off
+
+      - name: Keep test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-release-swap
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
