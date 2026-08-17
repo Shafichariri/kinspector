@@ -232,6 +232,25 @@ not push a beta transitive dependency onto consumers. So: Android uses `androidx
 handler (guaranteed by `ComponentActivity`), desktop and iOS no-op, because neither has a system
 back gesture for a full-screen overlay.
 
+**The daemon's control endpoints require `X-Inspector-Control: 1`.** Not ceremony. The daemon
+listens on loopback with no authentication, so any page the developer has open can POST to
+`127.0.0.1:8099`; a form post or a `no-cors` fetch would otherwise be an off switch for anyone's
+web page. A custom header forces a CORS preflight, and this server answers none, so only its own
+page gets through. Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the
+MCP tools post markers without it, and a marker is not a weapon.
+
+**`ServerControl` is an interface because the real one ends the JVM.** The daemon tests run a
+daemon inside the test JVM; a hardcoded `exitProcess` in the stop handler would kill the test
+runner rather than fail a test. On restart the port is released *before* the replacement spawns —
+the other order has the new process fail its own pre-flight bind and exit, leaving no daemon at
+all.
+
+**Method colours avoid the status hue family.** Green/amber/red belong to 2xx/4xx/5xx. An amber
+PUT next to an amber 404 reads as "this row failed", which is the one thing a traffic list must
+not get wrong. So reads are blue, POST green (it is not a status), PUT purple, PATCH amber only
+because it is rare, DELETE red because destructive is what red should mean. The web UI's `--m-*`
+tokens and `InspectorColors.forMethod` are the same palette on purpose — keep them in step.
+
 **Overlay screens inset themselves; the host is not asked to.** `Modifier.inspectorScreen` applies
 `background` *before* `windowInsetsPadding(safeDrawing)`, so colour bleeds edge to edge while
 content stays clear of the status bar, cutout, nav bar and keyboard. Reversing that order leaves a

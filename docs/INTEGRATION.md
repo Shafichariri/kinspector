@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v7 — 2026-08-17.**
+**Document version: v8 — 2026-08-17.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -283,6 +283,11 @@ inspector-daemon/build/install/inspector/bin/inspector serve
 
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
 past 100 sessions or 300 MB.
+
+The top bar has **restart** and **stop**. `restart` relaunches the daemon in place — the page
+reconnects by itself and the archive is untouched. `stop` ends it, and the page says so instead of
+looking idle; start it again with the same command above. Both refuse any request that does not
+come from this page, so another browser tab cannot reach in and kill your daemon.
 
 ### 6d. Android: permit cleartext to the daemon
 
@@ -717,8 +722,22 @@ If your copy has no version line at the top, identify it by what it contains:
 | Has an **MCP** section and a `captureAllBodies` option | **v4** |
 | Has an **OkHttp interceptor** section | **v5** |
 | Has a real **Auth0 adapter** class in §11 | **v6** |
+| Overlay insets itself, system back works, bodies are copyable | **v7** |
 
-### v7 — 2026-08-17 (this document)
+### v8 — 2026-08-17 (this document)
+
+- **Stop and restart the daemon from the web UI.** Two buttons in the top bar. `restart` relaunches
+  the daemon and the page reconnects on its own; `stop` ends it and says so, rather than leaving a
+  page that looks merely idle. This is the cure for the "three daemons, two of them serving
+  nothing" problem — you no longer have to find the terminal that launched it.
+- **HTTP methods are colour coded** in the web UI, the overlay list, the detail header and the
+  pill — GET blue, POST green, PUT purple, PATCH amber, DELETE red, anything else muted. The
+  palette deliberately avoids the status colours so a PUT never reads as a 4xx.
+
+**Action:** rebuild the daemon to get the buttons — `./gradlew :inspector-daemon:installDist`.
+Rebuild the app for the method colours in the overlay. Neither is required for the other.
+
+### v7 — Overlay fixes from a real phone
 
 First round of fixes from running the overlay on a real Android phone. All four were reported
 from one screenshot, and all four are overlay-only — capture, the daemon and the archive are

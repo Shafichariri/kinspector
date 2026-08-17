@@ -166,9 +166,9 @@ private fun ExpandedPill(latest: NetworkTransaction?, inFlight: Int) {
 
         Text(
             text = latest.method,
-            color = colors.onSurfaceMuted,
+            color = colors.forMethod(latest.method),
             fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace,
         )
         Text(

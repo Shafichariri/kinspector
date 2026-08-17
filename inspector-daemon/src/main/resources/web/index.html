@@ -18,7 +18,15 @@
       <input type="checkbox" id="live-tail" checked>
       <span id="live-dot" class="dot"></span> live
     </label>
+    <span class="sep">·</span>
+    <button id="server-restart" class="btn btn-sm"
+            title="Relaunch the daemon. The page reconnects on its own.">restart</button>
+    <button id="server-stop" class="btn btn-sm btn-danger"
+            title="Stop the daemon. Nothing is recorded until you start it again.">stop</button>
   </header>
+
+  <!-- A stopped daemon otherwise looks exactly like an idle one. -->
+  <div id="server-banner" class="server-banner" hidden></div>
 
   <main id="panes">
     <aside id="rail">

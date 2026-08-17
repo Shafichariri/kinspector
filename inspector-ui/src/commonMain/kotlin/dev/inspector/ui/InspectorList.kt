@@ -166,8 +166,9 @@ private fun TransactionRow(txn: NetworkTransaction, onClick: () -> Unit) {
 
         Text(
             txn.method,
-            color = colors.onSurfaceMuted,
+            color = colors.forMethod(txn.method),
             fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.width(46.dp),
         )

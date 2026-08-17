@@ -33,6 +33,11 @@ data class InspectorColors(
     val clientError: Color,
     val serverError: Color,
     val transportError: Color,
+    val methodGet: Color,
+    val methodPost: Color,
+    val methodPut: Color,
+    val methodPatch: Color,
+    val methodDelete: Color,
 ) {
     /** Status-class colour used by the pill dot and the list chips. */
     fun forStatus(status: Int?): Color = when {
@@ -41,6 +46,24 @@ data class InspectorColors(
         status >= 400 -> clientError
         status >= 300 -> redirect
         else -> success
+    }
+
+    /**
+     * Method colour, matching the web UI's `--m-*` tokens so one row looks the same in both
+     * surfaces.
+     *
+     * Kept out of the status hue family: an amber PUT beside an amber 404 reads as "this row is a
+     * 4xx", which is the one thing the list must not get wrong. DELETE keeps red because
+     * destructive is what red should mean here. Unrecognised verbs stay muted rather than
+     * borrowing a colour that already means something.
+     */
+    fun forMethod(method: String): Color = when (method.uppercase()) {
+        "GET" -> methodGet
+        "POST" -> methodPost
+        "PUT" -> methodPut
+        "PATCH" -> methodPatch
+        "DELETE" -> methodDelete
+        else -> onSurfaceMuted
     }
 }
 
@@ -56,6 +79,11 @@ private val DarkColors = InspectorColors(
     clientError = Color(0xFFE0A030),
     serverError = Color(0xFFE5484D),
     transportError = Color(0xFF8A8F98),
+    methodGet = Color(0xFF6AA9FF),
+    methodPost = Color(0xFF4CC38A),
+    methodPut = Color(0xFFD99BFF),
+    methodPatch = Color(0xFFE0A030),
+    methodDelete = Color(0xFFE5484D),
 )
 
 private val LightColors = InspectorColors(
@@ -70,6 +98,11 @@ private val LightColors = InspectorColors(
     clientError = Color(0xFFB45309),
     serverError = Color(0xFFC62A2F),
     transportError = Color(0xFF6B7280),
+    methodGet = Color(0xFF2563EB),
+    methodPost = Color(0xFF13875B),
+    methodPut = Color(0xFF7C3AED),
+    methodPatch = Color(0xFFB45309),
+    methodDelete = Color(0xFFC62A2F),
 )
 
 val LocalInspectorColors = staticCompositionLocalOf { DarkColors }

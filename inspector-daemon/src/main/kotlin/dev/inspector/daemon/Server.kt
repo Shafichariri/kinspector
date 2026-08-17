@@ -54,7 +54,10 @@ class PortUnavailableException(val port: Int, cause: Throwable) :
  * credentials by default, so the loopback bind is the security boundary — do not widen it
  * without adding auth first.
  */
-class InspectorDaemon(private val config: DaemonConfig) {
+class InspectorDaemon(
+    private val config: DaemonConfig,
+    private val control: ServerControl = ProcessServerControl(),
+) {
 
     private val repository = SessionRepository(config)
     private val retention = Retention(config, repository)
@@ -128,8 +131,91 @@ class InspectorDaemon(private val config: DaemonConfig) {
             ingestRoute()
             liveRoute()
             apiRoutes()
+            controlRoutes()
             webUiRoutes()
         }
+    }
+
+    // --- lifecycle control --------------------------------------------------------------------
+
+    /**
+     * Stop and restart, so the web UI can end a daemon without hunting for the terminal that
+     * launched it. This exists because the failure it addresses was real: three `inspector serve`
+     * processes on one machine, two of them serving nothing.
+     */
+    private fun io.ktor.server.routing.Route.controlRoutes() {
+        get("/api/server") {
+            call.respondJson(
+                """{"pid":${ProcessHandle.current().pid()},""" +
+                    """"port":${config.port},""" +
+                    """"canRestart":${control.canRestart}}"""
+            )
+        }
+
+        post("/api/server/stop") {
+            if (!call.requireControlHeader()) return@post
+            call.respondJson("""{"ok":true,"action":"stop"}""")
+            shutdownAfterResponse(restart = false)
+        }
+
+        post("/api/server/restart") {
+            if (!call.requireControlHeader()) return@post
+            if (!control.canRestart) {
+                return@post call.respondError(
+                    HttpStatusCode.NotImplemented,
+                    "this process cannot report its own command line, so it cannot relaunch " +
+                        "itself — stop it and start it again from your terminal",
+                )
+            }
+            call.respondJson("""{"ok":true,"action":"restart"}""")
+            shutdownAfterResponse(restart = true)
+        }
+    }
+
+    /**
+     * Requires a header no cross-origin request can set without a preflight.
+     *
+     * The daemon listens on loopback with no authentication, which means *any* page the developer
+     * happens to have open can POST to `127.0.0.1:8099`. A simple form or `no-cors` fetch could
+     * therefore kill the daemon. A custom header forces the browser to preflight, and this server
+     * answers no CORS preflight, so only its own page gets through. The read-only endpoints are
+     * left alone — this guard is about not handing strangers an off switch.
+     */
+    private suspend fun io.ktor.server.application.ApplicationCall.requireControlHeader(): Boolean {
+        if (request.headers["X-Inspector-Control"] == "1") return true
+        respondError(
+            HttpStatusCode.Forbidden,
+            "control endpoints require the X-Inspector-Control: 1 header",
+        )
+        return false
+    }
+
+    /**
+     * Tears down after the response has gone out.
+     *
+     * On its own thread, and never inside the request handler: stopping the engine from within
+     * one of its own handlers deadlocks, and the caller would see a dropped connection rather
+     * than the acknowledgement that tells the UI its click worked.
+     *
+     * The port is released *before* the replacement is spawned. The other order has the new
+     * process fail its own pre-flight bind check and exit, leaving no daemon at all.
+     */
+    private fun shutdownAfterResponse(restart: Boolean) {
+        Thread {
+            Thread.sleep(RESPONSE_FLUSH_MILLIS)
+            manager.closeAll()
+            server?.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
+            if (restart) {
+                println("inspector: restarting on request from the web UI")
+                control.spawnReplacement()
+            } else {
+                println("inspector: stopped on request from the web UI")
+            }
+            control.exit()
+        }.apply {
+            name = "inspector-shutdown"
+            isDaemon = false
+        }.start()
     }
 
     // --- ingest ----------------------------------------------------------------------------
@@ -348,6 +434,9 @@ class InspectorDaemon(private val config: DaemonConfig) {
         }
     }
 }
+
+/** Long enough for CIO to write the response before the engine is torn down under it. */
+private const val RESPONSE_FLUSH_MILLIS = 150L
 
 private suspend fun io.ktor.server.application.ApplicationCall.respondJson(json: String) {
     respondText(json, ContentType.Application.Json)

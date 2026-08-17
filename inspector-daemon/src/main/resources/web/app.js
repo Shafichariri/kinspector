@@ -16,6 +16,9 @@
     filter: '',
     liveTail: true,
     activeSessionId: null,
+    // 'running' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem to
+    // reconnect from or the outcome the user asked for.
+    serverState: 'running',
   };
 
   const $ = (id) => document.getElementById(id);
@@ -30,6 +33,14 @@
 
   const statusClass = (s) =>
     s === null || s === undefined ? 'x' : s >= 500 ? '5' : s >= 400 ? '4' : s >= 300 ? '3' : '2';
+
+  const KNOWN_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
+  /** Anything unrecognised (HEAD, OPTIONS, a custom verb) stays muted rather than borrowing a
+   *  colour that means something else. */
+  const methodClass = (m) => {
+    const lower = String(m || '').toLowerCase();
+    return KNOWN_METHODS.includes(lower) ? `m-${lower}` : 'm-other';
+  };
 
   const fmtMs = (ms) =>
     ms === null || ms === undefined ? '—' : ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -165,7 +176,7 @@
     if (txn.id === state.selectedId) row.classList.add('selected');
 
     row.appendChild(el('span', `status-dot b${cls}`));
-    row.appendChild(el('span', 'method', txn.method));
+    row.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
 
     const path = el('span', 'path', txn.path);
     if (txn.attempt > 1) {
@@ -190,7 +201,8 @@
 
     const head = el('div', 'detail-head');
     head.appendChild(el('span', `status s${statusClass(txn.status)}`, txn.status ?? 'ERR'));
-    head.appendChild(el('span', 'path', `${txn.method} ${txn.path}`));
+    head.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
+    head.appendChild(el('span', 'path', txn.path));
     pane.appendChild(head);
 
     const [reqBody, resBody] = await Promise.all([
@@ -347,6 +359,80 @@
     }, 150);
   }
 
+  // --- server control -----------------------------------------------------
+
+  /**
+   * Stop and restart the daemon from the page.
+   *
+   * `stop` is genuinely destructive to the session in progress, so it confirms first. `restart`
+   * does not: it is the recovery action, and a confirm dialog on the thing you reach for when
+   * something is already wrong is just friction.
+   */
+  async function control(action) {
+    const res = await fetch(`/api/server/${action}`, {
+      method: 'POST',
+      // Not decoration: the daemon rejects control requests without it, which is what stops any
+      // other page in the browser from reaching a loopback daemon that has no authentication.
+      headers: { 'X-Inspector-Control': '1' },
+    });
+    if (!res.ok) {
+      let message = `${res.status}`;
+      try { message = (await res.json()).error || message; } catch { /* keep the status */ }
+      throw new Error(message);
+    }
+  }
+
+  function showServerBanner(text, pending) {
+    const node = $('server-banner');
+    node.hidden = !text;
+    node.textContent = text || '';
+    node.classList.toggle('pending', !!pending);
+  }
+
+  async function requestStop() {
+    if (!confirm('Stop the daemon? Traffic will stop being recorded until you start it again.')) return;
+    setControlsEnabled(false);
+    try {
+      await control('stop');
+      state.serverState = 'stopped';
+      showServerBanner('Daemon stopped. Run `inspector serve` to start it again.', false);
+    } catch (e) {
+      setControlsEnabled(true);
+      showServerBanner(`Could not stop the daemon: ${e.message}`, false);
+    }
+  }
+
+  async function requestRestart() {
+    setControlsEnabled(false);
+    try {
+      await control('restart');
+      state.serverState = 'restarting';
+      showServerBanner('Restarting…', true);
+      // The socket drops, reconnects on its own, and its onopen clears this banner. Nothing here
+      // polls: the live connection already knows when the daemon is back.
+    } catch (e) {
+      setControlsEnabled(true);
+      showServerBanner(`Could not restart the daemon: ${e.message}`, false);
+    }
+  }
+
+  function setControlsEnabled(enabled) {
+    $('server-stop').disabled = !enabled;
+    $('server-restart').disabled = !enabled;
+  }
+
+  async function loadServerInfo() {
+    try {
+      const info = await api('/api/server');
+      // A daemon that cannot report its own argv cannot relaunch itself; say so on the button
+      // rather than letting the click fail.
+      $('server-restart').disabled = !info.canRestart;
+      $('server-restart').title = info.canRestart
+        ? 'Relaunch the daemon. The page reconnects on its own.'
+        : 'This daemon cannot relaunch itself — restart it from your terminal.';
+    } catch { /* the banner already covers an unreachable daemon */ }
+  }
+
   function connectLive() {
     const ws = new WebSocket(`ws://${location.host}/api/live`);
     ws.onmessage = (event) => {
@@ -371,9 +457,27 @@
     };
     ws.onclose = () => {
       $('live-dot').classList.remove('on');
+      // A deliberate stop is not a connection problem, so do not keep dialling — and do not
+      // overwrite the banner that says the daemon is gone on purpose.
+      if (state.serverState === 'stopped') return;
+      if (state.serverState === 'running') {
+        showServerBanner('Lost the daemon — reconnecting…', true);
+      }
       setTimeout(connectLive, 1000);
     };
-    ws.onopen = () => $('live-dot').classList.add('on');
+    ws.onopen = () => {
+      $('live-dot').classList.add('on');
+      const wasAway = state.serverState !== 'running';
+      state.serverState = 'running';
+      showServerBanner(null, false);
+      setControlsEnabled(true);
+      // A restart means a new process with a fresh session list; a reconnect after a blip may
+      // also have missed rows. Either way the page's data is stale, so re-read it.
+      if (wasAway) {
+        loadServerInfo();
+        loadSessions().then(loadTransactions);
+      }
+    };
   }
 
   document.addEventListener('keydown', (e) => {
@@ -416,7 +520,11 @@
     });
   }
 
+  $('server-stop').addEventListener('click', requestStop);
+  $('server-restart').addEventListener('click', requestRestart);
+
   (async function init() {
+    await loadServerInfo();
     await loadSessions();
     await loadTransactions();
     connectLive();

@@ -13,6 +13,13 @@
   --warn: #e0a030;
   --err: #e5484d;
   --neutral: #8a8f98;
+  /* Method hues. Kept out of the status family above (green/amber/red) on purpose — see the
+     .m-* rules for why. */
+  --m-get: #6aa9ff;
+  --m-post: #4cc38a;
+  --m-put: #d99bff;
+  --m-patch: #e0a030;
+  --m-delete: #e5484d;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -31,6 +38,11 @@
     --warn: #b45309;
     --err: #c62a2f;
     --neutral: #6b7280;
+    --m-get: #2563eb;
+    --m-post: #13875b;
+    --m-put: #7c3aed;
+    --m-patch: #b45309;
+    --m-delete: #c62a2f;
   }
 }
 
@@ -181,7 +193,8 @@ kbd {
 .row.selected { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent); }
 
 .row .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-.row .method { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 44px; }
+/* No colour here: the .m-* class carries it, and this selector would outrank it. */
+.row .method { font-family: var(--mono); font-size: 11px; width: 44px; }
 .row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .status { font-family: var(--mono); font-weight: 600; width: 40px; text-align: right; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
@@ -192,6 +205,20 @@ kbd {
 .s4 { color: var(--warn); } .b4 { background: var(--warn); }
 .s5 { color: var(--err); } .b5 { background: var(--err); }
 .sx { color: var(--neutral); } .bx { background: var(--neutral); }
+
+/* Method colours.
+ *
+ * Deliberately a different hue family from the status colours above, which own green/amber/red.
+ * An amber PUT sitting next to an amber 404 reads as "this row is a 4xx" at a glance, which is
+ * the one thing the list must never get wrong. DELETE is the exception that keeps red, because
+ * destructive is exactly what red should mean here. */
+.method { font-weight: 600; }
+.m-get { color: var(--m-get); }
+.m-post { color: var(--m-post); }
+.m-put { color: var(--m-put); }
+.m-patch { color: var(--m-patch); }
+.m-delete { color: var(--m-delete); }
+.m-other { color: var(--fg-muted); }
 
 /* Markers render inline in the list so "what happened when I tapped checkout"
    is answered visually rather than by comparing timestamps. */
@@ -227,6 +254,21 @@ kbd {
   cursor: pointer;
 }
 .btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.btn-sm { padding: 2px 8px; font-size: 11px; }
+.btn-danger { color: var(--err); }
+.btn-danger:hover { background: var(--err); color: #fff; border-color: var(--err); }
+
+/* Full-width because a dead daemon is not a detail — every number on the page is now stale. */
+.server-banner {
+  padding: 8px 14px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--err);
+  color: var(--err);
+}
+.server-banner.pending { border-bottom-color: var(--warn); color: var(--warn); }
 
 .section-title {
   font-size: 11px;

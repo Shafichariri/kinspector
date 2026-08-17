@@ -65,7 +65,15 @@ internal fun InspectorDetail(
         ) {
             ToolbarButton("‹ back", onBack)
             Text(
-                "${txn.method} ${pathTail(txn.path)}",
+                txn.method,
+                color = colors.forMethod(txn.method),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+            )
+            Text(
+                pathTail(txn.path),
                 color = colors.onSurface,
                 fontSize = 14.sp,
                 fontFamily = FontFamily.Monospace,
