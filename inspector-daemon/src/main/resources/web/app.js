@@ -304,11 +304,17 @@
   function bodyAbsenceReason(txn, side, body) {
     if (body !== null) return null;
     const totalBytes = side === 'req' ? txn.reqBytes : txn.resBytes;
-    if (!totalBytes) return 'empty';
-
     const omitted = side === 'req' ? txn.reqBodyOmitted : txn.resBodyOmitted;
     const contentType = side === 'req' ? txn.reqContentType : txn.resContentType;
     const size = fmtBytes(totalBytes);
+
+    // A recorded reason outranks the byte count. A discarded hop reports zero bytes because nothing
+    // was ever read from it, so the 'empty' shortcut below would state as fact the one thing
+    // capture could not determine.
+    if (omitted === 'discarded') {
+      return 'body not read — the client discarded this response to make the next attempt';
+    }
+    if (!totalBytes) return 'empty';
 
     if (omitted === 'contentType') {
       const named = contentType ? `content type ${contentType} is` : 'no content type was declared, so it is';

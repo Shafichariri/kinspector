@@ -62,11 +62,39 @@ internal fun CoroutineScope.teeBody(
 ): ByteReadChannel {
     val forwarded = ByteChannel(autoFlush = true)
 
-    launch {
+    // Accumulation state lives outside the coroutine so the completion fallback below can report
+    // whatever was read before the call died, rather than nothing at all.
+    val accumulator = if (capture) ByteAccumulator(maxBytes) else null
+    var total = 0L
+    var truncated = false
+    var reported = false
+
+    /**
+     * Fires [onComplete] at most once.
+     *
+     * No atomic is needed despite two possible callers. The `finally` below runs inside the
+     * coroutine; `invokeOnCompletion` runs only once the job has completed, so job completion
+     * orders the two. When the coroutine never runs at all, there is no second writer.
+     */
+    fun report(discarded: Boolean) {
+        if (reported) return
+        reported = true
+        onComplete(
+            CapturedBody(
+                bytes = accumulator?.toByteArray(),
+                totalBytes = total,
+                truncated = truncated,
+                omitted = when {
+                    discarded -> BodyOmission.DISCARDED
+                    accumulator == null && total > 0 -> BodyOmission.CONTENT_TYPE
+                    else -> null
+                },
+            )
+        )
+    }
+
+    val job = launch {
         val chunk = ByteArray(CHUNK)
-        val accumulator = if (capture) ByteAccumulator(maxBytes) else null
-        var total = 0L
-        var truncated = false
         try {
             while (true) {
                 val read = source.readAvailable(chunk, 0, chunk.size)
@@ -81,16 +109,19 @@ internal fun CoroutineScope.teeBody(
             // Propagate the failure to the app rather than handing it a silently short body.
             forwarded.cancel(cause)
         } finally {
-            onComplete(
-                CapturedBody(
-                    bytes = accumulator?.toByteArray(),
-                    totalBytes = total,
-                    truncated = truncated,
-                    omitted = if (accumulator == null && total > 0) BodyOmission.CONTENT_TYPE else null,
-                )
-            )
+            report(discarded = false)
         }
     }
+
+    // The row must not depend on this coroutine ever being dispatched.
+    //
+    // `teeBody` is called on the *response's* scope, and in Ktor an HttpResponse is a CoroutineScope
+    // tied to its call. Ktor discards intermediate responses — every redirect hop, every retried
+    // attempt — by cancelling that scope. A `launch` whose scope is cancelled before it is
+    // dispatched never runs its body, so the `finally` above never runs either, and the hop produces
+    // no row at all: silent loss of exactly the rows "one row per attempt" promises. It is
+    // load-dependent, so it hid on a fast machine and only showed up on a small CI runner.
+    job.invokeOnCompletion { report(discarded = true) }
 
     return forwarded
 }

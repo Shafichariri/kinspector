@@ -124,6 +124,17 @@ object BodyOmission {
      * the cost the efficiency contract forbids, so its size is reported and its bytes are not.
      */
     const val STREAMING = "streaming"
+
+    /**
+     * The call was abandoned before its body was read — normally a redirect hop or a retried
+     * attempt that the client discarded, body unread, in order to make the next one.
+     *
+     * The row is real: status, timing and headers all describe a response that happened. Only the
+     * body was never available to capture. Keeping this distinct from "the body was empty" matters,
+     * because the hop may well have carried one, and calling it empty would be exactly the kind of
+     * guess this field exists to replace.
+     */
+    const val DISCARDED = "discarded"
 }
 
 /** Marker [Marker.source] values. */

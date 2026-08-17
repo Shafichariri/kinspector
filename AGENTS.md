@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**162 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**164 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -223,6 +223,23 @@ once in `SetupRequest` is the only thing that survives. `PerAttemptTest` caught 
 and copies a capped prefix aside; **past the cap it keeps reading and only counts**, because
 stopping early would stall the app's side of the channel. `onComplete` fires in a `finally` so a
 body the app abandons still produces a row.
+
+**`teeBody` also reports from `job.invokeOnCompletion`, and that is not belt-and-braces.** The
+`finally` is not sufficient: `teeBody` launches into the *response's* scope, and in Ktor an
+`HttpResponse` is a `CoroutineScope` tied to its call. Ktor discards intermediate responses — every
+redirect hop, every retried attempt — by cancelling that scope, and a `launch` cancelled before it
+is dispatched never runs its body, so the `finally` never runs either and **the hop produces no row
+at all**. A unit test that cancels the scope around 200 tees saw 6 rows without the completion
+handler and 200 with it. This was live for months and hid on a fast machine, surfacing only on a
+2-core CI runner: the last hop always survived (the app reads it) while earlier ones vanished, so
+`redirect_chain_produces_a_row_for_every_hop` failed with attempts 2 and 3 present and 1 missing.
+Silent loss of exactly the rows "one row per attempt" exists to show. `TeeCancellationTest` guards
+both directions; do not "simplify" the handler away.
+
+The row that survives cancellation carries `BodyOmission.DISCARDED` and zero bytes. Both UIs check
+the recorded reason **before** the byte count, because a discarded hop reports zero bytes and the
+`totalBytes == 0` shortcut would otherwise render "empty" — asserting the one thing capture could
+not determine.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.

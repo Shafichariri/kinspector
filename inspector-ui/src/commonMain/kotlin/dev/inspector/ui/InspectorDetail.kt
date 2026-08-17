@@ -215,6 +215,15 @@ private fun BodySection(
 
     SectionTitle("Body", onCopy = rendered?.let { { onCopy(it) } })
     when {
+        // A recorded reason outranks the byte count. A discarded hop reports zero bytes because
+        // nothing was ever read from it, and falling through to "empty" here would state as fact
+        // the one thing capture could not determine.
+        body == null && omitted != null -> Text(
+            bodyAbsenceReason(omitted, contentType, totalBytes),
+            color = colors.onSurfaceMuted,
+            fontSize = 12.sp,
+        )
+
         body == null && totalBytes > 0 -> Text(
             bodyAbsenceReason(omitted, contentType, totalBytes),
             color = colors.onSurfaceMuted,
@@ -266,6 +275,11 @@ private fun bodyAbsenceReason(omitted: String?, contentType: String?, totalBytes
         }
 
         BodyOmission.STREAMING -> "$size not captured — streamed body, never held in memory"
+
+        // Says "not read", not "empty". This hop may well have carried a body; the client threw the
+        // response away to follow a redirect or retry before anything could read it.
+        BodyOmission.DISCARDED ->
+            "body not read — the client discarded this response to make the next attempt"
 
         else -> "$size recorded, but the body is no longer in the device buffer"
     }
