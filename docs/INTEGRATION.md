@@ -46,7 +46,7 @@ produces (klib/metadata mismatches) don't point at the real cause. Check before 
 
 | Requirement | Value |
 |---|---|
-| Kotlin | **2.3.21** |
+| Kotlin | **2.3.20** |
 | Compose Multiplatform | **1.11.x** |
 | Ktor | 3.x (3.5.0 is what Inspector is built against) |
 | JDK toolchain | 21 |
@@ -431,7 +431,7 @@ and that the dependency coordinates are exactly `dev.inspector:inspector-core:0.
 
 **Compose compiler plugin version conflicts**
 Your app must be on Compose Multiplatform 1.11.x with the Kotlin Compose compiler plugin at
-Kotlin 2.3.21.
+Kotlin 2.3.20.
 
 **Pill doesn't appear**
 `InspectorOverlay` must wrap something that fills the screen. If your root is inside a

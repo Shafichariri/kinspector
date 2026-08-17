@@ -15,14 +15,16 @@ Three consumers of the same captured data:
 
 1. **In-app** — a draggable overlay pill showing `GET /users · 200 · 143ms`, tapping into a full
    inspector. Works on Android, iOS and desktop from one Compose codebase.
-2. **Host daemon** *(not built yet)* — archives every session to `~/.inspector/sessions/…` as
-   readable folders, serves a web UI.
-3. **Agents** *(not built yet)* — read `index.jsonl` directly, or query via CLI/MCP.
+2. **Host daemon** — archives every session to `~/.inspector/sessions/…` as readable folders and
+   serves a web UI at `http://127.0.0.1:8099`. Operations are in `docs/DAEMON.md`.
+3. **Agents** — read `index.jsonl` directly, or query via the CLI or the MCP server.
 
 ## What it is not
 
-- Not a process-wide inspector. It sees **Ktor traffic only** — no third-party SDK traffic, no
-  WebView, no native iOS `NSURLSession` calls. This was a deliberate v1 scope decision.
+- Not a process-wide inspector. It sees **Ktor traffic, plus any OkHttp client the app hands the
+  interceptor to** — so Auth0/Retrofit/Coil are reachable on Android and JVM with a line of app
+  code, but WebViews and native iOS `NSURLSession` calls are not. Deliberate scope; the universal
+  answer is proxy capture (4c), which is not started.
 - Not wire-level. Bodies may already be decompressed; there is no DNS/TLS/TTFB breakdown.
 - Not for WebSockets or SSE.
 - Not shipped to production, ever. See **Production safety** below — this is enforced, not
@@ -41,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**156 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**162 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -86,8 +88,12 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 - Retention prunes by count and by bytes, never the active session.
 - **The web UI renders.** `scripts/render-web-ui.js` runs the real `app.js` against the real
   `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
-  marker dividers, session picker, detail pane, attempt chain, console errors. Last run: 109
-  rows, 2 marker dividers, 6 detail sections, 4 chain rows, zero errors.
+  marker dividers, session picker, detail pane, attempt chain, method classes, console errors. It
+  also drives the sort toggle and asserts the rendered order reverses, restores, and that the
+  row/divider sequence is an exact mirror.
+- **Daemon stop and restart, against a live daemon** — not only the unit tests. An unheadered POST
+  is refused 403 and the daemon survives; restart swapped one pid for another in about a second
+  with the whole archive still served; stop released the port and left no `serve` process.
 - **A live viewer receives body refs**, so bodies are fetchable without a page reload
   (`LiveTest`). This is the defect the first real user hit.
 - **OkHttp capture, end to end.** The sample makes one call through a plain `OkHttpClient` with no
@@ -440,7 +446,7 @@ Changing the public API is deliberately high-friction, because it is a contract:
 
 ## Conventions
 
-- **Pinned versions.** Kotlin 2.3.21, Ktor 3.5.0, Compose MP 1.11.1, AGP 9.3.1, Gradle 9.5.1,
+- **Pinned versions.** Kotlin 2.3.20, Ktor 3.5.0, Compose MP 1.11.1, AGP 9.2.1, Gradle 9.5.1,
   JDK 21. All were verified present in the local Gradle cache before pinning. Do not bump
   casually.
 - **Trust the pinned source over blog posts.** Ktor's plugin surface drifted across 2.x/3.x.
@@ -471,6 +477,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | Path | Why it matters |
 |---|---|
 | `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
+| `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
 | `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a §13 changelog entry saying what they must *do*, not just what changed. |
 | `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
