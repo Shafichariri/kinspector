@@ -44,6 +44,48 @@ internal fun InspectorConfig.capturesBody(contentType: String?): Boolean {
 private val TEXT_LIKE_SUFFIXES = listOf("+json", "+xml")
 
 /**
+ * Captures a body that Ktor has already buffered in memory, without touching the app's copy.
+ *
+ * Only valid for a channel that can be re-read — see `HttpResponse.isSaved`, which is true for
+ * every non-streaming response because Ktor's `SaveBody` plugin materialises the body into a
+ * `ByteArray` and hands out a brand new reader on each `rawContent` access.
+ *
+ * This exists because [teeBody] must not be used there. Ktor's `HttpRequestRetry` evaluates
+ * `throwOnInvalidResponseBody` on the returned call, which does
+ * `rawContent.run { try { awaitContent() } finally { cancel() } }`. That is correct against a saved
+ * response, where it cancels a throwaway reader, and fatal against a single teed channel, where it
+ * destroys the one channel the app has yet to read.
+ *
+ * Reading a second view costs a capped memcpy over memory Ktor has already paid for, and nothing
+ * Inspector owns ends up on the path the app reads.
+ */
+internal suspend fun readSavedBody(
+    source: ByteReadChannel,
+    capture: Boolean,
+    maxBytes: Int,
+): CapturedBody {
+    val accumulator = if (capture) ByteAccumulator(maxBytes) else null
+    var total = 0L
+    var truncated = false
+    val chunk = ByteArray(CHUNK)
+    while (true) {
+        val read = source.readAvailable(chunk, 0, chunk.size)
+        if (read == -1) break
+        if (read == 0) continue
+        total += read
+        if (accumulator != null && accumulator.append(chunk, read)) truncated = true
+    }
+    return CapturedBody(
+        bytes = accumulator?.toByteArray(),
+        totalBytes = total,
+        truncated = truncated,
+        // Drained even when not capturing, because `totalBytes` is the honest size and the only
+        // alternative is trusting a Content-Length header that may be absent or wrong.
+        omitted = if (accumulator == null && total > 0) BodyOmission.CONTENT_TYPE else null,
+    )
+}
+
+/**
  * Returns a channel carrying exactly the bytes of [source], while capturing a capped copy.
  *
  * Ktor's own `split` is internal API, so this is a hand-rolled tee: one coroutine reads the
@@ -53,6 +95,9 @@ private val TEXT_LIKE_SUFFIXES = listOf("+json", "+xml")
  *
  * [onComplete] fires exactly once: on normal completion, on error, or on the app abandoning the
  * body. A call must produce a row in all three cases.
+ *
+ * For responses Ktor has already saved, use [readSavedBody] instead — see its doc for why teeing a
+ * saved response breaks the call.
  */
 internal fun CoroutineScope.teeBody(
     source: ByteReadChannel,

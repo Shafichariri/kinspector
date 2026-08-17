@@ -28,7 +28,7 @@ CI — see [Production safety](#production-safety).
 | **4a** | OkHttp capture, for SDKs that own their transport (Auth0, Retrofit, Coil) | ✅ |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**164 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+**167 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
 Compose Multiplatform app on Android.
 
 Honest gaps: the overlay has been run on one Android device and desktop, never on iOS hardware; the

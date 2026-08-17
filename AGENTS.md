@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**164 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**167 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -240,6 +240,35 @@ The row that survives cancellation carries `BodyOmission.DISCARDED` and zero byt
 the recorded reason **before** the byte count, because a discarded hop reports zero bytes and the
 `totalBytes == 0` shortcut would otherwise render "empty" — asserting the one thing capture could
 not determine.
+
+**Saved responses are read, not teed — the `isSaved` branch in the `Send` hook is load-bearing.**
+Ktor's `SaveBody` plugin lives in the *receive* pipeline, and the receive pipeline runs **inside**
+`proceed` (`HttpClient` intercepts `HttpSendPipeline.Receive` to execute it). So by the time the hook
+regains control, every non-streaming response is already a `ByteArray` and `rawContent` yields a
+fresh reader per access. Capture reads one of those readers and hands the call back untouched.
+
+Teeing there was a real bug. `HttpRequestRetry` sits **outside** this hook — `HttpSend` builds its
+chain from `interceptors.reversed()`, and Inspector installs last, so it ends up innermost — and it
+probes whatever call comes back with
+`isSaved && rawContent.run { try { awaitContent() } finally { cancel() } }`. Against Ktor's saved
+response that cancel discards a throwaway reader, which is what its own comment says it is for.
+Against `replaceResponse { appChannel }`, which returned **one** captured channel on every access, it
+destroyed the only channel the caller had left, and `HttpStatement.fetchResponse`'s own `call.save()`
+then died with `ClosedByteChannelException`. Load-dependent, because it only did damage when the
+cancel beat the tee to the bytes — so it surfaced as an intermittent CI failure in the burst test.
+`SavedBodyTest` reproduces it deterministically with a 2 MB body; do not collapse the branch back
+into a single tee.
+
+The tee is still correct for streaming responses, and still necessary: there is nothing buffered to
+re-read, and buffering a stream to inspect it is the cost the efficiency contract forbids. `isSaved`
+being false is also exactly what short-circuits the cancel above, so the tee is safe there.
+
+**Known limitation of the `isSaved` branch:** if the app registers a download progress listener
+(`onDownload`), `BodyProgress` wraps `rawContent` in an observable channel, and capture reading a
+second view makes that listener fire for the whole body twice. Ktor exposes no way to reach the
+underlying saved channel — `DelegatedResponse.origin` and `DownloadProgressListenerAttributeKey` are
+both internal — so this is not currently avoidable. It affects only apps using progress listeners,
+and it doubles reported progress rather than corrupting the body.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.

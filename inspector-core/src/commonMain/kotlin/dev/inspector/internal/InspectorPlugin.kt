@@ -5,6 +5,7 @@ import dev.inspector.model.NetworkTransaction
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.HttpClientCall
 import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.isSaved
 import io.ktor.client.plugins.api.SetupRequest
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.call.replaceResponse
@@ -117,7 +118,33 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
                 )
             }
 
-            // The app reads the teed channel; every byte is forwarded unchanged.
+            // Ktor's `SaveBody` plugin lives in the *receive* pipeline, and the receive pipeline
+            // runs inside the `proceed` above — `HttpClient` intercepts `HttpSendPipeline.Receive`
+            // to execute it. So by the time control returns here, every non-streaming response has
+            // already been materialised into a `ByteArray` and `rawContent` yields a fresh reader
+            // on each access. Read one of those readers and hand the call straight back.
+            //
+            // Teeing here instead was a real bug, not a style choice. `HttpRequestRetry` sits
+            // *outside* this hook (`HttpSend` builds its chain from `interceptors.reversed()`, and
+            // Inspector installs last, so it ends up innermost), and it evaluates
+            // `throwOnInvalidResponseBody` on whatever call we return:
+            //
+            //     isSaved && rawContent.run { try { awaitContent() } finally { cancel() } }
+            //
+            // Against a saved response that cancel discards a throwaway reader, which is what its
+            // comment says it is for. Against `replaceResponse { appChannel }` — one captured
+            // channel returned on every access — it destroyed the only channel left to read, and
+            // `HttpStatement.fetchResponse`'s own `call.save()` then died with
+            // `ClosedByteChannelException`. Load-dependent, because it only lost the race when the
+            // tee had not finished forwarding yet.
+            if (response.isSaved) {
+                emit(readSavedBody(response.rawContent, captureResBody, config.bodyCaptureMaxBytes))
+                return@on call
+            }
+
+            // Streaming response: a genuine one-shot network channel that cannot be re-read, so tee
+            // it and hand the app the copy. Safe, because `isSaved` is false is exactly the
+            // condition that short-circuits the cancel above before it touches `rawContent`.
             val appChannel = response.teeBody(
                 source = response.rawContent,
                 capture = captureResBody,
