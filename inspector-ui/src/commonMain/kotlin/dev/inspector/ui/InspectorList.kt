@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -164,14 +163,7 @@ private fun TransactionRow(txn: NetworkTransaction, onClick: () -> Unit) {
     ) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(colors.forStatus(txn.status)))
 
-        Text(
-            txn.method,
-            color = colors.forMethod(txn.method),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(46.dp),
-        )
+        MethodBadge(txn.method, minWidth = 52.dp)
 
         Column(Modifier.weight(1f)) {
             Text(

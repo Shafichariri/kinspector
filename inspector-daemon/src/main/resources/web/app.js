@@ -19,6 +19,9 @@
     // 'running' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem to
     // reconnect from or the outcome the user asked for.
     serverState: 'running',
+    // false = oldest first (causal reading order), true = newest first (tail-a-log order).
+    // Remembered across reloads because it is a reading preference, not session state.
+    newestFirst: localStorage.getItem('inspector.newestFirst') === '1',
   };
 
   const $ = (id) => document.getElementById(id);
@@ -144,29 +147,65 @@
     }
   }
 
+  /**
+   * Transactions in display order — the single source of truth for both rendering and j/k
+   * navigation, so "next row" always means the row visually below the current one.
+   */
+  const orderedRows = () => {
+    const rows = [...state.transactions].sort((a, b) => a.mono - b.mono);
+    return state.newestFirst ? rows.reverse() : rows;
+  };
+
   function renderList() {
     const list = $('list');
     list.innerHTML = '';
 
-    // Oldest-first for display so marker dividers fall in causal order.
-    const rows = [...state.transactions].sort((a, b) => a.mono - b.mono);
+    const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
 
+    // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the
+    // only arrangement that makes causal sense, then reverse the whole thing. Reversing after
+    // interleaving keeps each divider attached to the same rows: read downward in newest-first
+    // and a divider below a row still means that row happened after the marker.
     const markers = [...state.markers].sort((a, b) => a.mono - b.mono);
+    const sequence = [];
     let markerIndex = 0;
-
-    for (const txn of rows) {
+    for (const txn of [...state.transactions].sort((a, b) => a.mono - b.mono)) {
       while (markerIndex < markers.length && markers[markerIndex].mono <= txn.mono) {
-        list.appendChild(el('div', 'marker-divider', markers[markerIndex].label));
+        sequence.push({ marker: markers[markerIndex] });
         markerIndex++;
       }
-      list.appendChild(rowFor(txn));
+      sequence.push({ txn });
     }
     for (; markerIndex < markers.length; markerIndex++) {
-      list.appendChild(el('div', 'marker-divider', markers[markerIndex].label));
+      sequence.push({ marker: markers[markerIndex] });
+    }
+    if (state.newestFirst) sequence.reverse();
+
+    for (const entry of sequence) {
+      list.appendChild(
+        entry.marker
+          ? el('div', 'marker-divider', entry.marker.label)
+          : rowFor(entry.txn),
+      );
     }
 
-    if (state.liveTail) list.parentElement.scrollTop = list.parentElement.scrollHeight;
+    // Follow the newest row, wherever it now lives.
+    if (state.liveTail) {
+      const pane = list.parentElement;
+      pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
+    }
+  }
+
+  function setSortOrder(newestFirst) {
+    state.newestFirst = newestFirst;
+    localStorage.setItem('inspector.newestFirst', newestFirst ? '1' : '0');
+    const button = $('sort-order');
+    button.textContent = newestFirst ? 'newest ↑' : 'oldest ↓';
+    button.title = newestFirst
+      ? 'Newest request at the top — click for oldest first'
+      : 'Oldest request at the top — click for newest first';
+    renderList();
   }
 
   function rowFor(txn) {
@@ -339,7 +378,8 @@
   }
 
   function move(delta) {
-    const rows = [...state.transactions].sort((a, b) => a.mono - b.mono);
+    // Display order, so j always moves down the screen regardless of sort direction.
+    const rows = orderedRows();
     if (!rows.length) return;
     const current = rows.findIndex((t) => t.id === state.selectedId);
     const next = Math.min(rows.length - 1, Math.max(0, (current === -1 ? 0 : current + delta)));
@@ -489,6 +529,7 @@
       case 'j': move(1); break;
       case 'k': move(-1); break;
       case '/': case 'f': e.preventDefault(); $('filter').focus(); break;
+      case 'o': setSortOrder(!state.newestFirst); break;
       case 'g': move(-1e9); break;
       case 'G': move(1e9); break;
       case 'Escape':
@@ -522,8 +563,10 @@
 
   $('server-stop').addEventListener('click', requestStop);
   $('server-restart').addEventListener('click', requestRestart);
+  $('sort-order').addEventListener('click', () => setSortOrder(!state.newestFirst));
 
   (async function init() {
+    setSortOrder(state.newestFirst);   // paints the button to match the remembered preference
     await loadServerInfo();
     await loadSessions();
     await loadTransactions();

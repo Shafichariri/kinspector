@@ -64,14 +64,7 @@ internal fun InspectorDetail(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ToolbarButton("‹ back", onBack)
-            Text(
-                txn.method,
-                color = colors.forMethod(txn.method),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 1,
-            )
+            MethodBadge(txn.method, fontSize = 12.sp)
             Text(
                 pathTail(txn.path),
                 color = colors.onSurface,

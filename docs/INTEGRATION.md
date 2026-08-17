@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v8 — 2026-08-17.**
+**Document version: v9 — 2026-08-17.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -723,8 +723,21 @@ If your copy has no version line at the top, identify it by what it contains:
 | Has an **OkHttp interceptor** section | **v5** |
 | Has a real **Auth0 adapter** class in §11 | **v6** |
 | Overlay insets itself, system back works, bodies are copyable | **v7** |
+| Web UI has stop/restart buttons and coloured methods | **v8** |
 
-### v8 — 2026-08-17 (this document)
+### v9 — 2026-08-17 (this document)
+
+- **Methods are badges, not coloured text**, in both the web UI and the overlay — a tinted chip in
+  the method's colour. A hue change alone was too easy to miss at a glance, which is the only job
+  this label has.
+- **Sort order toggle in the web UI.** The button next to the counts flips newest-first and
+  oldest-first; <kbd>o</kbd> does the same. The choice is remembered across reloads, live tail
+  follows the newest row to whichever end it now lives at, and <kbd>j</kbd>/<kbd>k</kbd> follow
+  what you see rather than a fixed direction.
+
+**Action:** rebuild the daemon for the sort toggle, rebuild the app for the overlay badges.
+
+### v8 — Daemon control from the web UI
 
 - **Stop and restart the daemon from the web UI.** Two buttons in the top bar. `restart` relaunches
   the daemon and the page reconnects on its own; `stop` ends it and says so, rather than leaving a

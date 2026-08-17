@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -164,13 +163,7 @@ private fun ExpandedPill(latest: NetworkTransaction?, inFlight: Int) {
             return@Row
         }
 
-        Text(
-            text = latest.method,
-            color = colors.forMethod(latest.method),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace,
-        )
+        MethodBadge(latest.method, fontSize = 11.sp)
         Text(
             text = pathTail(latest.path),
             color = colors.onSurface,

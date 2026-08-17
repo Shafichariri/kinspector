@@ -72,8 +72,50 @@ window.navigator.clipboard = { writeText: async () => {} };
   await new Promise((r) => setTimeout(r, 900));
 
   const doc = window.document;
+
+  // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the
+  // real .row order matters — asserting on the state flag would only prove the flag changed, not
+  // that the list re-rendered from it.
+  const sortButton = doc.getElementById('sort-order');
+  const rowIds = () => [...doc.querySelectorAll('.row')].map((r) => r.dataset.id);
+  const click = async (node) => {
+    node.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+  };
+
+  // Row/divider sequence, so a divider that detaches from its rows on reversal is visible here
+  // rather than only on screen. R = transaction, M = marker divider.
+  const sequence = () =>
+    [...doc.getElementById('list').children]
+      .map((n) => (n.classList.contains('marker-divider') ? 'M' : 'R'))
+      .join('');
+
+  const beforeFlip = rowIds();
+  const beforeSequence = sequence();
+  await click(sortButton);
+  const afterFlip = rowIds();
+  const afterSequence = sequence();
+  const reversed =
+    beforeFlip.length > 1 &&
+    afterFlip.length === beforeFlip.length &&
+    afterFlip.every((id, i) => id === beforeFlip[beforeFlip.length - 1 - i]);
+  const flippedLabel = sortButton.textContent;
+  await click(sortButton);
+  const restored = rowIds().every((id, i) => id === beforeFlip[i]);
+
+  const methodClasses = [...new Set(
+    [...doc.querySelectorAll('.row .method')].map((n) => n.className.replace('method ', '')),
+  )].sort();
+
   console.error('--- render report ---');
   console.error('rows rendered      :', doc.querySelectorAll('.row').length);
+  console.error('sort flip reverses :', reversed, `(button then read "${flippedLabel}")`);
+  console.error('sort flip restores :', restored);
+  console.error(
+    'list sequence      :', `${beforeSequence} -> ${afterSequence}`,
+    afterSequence === [...beforeSequence].reverse().join('') ? '(exact mirror)' : '(NOT a mirror)',
+  );
+  console.error('method classes     :', methodClasses.join(', ') || 'none');
   console.error('marker dividers    :', doc.querySelectorAll('.marker-divider').length);
   console.error('session options    :', doc.querySelectorAll('#session-picker option').length);
   console.error('counts             :', doc.getElementById('counts').textContent);

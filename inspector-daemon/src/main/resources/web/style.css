@@ -13,13 +13,14 @@
   --warn: #e0a030;
   --err: #e5484d;
   --neutral: #8a8f98;
-  /* Method hues. Kept out of the status family above (green/amber/red) on purpose — see the
-     .m-* rules for why. */
-  --m-get: #6aa9ff;
-  --m-post: #4cc38a;
-  --m-put: #d99bff;
-  --m-patch: #e0a030;
-  --m-delete: #e5484d;
+  /* Method hues, as bare RGB components so one token yields both the text colour and the badge
+     tint via rgb(var(--x) / alpha). Kept out of the status family above (green/amber/red) on
+     purpose — see the .m-* rules for why. */
+  --m-get: 106 169 255;
+  --m-post: 76 195 138;
+  --m-put: 217 155 255;
+  --m-patch: 224 160 48;
+  --m-delete: 229 72 77;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -38,11 +39,11 @@
     --warn: #b45309;
     --err: #c62a2f;
     --neutral: #6b7280;
-    --m-get: #2563eb;
-    --m-post: #13875b;
-    --m-put: #7c3aed;
-    --m-patch: #b45309;
-    --m-delete: #c62a2f;
+    --m-get: 37 99 235;
+    --m-post: 19 135 91;
+    --m-put: 124 58 237;
+    --m-patch: 180 83 9;
+    --m-delete: 198 42 47;
   }
 }
 
@@ -193,8 +194,9 @@ kbd {
 .row.selected { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent); }
 
 .row .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
-/* No colour here: the .m-* class carries it, and this selector would outrank it. */
-.row .method { font-family: var(--mono); font-size: 11px; width: 44px; }
+/* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
+   the path column lines up across rows whose verbs differ in length. */
+.row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
 .row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .status { font-family: var(--mono); font-weight: 600; width: 40px; text-align: right; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
@@ -212,12 +214,26 @@ kbd {
  * An amber PUT sitting next to an amber 404 reads as "this row is a 4xx" at a glance, which is
  * the one thing the list must never get wrong. DELETE is the exception that keeps red, because
  * destructive is exactly what red should mean here. */
-.method { font-weight: 600; }
-.m-get { color: var(--m-get); }
-.m-post { color: var(--m-post); }
-.m-put { color: var(--m-put); }
-.m-patch { color: var(--m-patch); }
-.m-delete { color: var(--m-delete); }
+/* A filled badge, not just coloured text: a hue change alone is easy to miss while scanning, and
+ * scanning is the only thing this label is for.
+ *
+ * The tint is the same colour at low alpha rather than a solid fill with white text. Solid works
+ * for GET's blue and fails for PATCH's amber in the light theme, where white on amber is
+ * unreadable — one rule that holds for all five beats five exceptions. */
+.method {
+  font-weight: 700;
+  font-family: var(--mono);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.m-get { color: rgb(var(--m-get)); background: rgb(var(--m-get) / 0.18); }
+.m-post { color: rgb(var(--m-post)); background: rgb(var(--m-post) / 0.18); }
+.m-put { color: rgb(var(--m-put)); background: rgb(var(--m-put) / 0.18); }
+.m-patch { color: rgb(var(--m-patch)); background: rgb(var(--m-patch) / 0.18); }
+.m-delete { color: rgb(var(--m-delete)); background: rgb(var(--m-delete) / 0.18); }
+/* Unrecognised verbs stay flat and muted rather than borrowing a colour that means something. */
 .m-other { color: var(--fg-muted); }
 
 /* Markers render inline in the list so "what happened when I tapped checkout"
@@ -243,6 +259,7 @@ kbd {
 
 .detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .detail-head .path { font-family: var(--mono); font-size: 14px; word-break: break-all; }
+.detail-head .method { font-size: 11px; flex: 0 0 auto; }
 
 .btn {
   background: var(--bg-elevated);

@@ -251,6 +251,19 @@ not get wrong. So reads are blue, POST green (it is not a status), PUT purple, P
 because it is rare, DELETE red because destructive is what red should mean. The web UI's `--m-*`
 tokens and `InspectorColors.forMethod` are the same palette on purpose — keep them in step.
 
+The method renders as a **tinted badge**, not coloured text: `MethodBadge` in the overlay, `.method`
+plus `.m-*` on the web. Both tint at 0.18 alpha of the text colour rather than filling solid with
+white text — solid is fine for GET's blue and unreadable for PATCH's amber in the light theme, and
+one rule that holds for all five beats five exceptions. The web tokens are therefore bare RGB
+components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from the same token;
+`color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
+older engine drops the whole `background` declaration and the badge with it.
+
+**The list's display order is `orderedRows()`, and both rendering and `j`/`k` go through it.** If
+navigation computes its own sort, `j` moves up the screen the moment newest-first is on. Marker
+dividers are interleaved oldest-first and the whole sequence is then reversed, so a divider stays
+attached to the same rows; `scripts/render-web-ui.js` asserts the sequence is an exact mirror.
+
 **Overlay screens inset themselves; the host is not asked to.** `Modifier.inspectorScreen` applies
 `background` *before* `windowInsetsPadding(safeDrawing)`, so colour bleeds edge to edge while
 content stays clear of the status bar, cutout, nav bar and keyboard. Reversing that order leaves a
