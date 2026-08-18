@@ -255,6 +255,7 @@ private fun Request.toTransaction(
     method = method.uppercase(),
     scheme = url.scheme,
     host = url.host,
+    port = url.port,
     path = url.encodedPath,
     query = redactor.query(url.encodedQuery?.takeIf { it.isNotEmpty() }, hits),
     status = status,

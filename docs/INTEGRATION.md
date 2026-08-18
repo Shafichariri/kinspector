@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v10 — 2026-08-17.**
+**Document version: v11 — 2026-08-18.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -725,8 +725,51 @@ If your copy has no version line at the top, identify it by what it contains:
 | Overlay insets itself, system back works, bodies are copyable | **v7** |
 | Web UI has stop/restart buttons and coloured methods | **v8** |
 | Methods are badges; web UI has a sort toggle | **v9** |
+| §1 says Kotlin 2.3.20 | **v10** |
 
-### v10 — 2026-08-17 (this document)
+### v11 — 2026-08-18 (this document)
+
+- **Request replay, with re-signing on the device.** The web UI can re-send a captured request.
+  Requests whose headers are single-use — a timestamp, a nonce, a signature over them — cannot be
+  replayed verbatim, and a host cannot regenerate them because the device key is non-exportable.
+  So the host asks the app, over the connection it already has.
+
+  Opt in by passing a `signer` to `StreamSink`. It is the **last** constructor parameter and
+  defaults to null, so an existing `StreamSink(clientInfo)` call is unaffected and needs no change:
+
+  ```kotlin
+  StreamSink(
+      client = defaultClientInfo(appId, appVersion, buildType),
+      signer = { method, url ->
+          // Your existing per-request header code. Return only what must be fresh;
+          // the host merges it over the captured headers.
+          deviceProof.headersFor(method, url)
+      },
+  ).start()
+  ```
+
+  `:inspector-noop-stream` declares the same `ReplaySigner` type and the same parameter, so this
+  call site compiles in release configurations too — it is simply never invoked there. A release
+  build has no daemon to ask, which is the point: a shipped binary must not carry a signing oracle.
+
+  The contract is deliberately "headers for this request", not "sign these bytes". Inspector never
+  learns your signing scheme, so this works whatever it is, and no part of Inspector becomes a
+  signer. Edits are applied **before** your signer is called, so a signature covers what is
+  actually sent.
+
+- **Fixed: the port was never captured.** A request to `127.0.0.1:8080` was recorded with host
+  `127.0.0.1` and no port, so `NetworkTransaction.url` — and therefore the **copied cURL** — pointed
+  at the default port for the scheme. Anyone who copied a cURL for a service on a non-default port
+  got a command that addressed the wrong one, silently. `NetworkTransaction` now carries
+  `port: Int?`; it is null for default ports and for rows captured before this change, so older
+  archives still read.
+
+**Action:** rebuild. Nothing you already wrote changes. Add a `signer` only if you want replay of
+signed requests; without one, replay still works for requests that need no fresh headers, and says
+so explicitly when it cannot. **If you copy cURL commands for anything on a non-default port, the
+ones you copied before this version were wrong** — recopy them.
+
+### v10 — 2026-08-17
 
 - **Corrected: §1 said Kotlin 2.3.21. The real pin is 2.3.20.** The version catalog pins 2.3.20 and
   the build resolves 2.3.20; the table had been wrong since v1. This is the one number in this

@@ -1,7 +1,9 @@
 package dev.inspector.daemon
 
+import dev.inspector.stream.ReplaySigner
 import dev.inspector.stream.StreamSink
 import dev.inspector.stream.StreamState
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -46,8 +48,8 @@ class IngestTest {
     private fun startDaemon(): InspectorDaemon =
         InspectorDaemon(config).also { it.start(wait = false); daemon = it }
 
-    private fun startSink(): StreamSink =
-        StreamSink(client = clientInfo(), host = "127.0.0.1", port = config.port)
+    private fun startSink(signer: ReplaySigner? = null): StreamSink =
+        StreamSink(client = clientInfo(), host = "127.0.0.1", port = config.port, signer = signer)
             .also { it.start(); sink = it }
 
     private suspend fun awaitState(sink: StreamSink, state: StreamState, timeoutMs: Long = 10_000) {
@@ -187,5 +189,102 @@ class IngestTest {
 
         val dirs = awaitSessions(2)
         assertEquals(2, dirs.size, "a relaunch must get its own session folder")
+    }
+}
+
+/**
+ * The re-signing round trip, over a real WebSocket.
+ *
+ * Deliberately not a fake connection. The whole feature rests on `/ingest` being genuinely
+ * bidirectional — the app's receive loop existed only to notice a dead daemon and threw every
+ * frame away — so a test that stubs the socket would prove nothing about the thing that changed.
+ */
+class SignRoundTripTest {
+
+    private lateinit var tmp: Path
+    private lateinit var config: DaemonConfig
+    private var daemon: InspectorDaemon? = null
+    private var sink: StreamSink? = null
+
+    @BeforeTest
+    fun setUp() {
+        tmp = Files.createTempDirectory("inspector-sign")
+        config = DaemonConfig(port = ServerSocket(0).use { it.localPort }, dataDir = tmp)
+    }
+
+    @AfterTest
+    fun tearDown() {
+        sink?.stop()
+        daemon?.stop()
+        Files.walk(tmp).sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+    }
+
+    private suspend fun attach(signer: ReplaySigner?): LiveApps.Connection {
+        val started = InspectorDaemon(config).also { it.start(wait = false); daemon = it }
+        sink = StreamSink(clientInfo(), "127.0.0.1", config.port, signer = signer).also { it.start() }
+        return withTimeoutOrNull(10_000) {
+            var found: LiveApps.Connection? = null
+            while (found == null) {
+                found = started.liveApps.sole()
+                if (found == null) delay(20)
+            }
+            found
+        } ?: error("the app never registered with the daemon")
+    }
+
+    @Test
+    fun `the daemon asks the running app for headers and gets them back over the socket`() = runBlocking {
+        val seen = mutableListOf<Pair<String, String>>()
+        val connection = attach { method, url ->
+            seen += method to url
+            mapOf("X-Device-Timestamp" to "1787", "X-Device-Nonce" to "fresh", "X-Device-Signature" to "sig")
+        }
+
+        val headers = connection.requestHeaders("POST", "https://api.example.com/v2/orders")
+
+        assertEquals(listOf("POST" to "https://api.example.com/v2/orders"), seen, "the app must be told what it is signing")
+        assertEquals("1787", headers["X-Device-Timestamp"])
+        assertEquals("fresh", headers["X-Device-Nonce"])
+        assertEquals("sig", headers["X-Device-Signature"])
+    }
+
+    /** Without a signer the app must answer, not go quiet and leave the host on its timeout. */
+    @Test
+    fun `an app with no signer answers with a reason rather than nothing`() = runBlocking {
+        val connection = attach(signer = null)
+        val failure = runCatching { connection.requestHeaders("GET", "https://api.example.com/x", timeoutMs = 5_000) }
+        val message = failure.exceptionOrNull()?.message ?: error("expected a refusal, got ${failure.getOrNull()}")
+        // Specifically the app's own wording, not the host's timeout text — which also mentions
+        // ReplaySigner, and so would let this pass even if the app never answered at all.
+        assertTrue(
+            "on this StreamSink" in message,
+            "the app must answer for itself rather than the host timing out: $message",
+        )
+        assertTrue("did not answer" !in message, "this must not be a timeout: $message")
+    }
+
+    /** A signer that throws is a reported failure, never a silently unsigned request. */
+    @Test
+    fun `a throwing signer is reported to the host`() = runBlocking {
+        val connection = attach { _, _ -> error("keystore unavailable") }
+        val failure = runCatching { connection.requestHeaders("GET", "https://api.example.com/x", timeoutMs = 5_000) }
+        val message = failure.exceptionOrNull()?.message ?: error("expected a refusal")
+        assertTrue("keystore unavailable" in message, "the cause must survive: $message")
+    }
+
+    /** Concurrent requests must not cross-talk; correlation is by requestId, not by arrival order. */
+    @Test
+    fun `two overlapping requests each get their own answer`() = runBlocking {
+        val connection = attach { method, url ->
+            // Answer the slower one first, so a queue-order implementation would swap them.
+            if (method == "GET") delay(300)
+            mapOf("X-Echo" to "$method $url")
+        }
+
+        val first = async { connection.requestHeaders("GET", "https://api.example.com/slow") }
+        val second = async { connection.requestHeaders("POST", "https://api.example.com/fast") }
+
+        assertEquals("GET https://api.example.com/slow", first.await()["X-Echo"])
+        assertEquals("POST https://api.example.com/fast", second.await()["X-Echo"])
     }
 }

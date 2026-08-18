@@ -156,3 +156,41 @@ class SerializationTest {
         assertEquals("https://api.example.com/v2/users/me?page=2", txn(query = "page=2").url)
     }
 }
+
+/**
+ * The port, which capture used to drop entirely.
+ *
+ * A capture of `127.0.0.1:8080` rendered as `http://127.0.0.1`, so the copied cURL and any replay
+ * addressed port 80 while reporting the right host. It failed silently and looked like the server
+ * misbehaving. Found when replay could not connect to the sample's own demo server.
+ */
+class PortTest {
+
+    private fun txn(scheme: String, port: Int?) = NetworkTransaction(
+        id = "a", ts = "2026-08-18T00:00:00Z", mono = 0, method = "GET",
+        scheme = scheme, host = "example.com", port = port, path = "/x", callId = "c",
+    )
+
+    @kotlin.test.Test
+    fun `a non-default port appears in the url`() {
+        kotlin.test.assertEquals("http://example.com:8080/x", txn("http", 8080).url)
+        kotlin.test.assertEquals("https://example.com:8443/x", txn("https", 8443).url)
+    }
+
+    @kotlin.test.Test
+    fun `a default port is left out because it is noise`() {
+        kotlin.test.assertEquals("http://example.com/x", txn("http", 80).url)
+        kotlin.test.assertEquals("https://example.com/x", txn("https", 443).url)
+    }
+
+    /** Archives written before the field existed must still read. */
+    @kotlin.test.Test
+    fun `a row with no port at all still renders and still parses`() {
+        kotlin.test.assertEquals("http://example.com/x", txn("http", null).url)
+        val older = """{"v":1,"id":"a","ts":"2026-08-18T00:00:00Z","mono":0,"method":"GET",""" +
+            """"scheme":"https","host":"example.com","path":"/x","callId":"c"}"""
+        val parsed = InspectorJson.decodeFromString(NetworkTransaction.serializer(), older)
+        kotlin.test.assertEquals(null, parsed.port)
+        kotlin.test.assertEquals("https://example.com/x", parsed.url)
+    }
+}

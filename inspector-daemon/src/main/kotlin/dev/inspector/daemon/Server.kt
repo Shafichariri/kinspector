@@ -9,6 +9,8 @@ import dev.inspector.model.Marker
 import dev.inspector.model.MarkerSource
 import dev.inspector.model.MarkerMsg
 import dev.inspector.model.SessionMeta
+import dev.inspector.model.SignRequest
+import dev.inspector.model.SignResponse
 import dev.inspector.model.Txn
 import dev.inspector.model.WireMsg
 import io.ktor.http.ContentType
@@ -58,7 +60,14 @@ class InspectorDaemon(
     private val config: DaemonConfig,
     private val control: ServerControl = ProcessServerControl(),
     private val peers: PeerRegistry = ProcessHandlePeerRegistry(),
+    /** Exposed so replay can address a running app; see `docs/REPLAY.md`. */
+    val liveApps: LiveApps = LiveApps(),
+    private val replayer: Replayer? = null,
 ) {
+
+    private val replay: Replayer by lazy {
+        replayer ?: Replayer(SessionRepository(config), liveApps)
+    }
 
     private val repository = SessionRepository(config)
     private val retention = Retention(config, repository)
@@ -173,6 +182,35 @@ class InspectorDaemon(
         }
 
         peerRoutes()
+        replayRoute()
+    }
+
+    /**
+     * Re-sends a captured request.
+     *
+     * Behind the control header, and that is doing more work here than it does for stop/restart.
+     * Until now the daemon only *read* an archive; this turns it into something that sends
+     * arbitrary requests carrying unredacted credentials. The header forces a preflight this
+     * server never answers, which is CSRF defence — it is not authentication, and the loopback
+     * bind is still the only thing standing between this and any local process. Said plainly in
+     * `docs/REPLAY.md` rather than left implicit.
+     */
+    private fun io.ktor.server.routing.Route.replayRoute() {
+        post("/api/replay") {
+            if (!call.requireControlHeader()) return@post
+            val body = call.receiveText()
+            val request = try {
+                InspectorJson.decodeFromString(ReplayRequest.serializer(), body)
+            } catch (e: Exception) {
+                return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "could not read the replay request: ${e.message}",
+                )
+            }
+
+            val result = replay.replay(request)
+            call.respondJson(InspectorJson.encodeToString(ReplayResult.serializer(), result))
+        }
     }
 
     /**
@@ -262,6 +300,7 @@ class InspectorDaemon(
 
     private fun io.ktor.server.routing.Route.ingestRoute() = webSocket("/ingest") {
         var sessionId: String? = null
+        var connection: LiveApps.Connection? = null
         try {
             for (frame in incoming) {
                 if (frame !is Frame.Text) continue
@@ -276,6 +315,12 @@ class InspectorDaemon(
                     is Hello -> {
                         val opened = manager.openSession(message)
                         sessionId = opened.sessionId
+                        // Registered so the host can address this app later. The send closure is
+                        // handed over rather than the socket, keeping LiveApps free of Ktor.
+                        connection?.let { liveApps.unregister(it.sessionId, it) }
+                        connection = liveApps.register(opened.sessionId) { outbound ->
+                            send(Frame.Text(InspectorJson.encodeToString(outbound)))
+                        }
                         send(
                             Frame.Text(
                                 InspectorJson.encodeToString<WireMsg>(
@@ -301,13 +346,17 @@ class InspectorDaemon(
 
                     is MarkerMsg -> sessionId?.let { manager.append(it, message.marker) }
 
+                    is SignResponse -> sessionId?.let { liveApps.complete(it, message) }
+
                     Bye -> break
 
-                    // Daemon-to-client only; a client sending it is simply ignored.
+                    // Daemon-to-client only; a client sending either back is simply ignored.
                     is HelloAck -> Unit
+                    is SignRequest -> Unit
                 }
             }
         } finally {
+            connection?.let { liveApps.unregister(it.sessionId, it) }
             sessionId?.let {
                 manager.closeSession(it)
                 println("inspector: closed session $it")

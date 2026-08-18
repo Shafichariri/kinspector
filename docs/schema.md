@@ -32,7 +32,8 @@ catching usually live in the attempts a "one row per call" view would hide.
 | `ts` | string | ISO-8601 UTC with millis, device wall clock. **Display only.** |
 | `mono` | long | Device monotonic ms. **Ordering authority.** |
 | `method` | string | Uppercase. |
-| `scheme` / `host` / `path` | string | `path` excludes the query. |
+| `scheme` / `host` / `path` | string | `path` excludes the query. `host` is the hostname alone, so `host:` filters match it directly. |
+| `port` | int? | Only when it is not the default for `scheme`. Null means the default — and also means a row written before this field existed, so older archives still read. Capture used to drop the port entirely, which made `url` and every copied cURL address the wrong one. |
 | `query` | string? | Raw query without `?`, post-redaction. |
 | `status` | int? | Null means the call failed before a response — see `error`. |
 | `error` | string? | Exception class and message when `status` is null. |
@@ -87,7 +88,7 @@ daemon additionally records its own receive time.
 
 - `isError` — `status >= 400` or `error != null`. Backs `has:error`.
 - `statusClass` — `2xx`, `4xx`, … or `error`. Backs session summaries.
-- `url` — reassembled from scheme/host/path/query.
+- `url` — reassembled from scheme/host/port/path/query. The port is included only when it is not the default for the scheme.
 
 ---
 

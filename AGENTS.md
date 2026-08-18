@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**186 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**212 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -269,6 +269,26 @@ second view makes that listener fire for the whole body twice. Ktor exposes no w
 underlying saved channel — `DelegatedResponse.origin` and `DownloadProgressListenerAttributeKey` are
 both internal — so this is not currently avoidable. It affects only apps using progress listeners,
 and it doubles reported progress rather than corrupting the body.
+
+**Replay applies edits before asking the app to sign.** A signing scheme typically covers the
+method and path, so signing first and editing after produces a signature for a request that was
+never sent. Doing it in the wrong order works fine for unedited replays, so it would pass every
+test that did not specifically edit a path — the worst possible failure distribution.
+`ReplayTest.an edited path is what gets signed` pins it.
+
+**The signing hook asks for headers, not for a signature over bytes.** `ReplaySigner` takes a
+method and a URL and returns headers. Inspector therefore never learns the canonical-string format,
+the algorithm, or which headers are involved, which means replay works for any scheme and no part
+of this codebase becomes a signing oracle. `:inspector-noop-stream` declares the same type and
+parameter so a consumer's call site compiles under `-Pinspector=off`; the sample passes one
+specifically to keep that parity honest at compile time.
+
+**Capture records the port, and `url` omits it only when it is the default.** It used to be dropped
+entirely: `RequestSnapshot` took `url.host`, which excludes the port, so a capture of
+`127.0.0.1:8080` rendered as `http://127.0.0.1`. Every copied cURL for a non-default port was
+silently wrong, and it went unnoticed for the whole life of the feature because the host was right
+and only the port was missing. Found when replay could not connect to the sample's own demo server.
+`port` is nullable so archives written before it existed still read.
 
 **A guard that scans nothing must fail, not pass.** `check-release-clean.sh` used to treat a
 missing `--paths` target as `skip (missing)` and still print `PASSED: no capture code found in 1

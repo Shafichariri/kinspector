@@ -8,14 +8,18 @@ import dev.inspector.model.HelloAck
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.MarkerMsg
+import dev.inspector.model.SignRequest
+import dev.inspector.model.SignResponse
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Txn
 import dev.inspector.model.WireMsg
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +39,35 @@ import kotlinx.coroutines.launch
 enum class StreamState { Disconnected, Connecting, Connected }
 
 /**
+ * Produces the per-request headers a replayed request needs regenerated.
+ *
+ * Registered by the app, called by the host when it replays a captured request. The app returns
+ * whatever must be fresh — a timestamp, a nonce, a signature over them — and the host merges the
+ * result over the captured headers.
+ *
+ * This exists because the interesting keys cannot leave the device. On Android and iOS a device
+ * key lives in the Keystore or the Secure Enclave and is non-exportable by construction: the only
+ * operation exposed is "sign these bytes". A host-side replay therefore cannot reproduce a signed
+ * request on its own, and the alternatives are a debug-only software key (a different key, so not
+ * production behaviour) or sending it unsigned (not a test of anything). Asking the app is the
+ * only option that reproduces what production does.
+ *
+ * The contract is deliberately "give me headers for this request", not "sign these bytes":
+ * Inspector never learns the signing scheme, so this works for any of them, and no part of this
+ * codebase becomes a signing oracle.
+ *
+ * Called off the main thread. Implementations may suspend; the host applies its own timeout.
+ * **Debug builds only** — the release swap removes this whole module.
+ */
+fun interface ReplaySigner {
+    /**
+     * Headers to apply to a replay of [method] [url]. Returning an empty map means "nothing to
+     * add"; throwing is reported to the host as a failed replay rather than being swallowed.
+     */
+    suspend fun headersFor(method: String, url: String): Map<String, String>
+}
+
+/**
  * Streams captured transactions to the host daemon over `WS /ingest`.
  *
  * The contract, in order of importance:
@@ -52,6 +85,14 @@ class StreamSink(
     private val host: String = defaultDaemonHost(),
     private val port: Int = 8099,
     private val engineFactory: () -> HttpClient = ::defaultStreamClient,
+    /**
+     * Optional. Without it the host can still replay, but any request whose headers must be
+     * regenerated will be rejected by the server; the host says so explicitly rather than letting
+     * it look like a backend fault.
+     *
+     * Added last so existing `StreamSink(clientInfo)` call sites are unaffected.
+     */
+    private val signer: ReplaySigner? = null,
 ) : InspectorSink {
 
     private sealed interface Outbound {
@@ -185,14 +226,63 @@ class StreamSink(
                     runCatching { send(Frame.Text(InspectorJson.encodeToString<WireMsg>(Bye))) }
                 }
 
+                // Reads to observe the peer going away, and now also to serve the host's sign
+                // requests. The read itself is still what detects a dead daemon, so the liveness
+                // role is unchanged.
                 val watcher = launch {
-                    runCatching { for (frame in incoming) Unit }
+                    runCatching {
+                        for (frame in incoming) {
+                            if (frame !is Frame.Text) continue
+                            val message = runCatching {
+                                InspectorJson.decodeFromString<WireMsg>(frame.readText())
+                            }.getOrNull()
+                            if (message is SignRequest) {
+                                // Launched rather than awaited inline: signing can touch a hardware
+                                // key and may prompt for user presence, and blocking here would
+                                // stall the liveness read for as long as that takes.
+                                launch { answerSignRequest(message) }
+                            }
+                        }
+                    }
                 }
 
                 watcher.invokeOnCompletion { sender.cancel() }
                 sender.invokeOnCompletion { watcher.cancel() }
             }
         }
+    }
+
+    /**
+     * Answers one [SignRequest] on the socket it arrived on.
+     *
+     * Always replies, including on failure. A silent drop would leave the host waiting for its
+     * timeout and then reporting something vague; naming the reason here is the difference between
+     * "no signer is registered in this build" and "replay didn't work".
+     */
+    private suspend fun DefaultClientWebSocketSession.answerSignRequest(request: SignRequest) {
+        val reply = if (signer == null) {
+            SignResponse(
+                requestId = request.requestId,
+                error = "no ReplaySigner is registered on this StreamSink, so per-request headers " +
+                    "cannot be regenerated on the device",
+            )
+        } else {
+            try {
+                SignResponse(
+                    requestId = request.requestId,
+                    headers = signer.headersFor(request.method, request.url),
+                )
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (cause: Throwable) {
+                SignResponse(
+                    requestId = request.requestId,
+                    error = "${cause::class.simpleName}: ${cause.message}",
+                )
+            }
+        }
+        // The socket may already be gone; the host times out on its side either way.
+        runCatching { send(Frame.Text(InspectorJson.encodeToString<WireMsg>(reply))) }
     }
 
     private fun encodeBody(bytes: ByteArray): String =

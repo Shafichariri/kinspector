@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import dev.inspector.Inspector
+import kotlin.random.Random
 import dev.inspector.InspectorConfig
 import dev.inspector.Redaction
 import dev.inspector.okHttpInterceptor
@@ -57,6 +58,22 @@ fun main() {
             osVersion = System.getProperty("os.version") ?: "?",
             buildType = "debug",
         ),
+        // The reference implementation of a replay signer.
+        //
+        // A real app would call into its own request-signing code here — the whole reason this
+        // hook exists is that a device key cannot leave the device, so the host has to ask. This
+        // one just proves the round trip and shows the shape: return whatever must be fresh for
+        // *this* request, and the host merges it over the captured headers.
+        //
+        // Also a compile-time parity check. This call site has to build under `-Pinspector=off`
+        // too, which is what keeps `:inspector-noop-stream` honest about carrying the same surface.
+        signer = { method, url ->
+            mapOf(
+                "X-Sample-Timestamp" to (System.currentTimeMillis() / 1000).toString(),
+                "X-Sample-Nonce" to Random.nextLong().toString(16),
+                "X-Sample-Signed" to "$method $url",
+            )
+        },
     )
     stream.start()
     Inspector.addSink(stream)

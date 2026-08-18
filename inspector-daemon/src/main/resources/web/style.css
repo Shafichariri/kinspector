@@ -412,3 +412,33 @@ pre.body {
   color: var(--accent);
   background: rgb(106 169 255 / 0.15);
 }
+
+/* --- replay ------------------------------------------------------------------------------- */
+
+.replay-result {
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: var(--bg-elevated);
+}
+
+.replay-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.replay-resigned { font-size: 12px; font-family: var(--mono); }
+
+.replay-error {
+  color: var(--err);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* A guess, and it must not read like a verdict — the most common replay failure is an expired
+   token, which has nothing to do with signing. */
+.replay-diagnosis {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--warn);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}

@@ -31,6 +31,16 @@ data class NetworkTransaction(
     val method: String,
     val scheme: String,
     val host: String,
+    /**
+     * The port, when it is not the default for [scheme].
+     *
+     * Null means "the default", which keeps every archive written before this field existed
+     * readable. It is separate from [host] so `host:` filters keep matching the hostname alone.
+     *
+     * Not cosmetic: without it a capture of `127.0.0.1:8080` rendered as `http://127.0.0.1`, and
+     * anything built from that — the copied cURL, a replay — silently addressed port 80.
+     */
+    val port: Int? = null,
     /** Path only, no query string. */
     val path: String,
     /** Raw query string without the leading `?`, post-redaction. */
@@ -86,9 +96,18 @@ data class NetworkTransaction(
 
     val url: String
         get() = buildString {
-            append(scheme).append("://").append(host).append(path)
+            append(scheme).append("://").append(host)
+            port?.takeIf { it != defaultPortFor(scheme) }?.let { append(':').append(it) }
+            append(path)
             query?.let { append('?').append(it) }
         }
+}
+
+/** 80 for http, 443 for https, null for anything else — where "null" means "always show it". */
+fun defaultPortFor(scheme: String): Int? = when (scheme.lowercase()) {
+    "http", "ws" -> 80
+    "https", "wss" -> 443
+    else -> null
 }
 
 /**

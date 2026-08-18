@@ -19,10 +19,24 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 enum class StreamState { Disconnected, Connecting, Connected }
 
+/**
+ * Release-build stand-in for the real `ReplaySigner`.
+ *
+ * Declared here so an app can pass one at a call site that compiles in both configurations. It is
+ * never invoked: the release build has no daemon connection to ask, which is the point — a signing
+ * oracle must not exist in a shipped binary.
+ *
+ * Carries no Ktor types, so this costs a release build nothing.
+ */
+fun interface ReplaySigner {
+    suspend fun headersFor(method: String, url: String): Map<String, String>
+}
+
 class StreamSink(
     private val client: ClientInfo,
     private val host: String = defaultDaemonHost(),
     private val port: Int = 8099,
+    @Suppress("UNUSED_PARAMETER") signer: ReplaySigner? = null,
 ) : InspectorSink {
 
     private val _state = MutableStateFlow(StreamState.Disconnected)

@@ -4,7 +4,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Device → daemon protocol, sent as JSON text frames over `WS /ingest`.
+ * Ingest protocol, sent as JSON text frames over `WS /ingest`.
+ *
+ * Mostly device → daemon, but not exclusively: [HelloAck] and [SignRequest] travel the other way.
+ * That the socket is genuinely bidirectional is what makes host-driven replay of a signed request
+ * possible at all — see `docs/REPLAY.md`.
  * The `type` discriminator is configured on [InspectorJson].
  *
  * Contract:
@@ -60,6 +64,42 @@ data class Txn(
 @SerialName("marker")
 data class MarkerMsg(
     val marker: Marker,
+) : WireMsg
+
+/**
+ * Daemon → device: produce fresh per-request headers for a request about to be replayed.
+ *
+ * Deliberately says *what request*, not *what bytes to sign*. The app owns its signing scheme and
+ * already has the code that builds these headers; Inspector never learns the canonical-string
+ * format, the algorithm, or which headers are involved. That keeps replay working for any scheme
+ * rather than only the one it was written against, and it keeps a signing oracle out of this
+ * codebase.
+ *
+ * [url] is the full URL as it will be sent, so a scheme that signs the path can take the path from
+ * it. Headers that are unchanged from the capture are not mentioned here; the daemon merges what
+ * comes back over the captured set, so the reply need only carry what must be fresh.
+ */
+@Serializable
+@SerialName("signReq")
+data class SignRequest(
+    val requestId: String,
+    val method: String,
+    val url: String,
+) : WireMsg
+
+/**
+ * Device → daemon: the reply to [SignRequest], correlated by [requestId].
+ *
+ * [error] set means the app could not produce headers — no signer registered, or the signer threw.
+ * Reported rather than swallowed, because a replay that silently goes out unsigned fails at the
+ * server as something that looks unrelated.
+ */
+@Serializable
+@SerialName("signRes")
+data class SignResponse(
+    val requestId: String,
+    val headers: Map<String, String> = emptyMap(),
+    val error: String? = null,
 ) : WireMsg
 
 /** Clean shutdown. Best-effort — the daemon must handle an abrupt socket close identically. */
