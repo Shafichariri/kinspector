@@ -90,7 +90,11 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
   marker dividers, session picker, detail pane, attempt chain, method classes, console errors. It
   also drives the sort toggle and asserts the rendered order reverses, restores, and that the
-  row/divider sequence is an exact mirror.
+  row/divider sequence is an exact mirror. It clicks an endpoint chip and asserts three things:
+  the row count narrows, the chip list *survives* (proving chips come from the unfiltered
+  session), and exactly one chip goes active. It then drives the settings input to prove the cap
+  applies and `0` hides them. `INSPECTOR_UI_SESSION=<id or substring>` targets a session other
+  than the newest, which is otherwise whatever ran last on the machine.
 - **Daemon stop and restart, against a live daemon** — not only the unit tests. An unheadered POST
   is refused 403 and the daemon survives; restart swapped one pid for another in about a second
   with the whole archive still served; stop released the port and left no `serve` process.
@@ -317,13 +321,23 @@ identifies rows that are *indistinguishable at row level* — a weaker claim tha
 bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
 algorithm; keep them in step.
 
-**The web UI keeps an unfiltered copy of the session.** `state.transactions` holds the rows the
-*daemon* matched against the current filter, so it is the wrong source for anything describing the
-session as a whole. `state.allTransactions` is the whole session, and duplicate detection reads it:
-a duplicate whose twin is filtered out is still a duplicate, so highlighting from the filtered view
-would hide exactly the case you applied the filter to investigate. It costs one extra request per
-*session* — not per keystroke — and nothing at all when no filter is set, because then the rows
-already are the whole session.
+**The web UI keeps an unfiltered copy of the session, and two features depend on it.**
+`state.transactions` holds the rows the *daemon* matched against the current filter, so it is the
+wrong source for anything describing the session as a whole. `state.allTransactions` is the whole
+session; endpoint chips and duplicate detection both read it. Endpoint chips built from the
+filtered view would collapse to the one chip you just clicked, making every other endpoint a dead
+end, and duplicate highlighting would vanish under exactly the filter you applied to investigate
+it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
+filter is set, because then the rows already are the whole session.
+
+**Endpoint chips filter with an anchored glob, not a substring.** A chip labelled `profile` emits
+`path:` + `*/profile`, because a bare `path:profile` term is a substring match and would also match
+`/v3/accounts/profile/status` — a chip that does not mean what its label says. `globMatches`
+anchors the trailing literal with `endsWith`, so the term matches only paths ending in `/profile`.
+Chips are ordered by call count rather than recency on purpose: recency reshuffles the whole row on
+every
+request during live tail. Ties break on the most recent call, then alphabetically, so the order is
+deterministic and `scripts/render-web-ui.js` can assert it.
 
 **Backtick test names in multiplatform `commonTest` cannot contain commas.** Kotlin/Native rejects
 them with `Name contains illegal characters: ","` while the JVM accepts them, so a targeted
@@ -544,6 +558,7 @@ every release build clean:
 ./gradlew :inspector-daemon:installDist           # then: inspector-daemon/build/install/inspector/bin/inspector serve
 ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
 npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
+INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS

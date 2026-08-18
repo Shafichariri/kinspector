@@ -28,12 +28,15 @@
     duplicates: new Map(),
     // Every row in the session, ignoring the filter, plus the session it belongs to.
     //
-    // `transactions` is the *filtered* set — the daemon applies the filter — which is the wrong
-    // source for anything describing the session as a whole. A duplicate whose twin is filtered
-    // out is still a duplicate, so making the highlight depend on the filter would hide exactly
-    // the case you go looking for.
+    // `transactions` is the *filtered* set — the daemon applies the filter — and two features
+    // need the unfiltered one. Endpoint chips built from the filtered view would collapse to the
+    // single chip you just clicked, and a duplicate whose twin is filtered out is still a
+    // duplicate; making the highlight depend on the filter would hide exactly the case you go
+    // looking for.
     allTransactions: [],
     allSessionId: null,
+    // How many endpoint chips to show. 0 hides them.
+    endpointLimit: Number(localStorage.getItem('inspector.endpointChipLimit') ?? 10),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -151,7 +154,8 @@
    *
    * With no filter the rows just fetched already are the whole session, so the common case costs
    * nothing. With a filter active it costs one extra request per *session*, not per keystroke:
-   * the session only grows when new traffic arrives, and the live socket appends to both lists.
+   * the endpoint inventory only grows when new traffic arrives, and the live socket appends to
+   * both lists.
    */
   async function syncAllTransactions() {
     if (!state.filter) {
@@ -167,8 +171,8 @@
       const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
       state.allTransactions = page.items;
     } catch {
-      // Duplicate highlighting is a convenience. If this fails, fall back to what we have rather
-      // than taking the list down with it.
+      // Chips are a convenience. If this fails, fall back to what we have rather than taking the
+      // list down with it.
       state.allTransactions = state.transactions.slice();
     }
     state.allSessionId = state.sessionId;
@@ -218,6 +222,7 @@
     // still a duplicate, and making the highlight depend on the current filter would hide exactly
     // the case you go looking for.
     state.duplicates = computeDuplicates(state.allTransactions, state.duplicateWindowMs);
+    renderEndpointChips();
 
     const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
@@ -282,6 +287,76 @@
       txn.status ?? -1,
       `${txn.reqBytes || 0}/${txn.resBytes || 0}`,
     ].join(' ');
+  }
+
+  /**
+   * The last non-empty path segment: `/v3/accounts/profile/status` -> `status`.
+   *
+   * Trailing slashes are ignored. A path with no segments at all (`/`) has no shortcut worth
+   * offering, so it yields null rather than an empty chip.
+   */
+  function lastSegment(path) {
+    const segments = String(path || '').split('/').filter((s) => s.length > 0);
+    return segments.length ? segments[segments.length - 1] : null;
+  }
+
+  // Builds a star-glob term - for the segment `status`, the filter `path:` star `/status`.
+  //
+  // A bare `path:` term is a substring match, so `path:profile` would also match
+  // `/v3/accounts/profile/status` and the chip would not mean what its label says. The star makes
+  // it a glob, and `globMatches` anchors the trailing literal with `endsWith`, so the term matches
+  // only paths that end in `/status`.
+  //
+  // Line comments on purpose: the term contains the sequence that closes a block comment.
+  const endpointFilter = (segment) => `path:*/${segment}`;
+
+  /**
+   * One entry per distinct last segment, most-used first.
+   *
+   * Ordered by count rather than recency deliberately: recency would reshuffle the whole chip row
+   * on every request during live tail, and the endpoints worth a one-click filter are the ones
+   * that dominate the list. Ties break on the most recent call and then alphabetically, so the
+   * order is fully determined and the jsdom harness can assert it.
+   */
+  function endpointShortcuts(txns, limit) {
+    if (!limit || limit <= 0) return [];
+    const bySegment = new Map();
+    for (const txn of txns) {
+      const segment = lastSegment(txn.path);
+      // The filter tokenizer splits on whitespace and `|`, so a segment containing either cannot
+      // be expressed as a term. Skipping beats emitting a chip that filters to the wrong thing.
+      if (!segment || /[\s|"]/.test(segment)) continue;
+      const entry = bySegment.get(segment) || { segment, count: 0, latest: -Infinity };
+      entry.count += 1;
+      if (txn.mono > entry.latest) entry.latest = txn.mono;
+      bySegment.set(segment, entry);
+    }
+    return [...bySegment.values()]
+      .sort((a, b) => b.count - a.count || b.latest - a.latest || a.segment.localeCompare(b.segment))
+      .slice(0, limit);
+  }
+
+  function renderEndpointChips() {
+    const box = $('endpoint-chips');
+    const shortcuts = endpointShortcuts(state.allTransactions, state.endpointLimit);
+    box.innerHTML = '';
+    box.hidden = shortcuts.length === 0;
+    $('endpoints-label').hidden = shortcuts.length === 0;
+
+    for (const { segment, count } of shortcuts) {
+      const value = endpointFilter(segment);
+      const chip = el('button', 'chip');
+      chip.dataset.filter = value;
+      chip.title = `${count} request${count === 1 ? '' : 's'} ending in /${segment}`;
+      chip.appendChild(el('span', null, segment));
+      chip.appendChild(el('span', 'chip-count', String(count)));
+      chip.classList.toggle('active', value === state.filter);
+      chip.addEventListener('click', () => {
+        $('filter').value = $('filter').value === value ? '' : value;
+        applyFilter();
+      });
+      box.appendChild(chip);
+    }
   }
 
   function computeDuplicates(txns, windowMs) {
@@ -696,6 +771,23 @@
     renderList();
   }
 
+  // --- settings: endpoint shortcuts -------------------------------------------------------------
+
+  function applyEndpointLimit(value) {
+    const limit = Number.isFinite(value) && value >= 0 ? Math.round(value) : 10;
+    state.endpointLimit = limit;
+    localStorage.setItem('inspector.endpointChipLimit', String(limit));
+    $('endpoint-limit').value = limit;
+
+    const total = new Set(
+      state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean),
+    ).size;
+    $('endpoint-summary').textContent = limit === 0
+      ? 'hidden'
+      : `showing ${Math.min(limit, total)} of ${total} in this session`;
+    renderEndpointChips();
+  }
+
   // --- settings: the MCP server ----------------------------------------------------------------
 
   /**
@@ -964,10 +1056,13 @@
       loadPeers();
       loadMcp();
       applyDuplicateWindow(state.duplicateWindowMs);   // refreshes the count for this session
+      applyEndpointLimit(state.endpointLimit);
     });
     $('peers-refresh').addEventListener('click', loadPeers);
     $('dup-window').value = state.duplicateWindowMs;
     $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
+    $('endpoint-limit').value = state.endpointLimit;
+    $('endpoint-limit').addEventListener('change', (e) => applyEndpointLimit(Number(e.target.value)));
     $('mcp-probe').addEventListener('click', probeMcp);
     $('mcp-copy').addEventListener('click', () => {
       const text = $('mcp-command').textContent;

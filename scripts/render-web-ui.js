@@ -10,6 +10,8 @@
  *   ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true
  *   npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html
  *
+ * INSPECTOR_UI_SESSION=<id or substring> targets a session other than the newest.
+ *
  * The report goes to stderr; a self-contained static snapshot goes to stdout.
  * A healthy run reports non-zero rows and 'errors: none'.
  */
@@ -65,6 +67,23 @@ window.navigator.clipboard = { writeText: async () => {} };
   // Let init() finish its fetches, then select a row so the detail pane renders too.
   await new Promise((r) => setTimeout(r, 1500));
 
+  // The page opens on the newest session, which is whatever ran last on this machine and not
+  // necessarily the one worth snapshotting. INSPECTOR_UI_SESSION picks another by id or by
+  // substring, so a session with real endpoint variety can be exercised on purpose.
+  const wanted = process.env.INSPECTOR_UI_SESSION;
+  if (wanted) {
+    const picker = window.document.getElementById('session-picker');
+    const match = [...picker.options].find((o) => o.value === wanted || o.value.includes(wanted));
+    if (!match) {
+      console.error(`no session matches INSPECTOR_UI_SESSION=${wanted}; using the newest.`);
+    } else {
+      picker.value = match.value;
+      picker.dispatchEvent(new window.Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 900));   // settle() is defined further down
+
+    }
+  }
+
   const rows = window.document.querySelectorAll('.row');
   const interesting =
     [...rows].find((r) => r.querySelector('.status')?.textContent === '500') || rows[rows.length - 1];
@@ -72,6 +91,99 @@ window.navigator.clipboard = { writeText: async () => {} };
   await new Promise((r) => setTimeout(r, 900));
 
   const doc = window.document;
+
+  /**
+   * Wait for the list to stop changing, rather than sleeping a hopeful number of milliseconds.
+   *
+   * `renderList` clears the list and re-appends, and a fetch sits in front of it, so a fixed sleep
+   * can sample a half-built list — a read taken mid-render reported 6 rows for a 10-row session.
+   * That makes a count assertion pass or fail on machine speed. Two identical consecutive samples
+   * mean the render finished.
+   */
+  const settle = async (timeoutMs = 4000) => {
+    const sample = () => [
+      doc.querySelectorAll('.row').length,
+      doc.querySelectorAll('#endpoint-chips .chip').length,
+      doc.getElementById('counts').textContent,
+    ].join('|');
+
+    const deadline = Date.now() + timeoutMs;
+    let previous = null;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 120));
+      const current = sample();
+      if (current === previous) return;
+      previous = current;
+    }
+    console.error(`settle() timed out after ${timeoutMs}ms — counts below may be mid-render.`);
+  };
+
+  /**
+   * Click the first endpoint chip and check three things at once.
+   *
+   * The load-bearing one is `survived`. Chips are derived from the *unfiltered* session; if that
+   * ever regresses to the filtered rows the list would collapse to the single chip just clicked,
+   * and every other endpoint would become unreachable in one click. That failure looks like a
+   * cosmetic glitch and is really a dead end, so it is asserted rather than eyeballed.
+   */
+  async function probeEndpointChip() {
+    const chip = doc.querySelector('#endpoint-chips .chip');
+    const before = doc.querySelectorAll('.row').length;
+    if (!chip) return { before, after: before, narrowed: 'no chips', survived: 'n/a', active: 'n/a', chipsAfter: 0 };
+
+    const chipsBefore = doc.querySelectorAll('#endpoint-chips .chip').length;
+    const label = chip.firstChild.textContent;
+    chip.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+
+    const after = doc.querySelectorAll('.row').length;
+    const chipsAfter = doc.querySelectorAll('#endpoint-chips .chip').length;
+    const actives = [...doc.querySelectorAll('#endpoint-chips .chip.active')];
+
+    const result = {
+      before,
+      after,
+      chipsAfter,
+      narrowed: after > 0 && after < before,
+      survived: chipsAfter === chipsBefore,
+      active: actives.length === 1 && actives[0].firstChild.textContent === label,
+    };
+
+    // Put the page back the way it was, so the snapshot and every later count are unaffected.
+    chip.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+    return result;
+  }
+
+  const chipProbe = await probeEndpointChip();
+
+  /**
+   * The configurable cap, driven through the settings input rather than the state object.
+   *
+   * Going through the real `change` event is the point: it covers the listener, the localStorage
+   * write and the re-render together. Asserting on `state.endpointLimit` would only prove a number
+   * was stored somewhere.
+   */
+  async function probeEndpointLimit() {
+    const input = doc.getElementById('endpoint-limit');
+    const chipCount = () => doc.querySelectorAll('#endpoint-chips .chip').length;
+    const setLimit = async (n) => {
+      input.value = String(n);
+      input.dispatchEvent(new window.Event('change', { bubbles: true }));
+      await settle();
+    };
+
+    const original = input.value;
+    await setLimit(3);
+    const capped = chipCount();
+    const summary = doc.getElementById('endpoint-summary').textContent;
+    await setLimit(0);
+    const off = chipCount() === 0 && doc.getElementById('endpoint-chips').hidden;
+    await setLimit(original);
+    return { capped, off, restored: chipCount(), summary };
+  }
+
+  const limitProbe = await probeEndpointLimit();
 
   // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the
   // real .row order matters — asserting on the state flag would only prove the flag changed, not
@@ -149,6 +261,25 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('duplicate rows     :', dupRows.length);
   console.error('duplicate badges   :', dupBadges, '(must equal the rows — colour alone is not enough)');
   console.error('start times shown  :', clocks, 'of', doc.querySelectorAll('.row').length);
+  // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
+  // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
+  // also matched `profile/status` would quietly be lying.
+  const endpointChips = [...doc.querySelectorAll('#endpoint-chips .chip')];
+  const chipLabels = endpointChips.map(
+    (c) => `${c.firstChild.textContent}(${c.querySelector('.chip-count')?.textContent ?? '?'})`,
+  );
+  const unanchored = endpointChips.filter((c) => !c.dataset.filter.startsWith('path:*/')).length;
+
+  console.error('endpoint chips     :', endpointChips.length);
+  console.error('endpoint labels    :', chipLabels.join(' ') || 'none');
+  console.error('unanchored chips   :', unanchored, '(must be 0)');
+  console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
+  console.error('chips survive click:', chipProbe.survived, `(${endpointChips.length} -> ${chipProbe.chipsAfter})`);
+  console.error('chip marks active  :', chipProbe.active, '(the clicked chip, and only it)');
+  console.error('limit 3 caps to    :', limitProbe.capped, '(must be 3)');
+  console.error('limit 0 hides      :', limitProbe.off);
+  console.error('limit restored to  :', limitProbe.restored);
+  console.error('limit summary      :', limitProbe.summary);
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons, '(must be 0)');

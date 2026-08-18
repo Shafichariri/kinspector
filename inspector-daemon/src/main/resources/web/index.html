@@ -47,6 +47,9 @@
         <button class="chip" data-filter="attempt&gt;1">retries</button>
       </div>
 
+      <div class="rail-label" id="endpoints-label" hidden>Endpoints</div>
+      <div class="chips" id="endpoint-chips" hidden></div>
+
       <div class="rail-label">Markers</div>
       <ul id="markers" class="markers"><li class="muted">none</li></ul>
 
@@ -107,6 +110,25 @@
           ms
         </label>
         <span id="dup-summary" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <div class="settings-title">Endpoint shortcuts</div>
+      <p class="settings-note muted">
+        One chip per distinct last path segment, most-used first —
+        <code>/v3/accounts/profile/status</code> becomes <code>status</code>. Clicking one
+        filters to <code>path:*/status</code>, a glob anchored at the end of the path, so
+        <code>profile</code> does not also match <code>profile/status</code>. Built from the whole
+        session rather than the filtered view, so the chips stay put once you click one. Set to
+        <code>0</code> to hide them.
+      </p>
+      <div class="settings-actions">
+        <label class="settings-field">
+          show at most
+          <input id="endpoint-limit" type="number" min="0" max="100" step="1" value="10">
+        </label>
+        <span id="endpoint-summary" class="muted"></span>
       </div>
     </section>
 
