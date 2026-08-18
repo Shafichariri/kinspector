@@ -556,6 +556,56 @@
     }
   }
 
+  // --- settings: the MCP server ----------------------------------------------------------------
+
+  /**
+   * There is no start button on purpose.
+   *
+   * The MCP server reads stdio and stops at EOF, so a process the daemon spawned would have no
+   * client on the other end. The editor owns that lifecycle. What is useful is proving the binary
+   * answers, and killing a wedged one — the latter is just the peer list above.
+   */
+  let mcpInfo = null;
+
+  async function loadMcp() {
+    try {
+      mcpInfo = await api('/api/mcp');
+      const shown = mcpInfo.launcher
+        ? `${mcpInfo.launcher} mcp --data ${mcpInfo.dataDir}`
+        : [mcpInfo.command, ...(mcpInfo.args || [])].join(' ');
+      $('mcp-command').textContent = shown;
+    } catch (e) {
+      $('mcp-command').textContent = `could not read MCP details: ${e.message}`;
+    }
+  }
+
+  async function probeMcp() {
+    const button = $('mcp-probe');
+    const status = $('mcp-status');
+    button.disabled = true;
+    status.classList.remove('error');
+    status.textContent = 'starting a throwaway server…';
+    try {
+      const res = await fetch('/api/mcp/probe', {
+        method: 'POST',
+        headers: { 'X-Inspector-Control': '1' },
+      });
+      const result = await res.json();
+      if (result.ok) {
+        status.textContent =
+          `answered: ${result.toolCount} tools${result.serverName ? ` (${result.serverName})` : ''}`;
+      } else {
+        status.classList.add('error');
+        status.textContent = result.error || 'no answer';
+      }
+    } catch (e) {
+      status.classList.add('error');
+      status.textContent = `could not reach the daemon: ${e.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   // --- settings: sibling inspector processes ------------------------------------------------
 
   /**
@@ -770,8 +820,18 @@
     $('open-settings').addEventListener('click', () => {
       $('settings').showModal();
       loadPeers();
+      loadMcp();
     });
     $('peers-refresh').addEventListener('click', loadPeers);
+    $('mcp-probe').addEventListener('click', probeMcp);
+    $('mcp-copy').addEventListener('click', () => {
+      const text = $('mcp-command').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const button = $('mcp-copy');
+        button.textContent = 'copied';
+        setTimeout(() => (button.textContent = 'copy command'), 1200);
+      });
+    });
 
     await loadServerInfo();
     await loadSessions();

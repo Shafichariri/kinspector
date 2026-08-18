@@ -229,3 +229,107 @@ class PeerRegistryTest {
         assertContains((outcome as KillOutcome.Refused).reason, "Stop")
     }
 }
+
+/**
+ * The MCP settings endpoints.
+ *
+ * There is deliberately no start endpoint, and that absence is the design: `McpServer.run` blocks
+ * on `input.readLine()` and stops at EOF, so a server the daemon spawned would have no client on
+ * its pipes. The editor owns that lifecycle. What is testable, and useful, is that the daemon can
+ * report how to register it and prove the binary answers.
+ */
+class McpControlTest {
+
+    private class FakeMcp(
+        private val result: McpProbeResult,
+        private val details: McpInfo = McpInfo("java", listOf("-cp", "x", "MainKt", "mcp"), null, "/tmp/d"),
+    ) : McpControl {
+        var probes = 0
+        override fun info() = details
+        override fun probe(timeoutMs: Long): McpProbeResult {
+            probes++
+            return result
+        }
+    }
+
+    private lateinit var tmp: Path
+    private lateinit var config: DaemonConfig
+    private lateinit var daemon: InspectorDaemon
+    private lateinit var http: HttpClient
+
+    private fun start(mcp: McpControl) = runBlocking {
+        tmp = Files.createTempDirectory("inspector-mcpctl")
+        config = DaemonConfig(port = ServerSocket(0).use { it.localPort }, dataDir = tmp)
+        Files.createDirectories(config.sessionsDir)
+        daemon = InspectorDaemon(config, mcp = mcp)
+        daemon.start(wait = false)
+        http = HttpClient(CIO)
+        withTimeoutOrNull(10_000) {
+            while (runCatching { http.get(url("/api/server")).status.value }.getOrNull() != 200) delay(50)
+        }
+        Unit
+    }
+
+    private fun url(path: String) = "http://127.0.0.1:${config.port}$path"
+
+    @AfterTest
+    fun tearDown() {
+        runCatching { http.close() }
+        runCatching { daemon.stop() }
+        runCatching { tmp.toFile().deleteRecursively() }
+    }
+
+    @Test
+    fun `registration details are served without needing the control header`() = runBlocking {
+        start(FakeMcp(McpProbeResult(ok = true)))
+        val body = http.get(url("/api/mcp")).bodyAsText()
+        assertContains(body, "\"command\":\"java\"")
+        assertContains(body, "mcp")
+    }
+
+    /** Probing spawns a process, so it is a control operation, not a read. */
+    @Test
+    fun `probing requires the control header`() = runBlocking {
+        val mcp = FakeMcp(McpProbeResult(ok = true))
+        start(mcp)
+        assertEquals(403, http.post(url("/api/mcp/probe")).status.value)
+        assertEquals(0, mcp.probes, "an unheadered request must not spawn anything")
+    }
+
+    @Test
+    fun `a working server reports its tool count`() = runBlocking {
+        val mcp = FakeMcp(McpProbeResult(ok = true, serverName = "inspector", toolCount = 6))
+        start(mcp)
+        val body = http.post(url("/api/mcp/probe")) { header("X-Inspector-Control", "1") }.bodyAsText()
+        assertContains(body, "\"ok\":true")
+        assertContains(body, "\"toolCount\":6")
+        assertEquals(1, mcp.probes)
+    }
+
+    @Test
+    fun `a broken server reports why, rather than a bare failure`() = runBlocking {
+        start(FakeMcp(McpProbeResult(ok = false, error = "it started but did not answer a tools/list")))
+        val body = http.post(url("/api/mcp/probe")) { header("X-Inspector-Control", "1") }.bodyAsText()
+        assertContains(body, "\"ok\":false")
+        assertContains(body, "did not answer")
+    }
+
+    /**
+     * The real control, spawning a real server.
+     *
+     * Only meaningful when the daemon is launched the way the launcher launches it; under Gradle
+     * the argv has no `MainKt`, so the control correctly reports that it cannot build a command
+     * rather than guessing one. Either outcome is a pass — what must never happen is a claim of
+     * success without a real handshake.
+     */
+    @Test
+    fun `the real control either answers or explains why it cannot`() {
+        val result = ProcessMcpControl(DaemonConfig(dataDir = Files.createTempDirectory("mcp-real")))
+            .probe(timeoutMs = 5_000)
+        if (result.ok) {
+            assertTrue((result.toolCount ?: 0) > 0, "a successful probe must have seen tools")
+        } else {
+            assertTrue(!result.error.isNullOrBlank(), "a failed probe must say why")
+        }
+    }
+}

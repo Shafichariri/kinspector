@@ -63,7 +63,10 @@ class InspectorDaemon(
     /** Exposed so replay can address a running app; see `docs/REPLAY.md`. */
     val liveApps: LiveApps = LiveApps(),
     private val replayer: Replayer? = null,
+    private val mcp: McpControl? = null,
 ) {
+
+    private val mcpControl: McpControl by lazy { mcp ?: ProcessMcpControl(config) }
 
     private val replay: Replayer by lazy {
         replayer ?: Replayer(SessionRepository(config), liveApps)
@@ -183,6 +186,26 @@ class InspectorDaemon(
 
         peerRoutes()
         replayRoute()
+        mcpRoutes()
+    }
+
+    /**
+     * MCP registration details, and a probe that proves the server answers.
+     *
+     * There is no start endpoint. The MCP server speaks stdio, so a process the daemon spawned
+     * would have no client on its pipes; the editor spawns it on connect. Killing a wedged one
+     * goes through `/api/peers/{pid}/kill`, after which the editor spawns a fresh one.
+     */
+    private fun io.ktor.server.routing.Route.mcpRoutes() {
+        get("/api/mcp") {
+            call.respondJson(InspectorJson.encodeToString(McpInfo.serializer(), mcpControl.info()))
+        }
+
+        post("/api/mcp/probe") {
+            if (!call.requireControlHeader()) return@post
+            val result = mcpControl.probe()
+            call.respondJson(InspectorJson.encodeToString(McpProbeResult.serializer(), result))
+        }
     }
 
     /**

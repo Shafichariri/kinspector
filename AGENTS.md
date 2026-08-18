@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**212 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**217 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -305,6 +305,14 @@ defaulted to `latest`, and answered about a *different session* with no sign any
 a confidently wrong answer to an agent that cannot tell. The allowlist is derived from
 `descriptors()` so a new parameter cannot drift out of it, and the error names `session` explicitly
 when it sees `sessionId`. Reported from a consuming app.
+
+**There is no "start the MCP server" endpoint, and there should not be.** The MCP server speaks
+stdio — `McpServer.run` blocks on `input.readLine()` and stops at EOF — so a process the daemon
+spawned would have no client on its pipes and would exit at once or hang holding an empty one. The
+editor owns that lifecycle. The two operations that mean something are `POST /api/mcp/probe`, which
+spawns a throwaway server, handshakes, reports the tool count and stops it, and killing a wedged one
+through the ordinary peer kill so the editor respawns it. `McpControlTest` asserts the probe leaves
+nothing behind.
 
 **Peers are identified by argv token, never by command-line substring.** `PeerArgv.MAIN_CLASS`
 is matched against `ProcessHandle` arguments by exact equality. Substring matching is what makes

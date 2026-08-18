@@ -302,6 +302,37 @@ Space-separated terms are ANDed; `|` ORs and binds more loosely.
 
 ## 8. The MCP server
 
+### From the web UI — Settings
+
+The settings panel has an MCP section with a **test** button and a copyable registration command.
+
+There is **no start button**, and that is deliberate rather than missing. The MCP server speaks
+stdio: `McpServer.run` blocks on `input.readLine()` and stops at EOF, so a server the daemon
+spawned would have nobody on the other end of its pipes and would exit immediately. Your editor
+spawns it when it connects. To recover a wedged one, kill it in the process list above — the editor
+spawns a fresh one on reconnect.
+
+**Test** answers the question that button would have been for: does the binary actually work? It
+spawns a throwaway server, completes an `initialize` and `tools/list` handshake, reports the tool
+count, and stops it. It leaves nothing behind.
+
+```bash
+curl -s http://127.0.0.1:8099/api/mcp                                        # how to register it
+curl -s -X POST -H "X-Inspector-Control: 1" http://127.0.0.1:8099/api/mcp/probe
+```
+
+```json
+{ "ok": true, "serverName": "inspector", "toolCount": 6 }
+```
+
+Probing spawns a process, so it needs the control header; reading the registration details does
+not. `/api/mcp` reports the `bin/inspector` launcher path when it can find one on disk, and the raw
+`java -classpath …` line otherwise — the launcher is checked for existence before being offered,
+because a path that only looks right gets pasted into an editor config and fails there instead of
+here.
+
+
+
 A separate long-lived process, started by your editor rather than by you:
 
 ```bash

@@ -92,6 +92,21 @@
         <span id="peers-status" class="muted"></span>
       </div>
     </section>
+
+    <section class="settings-section">
+      <div class="settings-title">MCP server</div>
+      <p class="settings-note muted">
+        Speaks over stdio, so your editor starts it — there is nothing here to start, and a process
+        this daemon spawned would have no client on its pipes. <strong>Test</strong> proves the
+        binary answers. Kill a wedged one in the list above and your editor spawns a fresh one.
+      </p>
+      <div class="settings-actions">
+        <button id="mcp-probe" class="btn btn-sm">test</button>
+        <button id="mcp-copy" class="btn btn-sm">copy command</button>
+        <span id="mcp-status" class="muted"></span>
+      </div>
+      <pre id="mcp-command" class="mcp-command"></pre>
+    </section>
   </dialog>
 
   <script src="/app.js"></script>
