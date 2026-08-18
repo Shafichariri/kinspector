@@ -89,6 +89,10 @@ daemon additionally records its own receive time.
 - `isError` — `status >= 400` or `error != null`. Backs `has:error`.
 - `statusClass` — `2xx`, `4xx`, … or `error`. Backs session summaries.
 - `url` — reassembled from scheme/host/port/path/query. The port is included only when it is not the default for the scheme.
+- `duplicateGroups(transactions, windowMs)` — separate calls that asked the same question inside a
+  window. Requires **different `callId`s**, so retries and redirect hops are never reported; keys on
+  method + url + status + byte counts, deliberately **excluding headers**, because a signed request
+  carries a fresh nonce every time. Times with `mono`, per the rule above.
 
 ---
 

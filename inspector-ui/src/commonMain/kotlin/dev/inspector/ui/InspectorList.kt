@@ -1,6 +1,7 @@
 package dev.inspector.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,7 @@ import dev.inspector.model.FilterContext
 import dev.inspector.model.FilterParser
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.duplicateIds
 
 /**
  * Transaction list with a live filter bar.
@@ -143,9 +145,14 @@ internal fun InspectorList(
                 )
             }
         } else {
+            // Computed over *all* transactions, not the filtered view: a duplicate whose twin is
+            // filtered out is still a duplicate, and hiding that would make the highlight depend
+            // on what you happened to be searching for.
+            val duplicates = remember(transactions) { duplicateIds(transactions) }
+
             LazyColumn(Modifier.fillMaxSize()) {
                 items(visible, key = { it.id }) { txn ->
-                    TransactionRow(txn) { onSelect(txn) }
+                    TransactionRow(txn, isDuplicate = txn.id in duplicates) { onSelect(txn) }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
                 }
             }
@@ -154,10 +161,18 @@ internal fun InspectorList(
 }
 
 @Composable
-private fun TransactionRow(txn: NetworkTransaction, onClick: () -> Unit) {
+private fun TransactionRow(
+    txn: NetworkTransaction,
+    isDuplicate: Boolean,
+    onClick: () -> Unit,
+) {
     val colors = LocalInspectorColors.current
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth()
+            .clickable(onClick = onClick)
+            // Background before padding, so the tint fills the row rather than insetting with it.
+            .background(if (isDuplicate) colors.duplicate.copy(alpha = DUPLICATE_TINT_ALPHA) else Color.Transparent)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -177,6 +192,9 @@ private fun TransactionRow(txn: NetworkTransaction, onClick: () -> Unit) {
                 buildString {
                     append(txn.host)
                     if (txn.attempt > 1) append("  ·  attempt ${txn.attempt}")
+                    // Said in words as well as colour: a tint alone is invisible to anyone who
+                    // cannot distinguish it, and unexplained to everyone else.
+                    if (isDuplicate) append("  ·  repeated")
                     txn.error?.let { append("  ·  ").append(it) }
                 },
                 color = colors.onSurfaceMuted,
@@ -222,3 +240,6 @@ internal fun ToolbarButton(label: String, onClick: () -> Unit, prominent: Boolea
             .padding(horizontal = 8.dp, vertical = 6.dp),
     )
 }
+
+/** Low enough to read as a tint rather than as a status colour. */
+private const val DUPLICATE_TINT_ALPHA = 0.14f

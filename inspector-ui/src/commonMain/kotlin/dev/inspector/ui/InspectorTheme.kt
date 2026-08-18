@@ -38,6 +38,14 @@ data class InspectorColors(
     val methodPut: Color,
     val methodPatch: Color,
     val methodDelete: Color,
+    /**
+     * Row tint for a request that was sent more than once, close together, by separate calls.
+     *
+     * Amber, and used at a low alpha as a *background* rather than as text. The status chip already
+     * owns the foreground colour on that row, so a tint is a second channel that cannot be misread
+     * as "this row is a 4xx". Added last, so an app constructing its own palette is unaffected.
+     */
+    val duplicate: Color = Color(0xFFE0A030),
 ) {
     /** Status-class colour used by the pill dot and the list chips. */
     fun forStatus(status: Int?): Color = when {
@@ -84,6 +92,7 @@ private val DarkColors = InspectorColors(
     methodPut = Color(0xFFD99BFF),
     methodPatch = Color(0xFFE0A030),
     methodDelete = Color(0xFFE5484D),
+    duplicate = Color(0xFFE0A030),
 )
 
 private val LightColors = InspectorColors(
@@ -103,6 +112,7 @@ private val LightColors = InspectorColors(
     methodPut = Color(0xFF7C3AED),
     methodPatch = Color(0xFFB45309),
     methodDelete = Color(0xFFC62A2F),
+    duplicate = Color(0xFFB45309),
 )
 
 val LocalInspectorColors = staticCompositionLocalOf { DarkColors }

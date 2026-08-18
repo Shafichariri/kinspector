@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**217 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**259 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -305,6 +305,22 @@ defaulted to `latest`, and answered about a *different session* with no sign any
 a confidently wrong answer to an agent that cannot tell. The allowlist is derived from
 `descriptors()` so a new parameter cannot drift out of it, and the error names `session` explicitly
 when it sees `sessionId`. Reported from a consuming app.
+
+**Repeated-request detection lives in `:inspector-model`, and the web UI mirrors it.** Both rules
+in `duplicateGroups` are load-bearing. A **different `callId` is required**, because redirect hops
+and retry attempts share one and are a single logical call already shown as an attempt chain —
+without that rule every retry lights up, which is noise *and* a false description. And **headers are
+excluded from the key**, because a signed app puts a fresh nonce and signature on every request, so
+a key including them would find nothing on exactly the apps this helps most. Timing uses `mono`,
+never `ts`, per `docs/schema.md`. The key is method + URL + status + both byte counts, which
+identifies rows that are *indistinguishable at row level* — a weaker claim than byte-identical
+bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
+algorithm; keep them in step.
+
+**Backtick test names in multiplatform `commonTest` cannot contain commas.** Kotlin/Native rejects
+them with `Name contains illegal characters: ","` while the JVM accepts them, so a targeted
+`:inspector-model:jvmTest` passes and the full build fails on iOS. `:inspector-daemon` is JVM-only,
+so its tests are exempt — do not churn them.
 
 **There is no "start the MCP server" endpoint, and there should not be.** The MCP server speaks
 stdio — `McpServer.run` blocks on `input.readLine()` and stops at EOF — so a process the daemon

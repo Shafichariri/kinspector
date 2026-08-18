@@ -94,6 +94,23 @@
     </section>
 
     <section class="settings-section">
+      <div class="settings-title">Repeated requests</div>
+      <p class="settings-note muted">
+        Highlights requests sent more than once, close together, by <em>separate</em> calls — same
+        method, URL, status and byte counts. Retries and redirect hops share one call id and are
+        never flagged; they already show as an attempt chain. Set to <code>0</code> to turn it off.
+      </p>
+      <div class="settings-actions">
+        <label class="settings-field">
+          within
+          <input id="dup-window" type="number" min="0" step="250" value="3000">
+          ms
+        </label>
+        <span id="dup-summary" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <div class="settings-title">MCP server</div>
       <p class="settings-note muted">
         Speaks over stdio, so your editor starts it — there is nothing here to start, and a process

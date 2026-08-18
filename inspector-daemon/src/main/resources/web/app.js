@@ -22,6 +22,10 @@
     // false = oldest first (causal reading order), true = newest first (tail-a-log order).
     // Remembered across reloads because it is a reading preference, not session state.
     newestFirst: localStorage.getItem('inspector.newestFirst') === '1',
+    // Window for duplicate detection, in ms. 0 disables it.
+    duplicateWindowMs: Number(localStorage.getItem('inspector.duplicateWindowMs') ?? 3000),
+    // id -> group ordinal, recomputed whenever the transaction list changes.
+    duplicates: new Map(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -168,6 +172,11 @@
     const list = $('list');
     list.innerHTML = '';
 
+    // Over *all* transactions, not the filtered view: a duplicate whose twin is filtered out is
+    // still a duplicate, and making the highlight depend on the current filter would hide exactly
+    // the case you go looking for.
+    state.duplicates = computeDuplicates(state.transactions, state.duplicateWindowMs);
+
     const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
 
@@ -216,19 +225,93 @@
     renderList();
   }
 
+  /**
+   * Mirror of `duplicateGroups` in :inspector-model — same rules, so a row that highlights here
+   * highlights in the app too. Keep the two in step; the Kotlin one carries the reasoning.
+   *
+   * The two rules that matter: a *different* callId is required, because redirect hops and retry
+   * attempts share one and are a single logical call; and headers are excluded, because a signed
+   * app puts a fresh nonce on every request and a key including them would never match twice.
+   */
+  function duplicateKey(txn) {
+    return [
+      txn.method,
+      urlOf(txn),
+      txn.status ?? -1,
+      `${txn.reqBytes || 0}/${txn.resBytes || 0}`,
+    ].join(' ');
+  }
+
+  function computeDuplicates(txns, windowMs) {
+    const marks = new Map();
+    if (!windowMs || windowMs <= 0 || txns.length < 2) return marks;
+
+    const byKey = new Map();
+    for (const txn of txns) {
+      const key = duplicateKey(txn);
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(txn);
+    }
+
+    let ordinal = 0;
+    for (const group of byKey.values()) {
+      // `mono` is the monotonic clock. `ts` is a wall clock that can step, and the device and host
+      // clocks are unrelated — so timing uses mono and only the display uses ts.
+      const ordered = [...group].sort((a, b) => a.mono - b.mono);
+      let run = [];
+      const flush = () => {
+        if (run.length > 1 && new Set(run.map((t) => t.callId)).size > 1) {
+          ordinal += 1;
+          const span = run[run.length - 1].mono - run[0].mono;
+          for (const t of run) marks.set(t.id, { ordinal, count: run.length, spanMs: span });
+        }
+        run = [];
+      };
+      for (const txn of ordered) {
+        if (run.length && txn.mono - run[run.length - 1].mono > windowMs) flush();
+        run.push(txn);
+      }
+      flush();
+    }
+    return marks;
+  }
+
+  /** Wall-clock start of the request, which is what makes a duplicate visible in the list. */
+  function fmtClock(ts) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  }
+
   function rowFor(txn) {
     const cls = statusClass(txn.status);
     const row = el('div', 'row');
     row.dataset.id = txn.id;
     if (txn.id === state.selectedId) row.classList.add('selected');
 
+    const duplicate = state.duplicates.get(txn.id);
+    if (duplicate) {
+      row.classList.add('duplicate');
+      row.title =
+        `sent ${duplicate.count}x by separate calls within ${fmtMs(duplicate.spanMs)} — ` +
+        'same method, URL, status and byte counts';
+    }
+
     row.appendChild(el('span', `status-dot b${cls}`));
+    // The start time is what makes a duplicate legible: two rows 1.9s apart is the whole finding.
+    row.appendChild(el('span', 'clock mono muted', fmtClock(txn.ts)));
     row.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
 
     const path = el('span', 'path', txn.path);
     if (txn.attempt > 1) {
       const badge = el('span', 'attempt', ` ·attempt ${txn.attempt}`);
       path.appendChild(badge);
+    }
+    if (duplicate) {
+      // Colour alone is invisible to some readers and unexplained to the rest.
+      path.appendChild(el('span', 'dup-badge', ` ·repeated ${duplicate.count}x`));
     }
     row.appendChild(path);
 
@@ -556,6 +639,19 @@
     }
   }
 
+  // --- settings: duplicate detection ------------------------------------------------------------
+
+  function applyDuplicateWindow(valueMs) {
+    const ms = Number.isFinite(valueMs) && valueMs >= 0 ? Math.round(valueMs) : 3000;
+    state.duplicateWindowMs = ms;
+    localStorage.setItem('inspector.duplicateWindowMs', String(ms));
+    $('dup-window').value = ms;
+    $('dup-summary').textContent = ms === 0
+      ? 'off'
+      : `${computeDuplicates(state.transactions, ms).size} row(s) in this session`;
+    renderList();
+  }
+
   // --- settings: the MCP server ----------------------------------------------------------------
 
   /**
@@ -821,8 +917,11 @@
       $('settings').showModal();
       loadPeers();
       loadMcp();
+      applyDuplicateWindow(state.duplicateWindowMs);   // refreshes the count for this session
     });
     $('peers-refresh').addEventListener('click', loadPeers);
+    $('dup-window').value = state.duplicateWindowMs;
+    $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
     $('mcp-probe').addEventListener('click', probeMcp);
     $('mcp-copy').addEventListener('click', () => {
       const text = $('mcp-command').textContent;

@@ -459,3 +459,44 @@ pre.body {
 
 #mcp-status { font-size: 12px; }
 #mcp-status.error { color: var(--err); }
+
+/* --- repeated requests -------------------------------------------------------------------- */
+
+/* A tint, not a status colour: the row's own status chip still owns the foreground, so this reads
+   as a second channel rather than as "this row is a 4xx". Selection stays distinguishable because
+   it is an inset bar plus a different background. */
+.row.duplicate { background: rgb(var(--m-patch) / 0.13); }
+.row.duplicate.selected { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent); }
+
+.dup-badge {
+  color: rgb(var(--m-patch));
+  font-size: 11px;
+}
+
+/* Fixed width and no shrink, so the path column stays the one that flexes. */
+.row .clock {
+  font-size: 11px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  width: 84px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.settings-field input {
+  width: 84px;
+  padding: 4px 6px;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 12px;
+}

@@ -142,6 +142,13 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('detail sections    :', doc.querySelectorAll('#detail .section-title').length);
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
+  const dupRows = [...doc.querySelectorAll('.row.duplicate')];
+  const dupBadges = [...doc.querySelectorAll('.dup-badge')].length;
+  const clocks = [...doc.querySelectorAll('.row .clock')].filter((n) => n.textContent.trim()).length;
+
+  console.error('duplicate rows     :', dupRows.length);
+  console.error('duplicate badges   :', dupBadges, '(must equal the rows — colour alone is not enough)');
+  console.error('start times shown  :', clocks, 'of', doc.querySelectorAll('.row').length);
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons, '(must be 0)');
