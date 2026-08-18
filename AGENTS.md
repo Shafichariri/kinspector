@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**182 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**186 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -269,6 +269,22 @@ second view makes that listener fire for the whole body twice. Ktor exposes no w
 underlying saved channel — `DelegatedResponse.origin` and `DownloadProgressListenerAttributeKey` are
 both internal — so this is not currently avoidable. It affects only apps using progress listeners,
 and it doubles reported progress rather than corrupting the body.
+
+**A guard that scans nothing must fail, not pass.** `check-release-clean.sh` used to treat a
+missing `--paths` target as `skip (missing)` and still print `PASSED: no capture code found in 1
+artifact(s)` with exit 0. It also `cd`s to its own repo root, so a *relative* path from a consumer's
+build directory resolved against Inspector and missed every time — the two combined into a release
+guard that green-lit a build it had never looked at. Relative `--paths` now resolve against the
+caller's directory, and any missing target is a hard exit 2. Reported from a consuming app. This
+is the same principle the `--self-test` mode exists for: a broken detector reports everything
+clean.
+
+**MCP tools reject arguments they do not declare.** They used to ignore them. `list_sessions`
+reports the field as `sessionId`, so calling another tool with `sessionId` left `session` absent,
+defaulted to `latest`, and answered about a *different session* with no sign anything was dropped —
+a confidently wrong answer to an agent that cannot tell. The allowlist is derived from
+`descriptors()` so a new parameter cannot drift out of it, and the error names `session` explicitly
+when it sees `sessionId`. Reported from a consuming app.
 
 **Peers are identified by argv token, never by command-line substring.** `PeerArgv.MAIN_CLASS`
 is matched against `ProcessHandle` arguments by exact equality. Substring matching is what makes

@@ -16,6 +16,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.builtins.ListSerializer
@@ -123,8 +124,51 @@ class McpTools(
         )
     }
 
+    /**
+     * Argument names each tool declares, read back out of [descriptors].
+     *
+     * Derived from the descriptors rather than written out again, so a parameter added above
+     * cannot drift out of this allowlist and start being rejected.
+     */
+    private val acceptedArguments: Map<String, Set<String>> by lazy {
+        descriptors().associate { descriptor ->
+            val obj = descriptor.jsonObject
+            val properties = obj["inputSchema"]?.jsonObject?.get("properties")?.jsonObject
+            obj.getValue("name").jsonPrimitive.content to (properties?.keys ?: emptySet())
+        }
+    }
+
+    /**
+     * Rejects arguments a tool does not declare, instead of ignoring them.
+     *
+     * Ignoring them produced confidently wrong answers. `list_sessions` returns the field as
+     * `sessionId`, so calling another tool with `sessionId` — the obvious next step — left
+     * `session` absent, defaulted it to `latest`, and returned a **different session's** data with
+     * nothing to indicate the argument had been dropped. Reported from a consuming app.
+     *
+     * A tool that cannot honour what it was asked must say so; guessing is worse than failing.
+     */
+    private fun unknownArgumentError(name: String, args: JsonObject): ToolOutcome? {
+        val accepted = acceptedArguments[name] ?: return null
+        val unknown = args.keys.filterNot { it in accepted }
+        if (unknown.isEmpty()) return null
+
+        // The exact confusion that prompted this, named directly rather than left to be rediscovered.
+        val hint = if ("sessionId" in unknown && "session" in accepted) {
+            " Did you mean 'session'? list_sessions reports that field as 'sessionId'."
+        } else {
+            ""
+        }
+
+        return ToolOutcome.Failed(
+            "unknown argument${if (unknown.size > 1) "s" else ""} for '$name': " +
+                unknown.sorted().joinToString(", ") +
+                ". Accepted: " + accepted.sorted().joinToString(", ") + "." + hint
+        )
+    }
+
     fun call(name: String, args: JsonObject): ToolOutcome = try {
-        when (name) {
+        unknownArgumentError(name, args) ?: when (name) {
             "list_sessions" -> listSessions(args)
             "session_summary" -> sessionSummary(args)
             "list_transactions" -> listTransactions(args)

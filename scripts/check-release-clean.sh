@@ -19,6 +19,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Captured before the cd below. --paths is given by a *caller*, usually from an app repo, so a
+# relative path there means "relative to where you ran me", not "relative to Inspector". Resolving
+# it against REPO_ROOT made it miss, and a miss used to be a skip, so the guard printed PASSED
+# having scanned nothing. Reported from a consuming app; see the missing-target check further down.
+INVOCATION_DIR="$PWD"
+
 cd "$REPO_ROOT"
 
 CANARY_SOURCE="inspector-core/src/commonMain/kotlin/dev/inspector/InspectorConfig.kt"
@@ -68,7 +75,12 @@ case "${1:-}" in
       echo "ERROR: --paths needs at least one file or directory." >&2
       exit 2
     fi
-    TARGETS=("$@")
+    for given in "$@"; do
+      case "$given" in
+        /*) TARGETS+=("$given") ;;
+        *)  TARGETS+=("$INVOCATION_DIR/$given") ;;
+      esac
+    done
     ;;
   "")
     collect_artifacts inspector-noop/build
@@ -89,9 +101,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 hits=()
 
+missing=()
+
 scan_target() {
   local target="$1"
-  [[ -e "$target" ]] || { echo "  skip (missing): $target"; return; }
+  # Never a skip. A guard that cannot find what it was asked to scan has proven nothing, and
+  # saying PASSED there is the single most dangerous thing this script could do.
+  [[ -e "$target" ]] || { missing+=("$target"); echo "  MISSING: $target"; return; }
 
   case "$target" in
     *.jar|*.aar|*.apk|*.aab|*.zip)
@@ -130,6 +146,15 @@ for target in "${TARGETS[@]}"; do
   scan_target "$target"
 done
 echo
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "ERROR: ${#missing[@]} target(s) could not be found:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo >&2
+  echo "Nothing was proven about them. Check the paths, and note that relative paths are" >&2
+  echo "resolved against the directory you ran this from ($INVOCATION_DIR)." >&2
+  exit 2
+fi
 
 if [[ "$MODE" == "expect-present" ]]; then
   if [[ ${#hits[@]} -eq 0 ]]; then

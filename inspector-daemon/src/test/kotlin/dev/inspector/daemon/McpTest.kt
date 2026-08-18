@@ -107,6 +107,61 @@ class McpTest {
         return result.getValue("content").jsonArray.single().jsonObject.getValue("text").jsonPrimitive.content
     }
 
+    /** Like [callTool] but asserts the call failed, and returns the message. */
+    private fun callToolExpectingError(name: String, args: String): String {
+        val frames = exchange(
+            """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"$name","arguments":$args}}"""
+        )
+        val result = frames.single().getValue("result").jsonObject
+        assertTrue(
+            result.getValue("isError").jsonPrimitive.content.toBoolean(),
+            "tool $name was expected to fail but succeeded",
+        )
+        return result.getValue("content").jsonArray.single().jsonObject.getValue("text").jsonPrimitive.content
+    }
+
+    // --- argument validation -----------------------------------------------------------------
+
+    /**
+     * The exact call a consuming app made. `list_sessions` reports the field as `sessionId`, so
+     * reaching for `sessionId` here is the natural next step — and it used to be silently dropped,
+     * default to `latest`, and answer about a different session entirely.
+     */
+    @Test
+    fun `an unknown argument is refused rather than silently ignored`() {
+        val message = callToolExpectingError(
+            "session_summary",
+            """{"sessionId":"2026-08-16T10-14-02_app_dev_debug"}""",
+        )
+        assertContains(message, "unknown argument")
+        assertContains(message, "sessionId")
+        assertContains(message, "Did you mean 'session'?", message = "the hint must name the fix")
+    }
+
+    @Test
+    fun `the refusal lists what the tool does accept`() {
+        val message = callToolExpectingError("list_transactions", """{"nonsense":1}""")
+        assertContains(message, "Accepted:")
+        for (accepted in listOf("filter", "limit", "offset", "session")) {
+            assertContains(message, accepted)
+        }
+    }
+
+    @Test
+    fun `several unknown arguments are all reported`() {
+        val message = callToolExpectingError("list_sessions", """{"alpha":1,"beta":2}""")
+        assertContains(message, "unknown arguments")
+        assertContains(message, "alpha")
+        assertContains(message, "beta")
+    }
+
+    /** The allowlist comes from the descriptors, so every declared argument must pass. */
+    @Test
+    fun `every argument a tool declares is accepted`() {
+        callTool("list_transactions", """{"session":"latest","filter":"","limit":5,"offset":0}""")
+        callTool("get_body", """{"session":"latest","id":"cccc3333","side":"res","maxBytes":128}""")
+    }
+
     @Test
     fun initialize_advertises_tools_and_agrees_a_protocol_version() {
         val frames = exchange(
