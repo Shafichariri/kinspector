@@ -317,6 +317,14 @@ identifies rows that are *indistinguishable at row level* — a weaker claim tha
 bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
 algorithm; keep them in step.
 
+**The web UI keeps an unfiltered copy of the session.** `state.transactions` holds the rows the
+*daemon* matched against the current filter, so it is the wrong source for anything describing the
+session as a whole. `state.allTransactions` is the whole session, and duplicate detection reads it:
+a duplicate whose twin is filtered out is still a duplicate, so highlighting from the filtered view
+would hide exactly the case you applied the filter to investigate. It costs one extra request per
+*session* — not per keystroke — and nothing at all when no filter is set, because then the rows
+already are the whole session.
+
 **Backtick test names in multiplatform `commonTest` cannot contain commas.** Kotlin/Native rejects
 them with `Name contains illegal characters: ","` while the JVM accepts them, so a targeted
 `:inspector-model:jvmTest` passes and the full build fails on iOS. `:inspector-daemon` is JVM-only,

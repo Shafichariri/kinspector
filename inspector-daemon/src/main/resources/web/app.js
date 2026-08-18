@@ -26,6 +26,14 @@
     duplicateWindowMs: Number(localStorage.getItem('inspector.duplicateWindowMs') ?? 3000),
     // id -> group ordinal, recomputed whenever the transaction list changes.
     duplicates: new Map(),
+    // Every row in the session, ignoring the filter, plus the session it belongs to.
+    //
+    // `transactions` is the *filtered* set — the daemon applies the filter — which is the wrong
+    // source for anything describing the session as a whole. A duplicate whose twin is filtered
+    // out is still a duplicate, so making the highlight depend on the filter would hide exactly
+    // the case you go looking for.
+    allTransactions: [],
+    allSessionId: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -109,6 +117,11 @@
     if (!state.sessionId && state.sessions.length) state.sessionId = state.sessions[0].sessionId;
     if (state.sessionId) picker.value = state.sessionId;
 
+    showSessionLabel();
+  }
+
+  /** Which app and device the rows belong to. Also runs on switch, or it would name the old one. */
+  function showSessionLabel() {
     const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
     $('session-app').textContent = meta ? `${meta.appId} · ${meta.device}` : 'no sessions';
   }
@@ -128,8 +141,37 @@
       $('counts').textContent = '';
     }
     state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
+    await syncAllTransactions();
     renderMarkers();
     renderList();
+  }
+
+  /**
+   * Keeps `allTransactions` in step with the current session.
+   *
+   * With no filter the rows just fetched already are the whole session, so the common case costs
+   * nothing. With a filter active it costs one extra request per *session*, not per keystroke:
+   * the session only grows when new traffic arrives, and the live socket appends to both lists.
+   */
+  async function syncAllTransactions() {
+    if (!state.filter) {
+      // A copy, not an alias — the live socket pushes into both, and sharing one array would
+      // append every new row twice.
+      state.allTransactions = state.transactions.slice();
+      state.allSessionId = state.sessionId;
+      return;
+    }
+    if (state.allSessionId === state.sessionId && state.allTransactions.length) return;
+    try {
+      const q = new URLSearchParams({ filter: '', limit: '2000' });
+      const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
+      state.allTransactions = page.items;
+    } catch {
+      // Duplicate highlighting is a convenience. If this fails, fall back to what we have rather
+      // than taking the list down with it.
+      state.allTransactions = state.transactions.slice();
+    }
+    state.allSessionId = state.sessionId;
   }
 
   function showFilterError(message) {
@@ -175,7 +217,7 @@
     // Over *all* transactions, not the filtered view: a duplicate whose twin is filtered out is
     // still a duplicate, and making the highlight depend on the current filter would hide exactly
     // the case you go looking for.
-    state.duplicates = computeDuplicates(state.transactions, state.duplicateWindowMs);
+    state.duplicates = computeDuplicates(state.allTransactions, state.duplicateWindowMs);
 
     const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
@@ -646,9 +688,11 @@
     state.duplicateWindowMs = ms;
     localStorage.setItem('inspector.duplicateWindowMs', String(ms));
     $('dup-window').value = ms;
+    // The unfiltered set, matching what the list actually highlights. Counting the filtered rows
+    // instead made the summary read 0 while the list showed two tinted rows behind the dialog.
     $('dup-summary').textContent = ms === 0
       ? 'off'
-      : `${computeDuplicates(state.transactions, ms).size} row(s) in this session`;
+      : `${computeDuplicates(state.allTransactions, ms).size} row(s) in this session`;
     renderList();
   }
 
@@ -833,6 +877,7 @@
 
       if (message.type === 'txn') {
         state.transactions.push(message.txn);
+        if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
         renderList();
       } else if (message.type === 'marker') {
         state.markers.push(message.marker);
@@ -895,6 +940,7 @@
   $('session-picker').addEventListener('change', (e) => {
     state.sessionId = e.target.value;
     state.selectedId = null;
+    showSessionLabel();
     loadTransactions();
   });
   $('live-tail').addEventListener('change', (e) => { state.liveTail = e.target.checked; });
