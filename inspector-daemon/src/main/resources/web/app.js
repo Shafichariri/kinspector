@@ -467,6 +467,110 @@
     $('server-restart').disabled = !enabled;
   }
 
+  // --- settings: sibling inspector processes ------------------------------------------------
+
+  /**
+   * Lists other inspector processes and offers to kill them.
+   *
+   * The daemon identifies them by argv token, never by a substring of the command line, so the
+   * two traps documented in docs/DAEMON.md are unreachable from here. The page just renders what
+   * it is told.
+   */
+  async function loadPeers() {
+    const list = $('peers');
+    setPeersStatus('');
+    try {
+      const peers = await api('/api/peers');
+      renderPeers(peers);
+    } catch (e) {
+      list.textContent = '';
+      list.appendChild(el('div', 'muted', `could not list processes: ${e.message}`));
+    }
+  }
+
+  function setPeersStatus(text, isError) {
+    const node = $('peers-status');
+    node.textContent = text || '';
+    node.classList.toggle('error', !!isError);
+  }
+
+  function uptimeOf(startedEpochMs) {
+    if (!startedEpochMs) return '';
+    const seconds = Math.max(0, Math.round((Date.now() - startedEpochMs) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    return `${Math.floor(seconds / 86400)}d`;
+  }
+
+  function renderPeers(peers) {
+    const list = $('peers');
+    list.textContent = '';
+
+    if (!peers.length) {
+      list.appendChild(el('div', 'muted', 'no inspector processes found'));
+      return;
+    }
+
+    for (const peer of peers) {
+      const row = el('div', 'peer');
+      row.appendChild(el('span', `peer-role peer-role-${peer.role}`, peer.role));
+      row.appendChild(el('span', 'peer-pid mono', `pid ${peer.pid}`));
+
+      // `mcp` speaks over stdio and holds no port. Showing that plainly is the point: it is the
+      // process people kill by accident.
+      row.appendChild(el('span', 'peer-port mono muted',
+        peer.port == null ? 'stdio' : `:${peer.port}`));
+
+      const uptime = uptimeOf(peer.startedEpochMs);
+      if (uptime) row.appendChild(el('span', 'peer-uptime muted', `up ${uptime}`));
+
+      row.appendChild(el('span', 'spacer'));
+
+      if (peer.self) {
+        row.appendChild(el('span', 'peer-self', 'this daemon'));
+        const hint = el('span', 'muted', 'use stop');
+        hint.title = 'Stopping this daemon goes through Stop, which replies before shutting down.';
+        row.appendChild(hint);
+      } else {
+        const kill = el('button', 'btn btn-sm btn-danger', 'kill');
+        kill.title = `Terminate pid ${peer.pid}`;
+        kill.addEventListener('click', () => killPeer(peer, false));
+        row.appendChild(kill);
+      }
+
+      list.appendChild(row);
+    }
+  }
+
+  async function killPeer(peer, force) {
+    const what = `${peer.role} (pid ${peer.pid})`;
+    if (!force && !confirm(`Kill ${what}?`)) return;
+
+    setPeersStatus(`killing ${what}…`);
+    try {
+      const res = await fetch(`/api/peers/${peer.pid}/kill${force ? '?force=true' : ''}`, {
+        method: 'POST',
+        headers: { 'X-Inspector-Control': '1' },
+      });
+
+      if (!res.ok) {
+        let message = `${res.status}`;
+        try { message = (await res.json()).error || message; } catch { /* keep the status */ }
+        setPeersStatus(message, true);
+        await loadPeers();
+        return;
+      }
+
+      // The signal is asynchronous: the process may take a moment to go. Re-list rather than
+      // claiming success, so the row disappearing is what confirms it.
+      setPeersStatus(`signalled ${what}`);
+      setTimeout(loadPeers, 300);
+    } catch (e) {
+      setPeersStatus(`could not kill ${what}: ${e.message}`, true);
+    }
+  }
+
   async function loadServerInfo() {
     try {
       const info = await api('/api/server');
@@ -573,6 +677,13 @@
 
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the button to match the remembered preference
+
+    $('open-settings').addEventListener('click', () => {
+      $('settings').showModal();
+      loadPeers();
+    });
+    $('peers-refresh').addEventListener('click', loadPeers);
+
     await loadServerInfo();
     await loadSessions();
     await loadTransactions();

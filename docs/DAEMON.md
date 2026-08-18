@@ -143,6 +143,57 @@ pgrep -fl "MainKt serve"
 loss is the metadata flush for a session still recording, which shows up as a session with a stale
 transaction count.
 
+### From the web UI — Settings
+
+The **settings** button lists every inspector process on the machine and offers to kill the ones
+that are not this daemon. It exists precisely because the `pkill` patterns above are easy to get
+wrong.
+
+The daemon identifies siblings by **exact argv token** — the launcher's main class,
+`dev.inspector.daemon.MainKt`, followed by the subcommand — never by a substring of the command
+line. That is why the list cannot repeat either trap in the table above: an `mcp` process is
+reported as `mcp` even though its classpath contains `ktor-server-cio-*.jar`.
+
+```bash
+curl -s http://127.0.0.1:8099/api/peers
+```
+
+```json
+[ { "pid": 42941, "role": "serve", "port": 8099, "startedEpochMs": 1787050404327, "self": true },
+  { "pid": 41540, "role": "mcp", "startedEpochMs": 1787049838507, "self": false } ]
+```
+
+`port` is resolved the way that peer itself would resolve it — its own `--port` flag over its own
+`config.json` over the default — so it is the port the process is really on, not a guess. An `mcp`
+peer has no `port` at all, because it speaks over stdio; the UI shows `stdio`.
+
+```bash
+curl -s -X POST -H "X-Inspector-Control: 1" http://127.0.0.1:8099/api/peers/<PID>/kill
+curl -s -X POST -H "X-Inspector-Control: 1" "http://127.0.0.1:8099/api/peers/<PID>/kill?force=true"
+```
+
+`force=true` is `destroyForcibly` (SIGKILL); the default is `destroy` (SIGTERM), which runs the
+shutdown hook.
+
+The endpoint refuses rather than guessing:
+
+| Situation | Response |
+|---|---|
+| No `X-Inspector-Control` header | `403` |
+| The pid is this daemon | `409` — use `/api/server/stop`, which replies before shutting down |
+| The pid is not an inspector process | `409` |
+| The pid belongs to another user | `409` |
+| No live process with that pid | `404` |
+| The pid is not a number | `400` |
+
+The identity check is re-run **at kill time**, not taken from the listing. Between listing and
+killing, a process can exit and the OS can reuse its pid for something unrelated, so a pid on its
+own is not evidence of what it now identifies. This is also what stops the endpoint from being a
+general-purpose "kill any pid" facility on an unauthenticated loopback port.
+
+Processes launched some other way — `./gradlew run`, an IDE run configuration — do not carry that
+argv shape and so are not listed. Kill those where you started them.
+
 ---
 
 ## 4. Restart
@@ -276,7 +327,8 @@ printf '%s\n' \
 
 ## Why control needs a header
 
-`POST /api/server/stop` and `/api/server/restart` require `X-Inspector-Control: 1`.
+`POST /api/server/stop`, `/api/server/restart` and `/api/peers/{pid}/kill` require
+`X-Inspector-Control: 1`.
 
 The daemon listens on loopback with no authentication, which is fine for reading your own traffic
 but means *any* page open in your browser can POST to `127.0.0.1:8099`. Without a guard, a plain

@@ -20,6 +20,8 @@
       <span id="live-dot" class="dot"></span> live
     </label>
     <span class="sep">·</span>
+    <button id="open-settings" class="btn btn-sm"
+            title="Settings: other inspector processes on this machine">settings</button>
     <button id="server-restart" class="btn btn-sm"
             title="Relaunch the daemon. The page reconnects on its own.">restart</button>
     <button id="server-stop" class="btn btn-sm btn-danger"
@@ -69,6 +71,28 @@
       <div id="detail" hidden></div>
     </section>
   </main>
+
+  <dialog id="settings" class="settings">
+    <form method="dialog" class="settings-head">
+      <strong>Settings</strong>
+      <span class="spacer"></span>
+      <button class="btn btn-sm" value="close">close</button>
+    </form>
+
+    <section class="settings-section">
+      <div class="settings-title">Inspector processes on this machine</div>
+      <p class="settings-note muted">
+        Matched by launch arguments, not by name. A <code>pkill -f inspector</code> also kills your
+        editor's MCP connection, and <code>pkill -f "inspector.*serve"</code> does too — the
+        classpath contains <code>ktor-server-cio</code>. This list cannot make either mistake.
+      </p>
+      <div id="peers" class="peers"></div>
+      <div class="settings-actions">
+        <button id="peers-refresh" class="btn btn-sm">refresh</button>
+        <span id="peers-status" class="muted"></span>
+      </div>
+    </section>
+  </dialog>
 
   <script src="/app.js"></script>
 </body>

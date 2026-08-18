@@ -28,7 +28,7 @@ CI — see [Production safety](#production-safety).
 | **4a** | OkHttp capture, for SDKs that own their transport (Auth0, Retrofit, Coil) | ✅ |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**167 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+**182 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
 Compose Multiplatform app on Android.
 
 Honest gaps: the overlay has been run on one Android device and desktop, never on iOS hardware; the
@@ -119,6 +119,7 @@ and troubleshooting are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
 |---|---|
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Adding Inspector to a consuming CMP app. Self-contained and versioned. |
 | [`docs/DAEMON.md`](docs/DAEMON.md) | Running the daemon: start, stop, restart, kill, CLI, archive layout. |
+| [`docs/REPLAY.md`](docs/REPLAY.md) | Design for request replay, re-signing, and daemon control. |
 | [`docs/schema.md`](docs/schema.md) | The data contract. Read before touching `:inspector-model`. |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Full build order, phases, acceptance criteria. |
 | [`AGENTS.md`](AGENTS.md) | Contributor and AI-agent brief: architecture, decisions that must not be "fixed", gotchas. |

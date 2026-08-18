@@ -325,3 +325,90 @@ pre.body {
 
 .chain-row { font-family: var(--mono); font-size: 12px; padding: 3px 0; cursor: pointer; color: var(--accent); }
 .chain-row.current { color: var(--fg); font-weight: 600; cursor: default; }
+
+/* --- settings dialog ---------------------------------------------------------------------- */
+
+.settings {
+  width: min(680px, 92vw);
+  padding: 0;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-family: var(--sans);
+}
+
+.settings::backdrop { background: rgb(0 0 0 / 0.5); }
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.settings-section { padding: 14px; }
+.settings-title { font-weight: 600; margin-bottom: 6px; }
+
+.settings-note {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.settings-note code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+#peers-status { font-size: 12px; }
+#peers-status.error { color: var(--err); }
+
+.peers { display: flex; flex-direction: column; gap: 6px; }
+
+.peer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.peer-role {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--neutral);
+  background: rgb(138 143 152 / 0.18);
+}
+
+/* `serve` is the one that holds a port and the one you usually mean to kill; `mcp` is the one
+   people kill by accident, so it reads as distinct rather than as another server. */
+.peer-role-serve { color: rgb(var(--m-get)); background: rgb(var(--m-get) / 0.18); }
+.peer-role-mcp { color: rgb(var(--m-put)); background: rgb(var(--m-put) / 0.18); }
+
+.peer-pid, .peer-port, .peer-uptime { font-size: 12px; }
+
+.peer-self {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--accent);
+  background: rgb(106 169 255 / 0.15);
+}

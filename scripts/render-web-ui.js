@@ -107,6 +107,23 @@ window.navigator.clipboard = { writeText: async () => {} };
     [...doc.querySelectorAll('.row .method')].map((n) => n.className.replace('method ', '')),
   )].sort();
 
+  // Settings dialog: jsdom has no real <dialog>, so showModal is stubbed before opening it.
+  // The point is not the dialog chrome but that the peer list fetches and renders, and that a
+  // `self` peer offers no kill button — the guard that keeps the UI from shooting this daemon.
+  const settings = doc.getElementById('settings');
+  if (settings && typeof settings.showModal !== 'function') settings.showModal = () => {};
+  await click(doc.getElementById('open-settings'));
+  await new Promise((r) => setTimeout(r, 600));
+  const peerRows = [...doc.querySelectorAll('.peer')];
+  const selfRows = peerRows.filter((n) => n.querySelector('.peer-self'));
+  const peerRoles = [...new Set(peerRows.map((n) => {
+    const role = n.querySelector('.peer-role');
+    return role ? role.textContent : '?';
+  }))].sort();
+  const selfKillButtons = selfRows
+    .filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill'))
+    .length;
+
   console.error('--- render report ---');
   console.error('rows rendered      :', doc.querySelectorAll('.row').length);
   console.error('sort flip reverses :', reversed, `(button then read "${flippedLabel}")`);
@@ -125,6 +142,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('detail sections    :', doc.querySelectorAll('#detail .section-title').length);
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
+  console.error('peers listed       :', peerRows.length);
+  console.error('peer roles         :', peerRoles.join(', ') || 'none');
+  console.error('self has kill btn  :', selfKillButtons, '(must be 0)');
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
 
   // Freeze as a static, self-contained page.

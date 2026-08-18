@@ -43,7 +43,7 @@ Three consumers of the same captured data:
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**167 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**182 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -269,6 +269,20 @@ second view makes that listener fire for the whole body twice. Ktor exposes no w
 underlying saved channel — `DelegatedResponse.origin` and `DownloadProgressListenerAttributeKey` are
 both internal — so this is not currently avoidable. It affects only apps using progress listeners,
 and it doubles reported progress rather than corrupting the body.
+
+**Peers are identified by argv token, never by command-line substring.** `PeerArgv.MAIN_CLASS`
+is matched against `ProcessHandle` arguments by exact equality. Substring matching is what makes
+the manual alternative dangerous: `pkill -f inspector` also kills the editor's MCP connection, and
+`pkill -f "inspector.*serve"` kills it too, because the classpath contains `ktor-server-cio-*.jar`
+and "server" contains "serve". Both traps are documented in `docs/DAEMON.md`; the token match is
+what makes them unreachable from the UI. `PeerRegistryTest` asserts an `mcp` process whose
+classpath carries that jar is still reported as `mcp`.
+
+The kill endpoint **re-verifies process identity at kill time** rather than trusting the pid the
+client sends back. A process can exit between listing and killing and have its pid reused, so a pid
+alone is not evidence of what it identifies. Without that re-check the endpoint would be a
+"kill any pid" facility on an unauthenticated loopback port. It also refuses the daemon's own pid —
+`/api/server/stop` is the path that replies before shutting down.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
