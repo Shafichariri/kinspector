@@ -77,6 +77,11 @@ Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to
 Full guide: **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — versioned, with a changelog so an app
 that integrated from an older copy can see exactly what changed.
 
+You need this repository cloned. Inspector is consumed as a composite build — it compiles inside
+*your* build with *your* Kotlin version — so there is no artifact to depend on and nothing to
+download for this half. [`docs/ACCESS.md`](docs/ACCESS.md) covers getting it, and what your options
+are if you have no access.
+
 The short version. In `settings.gradle.kts`:
 
 ```kotlin
@@ -103,6 +108,15 @@ that hides the auth header is useless when the bug *is* the auth header. Opt in 
 
 ### Run the web UI
 
+The daemon is the one half that ships as a file. If you are not changing Inspector itself, download
+it — a JDK 21 is the only requirement:
+
+```bash
+gh release download --repo Shafichariri/kinspector --pattern '*.zip' && unzip inspector-*.zip
+```
+
+Or build it from this checkout:
+
 ```bash
 ./gradlew :inspector-daemon:installDist
 inspector-daemon/build/install/inspector/bin/inspector serve
@@ -117,6 +131,7 @@ and troubleshooting are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
 
 | Doc | For |
 |---|---|
+| [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: what you need with repo access, and what your options are without it. |
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Adding Inspector to a consuming CMP app. Self-contained and versioned. |
 | [`docs/DAEMON.md`](docs/DAEMON.md) | Running the daemon: start, stop, restart, kill, CLI, archive layout. |
 | [`docs/REPLAY.md`](docs/REPLAY.md) | Design for request replay, re-signing, and daemon control. |

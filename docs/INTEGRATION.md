@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v11 — 2026-08-18.**
+**Document version: v12 — 2026-08-19.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -39,6 +39,33 @@ Android with one small class** (section 11); iOS-native transports cannot yet.
 
 ---
 
+## 0. Getting Inspector
+
+Inspector is consumed as a **composite build**: your Gradle build compiles its source, using your
+Kotlin version. So you need the source tree on disk. It is not published to any artifact
+repository, and there is no zip of the library that Gradle could resolve.
+
+It lives in a private repository, `Shafichariri/kinspector`. Step zero is therefore access:
+
+- **If you have access**, clone it anywhere and note the absolute path — §2 wires your build to it.
+
+  ```bash
+  git clone https://github.com/Shafichariri/kinspector.git
+  ```
+
+- **If you do not**, ask to be added to the repository. There is no workaround that gets you the
+  library: no published artifact exists to fall back on, and the daemon zip on its own displays an
+  empty archive forever, because every row comes from the library running inside your app.
+
+The **daemon** — the web UI and session archive in §6 — travels separately, as a zip on the
+repository's Releases page, and needs only a JDK 21. If you have cloned the repo you can build it
+yourself instead; §6c covers both.
+
+If you have the repository, `docs/ACCESS.md` is the longer version of this page, including what to
+do about a teammate who cannot be given access.
+
+---
+
 ## 1. Prerequisites — check these first
 
 Version alignment is the single most common cause of integration failure, and the errors it
@@ -67,7 +94,7 @@ Also confirm: your app builds and runs *before* you start. Do not debug two thin
 
 ## 2. Wire the build
 
-No publishing or artifact repository is needed.
+No publishing or artifact repository is needed — but you do need the checkout from §0.
 
 ### `settings.gradle.kts`
 
@@ -269,16 +296,27 @@ unaffected either way — this is never on your app's critical path.
 
 ### 6c. Run the daemon on your Mac
 
-Once, from the Inspector repo:
+Either download it — no checkout, no Gradle, just a JDK 21:
+
+```bash
+gh release download --repo Shafichariri/kinspector --pattern '*.zip'
+unzip inspector-*.zip
+```
+
+which gives you `inspector-<version>/bin/inspector`. Or build it, once, from the Inspector repo:
 
 ```bash
 ./gradlew :inspector-daemon:installDist
 ```
 
-Then whenever you want to watch traffic:
+which gives you `inspector-daemon/build/install/inspector/bin/inspector`. Build from source if you
+are changing Inspector itself — the launcher runs the *installed* copy, so a source change you have
+not reinstalled will not appear. Otherwise the download is less to maintain.
+
+Then, whichever launcher you have, whenever you want to watch traffic:
 
 ```bash
-inspector-daemon/build/install/inspector/bin/inspector serve
+<launcher> serve
 ```
 
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
@@ -487,7 +525,9 @@ Tools: `list_sessions`, `session_summary`, `list_transactions(filter, limit, off
 `get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`. The last one needs a running
 daemon, since a marker has to land in a session that is currently recording.
 
-Register it once, using the absolute path to the built binary:
+Register it once, using the absolute path to your launcher — whichever of the two from §6c you
+ended up with. The examples below show the source-build path; if you downloaded the release,
+substitute `/absolute/path/to/inspector-<version>/bin/inspector`.
 
 ```bash
 claude mcp add inspector -- /Users/you/development/tools/inspector/inspector-daemon/build/install/inspector/bin/inspector mcp
@@ -727,7 +767,17 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v11 — 2026-08-18 (this document)
+### v12 — 2026-08-19 (this document)
+
+**Nothing to do.** No API, build or behaviour change. This version adds §0, which says where
+Inspector comes from and what your options are if you have no access to the repository — if you are
+reading this because you already integrated, you are past the problem §0 describes.
+
+One thing worth knowing anyway: the daemon now ships as a downloadable zip on the repository's
+Releases page, so a teammate who wants only the web UI no longer needs a checkout or Gradle. §6c
+covers both ways. Building from source is unchanged and still correct.
+
+### v11 — 2026-08-18
 
 - **Request replay, with re-signing on the device.** The web UI can re-send a captured request.
   Requests whose headers are single-use — a timestamp, a nonce, a signature over them — cannot be
