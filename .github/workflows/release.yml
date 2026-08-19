@@ -1,0 +1,89 @@
+name: Release
+
+# Publishes the host daemon as a downloadable GitHub Release, so a teammate can run the web UI
+# and the MCP server without cloning this repo or installing Gradle.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Only the daemon ships this way. The library modules are consumed as a composite build, not as
+# artifacts, so nothing here builds or publishes them.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # gh release create
+
+jobs:
+  daemon:
+    # ubuntu, not the macos-latest that CI uses: the daemon is plain JVM, and no Kotlin/Native
+    # target is compiled here. Gradle still *configures* the iOS targets -- it just reports them
+    # as unsupported on this host, which is harmless because no task in this job needs them.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Configuration-time requirement of the KMP library modules, even though this job builds
+      # none of them. Same line as ci.yml.
+      - name: Point at the Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Build the distribution
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./gradlew :inspector-daemon:distZip -Pinspector.version="$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "ZIP=inspector-daemon/build/distributions/inspector-$VERSION.zip" >> "$GITHUB_ENV"
+
+      # A zip that does not start is worse than no release, and packaging -- not the code, which
+      # CI already covers -- is what this job can break. So run the artifact itself, the way a
+      # teammate would: unzip somewhere clean, serve, and ask it for both surfaces.
+      - name: Smoke-test the artifact
+        run: |
+          BIN="$RUNNER_TEMP/dist/inspector-$VERSION/bin/inspector"
+          unzip -q "$ZIP" -d "$RUNNER_TEMP/dist"
+          "$BIN" serve --port 8123 --data "$RUNNER_TEMP/dist/data" &
+          DAEMON_PID=$!
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8123/api/sessions > /dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8123/api/sessions > /dev/null
+          curl -sf http://127.0.0.1:8123/ | grep -q '<title>Inspector</title>'
+          kill "$DAEMON_PID"
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
+            | "$BIN" mcp --data "$RUNNER_TEMP/dist/data" \
+            | grep -q '"serverInfo"'
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" \
+            --title "Inspector daemon $VERSION" \
+            --notes-file - <<NOTES
+          Host daemon for the Compose Multiplatform network inspector: the web UI at
+          \`http://127.0.0.1:8099\`, the on-disk session archive, the CLI and the MCP server.
+
+          **Requires JDK 21.** Nothing else — the zip carries its own dependencies.
+
+          \`\`\`bash
+          gh release download $GITHUB_REF_NAME --repo $GITHUB_REPOSITORY --pattern '*.zip'
+          unzip inspector-$VERSION.zip
+          ./inspector-$VERSION/bin/inspector serve
+          \`\`\`
+
+          The daemon binds \`127.0.0.1\` only and never calls out. Integrating the library into an
+          app is a separate thing — see \`docs/INTEGRATION.md\`.
+          NOTES

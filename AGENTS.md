@@ -564,7 +564,19 @@ INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against 
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
 ./gradlew build -Pinspector=off                   # release swap
+./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
 ```
+
+Cutting a daemon release — the tag is the trigger, and the only thing that ships this way:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` builds the zip, unzips it, starts it and checks the web UI and the
+MCP server both answer, and only then publishes. The library modules are *not* released — they are
+consumed as a composite build, so a consumer needs this repo checked out. The daemon is the half a
+teammate can use without it.
 
 Driving the MCP server by hand, which is the fastest way to check a tool change:
 
@@ -628,6 +640,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
+| `.github/workflows/release.yml` | Tag-triggered daemon release. Smoke-tests the zip before publishing, because packaging is what this job can break. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
 | `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |

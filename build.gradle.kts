@@ -9,7 +9,12 @@ plugins {
 }
 
 group = "dev.inspector"
-version = "0.1.0-SNAPSHOT"
+
+// Overridable so a tagged release can stamp the real version onto the daemon distribution --
+// `inspector-0.2.0.zip` rather than `inspector-0.1.0-SNAPSHOT.zip` -- without a commit that edits
+// this line every time. `.github/workflows/release.yml` passes the tag with its leading `v`
+// stripped; local builds get the snapshot and are unaffected.
+version = providers.gradleProperty("inspector.version").getOrElse("0.1.0-SNAPSHOT")
 
 subprojects {
     group = rootProject.group

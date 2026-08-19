@@ -20,7 +20,28 @@ Gradle comes from the wrapper (`./gradlew`); you do not install it.
 
 ---
 
-## 1. Build it once
+## 1. Get it
+
+Two ways, depending on whether you work *on* Inspector or only *with* it.
+
+### Download a release — if you just want to run it
+
+No clone, no Gradle, nothing but a JDK 21. From any directory:
+
+```bash
+gh release download --repo Shafichariri/kinspector --pattern '*.zip'
+unzip inspector-*.zip
+```
+
+That gives you `inspector-<version>/bin/inspector`. This repo is private, so the download
+authenticates as whoever `gh` is logged in as; a plain browser download of the same asset needs you
+signed in to GitHub with access to the repo.
+
+Releases are cut by tag — `git tag v0.2.0 && git push origin v0.2.0`. CI builds the zip, starts it
+and checks both surfaces answer before publishing, so a release that exists is a release that ran
+at least once. See `.github/workflows/release.yml`.
+
+### Build from source — if you change Inspector
 
 ```bash
 ./gradlew :inspector-daemon:installDist
@@ -32,8 +53,14 @@ That produces a launcher at:
 inspector-daemon/build/install/inspector/bin/inspector
 ```
 
-Every command below says `inspector`, meaning that launcher. The path is long, so put its directory
-on your `PATH` — from the repo root:
+Re-run `installDist` after any change to `:inspector-daemon`, `:inspector-model`, or the web UI
+files under `inspector-daemon/src/main/resources/web/` — the launcher runs the *installed* copy,
+not your source tree, so an un-reinstalled change simply will not appear.
+
+### Either way
+
+Every command below says `inspector`, meaning whichever launcher you ended up with. The path is
+long, so put its directory on your `PATH` — from the repo root, for a source build:
 
 ```bash
 export PATH="$PWD/inspector-daemon/build/install/inspector/bin:$PATH"
@@ -41,10 +68,6 @@ export PATH="$PWD/inspector-daemon/build/install/inspector/bin:$PATH"
 
 Add that to your shell profile with an absolute path to make it stick. Otherwise substitute the full
 path into every command below.
-
-Re-run `installDist` after any change to `:inspector-daemon`, `:inspector-model`, or the web UI
-files under `inspector-daemon/src/main/resources/web/` — the launcher runs the *installed* copy,
-not your source tree, so an un-reinstalled change simply will not appear.
 
 ---
 
