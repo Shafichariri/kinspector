@@ -49,8 +49,15 @@ gpr.user=your-github-username
 gpr.key=ghp_yourClassicTokenWithReadPackages
 ```
 
-The token needs the `read:packages` scope, and nothing else. Create it at
-**Settings → Developer settings → Personal access tokens**.
+The token needs the `read:packages` scope and nothing else — not `repo`, not `write:packages`,
+since publishing happens in CI under the automatic `GITHUB_TOKEN`.
+
+**It must be a classic token.** GitHub's own documentation says GitHub Packages "only supports
+authentication using a personal access token (classic)", so a fine-grained token returns 401
+against `maven.pkg.github.com` however you scope it — selecting the repository does not help. This
+is the one place where the newer, safer kind of token is not an option. Create it at
+**Settings → Developer settings → Personal access tokens (classic)**, and give it an expiry: a
+classic token's scope is account-wide, with no way to limit it to this repository.
 
 This is the only per-developer setup, it is one file outside the repo, and the file you commit is
 identical for everyone.

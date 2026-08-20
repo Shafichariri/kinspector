@@ -111,9 +111,10 @@ gpr.user=their-github-username
 gpr.key=ghp_theirClassicTokenWithReadPackages
 ```
 
-The token needs the `read:packages` scope and nothing else. **Do not commit it**, and do not put
-the path or the token in the file you check in — the point of reading them from a Gradle property
-is that the committed build file is identical for everyone.
+The token needs the `read:packages` scope and nothing else. **It has to be a classic token** —
+GitHub Packages does not accept fine-grained tokens, so one will return 401 no matter how you scope
+it. **Do not commit it**, and do not put the token or any path in the file you check in: the point
+of reading them from a Gradle property is that the committed build file is identical for everyone.
 
 ### Your shared module's `build.gradle.kts`
 
@@ -511,7 +512,8 @@ the composite build is not substituting — check the `includeBuild` path is cor
 the repository root.
 
 **`401 Unauthorized` or `404 Not Found` from `maven.pkg.github.com`**
-401 is the token: it needs the `read:packages` scope, and `gpr.user` must be your GitHub username.
+401 is the token. Check it is a **classic** token — fine-grained ones are rejected by GitHub
+Packages — that it carries `read:packages`, and that `gpr.user` is your GitHub username.
 404 is usually *not* a missing version — GitHub Packages returns "not found" for a package you are
 not allowed to see, so it most often means you do not have access to the repository. See
 `ACCESS.md` if you have it, or ask to be added.
