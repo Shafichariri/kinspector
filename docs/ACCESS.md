@@ -10,104 +10,113 @@ Integrating it into an app is [`INTEGRATION.md`](INTEGRATION.md); running the da
 
 ## Two halves, two ways of travelling
 
-They are distributed differently, and the difference is not arbitrary — it is what each one has to
-do.
-
 | Half | What it is | How it reaches you |
 |---|---|---|
-| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | **A source checkout. Nothing else works.** |
-| **Daemon** (`:inspector-daemon`) | A program on your own machine. Web UI, session archive, CLI, MCP server. | A zip from the [Releases page](https://github.com/Shafichariri/kinspector/releases), or built from the same checkout. |
+| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | A normal Gradle dependency, from GitHub Packages. |
+| **Daemon** (`:inspector-daemon`) | A program on your own machine. Web UI, session archive, CLI, MCP server. | A zip from the [Releases page](https://github.com/Shafichariri/kinspector/releases). |
 
-The library is not downloadable as a file because Gradle does not consume it as a file. It is wired
-in as a **composite build** — your build compiles Inspector's source with *your* Kotlin version —
-and `includeBuild` needs a directory on disk. There is no Maven publication, so there is no artifact
-anyone could send you that Gradle would know how to resolve.
+Neither one requires a checkout of this repository. You need a checkout only if you are changing
+Inspector itself.
 
-The daemon has no such constraint. It is an ordinary JVM program that a person downloads and runs,
-which is why it can travel as a zip.
+Both are gated on the same thing: **GitHub Packages and release assets on a private repository are
+private too.** There is no anonymous path to either. So the question below is not "which download
+link" — it is whether you have been given access to the repository at all.
 
 ---
 
 ## If you have repo access
 
-### 1. Clone it, once, anywhere
+### 1. Add the repository and your credentials
 
-```bash
-git clone https://github.com/Shafichariri/kinspector.git ~/development/tools/inspector
-```
-
-The location is yours to choose; nothing depends on it except the path you point your app at.
-
-### 2. Point your app's build at that directory
-
-In your app's `settings.gradle.kts`:
+GitHub Packages requires a token to **download**, not only to publish — this is true even for
+public packages, so there is no configuration that avoids it. In your app's
+`settings.gradle.kts`, inside `dependencyResolutionManagement { repositories { … } }`:
 
 ```kotlin
-includeBuild("/absolute/path/to/inspector")
+maven {
+    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+    credentials {
+        username = providers.gradleProperty("gpr.user").orNull
+        password = providers.gradleProperty("gpr.key").orNull
+    }
+}
 ```
 
-Better, if more than one person on your team will do this: read the path from a per-developer Gradle
-property instead of hardcoding one person's home directory, and gate the whole thing behind a flag
-so release builds never see it. [`INTEGRATION.md`](INTEGRATION.md) §3 covers that properly — do it
-before writing app code, not after.
+Then, once per machine, in `~/.gradle/gradle.properties` — **not** in the repository:
 
-Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1. Check the versions in §1 first: Inspector
-compiles inside your build, so a Kotlin mismatch fails in ways that do not point at the real cause.
+```properties
+gpr.user=your-github-username
+gpr.key=ghp_yourClassicTokenWithReadPackages
+```
+
+The token needs the `read:packages` scope, and nothing else. Create it at
+**Settings → Developer settings → Personal access tokens**.
+
+This is the only per-developer setup, it is one file outside the repo, and the file you commit is
+identical for everyone.
+
+### 2. Depend on it
+
+```kotlin
+implementation("dev.inspector:inspector-core:0.2.0")
+implementation("dev.inspector:inspector-ui:0.2.0")
+```
+
+Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1. Do §3 — the debug-only swap — before you
+write any app code, not after.
 
 ### 3. Get the daemon, if you want the web UI
 
-You already have the source, so either works:
-
 ```bash
-./gradlew :inspector-daemon:installDist   # from your checkout
+gh release download --repo Shafichariri/kinspector --pattern '*.zip'
+unzip inspector-*.zip
 ```
 
+A JDK 21 is the only requirement. You do not need the daemon at all for the in-app overlay; it is
+only for the web UI, the on-disk archive, the CLI and the MCP server.
+
+### Only if you are changing Inspector
+
+Clone it and wire it in as a composite build, which compiles the source in place so your edits
+appear immediately:
+
 ```bash
-gh release download --repo Shafichariri/kinspector --pattern '*.zip' && unzip inspector-*.zip
+git clone https://github.com/Shafichariri/kinspector.git
 ```
 
-The release zip is the better choice if you are not changing Inspector itself — it needs only a
-JDK 21, and it will not be invalidated every time you rebuild. The build-from-source path is the
-right one if you are editing the daemon or the web UI, because the launcher runs the *installed*
-copy, not your source tree.
-
-You do not need the daemon at all for the in-app overlay. It is only for the web UI, the on-disk
-archive, the CLI and the MCP server.
+`INTEGRATION.md` §2 covers the two lines that switch a consuming app from the published artifacts
+to a local checkout, and how to keep the path out of the committed build file. Consuming apps
+should not do this by default — it makes every developer responsible for a second repository.
 
 ---
 
 ## If you do not have repo access
 
-**You are blocked on the library, and that is the half that matters.**
+**You are blocked, and it is a permissions problem rather than a technical one.**
 
-Being precise about what is and is not blocked, because they are different kinds of "no":
+Being precise about the kinds of "no", because they differ:
 
-- **The library — blocked.** No checkout, no `includeBuild`, no capture. There is no published
-  artifact to fall back on. This is a permission problem, not a technical one: the code compiles
-  fine from any copy of the source, but you have not been given one.
-- **The daemon — runs, but has nothing to show.** The zip is self-contained and someone could
+- **The library — blocked.** The packages exist, but they inherit the repository's visibility.
+  Without access your token cannot read them and Gradle fails to resolve, exactly as it would for
+  any private dependency.
+- **The daemon — runs, but has nothing to show.** The zip is self-contained, and someone could
   simply hand you the file. It would start, serve the web UI, and display an empty archive forever,
-  because the rows come from the library inside a running app. Release assets on a private repo
-  also need a GitHub login with access, so you cannot fetch it yourself either.
+  because every row comes from the library running inside an app. You also cannot fetch it
+  yourself: release assets on a private repo need a login with access.
 - **The licence — unresolved.** This repository has not chosen one (see the README). Absent a
-  licence, nobody outside has a grant to use, copy, or redistribute it, whatever files they end up
-  holding. If you are outside the organisation, settle this first; it outranks the mechanics.
+  licence, nobody outside has a grant to use, copy or redistribute it, whatever files they end up
+  holding. If you are outside the organisation, settle this before the mechanics.
 
 ### What would unblock you
 
-In rough order of how little work each one is:
-
-1. **Be added to the repository** — a collaborator invite, or the repo moving into the organisation
-   so access follows team membership. Nothing in this document changes; you simply take the section
-   above.
-2. **Ask for the library to be published to a Maven repository.** This is real work in Inspector,
-   not a setting: the seven library modules need `maven-publish`, and the publishing job has to run
-   on macOS because the iOS artifacts cannot be built anywhere else. It also gives up a safety
-   property — a composite build compiles against *your* Kotlin, whereas published artifacts are
-   pinned to whichever Kotlin built them, so consumers on a different version get klib errors.
-   Worth doing when several teams need it; not worth doing for one person.
-3. **Be handed a source copy directly.** Technically sufficient and licence-permitting, but you
-   inherit a fork that no longer receives fixes. Prefer either option above.
+1. **Be added to the repository** — a collaborator invite, or the repo moving into the
+   organisation so access follows team membership. Nothing else changes: you take the section
+   above unmodified, because package access follows repository access.
+2. **Have the packages republished somewhere you can read** — a company Nexus or Artifactory, for
+   instance. Worth it if a whole team needs Inspector and managing individual GitHub tokens
+   becomes the annoying part; not worth it for one person.
+3. **Be handed a source copy directly.** Technically sufficient and licence permitting, but you
+   inherit a fork that stops receiving fixes. Prefer either option above.
 
 ---
 
@@ -115,9 +124,10 @@ In rough order of how little work each one is:
 
 | You want | Repo access | JDK 21 | Anything else |
 |---|---|---|---|
-| The in-app overlay only | yes | yes | Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
-| Overlay + web UI + archive | yes | yes | the daemon, running on your own machine |
-| To read sessions from an AI agent | yes | yes | the daemon, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
+| The in-app overlay only | yes | yes | a `read:packages` token, and Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
+| Overlay + web UI + archive | yes | yes | the same, plus the daemon running on your machine |
+| To read sessions from an AI agent | yes | yes | the same, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
+| To change Inspector itself | yes | yes | a clone, and the composite-build wiring in §2 |
 | To run the daemon against someone else's archive | no | yes | the release zip *handed to you*, and a copy of their `~/.inspector/sessions/` |
 
 That last row is the only useful thing available without repo access, and it is a forensic case —

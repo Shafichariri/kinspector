@@ -20,6 +20,41 @@ subprojects {
     group = rootProject.group
     version = rootProject.version
 
+    // Publishing is opt-in per module: this configures whichever modules apply `maven-publish`
+    // themselves, rather than listing them here. An allowlist in this file would be a second
+    // place to keep current, and the failure mode is silent -- :inspector-daemon is a tool and
+    // :sample:desktop is a demo, and neither should ever appear in the repository.
+    pluginManager.withPlugin("maven-publish") {
+        extensions.configure<PublishingExtension> {
+            repositories {
+                maven {
+                    name = "GitHubPackages"
+                    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+                    // GitHub Packages requires a token for *downloads* too, not only publishing,
+                    // even when the package is public -- so every consumer sets these as well.
+                    // Properties first so a developer can keep them in ~/.gradle/gradle.properties
+                    // and out of their environment; the env vars are what CI provides.
+                    credentials {
+                        username = providers.gradleProperty("gpr.user")
+                            .orElse(providers.environmentVariable("GITHUB_ACTOR")).orNull
+                        password = providers.gradleProperty("gpr.key")
+                            .orElse(providers.environmentVariable("GITHUB_TOKEN")).orNull
+                    }
+                }
+            }
+
+            publications.withType<MavenPublication>().configureEach {
+                pom {
+                    name = "Inspector ${'$'}{this@subprojects.name}"
+                    description = "Network debugger for Compose Multiplatform apps that use Ktor."
+                    url = "https://github.com/Shafichariri/kinspector"
+                    // No <licenses> block on purpose: this project has not chosen a licence, and
+                    // stating one here would be the wrong place to decide it. See the README.
+                }
+            }
+        }
+    }
+
     // Print the assertion message and stack trace when a test fails.
     //
     // Gradle's default exception format is SHORT, which logs only

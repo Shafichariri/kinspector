@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v12 — 2026-08-19.**
+**Document version: v13 — 2026-08-19.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -41,25 +41,18 @@ Android with one small class** (section 11); iOS-native transports cannot yet.
 
 ## 0. Getting Inspector
 
-Inspector is consumed as a **composite build**: your Gradle build compiles its source, using your
-Kotlin version. So you need the source tree on disk. It is not published to any artifact
-repository, and there is no zip of the library that Gradle could resolve.
+The library is published to **GitHub Packages**, so you do not need a checkout of Inspector —
+§2 wires your build to the published artifacts, and that is the whole of it.
 
-It lives in a private repository, `Shafichariri/kinspector`. Step zero is therefore access:
+What you do need is **access to the repository it is published from**,
+`Shafichariri/kinspector`, which is private. Packages inherit a repository's visibility, so there
+is no anonymous route and no token you can create that substitutes for access. If you do not have
+it, ask to be added; nothing else unblocks the library.
 
-- **If you have access**, clone it anywhere and note the absolute path — §2 wires your build to it.
-
-  ```bash
-  git clone https://github.com/Shafichariri/kinspector.git
-  ```
-
-- **If you do not**, ask to be added to the repository. There is no workaround that gets you the
-  library: no published artifact exists to fall back on, and the daemon zip on its own displays an
-  empty archive forever, because every row comes from the library running inside your app.
+Clone Inspector only if you are **changing** Inspector. §2 covers that case too, at the end.
 
 The **daemon** — the web UI and session archive in §6 — travels separately, as a zip on the
-repository's Releases page, and needs only a JDK 21. If you have cloned the repo you can build it
-yourself instead; §6c covers both.
+repository's Releases page, and needs only a JDK 21.
 
 If you have the repository, `docs/ACCESS.md` is the longer version of this page, including what to
 do about a teammate who cannot be given access.
@@ -81,8 +74,9 @@ produces (klib/metadata mismatches) don't point at the real cause. Check before 
 | Android `compileSdk` | ≥ 36 |
 | Gradle | 9.x |
 
-Inspector is consumed as a **composite build**, meaning it compiles inside your build using
-*your* Kotlin version. KMP metadata is not compatible across Kotlin versions, so these must match.
+Inspector's artifacts are compiled by **Kotlin 2.3.20**, and KMP metadata is not compatible
+across Kotlin versions, so yours has to match. A mismatch surfaces as a klib or metadata error
+naming neither Inspector nor your Kotlin version.
 
 **If your app is on an older Kotlin, do not upgrade your app to match.** Inspector's versions
 were pinned to what happened to be available, not to anything the code requires. Ask for
@@ -94,17 +88,32 @@ Also confirm: your app builds and runs *before* you start. Do not debug two thin
 
 ## 2. Wire the build
 
-No publishing or artifact repository is needed — but you do need the checkout from §0.
-
 ### `settings.gradle.kts`
 
+Add the repository, inside `dependencyResolutionManagement { repositories { … } }`:
+
 ```kotlin
-includeBuild("/ABSOLUTE/PATH/TO/inspector")
+maven {
+    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+    credentials {
+        username = providers.gradleProperty("gpr.user").orNull
+        password = providers.gradleProperty("gpr.key").orNull
+    }
+}
 ```
 
-Put this at the top level of the file, next to your other `include(...)` lines. Gradle
-substitutes the `dev.inspector:*` coordinates below for the local projects automatically, because
-the group and version already match.
+**GitHub Packages requires a token to download**, not only to publish, and that is true even of
+public packages — there is no configuration that avoids it. So each developer adds this once, to
+`~/.gradle/gradle.properties`, which is outside the repository:
+
+```properties
+gpr.user=their-github-username
+gpr.key=ghp_theirClassicTokenWithReadPackages
+```
+
+The token needs the `read:packages` scope and nothing else. **Do not commit it**, and do not put
+the path or the token in the file you check in — the point of reading them from a Gradle property
+is that the committed build file is identical for everyone.
 
 ### Your shared module's `build.gradle.kts`
 
@@ -112,8 +121,8 @@ the group and version already match.
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.1.0-SNAPSHOT")
-            implementation("dev.inspector:inspector-ui:0.1.0-SNAPSHOT")
+            implementation("dev.inspector:inspector-core:0.2.0")
+            implementation("dev.inspector:inspector-ui:0.2.0")
         }
     }
 }
@@ -124,6 +133,37 @@ Build once now and confirm it resolves before writing any code:
 ```bash
 ./gradlew :shared:compileKotlinJvm     # or whichever target you build fastest
 ```
+
+A 401 here means the token; a 404 usually means the repository, not the version — GitHub Packages
+answers "not found" for a package you are not allowed to see.
+
+### Only if you are changing Inspector: build against a checkout
+
+A composite build compiles Inspector's source in place, so your edits show up in the consuming app
+immediately, with no publish step. Consuming apps should not do this by default — it makes every
+developer responsible for a second repository.
+
+Clone it anywhere, then in `settings.gradle.kts`:
+
+```kotlin
+// The committed file is the same for everyone. The path comes from each developer's own
+// ~/.gradle/gradle.properties (`inspectorPath=/where/they/cloned/it`) or INSPECTOR_PATH, so
+// nobody's home directory ends up in version control, and anyone who has not set it simply
+// keeps using the published artifacts.
+val inspectorPath = providers.gradleProperty("inspectorPath")
+    .orElse(providers.environmentVariable("INSPECTOR_PATH"))
+    .orNull
+if (inspectorPath != null) {
+    require(file(inspectorPath).resolve("settings.gradle.kts").isFile) {
+        "inspectorPath '$inspectorPath' is not an Inspector checkout."
+    }
+    includeBuild(inspectorPath)
+}
+```
+
+The dependency lines above do not change. Gradle substitutes the `dev.inspector:*` coordinates for
+the local projects automatically, matching on group and module name, and ignores the version you
+asked for.
 
 ---
 
@@ -142,11 +182,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.1.0-SNAPSHOT")
-                implementation("dev.inspector:inspector-noop-ui:0.1.0-SNAPSHOT")
+                implementation("dev.inspector:inspector-noop:0.2.0")
+                implementation("dev.inspector:inspector-noop-ui:0.2.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.1.0-SNAPSHOT")
-                implementation("dev.inspector:inspector-ui:0.1.0-SNAPSHOT")
+                implementation("dev.inspector:inspector-core:0.2.0")
+                implementation("dev.inspector:inspector-ui:0.2.0")
             }
         }
     }
@@ -262,13 +302,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.1.0-SNAPSHOT")
-    implementation("dev.inspector:inspector-noop-ui:0.1.0-SNAPSHOT")
-    implementation("dev.inspector:inspector-noop-stream:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-noop:0.2.0")
+    implementation("dev.inspector:inspector-noop-ui:0.2.0")
+    implementation("dev.inspector:inspector-noop-stream:0.2.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.1.0-SNAPSHOT")
-    implementation("dev.inspector:inspector-ui:0.1.0-SNAPSHOT")
-    implementation("dev.inspector:inspector-stream:0.1.0-SNAPSHOT")
+    implementation("dev.inspector:inspector-core:0.2.0")
+    implementation("dev.inspector:inspector-ui:0.2.0")
+    implementation("dev.inspector:inspector-stream:0.2.0")
 }
 ```
 
@@ -464,8 +504,17 @@ by tests for 10 MB, gzipped, chunked, empty and binary responses.
 Version mismatch. Check section 1. This is the most likely failure by a wide margin.
 
 **`Unresolved reference: Inspector`**
-The composite build isn't substituting. Check the `includeBuild` path is absolute and correct,
-and that the dependency coordinates are exactly `dev.inspector:inspector-core:0.1.0-SNAPSHOT`.
+The dependency is not on the compile classpath. On the published artifacts, check the coordinates
+are exactly `dev.inspector:inspector-core` and that the `maven { … }` block from §2 is in
+`dependencyResolutionManagement`, not in a `buildscript` block. If you are on a checkout instead,
+the composite build is not substituting — check the `includeBuild` path is correct and points at
+the repository root.
+
+**`401 Unauthorized` or `404 Not Found` from `maven.pkg.github.com`**
+401 is the token: it needs the `read:packages` scope, and `gpr.user` must be your GitHub username.
+404 is usually *not* a missing version — GitHub Packages returns "not found" for a package you are
+not allowed to see, so it most often means you do not have access to the repository. See
+`ACCESS.md` if you have it, or ask to be added.
 
 **Compose compiler plugin version conflicts**
 Your app must be on Compose Multiplatform 1.11.x with the Kotlin Compose compiler plugin at
@@ -767,7 +816,29 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v12 — 2026-08-19 (this document)
+### v13 — 2026-08-19 (this document)
+
+**The library is published now. You can delete your `includeBuild` line.**
+
+Inspector no longer has to be a checkout on every developer's machine. It is published to GitHub
+Packages, so it is an ordinary dependency, and the file you commit no longer contains anybody's
+home directory.
+
+To switch, do §2: add the `maven { … }` block with credentials, put a `read:packages` token in
+your own `~/.gradle/gradle.properties`, change the version on the two `implementation` lines from
+`0.2.0` to the release you want, and delete the `includeBuild`. Nothing in §3 onwards
+changes — the debug-only swap, the code, the daemon and the MCP setup are all as they were.
+
+**You do not have to switch.** A composite build still works and is still the right thing while
+you are changing Inspector itself; §2's last subsection shows how to do it without committing a
+path. What you should not do is keep a hardcoded absolute path in a shared repository, which is
+what the old §2 told you to write.
+
+One thing to know before you move: the published artifacts are compiled by Kotlin 2.3.20 and are
+pinned to it, whereas a composite build compiled against whatever Kotlin *you* were using. If your
+app is not on 2.3.20, see §1 — ask for a re-pin rather than upgrading your app.
+
+### v12 — 2026-08-19
 
 **Nothing to do.** No API, build or behaviour change. This version adds §0, which says where
 Inspector comes from and what your options are if you have no access to the repository — if you are

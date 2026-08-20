@@ -51,11 +51,11 @@ non-Ktor is captured on iOS.
 
 Gradle comes from the wrapper — do not install it.
 
-> **Version alignment is the single most common integration failure.** Inspector is consumed as a
-> composite build, so it compiles inside *your* build with *your* Kotlin version, and KMP metadata
-> is not compatible across versions. If your app is on an older Kotlin, ask for Inspector to be
-> re-pinned downward rather than upgrading your app — these versions were pinned to what was
-> available, not to anything the code needs.
+> **Version alignment is the single most common integration failure.** The published artifacts are
+> compiled by Kotlin 2.3.20 and pinned to it, and KMP metadata is not compatible across versions.
+> If your app is on an older Kotlin, ask for Inspector to be re-pinned downward rather than
+> upgrading your app — these versions were pinned to what was available, not to anything the code
+> needs.
 
 There is no `iosX64` target: Compose Multiplatform 1.11+ dropped the Intel simulator, so no CMP app
 can target it.
@@ -77,16 +77,24 @@ Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to
 Full guide: **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — versioned, with a changelog so an app
 that integrated from an older copy can see exactly what changed.
 
-You need this repository cloned. Inspector is consumed as a composite build — it compiles inside
-*your* build with *your* Kotlin version — so there is no artifact to depend on and nothing to
-download for this half. [`docs/ACCESS.md`](docs/ACCESS.md) covers getting it, and what your options
-are if you have no access.
+You do not need this repository checked out — the library is published to GitHub Packages. You do
+need access to this (private) repository, because packages inherit its visibility.
+[`docs/ACCESS.md`](docs/ACCESS.md) covers getting that, and what your options are without it.
 
-The short version. In `settings.gradle.kts`:
+The short version. In `settings.gradle.kts`, alongside your other repositories:
 
 ```kotlin
-includeBuild("/absolute/path/to/inspector")
+maven {
+    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+    credentials {
+        username = providers.gradleProperty("gpr.user").orNull
+        password = providers.gradleProperty("gpr.key").orNull
+    }
+}
 ```
+
+with a `read:packages` token in your own `~/.gradle/gradle.properties`, then depend on
+`dev.inspector:inspector-core` and `dev.inspector:inspector-ui`.
 
 Then three lines of code:
 

@@ -330,6 +330,14 @@ end, and duplicate highlighting would vanish under exactly the filter you applie
 it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
 filter is set, because then the rows already are the whole session.
 
+**Publishing is opt-in per module, and the list lives in the modules.** The root build configures
+whichever subproject applied `maven-publish`; it does not name them. An allowlist in the root would
+be a second place to keep current, and the failure mode is silent in the wrong direction —
+`:inspector-daemon` is a tool and `:sample:desktop` is a demo, and a module that quietly starts
+publishing is not something a build failure would tell you about. The `:inspector-noop*` modules
+*are* published on purpose: a consumer's release build resolves them by coordinate like any other
+dependency.
+
 **Endpoint chips filter with an anchored glob, not a substring.** A chip labelled `profile` emits
 `path:` + `*/profile`, because a bare `path:profile` term is a substring match and would also match
 `/v3/accounts/profile/status` — a chip that does not mean what its label says. `globMatches`
@@ -565,6 +573,7 @@ INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against 
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
 ./gradlew build -Pinspector=off                   # release swap
 ./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
+./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
 ```
 
 Cutting a daemon release — the tag is the trigger, and the only thing that ships this way:
@@ -573,10 +582,15 @@ Cutting a daemon release — the tag is the trigger, and the only thing that shi
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` builds the zip, unzips it, starts it and checks the web UI and the
-MCP server both answer, and only then publishes. The library modules are *not* released — they are
-consumed as a composite build, so a consumer needs this repo checked out. The daemon is the half a
-teammate can use without it.
+`.github/workflows/release.yml` does two independent things on that tag. The **daemon** job builds
+the zip, unzips it, starts it and checks the web UI and the MCP server both answer, and only then
+publishes the release. The **library** job publishes all seven modules to GitHub Packages, and runs
+on macOS because the iOS klibs cannot be produced anywhere else — a publication missing its iOS
+variants resolves fine on JVM and Android and then fails on device, furthest from the cause.
+
+Neither half is reachable without access to this repository: packages and release assets both
+inherit its visibility. That is the whole of the access story, and `docs/ACCESS.md` is where it is
+written down.
 
 Driving the MCP server by hand, which is the fastest way to check a tool change:
 
@@ -641,7 +655,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
-| `.github/workflows/release.yml` | Tag-triggered daemon release. Smoke-tests the zip before publishing, because packaging is what this job can break. |
+| `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
 | `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |
