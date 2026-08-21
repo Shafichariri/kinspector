@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v13 — 2026-08-19.**
+**Document version: v14 — 2026-08-21.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -206,9 +206,20 @@ Verify the swap actually works:
 You should see only the `inspector-noop*` modules. If you see `inspector-core`, the property
 isn't reaching this module and release builds would ship capture code.
 
-> Inspector also has its own canary guard (`scripts/check-release-clean.sh`) that greps built
-> binaries for a marker string. Wiring it into your release CI is worth it — the Gradle property
-> is a convention, that script is the guarantee.
+> Inspector also has a canary guard, `scripts/check-release-clean.sh`, which greps built artifacts
+> for a marker string. Wiring a check like it into your release CI is worth it — the Gradle
+> property is a convention, a grep of the artifact is the guarantee.
+>
+> **That script needs an Inspector checkout**, because it reads the canary out of Inspector's own
+> source rather than hardcoding it. If you consume the published artifacts, you do not have it.
+>
+> The same guarantee is a few lines of your own: grep your release artifacts for `dev/inspector/`
+> and `dev.inspector.`, and fail the build if either appears. Those needles work on every target.
+>
+> **Do not grep for the canary string itself on iOS.** Kotlin/Native stores string literals as
+> UTF-16, so an ASCII search for the canary finds nothing in an iOS binary *whether or not capture
+> code is present* — a guard written that way passes forever and tells you nothing. The package
+> path above is what actually catches it.
 
 ---
 
@@ -793,7 +804,9 @@ trusts. That is a substantially larger piece of work and has not been started; s
 ## 12. What to report back
 
 1. **Your Ktor engine per target** — settles the redirect-chain question.
-2. **Whether the overlay looks right on a real phone.** Verified on desktop only.
+2. **Whether the overlay looks right on real hardware.** It has been exercised on desktop, an
+   Android emulator and an iOS simulator — never on a physical device, which is where insets and
+   the system back gesture actually differ.
 3. Anything that felt slow, any body that came back wrong, any call that didn't appear.
 4. **If you wire up the Auth0 adapter** — whether it worked, and whether your tenant uses DPoP.
 
@@ -802,6 +815,10 @@ trusts. That is a substantially larger piece of work and has not been started; s
 ## 13. Changelog
 
 Find the version you integrated from, then read downward. Everything below your row applies to you.
+
+Where an entry below says to rebuild the daemon with `./gradlew :inspector-daemon:installDist`,
+the equivalent today is downloading the current release (§6c). The Gradle command still works if
+you have a checkout; the download works either way.
 
 If your copy has no version line at the top, identify it by what it contains:
 
@@ -818,7 +835,20 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v13 — 2026-08-19 (this document)
+### v14 — 2026-08-21 (this document)
+
+**If you took v13, re-read §3.** It pointed at `scripts/check-release-clean.sh` without saying the
+script needs an Inspector checkout to run — which, now that the library is published, most
+consumers no longer have. §3 now says so and gives the grep that replaces it.
+
+Worth reading even if your release guard already passes, because it also says which needle *not*
+to use: searching an iOS artifact for the canary string finds nothing whether or not capture code
+is present, since Kotlin/Native stores string literals as UTF-16. A guard written that way passes
+forever. Grep for `dev/inspector/` and `dev.inspector.` instead.
+
+Also corrected: §12 no longer says the overlay has only been seen on desktop.
+
+### v13 — 2026-08-19
 
 **The library is published now. You can delete your `includeBuild` line.**
 

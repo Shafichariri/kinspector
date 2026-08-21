@@ -330,6 +330,17 @@ end, and duplicate highlighting would vanish under exactly the filter you applie
 it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
 filter is set, because then the rows already are the whole session.
 
+**The canary is findable in a klib and invisible in a linked iOS binary, and both are correct.**
+`check-release-clean.sh` greps ASCII, and that is right for what it scans: klibs, jars and aars
+keep string literals as ASCII, which is why `--self-test` finds the canary in
+`iosSimulatorArm64/main/klib`. It stops being right one step later. Kotlin/Native stores literals
+as **UTF-16** in the linked product, so in a built `.app` the canary appears zero times as ASCII
+and twice as UTF-16 — measured, not assumed — while `dev.inspector` appears 2681 times. A consumer
+who greps their `.app` for the canary therefore gets a guard that passes forever, including on a
+build full of capture code. That is why `INTEGRATION.md` §3 tells them to grep `dev/inspector/`
+and `dev.inspector.` instead, and why a consumer-side guard is not the same script as this one.
+Do not "fix" this by making the script search UTF-16: it never sees a linked binary.
+
 **Publishing is opt-in per module, and the list lives in the modules.** The root build configures
 whichever subproject applied `maven-publish`; it does not name them. An allowlist in the root would
 be a second place to keep current, and the failure mode is silent in the wrong direction —
