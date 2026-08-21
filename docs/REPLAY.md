@@ -13,13 +13,19 @@ replay refused rather than sending stale headers.
 This document exists because the replay feature has one constraint that determines its whole
 architecture, and that constraint is not obvious from the feature request.
 
+> **The signing scheme is described only as far as this design depends on it.** The exact canonical
+> string, the header names and the key derivation belong to the consuming app's team and are not
+> reproduced here — this repository is public, and none of those details are needed to understand
+> or maintain the code. What matters to Inspector is the *shape* of the constraint, which is below.
+> If you are integrating an app with a different scheme, that shape is what to compare against.
+
 ---
 
 ## 0. The constraint that decides everything
 
-The consuming app signs **every** outgoing request with four device-proof headers, three of which
-are single-use. The full wire contract is in the app team's `device-proof-replay-spec.md`; the
-parts that bind this design are quoted inline below.
+The consuming app that drove this design signs **every** outgoing request, and some of the values
+it signs with are **single-use** — regenerated per request and rejected if they are ever seen
+twice.
 
 **Therefore: verbatim replay is dead on arrival.** A replayed request reuses a captured timestamp
 and nonce, and the server rejects it. A "Run again" button that always returns 401 is worse than no
@@ -33,7 +39,7 @@ Replay and re-signing are one feature, not two. They ship together or not at all
 
 The private key lives in AndroidKeyStore or the Secure Enclave. It is non-exportable by
 construction — the only exposed operation is "sign these bytes". So the daemon cannot sign on its
-own, and the app team's spec offers three strategies:
+own, which leaves three strategies:
 
 | | A: app callback | B: software key | C: unsigned |
 |---|---|---|---|
@@ -62,8 +68,8 @@ Strategy A also sidesteps three traps the other strategies walk into:
 - **No DER-wrapping bug.** The app's existing signer emits DER already. WebCrypto's ECDSA emits raw
   `r‖s`, which the server rejects as malformed despite being mathematically valid — a trap we
   simply never enter.
-- **No MFA pre-registration.** The backend learns a device's public key during MFA verification.
-  Strategy B's fresh software key would need one MFA run before any replay could pass.
+- **No enrolment round-trip.** The backend learns a device's public key when the device enrols.
+  Strategy B's fresh software key would need its own enrolment before any replay could pass.
 - **No debug key to keep inert in release.** Strategy B adds a key that must never ship; this
   project already spends real effort on exactly that class of guarantee and does not need another.
 
@@ -77,36 +83,32 @@ artifact swap as everything else: `:inspector-noop` has no signer hook at all.
 
 ## 2. What the signature covers, and why it changes the UI
 
-The canonical string is pipe-separated ASCII:
+A signature of this kind covers a **canonical string** assembled from part of the request, not the
+whole of it. Which parts is the app's business; that it is a *subset* is Inspector's, because it
+splits every edit the UI offers into two classes:
 
-```
-v1|<deviceId>|<timestamp>|<nonce>|<METHOD>|<path>
-```
+- Edits to a field **outside** the canonical string do not invalidate the signature.
+- Edits to a field **inside** it do.
 
-Deliberately **excluded**: the query string, the request body, the host, and every other header.
-
-Two consequences the edit UI has to respect:
-
-- Editing the **body** or the **query** does *not* invalidate the signature.
-- Editing the **method** or the **path** does.
+In the app this was designed against, the request method and path were inside, and the query string
+and body were outside. Treat that as an example rather than a rule — a different app draws the line
+somewhere else, and the UI should be built so that moving the line does not require redesigning it.
 
 So re-signing must happen **after** edits are applied, never before. Get this wrong and it works on
-every unedited replay and fails the first time somebody edits a path — the worst possible failure
-distribution, because it passes testing.
-
-`path` is the encoded path without query: for
-`https://api.example.com/v1/auth/verify/mfa?x=1` the signed field is `/v1/auth/verify/mfa`.
+every unedited replay and fails the first time somebody edits a signed field — the worst possible
+failure distribution, because it passes testing.
 
 ### Device id mismatch
 
-The server maps `deviceId → public key`, learned at MFA verification. The device id is itself a
-fingerprint of the key — `base64url(SHA-256(0x04 || X || Y))`.
+The server identifies a device by an id it has previously associated with that device's public key,
+and the id is derived from the key. Regenerate the key — a reinstall, a wipe — and the id changes
+with it.
 
-So the app must return **its current `deviceId` alongside the signature**, and the UI must hard-warn
+So the app must return **its current device id alongside the signature**, and the UI must hard-warn
 when that differs from the captured one. Reusing a captured device id while signing with a
 different key produces a rejection that *looks like a malformed signature*, which sends you
-debugging the wrong thing entirely. A changed device id means the key was regenerated and every
-capture for the old id is permanently unreplayable — worth saying in those words in the UI.
+debugging the wrong thing entirely. A changed device id means every capture for the old id is
+permanently unreplayable — worth saying in those words in the UI.
 
 ---
 
@@ -232,5 +234,5 @@ Not observable from the client, and each one changes the replay UX:
    idempotent or whether every attempt must regenerate.
 3. **Enforcement per environment** — is the signature actually verified in dev and staging? Decides
    whether an unsigned mode is available at all for early testing.
-4. **Canonical-string versioning** — the `v1` prefix implies a `v2` is anticipated. Keep the version
-   a single constant rather than an inlined literal.
+4. **Canonical-string versioning** — if the scheme carries a version marker, a second version is
+   anticipated. Keep it a single constant rather than an inlined literal.
