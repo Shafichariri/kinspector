@@ -124,8 +124,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.2.0")
-            implementation("dev.inspector:inspector-ui:0.2.0")
+            implementation("dev.inspector:inspector-core:0.2.1")
+            implementation("dev.inspector:inspector-ui:0.2.1")
         }
     }
 }
@@ -185,11 +185,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.2.0")
-                implementation("dev.inspector:inspector-noop-ui:0.2.0")
+                implementation("dev.inspector:inspector-noop:0.2.1")
+                implementation("dev.inspector:inspector-noop-ui:0.2.1")
             } else {
-                implementation("dev.inspector:inspector-core:0.2.0")
-                implementation("dev.inspector:inspector-ui:0.2.0")
+                implementation("dev.inspector:inspector-core:0.2.1")
+                implementation("dev.inspector:inspector-ui:0.2.1")
             }
         }
     }
@@ -316,13 +316,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.2.0")
-    implementation("dev.inspector:inspector-noop-ui:0.2.0")
-    implementation("dev.inspector:inspector-noop-stream:0.2.0")
+    implementation("dev.inspector:inspector-noop:0.2.1")
+    implementation("dev.inspector:inspector-noop-ui:0.2.1")
+    implementation("dev.inspector:inspector-noop-stream:0.2.1")
 } else {
-    implementation("dev.inspector:inspector-core:0.2.0")
-    implementation("dev.inspector:inspector-ui:0.2.0")
-    implementation("dev.inspector:inspector-stream:0.2.0")
+    implementation("dev.inspector:inspector-core:0.2.1")
+    implementation("dev.inspector:inspector-ui:0.2.1")
+    implementation("dev.inspector:inspector-stream:0.2.1")
 }
 ```
 
@@ -848,9 +848,10 @@ The token does **not** go away, and that is the part worth knowing before you te
 public now, just add the dependency". GitHub Packages requires an authenticated download even for
 public packages. The daemon zip is a genuine anonymous download; the library is not.
 
-Also: the artifacts now carry an Apache-2.0 `<licenses>` block in their POM, which matters if your
-company runs a dependency scanner. Versions before this one declare no licence, so if a scan
-flagged Inspector, moving to the current release is the fix.
+Also: **0.2.1** is the first release whose POM carries an Apache-2.0 `<licenses>` block, which
+matters if your company runs a dependency scanner. `0.2.0` and earlier declare no licence at all,
+and package metadata cannot be edited after publication — so if a scan flagged Inspector, moving to
+0.2.1 is the fix, not an exemption.
 
 ### v14 — 2026-08-21
 
@@ -875,7 +876,7 @@ home directory.
 
 To switch, do §2: add the `maven { … }` block with credentials, put a `read:packages` token in
 your own `~/.gradle/gradle.properties`, change the version on the two `implementation` lines from
-`0.2.0` to the release you want, and delete the `includeBuild`. Nothing in §3 onwards
+`0.1.0-SNAPSHOT` to the release you want, and delete the `includeBuild`. Nothing in §3 onwards
 changes — the debug-only swap, the code, the daemon and the MCP setup are all as they were.
 
 **You do not have to switch.** A composite build still works and is still the right thing while
