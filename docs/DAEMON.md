@@ -33,9 +33,9 @@ gh release download --repo Shafichariri/kinspector --pattern '*.zip'
 unzip inspector-*.zip
 ```
 
-That gives you `inspector-<version>/bin/inspector`. This repo is private, so the download
-authenticates as whoever `gh` is logged in as; a plain browser download of the same asset needs you
-signed in to GitHub with access to the repo.
+That gives you `inspector-<version>/bin/inspector`. The repository is public, so this needs no
+token and no account — the Releases page works in a browser too. Unlike the library, which GitHub
+Packages will not serve without an authenticated token.
 
 Releases are cut by tag — `git tag v0.2.0 && git push origin v0.2.0`. CI builds the zip, starts it
 and checks both surfaces answer before publishing, so a release that exists is a release that ran

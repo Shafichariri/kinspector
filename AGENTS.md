@@ -605,9 +605,9 @@ publishes the release. The **library** job publishes all seven modules to GitHub
 on macOS because the iOS klibs cannot be produced anywhere else — a publication missing its iOS
 variants resolves fine on JVM and Android and then fails on device, furthest from the cause.
 
-Neither half is reachable without access to this repository: packages and release assets both
-inherit its visibility. That is the whole of the access story, and `docs/ACCESS.md` is where it is
-written down.
+The repository is public, so release assets are an anonymous download. The library is not:
+GitHub Packages demands an authenticated token even for public packages, which is the single thing
+every new consumer trips over. `docs/ACCESS.md` leads with it for that reason.
 
 Driving the MCP server by hand, which is the fastest way to check a tool change:
 

@@ -1,10 +1,27 @@
-# Getting Inspector — access, and what to do without it
+# Getting Inspector
 
-Inspector lives in a **private** GitHub repository, `Shafichariri/kinspector`. This page answers one
-question: what do *you* need in order to use it, and what happens if you have nothing.
+Inspector is a **public** repository, `Shafichariri/kinspector`, licensed
+[Apache-2.0](../LICENSE). Nobody needs to be invited to anything.
 
-Integrating it into an app is [`INTEGRATION.md`](INTEGRATION.md); running the daemon is
-[`DAEMON.md`](DAEMON.md). Come here only for the "how do I get it" part.
+There is still one setup step, and it surprises people, so it is the first thing on this page.
+
+Integrating into an app is [`INTEGRATION.md`](INTEGRATION.md); running the daemon is
+[`DAEMON.md`](DAEMON.md). Come here only for "how do I get it".
+
+---
+
+## The one catch: GitHub Packages always wants a token
+
+The library is published to GitHub Packages, and **that registry requires an authenticated token
+for downloads even when the package is public**. GitHub's own documentation puts it plainly: you
+need an access token "to publish, install, and delete private, internal, and public packages" —
+where *install* means what Gradle does when it resolves a dependency.
+
+So there is no anonymous `implementation("dev.inspector:…")`. This is a property of GitHub
+Packages, not a decision made here, and no visibility setting turns it off. Maven Central and
+JitPack do not work this way, which is exactly why the expectation trips people up.
+
+The token is free, takes a minute, and is the only thing standing between you and the library.
 
 ---
 
@@ -12,25 +29,34 @@ Integrating it into an app is [`INTEGRATION.md`](INTEGRATION.md); running the da
 
 | Half | What it is | How it reaches you |
 |---|---|---|
-| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | A normal Gradle dependency, from GitHub Packages. |
-| **Daemon** (`:inspector-daemon`) | A program on your own machine. Web UI, session archive, CLI, MCP server. | A zip from the [Releases page](https://github.com/Shafichariri/kinspector/releases). |
+| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | A Gradle dependency from GitHub Packages. Needs a token. |
+| **Daemon** (`:inspector-daemon`) | A program on your machine. Web UI, session archive, CLI, MCP server. | A zip from the [Releases page](https://github.com/Shafichariri/kinspector/releases). No token, no account. |
 
-Neither one requires a checkout of this repository. You need a checkout only if you are changing
-Inspector itself.
-
-Both are gated on the same thing: **GitHub Packages and release assets on a private repository are
-private too.** There is no anonymous path to either. So the question below is not "which download
-link" — it is whether you have been given access to the repository at all.
+Neither needs a checkout. Clone only if you are changing Inspector itself.
 
 ---
 
-## If you have repo access
+## 1. Create a token
 
-### 1. Add the repository and your credentials
+**It has to be a *classic* token.** GitHub Packages does not accept fine-grained tokens; one will
+return 401 however you scope it, which looks like a permissions mistake and is not one.
 
-GitHub Packages requires a token to **download**, not only to publish — this is true even for
-public packages, so there is no configuration that avoids it. In your app's
-`settings.gradle.kts`, inside `dependencyResolutionManagement { repositories { … } }`:
+At **Settings → Developer settings → Personal access tokens (classic)**, create one with the
+`read:packages` scope and nothing else — not `repo`, not `write:packages`. Give it an expiry.
+
+Then, once per machine, in `~/.gradle/gradle.properties`, which lives outside any repository:
+
+```properties
+gpr.user=your-github-username
+gpr.key=ghp_yourClassicToken
+```
+
+Never commit it. The file you check in stays identical for everyone; only this one does not.
+
+## 2. Add the repository and depend on it
+
+In your app's `settings.gradle.kts`, inside
+`dependencyResolutionManagement { repositories { … } }`:
 
 ```kotlin
 maven {
@@ -42,103 +68,52 @@ maven {
 }
 ```
 
-Then, once per machine, in `~/.gradle/gradle.properties` — **not** in the repository:
-
-```properties
-gpr.user=your-github-username
-gpr.key=ghp_yourClassicTokenWithReadPackages
-```
-
-The token needs the `read:packages` scope and nothing else — not `repo`, not `write:packages`,
-since publishing happens in CI under the automatic `GITHUB_TOKEN`.
-
-**It must be a classic token.** GitHub's own documentation says GitHub Packages "only supports
-authentication using a personal access token (classic)", so a fine-grained token returns 401
-against `maven.pkg.github.com` however you scope it — selecting the repository does not help. This
-is the one place where the newer, safer kind of token is not an option. Create it at
-**Settings → Developer settings → Personal access tokens (classic)**, and give it an expiry: a
-classic token's scope is account-wide, with no way to limit it to this repository.
-
-This is the only per-developer setup, it is one file outside the repo, and the file you commit is
-identical for everyone.
-
-### 2. Depend on it
-
 ```kotlin
 implementation("dev.inspector:inspector-core:0.2.0")
 implementation("dev.inspector:inspector-ui:0.2.0")
 ```
 
-Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1. Do §3 — the debug-only swap — before you
-write any app code, not after.
+Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do §3 — the debug-only swap — before
+writing app code rather than after.
 
-### 3. Get the daemon, if you want the web UI
+## 3. Get the daemon, if you want the web UI
 
 ```bash
 gh release download --repo Shafichariri/kinspector --pattern '*.zip'
 unzip inspector-*.zip
 ```
 
-A JDK 21 is the only requirement. You do not need the daemon at all for the in-app overlay; it is
-only for the web UI, the on-disk archive, the CLI and the MCP server.
+A JDK 21 is the only requirement, and the Releases page works in a browser with no account at all.
+You do not need the daemon for the in-app overlay; it is only for the web UI, the on-disk archive,
+the CLI and the MCP server.
 
-### Only if you are changing Inspector
-
-Clone it and wire it in as a composite build, which compiles the source in place so your edits
-appear immediately:
+## Only if you are changing Inspector
 
 ```bash
 git clone https://github.com/Shafichariri/kinspector.git
 ```
 
-`INTEGRATION.md` §2 covers the two lines that switch a consuming app from the published artifacts
-to a local checkout, and how to keep the path out of the committed build file. Consuming apps
-should not do this by default — it makes every developer responsible for a second repository.
+`INTEGRATION.md` §2 covers wiring a consuming app to a local checkout as a composite build, so your
+edits appear without publishing, and how to keep the path out of the committed build file.
+Consuming apps should not do this by default — it makes every developer responsible for a second
+repository.
 
----
-
-## If you do not have repo access
-
-**You are blocked, and it is a permissions problem rather than a technical one.**
-
-Being precise about the kinds of "no", because they differ:
-
-- **The library — blocked.** The packages exist, but they inherit the repository's visibility.
-  Without access your token cannot read them and Gradle fails to resolve, exactly as it would for
-  any private dependency.
-- **The daemon — runs, but has nothing to show.** The zip is self-contained, and someone could
-  simply hand you the file. It would start, serve the web UI, and display an empty archive forever,
-  because every row comes from the library running inside an app. You also cannot fetch it
-  yourself: release assets on a private repo need a login with access.
-- **The licence — not a blocker.** Inspector is Apache-2.0, so if a copy does reach you, you have
-  a grant to use it. That does not conjure access to the packages; it only means the legal question
-  is settled and the remaining one is purely mechanical.
-
-### What would unblock you
-
-1. **Be added to the repository** — a collaborator invite, or the repo moving into the
-   organisation so access follows team membership. Nothing else changes: you take the section
-   above unmodified, because package access follows repository access.
-2. **Have the packages republished somewhere you can read** — a company Nexus or Artifactory, for
-   instance. Worth it if a whole team needs Inspector and managing individual GitHub tokens
-   becomes the annoying part; not worth it for one person.
-3. **Be handed a source copy directly.** Technically sufficient and licence permitting, but you
-   inherit a fork that stops receiving fixes. Prefer either option above.
+`main` is protected: changes arrive by pull request, with review and green CI.
 
 ---
 
 ## What each person actually needs
 
-| You want | Repo access | JDK 21 | Anything else |
+| You want | GitHub account | Classic token | Anything else |
 |---|---|---|---|
-| The in-app overlay only | yes | yes | a `read:packages` token, and Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
-| Overlay + web UI + archive | yes | yes | the same, plus the daemon running on your machine |
-| To read sessions from an AI agent | yes | yes | the same, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
-| To change Inspector itself | yes | yes | a clone, and the composite-build wiring in §2 |
-| To run the daemon against someone else's archive | no | yes | the release zip *handed to you*, and a copy of their `~/.inspector/sessions/` |
+| The in-app overlay | yes | `read:packages` | Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
+| Overlay + web UI + archive | yes | `read:packages` | the daemon, running on your machine |
+| To read sessions from an AI agent | yes | `read:packages` | the daemon, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
+| To run the daemon only | no | no | the release zip and a JDK 21 |
+| To change Inspector itself | yes | no | a clone; `main` takes pull requests, not pushes |
 
-That last row is the only useful thing available without repo access, and it is a forensic case —
-reading an archive somebody else recorded, not recording your own.
+The fourth row is the only one that needs nothing: the daemon runs for anybody. It will show an
+empty archive until some app with the library in it starts sending rows.
 
 > Session archives hold **unredacted** credentials by default: bearer tokens, login bodies, the
 > lot. That is deliberate, because a debugger that hides the auth header is useless when the bug

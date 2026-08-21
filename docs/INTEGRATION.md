@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v14 — 2026-08-21.**
+**Document version: v15 — 2026-08-21.**
 Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -44,10 +44,12 @@ Android with one small class** (section 11); iOS-native transports cannot yet.
 The library is published to **GitHub Packages**, so you do not need a checkout of Inspector —
 §2 wires your build to the published artifacts, and that is the whole of it.
 
-What you do need is **access to the repository it is published from**,
-`Shafichariri/kinspector`, which is private. Packages inherit a repository's visibility, so there
-is no anonymous route and no token you can create that substitutes for access. If you do not have
-it, ask to be added; nothing else unblocks the library.
+The repository, `Shafichariri/kinspector`, is **public** and Apache-2.0 licensed, so there is
+nobody to ask for access.
+
+What you do need is a **classic** GitHub personal access token carrying `read:packages`. GitHub
+Packages requires an authenticated download *even for public packages* — there is no anonymous
+route, and no visibility setting changes it. §2 says where the two lines go.
 
 Clone Inspector only if you are **changing** Inspector. §2 covers that case too, at the end.
 
@@ -525,9 +527,10 @@ the repository root.
 **`401 Unauthorized` or `404 Not Found` from `maven.pkg.github.com`**
 401 is the token. Check it is a **classic** token — fine-grained ones are rejected by GitHub
 Packages — that it carries `read:packages`, and that `gpr.user` is your GitHub username.
-404 is usually *not* a missing version — GitHub Packages returns "not found" for a package you are
-not allowed to see, so it most often means you do not have access to the repository. See
-`ACCESS.md` if you have it, or ask to be added.
+404, now that the repository is public, really does mean not found: check the coordinates and that
+the version you asked for has been released. It no longer means "you cannot see this" — GitHub
+Packages answers that way for packages you lack access to, which was the usual cause while the
+repository was private.
 
 **Compose compiler plugin version conflicts**
 Your app must be on Compose Multiplatform 1.11.x with the Kotlin Compose compiler plugin at
@@ -835,7 +838,21 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v14 — 2026-08-21 (this document)
+### v15 — 2026-08-21 (this document)
+
+**Nothing to do.** Inspector is now a public, Apache-2.0 repository, so §0 no longer talks about
+being granted access — there is nobody to ask. Everything you already configured keeps working
+unchanged.
+
+The token does **not** go away, and that is the part worth knowing before you tell a teammate "it's
+public now, just add the dependency". GitHub Packages requires an authenticated download even for
+public packages. The daemon zip is a genuine anonymous download; the library is not.
+
+Also: the artifacts now carry an Apache-2.0 `<licenses>` block in their POM, which matters if your
+company runs a dependency scanner. Versions before this one declare no licence, so if a scan
+flagged Inspector, moving to the current release is the fix.
+
+### v14 — 2026-08-21
 
 **If you took v13, re-read §3.** It pointed at `scripts/check-release-clean.sh` without saying the
 script needs an Inspector checkout to run — which, now that the library is published, most

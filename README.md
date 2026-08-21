@@ -78,8 +78,8 @@ Full guide: **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — versioned, with
 that integrated from an older copy can see exactly what changed.
 
 You do not need this repository checked out — the library is published to GitHub Packages. You do
-need access to this (private) repository, because packages inherit its visibility.
-[`docs/ACCESS.md`](docs/ACCESS.md) covers getting that, and what your options are without it.
+need a **classic** GitHub token with `read:packages`, because that registry requires an
+authenticated download even for public packages. [`docs/ACCESS.md`](docs/ACCESS.md) covers it.
 
 The short version. In `settings.gradle.kts`, alongside your other repositories:
 
@@ -139,7 +139,7 @@ and troubleshooting are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
 
 | Doc | For |
 |---|---|
-| [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: what you need with repo access, and what your options are without it. |
+| [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: the token GitHub Packages requires, and what the daemon needs instead (nothing). |
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Adding Inspector to a consuming CMP app. Self-contained and versioned. |
 | [`docs/DAEMON.md`](docs/DAEMON.md) | Running the daemon: start, stop, restart, kill, CLI, archive layout. |
 | [`docs/REPLAY.md`](docs/REPLAY.md) | Design for request replay, re-signing, and daemon control. |
