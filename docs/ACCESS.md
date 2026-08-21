@@ -110,9 +110,9 @@ Being precise about the kinds of "no", because they differ:
   simply hand you the file. It would start, serve the web UI, and display an empty archive forever,
   because every row comes from the library running inside an app. You also cannot fetch it
   yourself: release assets on a private repo need a login with access.
-- **The licence — unresolved.** This repository has not chosen one (see the README). Absent a
-  licence, nobody outside has a grant to use, copy or redistribute it, whatever files they end up
-  holding. If you are outside the organisation, settle this before the mechanics.
+- **The licence — not a blocker.** Inspector is Apache-2.0, so if a copy does reach you, you have
+  a grant to use it. That does not conjure access to the packages; it only means the legal question
+  is settled and the remaining one is purely mechanical.
 
 ### What would unblock you
 

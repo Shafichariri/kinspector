@@ -264,4 +264,8 @@ the whole project with `-Pinspector=off`.
 
 ## Licence
 
-Not yet chosen.
+[Apache License 2.0](LICENSE). Copyright 2026 Chafic El Hariri.
+
+Apache rather than MIT for the explicit patent grant — this is a debugging tool that consuming
+apps compile into their own builds, and the grant is the part that matters to anyone adopting it
+inside a company.
