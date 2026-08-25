@@ -21,6 +21,7 @@ import dev.inspector.Redaction
 import dev.inspector.okHttpInterceptor
 import dev.inspector.model.ClientInfo
 import dev.inspector.model.Platforms
+import dev.inspector.model.SignalTags
 import dev.inspector.stream.StreamSink
 import dev.inspector.ui.InspectorOverlay
 import io.ktor.client.HttpClient
@@ -34,6 +35,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Reference wiring for a consuming app, and the manual-verification vehicle for the overlay.
@@ -110,6 +113,20 @@ fun main() {
                 }.bodyAsBytes()
             }
             Inspector.mark("tapped checkout")
+
+            // Signals: app state on the same timeline as the traffic above. `tag` and `name` are
+            // this app's own words — Inspector never learns what they mean.
+            Inspector.signal(
+                tag = SignalTags.SCREEN,
+                name = "Checkout",
+                data = buildJsonObject { put("step", "review"); put("items", 3) },
+            )
+            // Emitted per change, with no throttling here on purpose: conflation is the
+            // library's job, so a consuming app never has to reinvent it.
+            repeat(50) { i ->
+                Inspector.signal(SignalTags.STATE, "CheckoutViewModel", text = "Submitting(try=$i)")
+            }
+
             repeat(20) { hit("/json") }
             runCatching { client.get("http://127.0.0.1:1/dead").bodyAsBytes() }
 
@@ -174,6 +191,14 @@ private fun SampleScreen(client: HttpClient) {
             }) { Text("burst 50") }
 
             Button(onClick = { Inspector.mark("tapped checkout") }) { Text("mark") }
+
+            Button(onClick = {
+                // 50 state changes as fast as they can be emitted. Conflation should collapse
+                // these to the value the state settled on, not 50 rows.
+                repeat(50) { i ->
+                    Inspector.signal(SignalTags.STATE, "DemoViewModel", text = "tick=$i")
+                }
+            }) { Text("signal burst") }
 
             Button(onClick = {
                 scope.launch {
