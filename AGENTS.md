@@ -194,15 +194,6 @@ new bounded queue here must do the same.
   judged it.
 - **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
   module and an Xcode project; the UI module already compiles for both.
-- **Bump the GitHub Actions versions.** Both workflows use `actions/checkout@v4`,
-  `actions/setup-java@v4` and `gradle/actions/setup-gradle@v4`. CI passes, but every run now warns
-  that these target Node.js 20 and are being *forced* onto Node.js 24, and that `setup-java@v4` is
-  end-of-life. Check each action's current major first rather than assuming v5 across the board,
-  then change `ci.yml` and `release.yml` together — a release that fails on a deprecation is a
-  release you cannot cut on the day you need it.
-- **Phase 4 — signals.** Specified in `docs/SIGNALS.md`, nothing built. The largest outstanding
-  piece of work by far, and the one that changes what the tool is for: today it answers what went
-  over the wire, and it cannot answer what the app was doing at the time. Start at stage 1.
 - **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
 
 ---
