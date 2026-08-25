@@ -229,6 +229,29 @@ class RecorderSignalTest {
         }
     }
 
+
+    @Test
+    fun signals_dropped_by_a_full_queue_are_counted_not_silently_lost() {
+        // Overload must be visible. A silent drop turns "the signal never appeared" into an
+        // unfalsifiable claim about the app rather than a number anyone can read.
+        withRecorder(policy()) { recorder, _ ->
+            // The worker never runs: nothing advances the scheduler, so the bounded queue fills.
+            repeat(1_000) { i ->
+                recorder.signal(SignalTags.STATE, "Flood", JsonPrimitive("v$i"))
+            }
+
+            assertTrue(recorder.dropped.value > 0, "a saturated queue must report its drops")
+        }
+    }
+
+    @Test
+    fun submitting_a_signal_never_throws_even_with_no_worker_draining() {
+        // signal() runs on the app's coroutine. It may drop, but it may never blow up there.
+        withRecorder(policy()) { recorder, _ ->
+            repeat(1_000) { recorder.signal(SignalTags.STATE, "X", JsonPrimitive("y")) }
+        }
+    }
+
     private fun txn(id: String) = NetworkTransaction(
         id = id,
         ts = "2026-08-16T10:14:02.311Z",

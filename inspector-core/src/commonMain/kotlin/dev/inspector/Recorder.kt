@@ -90,7 +90,23 @@ internal class Recorder(
         class FlushSignals(val key: String) : Event
     }
 
-    private val queue = Channel<Event>(capacity = 256, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Transactions and signals dropped because the queue was full. Declared before [queue],
+     *  which reports into it. */
+    private val _dropped = MutableStateFlow(0L)
+
+    /**
+     * Overload is reported through [onUndeliveredElement], not through `trySend`.
+     *
+     * A `DROP_OLDEST` channel **always** accepts: it discards the oldest entry and returns
+     * success, so a `trySend(...).isSuccess` check can never observe a drop and the counter it
+     * guards stays at zero no matter how hard the queue is hammered. The callback is the only
+     * thing the channel actually tells about a discarded element.
+     */
+    private val queue = Channel<Event>(
+        capacity = 256,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onUndeliveredElement = { _dropped.value += 1 },
+    )
     private val ring = RingBuffer(config.ringBufferMaxBytes, ::sizeOfCapturedTxn)
     private val signalRing =
         RingBuffer(config.signals.ringBufferMaxBytes, ::sizeOfCapturedSignal)
@@ -112,8 +128,7 @@ internal class Recorder(
     val signals: StateFlow<List<Signal>> = _signals.asStateFlow()
     val bodies: StateFlow<Map<String, Pair<ByteArray?, ByteArray?>>> = _bodies.asStateFlow()
 
-    /** Transactions dropped because the queue was full. Surfaced so overload is visible, not silent. */
-    private val _dropped = MutableStateFlow(0L)
+    /** Surfaced so overload is visible, not silent. */
     val dropped: StateFlow<Long> = _dropped.asStateFlow()
 
     init {
@@ -129,16 +144,12 @@ internal class Recorder(
      * Called from the app's own coroutine, so it must stay this cheap.
      */
     internal fun submit(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
-        if (!queue.trySend(Event.Captured(txn, reqBody, resBody)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Event.Captured(txn, reqBody, resBody))
     }
 
     fun mark(label: String, source: String = MarkerSource.APP) {
         val marker = Marker(ts = nowIso(), mono = monoMs(), label = label, source = source)
-        if (!queue.trySend(Event.Marked(marker)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Event.Marked(marker))
     }
 
     /**
@@ -165,9 +176,7 @@ internal class Recorder(
             trigger = trigger,
             requestId = requestId,
         )
-        if (!queue.trySend(event).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(event)
     }
 
     fun addSink(sink: InspectorSink) {
@@ -287,9 +296,7 @@ internal class Recorder(
         val flushKey = key(event.tag, event.name)
         scope.launch {
             delay(wait)
-            if (!queue.trySend(Event.FlushSignals(flushKey)).isSuccess) {
-                _dropped.value += 1
-            }
+            queue.trySend(Event.FlushSignals(flushKey))
         }
     }
 

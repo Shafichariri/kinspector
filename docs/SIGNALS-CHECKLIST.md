@@ -11,19 +11,19 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ## Every PR, no exceptions
 
-- [ ] `ApiParityTest` green; `api/inspector-public-api.txt` regenerated
+- [x] `ApiParityTest` green; `api/inspector-public-api.txt` regenerated
       (`./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true`), never hand-edited
-- [ ] Every new public symbol has an identical-signature `:inspector-noop` twin
+- [x] Every new public symbol has an identical-signature `:inspector-noop` twin
 - [ ] **No-op `registerProvider` discards the lambda** — no signature check catches a retained
       closure
-- [ ] `-Pinspector=off` → runtime classpath contains only no-op modules
-- [ ] Canary guard proven in **both** directions on the new code
-- [ ] Schema `v` is still `1` — needing a bump means a field was removed or repurposed by mistake
-- [ ] `v` is **present in the serialized JSON** of an archived signal, not only as a Kotlin default
-- [ ] Nothing committed names a client, employer, product or domain — see `AGENTS.md`
-- [ ] `Signal.mono` comes from the same clock source as `NetworkTransaction.mono`, not a parallel
+- [x] `-Pinspector=off` → runtime classpath contains only no-op modules
+- [x] Canary guard proven in **both** directions on the new code
+- [x] Schema `v` is still `1` — needing a bump means a field was removed or repurposed by mistake
+- [x] `v` is **present in the serialized JSON** of an archived signal, not only as a Kotlin default
+- [x] Nothing committed names a client, employer, product or domain — see `AGENTS.md`
+- [x] `Signal.mono` comes from the same clock source as `NetworkTransaction.mono`, not a parallel
       one
-- [ ] Any new `Signal` field asserted on **both** the live path and the REST path
+- [x] Any new `Signal` field asserted on **both** the live path and the REST path
 
 ---
 
@@ -31,22 +31,22 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ### 1 — Signal core
 
-- [ ] 100 identical payloads for one `(tag, name)` → 1 row
-- [ ] 100 differing payloads → the **last** one per conflation window
-- [ ] A burst that **stops** mid-window still emits the held value (no timer ⇒ it is held forever)
-- [ ] The payload appears **once** on the wire: `SignalMsg.data` set, `Signal.data` null
-- [ ] Signal ring evicts under its own budget without touching the transaction ring
-- [ ] Dropped-signal counter is visible, not silent
-- [ ] `signal()` does nothing on the caller's coroutine but `trySend`
-- [ ] Existing `InspectorSink` implementations compile untouched
+- [x] 100 identical payloads for one `(tag, name)` → 1 row
+- [x] 100 differing payloads → the **last** one per conflation window
+- [x] A burst that **stops** mid-window still emits the held value (no timer ⇒ it is held forever)
+- [x] The payload appears **once** on the wire: `SignalMsg.data` set, `Signal.data` null
+- [x] Signal ring evicts under its own budget without touching the transaction ring
+- [x] Dropped-signal counter is visible, not silent
+- [x] `signal()` does nothing on the caller's coroutine but `trySend`
+- [x] Existing `InspectorSink` implementations compile untouched
 
 ### 2 — Daemon and archive
 
-- [ ] Signals archived beside transactions; `signals.jsonl` greppable from a terminal
-- [ ] **Live viewer receives `dataRef` populated** (`LiveTest`, not only the REST test)
-- [ ] Retention prunes per tag
-- [ ] Retention never prunes the active session
-- [ ] An unknown `tag` is archived and served normally, never dropped
+- [x] Signals archived beside transactions; `signals.jsonl` greppable from a terminal
+- [x] **Live viewer receives `dataRef` populated** (`LiveTest`, not only the REST test)
+- [x] Retention prunes per tag
+- [x] Retention never prunes the active session
+- [x] An unknown `tag` is archived and served normally, never dropped
 
 ### 3 — Pull
 
@@ -93,17 +93,21 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ---
 
-## The three that will bite
+## The ones that will bite
 
 1. **`dataRef` before broadcast.** Write payload → set ref → append → *then* broadcast.
    Verify with `LiveTest`. A passing REST test proves nothing here. This is defect #1 reproducing.
 2. **Trailing-edge conflation.** The burst test must assert the **last** value survives.
    Leading-edge passes a naive test and is useless in practice.
-3. **Separate ring budgets.** Emit one oversized cache snapshot; assert the transaction history is
+3. **`DROP_OLDEST` never fails a send.** `trySend(...).isSuccess` cannot observe a dropped
+   element, so any counter guarded by it stays at zero. Report drops through the channel's
+   `onUndeliveredElement` instead. This was live in `Recorder` and `StreamSink` for the whole
+   transaction path before signals existed.
+4. **Separate ring budgets.** Emit one oversized cache snapshot; assert the transaction history is
    untouched.
-4. **Conflation must not touch pull replies.** The failure is a timeout the host reports as an
+5. **Conflation must not touch pull replies.** The failure is a timeout the host reports as an
    unresponsive app, triggered by a cache that did not change — the least suspicious state there is.
-5. **Trailing-edge needs a timer.** The worker is event-driven; a burst that stops emits nothing
+6. **Trailing-edge needs a timer.** The worker is event-driven; a burst that stops emits nothing
    until something forces the window closed.
 
 ---
@@ -125,6 +129,7 @@ Not defects, but do not let them harden into recommendations unexamined:
 
 - The 150 ms conflation window.
 - The 2 MB signal ring budget.
+- The per-tag retention caps (`cache` 20, `state` 500, everything else uncapped).
 
 Revisit both against one real session before `INTEGRATION.md` presents them as defaults worth
 keeping.

@@ -108,12 +108,26 @@ class StreamSink(
         SupervisorJob() + Dispatchers.Default.limitedParallelism(1)
     )
 
-    private val queue = Channel<Outbound>(capacity = 512, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Declared before [queue], which reports into it. */
+    private val _dropped = MutableStateFlow(0L)
+
+    /**
+     * Rows discarded because the daemon could not keep up. Reported through
+     * [onUndeliveredElement], not through `trySend`.
+     *
+     * A `DROP_OLDEST` channel always accepts — it discards the oldest entry and returns success —
+     * so a `trySend(...).isSuccess` check can never observe a drop and would leave this counter at
+     * zero however far behind the daemon fell.
+     */
+    private val queue = Channel<Outbound>(
+        capacity = 512,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onUndeliveredElement = { _dropped.value += 1 },
+    )
 
     private val _state = MutableStateFlow(StreamState.Disconnected)
     val state: StateFlow<StreamState> = _state.asStateFlow()
 
-    private val _dropped = MutableStateFlow(0L)
     val dropped: StateFlow<Long> = _dropped.asStateFlow()
 
     /**
@@ -142,21 +156,15 @@ class StreamSink(
     }
 
     override fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
-        if (!queue.trySend(Outbound.Transaction(txn, reqBody, resBody)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Outbound.Transaction(txn, reqBody, resBody))
     }
 
     override fun onSignal(signal: Signal, data: ByteArray?) {
-        if (!queue.trySend(Outbound.SignalOut(signal, data)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Outbound.SignalOut(signal, data))
     }
 
     override fun onMarker(marker: Marker) {
-        if (!queue.trySend(Outbound.MarkerOut(marker)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Outbound.MarkerOut(marker))
     }
 
     private suspend fun runConnectionLoop() {

@@ -180,6 +180,14 @@ since that file is already a debug-only artifact here. This is the mitmproxy mod
 it without the user explicitly choosing it**: it turns the tool from a library into a piece of
 network infrastructure.
 
+**`DROP_OLDEST` channels never fail a send.** `Recorder` and `StreamSink` both counted dropped
+rows with `if (!queue.trySend(x).isSuccess) dropped++`. That branch is unreachable: a
+`DROP_OLDEST` channel discards the oldest entry and returns success, so the counter read zero no
+matter how far behind the consumer fell. Measured directly — 100 sends into a 4-slot buffer gave 0
+`trySend` failures and 96 `onUndeliveredElement` callbacks. Both now report through
+`onUndeliveredElement`, which is the only thing the channel tells about a discarded element. Any
+new bounded queue here must do the same.
+
 ### Also outstanding
 
 - **Someone should look at the web UI** and say what is ugly. It renders correctly; nobody has
