@@ -192,6 +192,9 @@ network infrastructure.
   end-of-life. Check each action's current major first rather than assuming v5 across the board,
   then change `ci.yml` and `release.yml` together — a release that fails on a deprecation is a
   release you cannot cut on the day you need it.
+- **Phase 4 — signals.** Specified in `docs/SIGNALS.md`, nothing built. The largest outstanding
+  piece of work by far, and the one that changes what the tool is for: today it answers what went
+  over the wire, and it cannot answer what the app was doing at the time. Start at stage 1.
 - **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
 
 ---
@@ -658,6 +661,32 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 
 ---
 
+## No client names in this repository
+
+**This repository is public.** Nothing committed here may name a client, an employer, or one of
+their products or domains. That includes prose, comments, test fixtures, sample data, commit
+messages and branch names — history is as public as the working tree.
+
+The rule exists because the design docs are strongest when argued from a real app, and the
+temptation is to name it for credibility. Do not. Say "one real consuming app", describe the
+constraint that mattered ("its navigation destinations are already `@Serializable`"), and drop the
+identity — the constraint is what carries the argument, never the name.
+
+History was scrubbed once already, with `filter-branch` across every commit, before the repository
+went public. Doing that again after a push is not a cleanup — the old objects survive on the remote
+and in every clone — so the check belongs before the commit, not after.
+
+**The terms to grep for are deliberately not listed in this file.** Writing them here would publish
+exactly the list of things that were removed, which defeats the removal. They live in the
+maintainer's local notes; ask if you do not have them. Commit author identity is the GitHub noreply
+address for the same reason — check it stays that way if you ever configure git in a fresh clone.
+
+`gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
+compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
+else a scan turns up.
+
+---
+
 ## Key files
 
 | Path | Why it matters |
@@ -666,7 +695,8 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `docs/ACCESS.md` | Who can get Inspector and how, and the honest answer for someone who cannot. Update it if the distribution story changes — it is the only doc that answers "am I blocked". |
 | `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
 | `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a §13 changelog entry saying what they must *do*, not just what changed. |
-| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. |
+| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–3 shipped; Phase 4 (signals) is specified and not started. |
+| `docs/SIGNALS.md` | Phase 4 design spec — app state on the traffic timeline. Nothing built. Read it before writing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
