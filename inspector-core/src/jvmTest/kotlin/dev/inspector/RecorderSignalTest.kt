@@ -7,11 +7,15 @@ import dev.inspector.model.SignalTrigger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -249,6 +253,102 @@ class RecorderSignalTest {
         // signal() runs on the app's coroutine. It may drop, but it may never blow up there.
         withRecorder(policy()) { recorder, _ ->
             repeat(1_000) { recorder.signal(SignalTags.STATE, "X", JsonPrimitive("y")) }
+        }
+    }
+
+
+    @Test
+    fun a_pull_records_a_row_marked_as_requested() = runBlocking {
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.registerProvider(SignalTags.CACHE, "response") {
+                JsonPrimitive("fresh")
+            }
+
+            val error = runBlocking {
+                recorder.answerProviderRequest(SignalTags.CACHE, "response", "r-1")
+            }
+            scheduler.advanceUntilIdle()
+
+            assertNull(error, "a registered provider must answer without error")
+            val row = recorder.signals.value.single()
+            assertEquals(SignalTrigger.Request, row.trigger)
+            assertEquals("r-1", row.requestId)
+            assertEquals(JsonPrimitive("fresh"), row.data)
+        }
+    }
+
+    @Test
+    fun an_unregistered_name_names_what_is_registered() {
+        // Discovery is the error path in v1, so the error has to carry the listing.
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.registerProvider(SignalTags.CACHE, "response") { null }
+            recorder.registerProvider(SignalTags.CACHE, "prefs") { null }
+
+            val error = runBlocking {
+                recorder.answerProviderRequest(SignalTags.CACHE, "orders", "r-1")
+            }
+            scheduler.advanceUntilIdle()
+
+            assertNotNull(error)
+            assertContains(error, "no provider for cache/orders")
+            assertContains(error, "cache/prefs")
+            assertContains(error, "cache/response")
+            assertTrue(recorder.signals.value.isEmpty(), "a failed pull must leave no row behind")
+        }
+    }
+
+    @Test
+    fun a_provider_that_throws_is_reported_and_records_nothing() {
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.registerProvider(SignalTags.CACHE, "response") {
+                error("cache closed")
+            }
+
+            val message = runBlocking {
+                recorder.answerProviderRequest(SignalTags.CACHE, "response", "r-1")
+            }
+            scheduler.advanceUntilIdle()
+
+            assertNotNull(message)
+            assertContains(message, "cache closed")
+            assertTrue(recorder.signals.value.isEmpty(), "errors are replies, never rows")
+        }
+    }
+
+    @Test
+    fun unregistering_removes_the_provider_from_the_listing() {
+        withRecorder(policy()) { recorder, _ ->
+            recorder.registerProvider(SignalTags.CACHE, "response") { null }
+            recorder.registerProvider(SignalTags.STATE, "Checkout") { null }
+            recorder.unregisterProvider(SignalTags.CACHE, "response")
+
+            assertEquals(listOf("state/Checkout"), recorder.registeredProviders())
+        }
+    }
+
+    @Test
+    fun a_provider_returning_null_still_records_a_row() {
+        // "The cache is empty" is an answer. Reporting nothing would look like a failed pull.
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.registerProvider(SignalTags.CACHE, "response") { null }
+
+            val error = runBlocking {
+                recorder.answerProviderRequest(SignalTags.CACHE, "response", "r-9")
+            }
+            scheduler.advanceUntilIdle()
+
+            assertNull(error)
+            assertEquals(1, recorder.signals.value.size)
+            assertNull(recorder.signals.value.single().data)
+        }
+    }
+
+    @Test
+    fun the_error_listing_says_none_when_nothing_is_registered() {
+        withRecorder(policy()) { recorder, _ ->
+            val error = runBlocking { recorder.answerProviderRequest(SignalTags.CACHE, "x", "r-1") }
+            assertNotNull(error)
+            assertContains(error, "registered: none")
         }
     }
 

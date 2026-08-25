@@ -14,7 +14,7 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 - [x] `ApiParityTest` green; `api/inspector-public-api.txt` regenerated
       (`./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true`), never hand-edited
 - [x] Every new public symbol has an identical-signature `:inspector-noop` twin
-- [ ] **No-op `registerProvider` discards the lambda** — no signature check catches a retained
+- [x] **No-op `registerProvider` discards the lambda** — no signature check catches a retained
       closure
 - [x] `-Pinspector=off` → runtime classpath contains only no-op modules
 - [x] Canary guard proven in **both** directions on the new code
@@ -50,14 +50,14 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ### 3 — Pull
 
-- [ ] Host-initiated pull returns a row with `trigger = request` and the matching `requestId`
-- [ ] A pull whose payload is **identical to the last pushed value** still returns a row —
+- [x] Host-initiated pull returns a row with `trigger = request` and the matching `requestId`
+- [x] A pull whose payload is **identical to the last pushed value** still returns a row —
       `dropUnchanged` must not swallow a reply somebody is awaiting
-- [ ] A pull is not delayed by `minIntervalMs`
-- [ ] Unregistered name → error naming what *is* registered
-- [ ] Provider throws → error surfaces; the deferred does not hang
-- [ ] App killed mid-pull → clean timeout, **no row in the archive**
-- [ ] `POST …/signals/request` carries the same origin-header protection as the existing mutating
+- [x] A pull is not delayed by `minIntervalMs`
+- [x] Unregistered name → error naming what *is* registered
+- [x] Provider throws → error surfaces; the deferred does not hang
+- [x] App killed mid-pull → clean timeout, **no row in the archive**
+- [x] `POST …/signals/request` carries the same origin-header protection as the existing mutating
       routes
 
 ### 4 — Grammar v2 and MCP
@@ -99,15 +99,19 @@ a build. If you find yourself explaining something here, it belongs in the spec.
    Verify with `LiveTest`. A passing REST test proves nothing here. This is defect #1 reproducing.
 2. **Trailing-edge conflation.** The burst test must assert the **last** value survives.
    Leading-edge passes a naive test and is useless in practice.
-3. **`DROP_OLDEST` never fails a send.** `trySend(...).isSuccess` cannot observe a dropped
+3. **A leak test must capture a `val` in a frame that ends.** A lambda closing over a local
+   `var` compiles to a `Ref.ObjectRef`; nulling the var clears the box the closure points at, so
+   the referent is collected whether or not the lambda was retained — the test passes against the
+   exact mistake it exists to catch. Register from a helper that returns only the `WeakReference`.
+4. **`DROP_OLDEST` never fails a send.** `trySend(...).isSuccess` cannot observe a dropped
    element, so any counter guarded by it stays at zero. Report drops through the channel's
    `onUndeliveredElement` instead. This was live in `Recorder` and `StreamSink` for the whole
    transaction path before signals existed.
-4. **Separate ring budgets.** Emit one oversized cache snapshot; assert the transaction history is
+5. **Separate ring budgets.** Emit one oversized cache snapshot; assert the transaction history is
    untouched.
-5. **Conflation must not touch pull replies.** The failure is a timeout the host reports as an
+6. **Conflation must not touch pull replies.** The failure is a timeout the host reports as an
    unresponsive app, triggered by a cache that did not change — the least suspicious state there is.
-6. **Trailing-edge needs a timer.** The worker is event-driven; a burst that stops emits nothing
+7. **Trailing-edge needs a timer.** The worker is event-driven; a burst that stops emits nothing
    until something forces the window closed.
 
 ---

@@ -377,15 +377,17 @@ class InspectorDaemon(
 
                     is SignalMsg -> {
                         val id = sessionId ?: continue
-                        manager.append(
+                        val stored = manager.append(
                             id,
                             message.signal,
                             decodeBody(message.data, message.dataB64),
                         )
+                        // Archived first, then handed to any waiting pull, so the row a caller
+                        // receives is the one on disk — `dataRef` included.
+                        stored?.let { liveApps.completeSignal(id, it) }
                     }
 
-                    // Correlated reply to a SignalRequest, which nothing sends until stage 3.
-                    is SignalError -> Unit
+                    is SignalError -> sessionId?.let { liveApps.failSignal(it, message) }
 
                     Bye -> break
 
@@ -574,6 +576,43 @@ class InspectorDaemon(
                     repository.currentSignals(dir, tag),
                 )
             )
+        }
+
+
+        post("/api/sessions/{id}/signals/request") {
+            if (!call.requireControlHeader()) return@post
+            val id = call.parameters["id"].orEmpty()
+            val sessionId = if (id == "latest") liveApps.sole()?.sessionId else id
+            val connection = sessionId?.let { liveApps.forSession(it) }
+                ?: return@post call.respondError(
+                    HttpStatusCode.Conflict,
+                    "no app is attached for session $id; a pull needs a live session, and this " +
+                        "one is only on disk. Attached: ${liveApps.attachedSessionIds()}",
+                )
+
+            val body = call.receiveText()
+            val request = try {
+                InspectorJson.decodeFromString(SignalPullRequest.serializer(), body)
+            } catch (e: Exception) {
+                return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "could not read the signal request: ${e.message}",
+                )
+            }
+            if (request.tag.isBlank() || request.name.isBlank()) {
+                return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "both tag and name are required; a pull answers exactly one provider",
+                )
+            }
+
+            try {
+                val signal = connection.requestSignal(request.tag, request.name)
+                call.respondJson(InspectorJson.encodeToString(signal))
+            } catch (e: SignalProviderException) {
+                // The app's own message names what is registered; pass it through untouched.
+                call.respondError(HttpStatusCode.BadGateway, e.message ?: "the pull failed")
+            }
         }
 
         get("/api/sessions/{id}/markers") {

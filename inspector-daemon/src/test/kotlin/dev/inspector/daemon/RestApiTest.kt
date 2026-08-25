@@ -4,6 +4,9 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import dev.inspector.model.SignalTags
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -174,6 +177,27 @@ class RestApiTest {
     fun a_missing_signal_or_payload_is_a_404_not_an_empty_200() = runBlocking {
         assertEquals(404, http.get(url("/api/sessions/latest/signals/nope")).status.value)
         assertEquals(404, http.get(url("/api/sessions/latest/signals/s1a/data")).status.value)
+    }
+
+
+    @Test
+    fun a_pull_against_a_session_with_no_attached_app_is_a_conflict_not_a_hang() = runBlocking {
+        // The archive holds this session, but nothing is attached to answer for it. Saying so
+        // beats waiting out a timeout and reporting something vague.
+        val response = http.post(url("/api/sessions/latest/signals/request")) {
+            header("X-Inspector-Control", "1")
+            setBody("""{"tag":"cache","name":"response"}""")
+        }
+        assertEquals(409, response.status.value)
+        assertContains(response.bodyAsText(), "no app is attached")
+    }
+
+    @Test
+    fun a_pull_without_the_control_header_is_refused() = runBlocking {
+        val response = http.post(url("/api/sessions/latest/signals/request")) {
+            setBody("""{"tag":"cache","name":"response"}""")
+        }
+        assertEquals(403, response.status.value, "a mutating route must carry the control header")
     }
 
 }

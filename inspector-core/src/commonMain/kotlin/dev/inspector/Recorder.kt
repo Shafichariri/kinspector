@@ -14,6 +14,7 @@ import dev.inspector.model.MarkerSource
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
 import dev.inspector.model.SignalTrigger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +178,59 @@ internal class Recorder(
             requestId = requestId,
         )
         queue.trySend(event)
+    }
+
+    // --- providers ----------------------------------------------------------------------------
+
+    /**
+     * Registered answers to a host-initiated pull, keyed by `(tag, name)`.
+     *
+     * Held on the recorder rather than passed to `StreamSink` as a constructor argument the way
+     * `ReplaySigner` is: providers come and go at runtime as caches and repositories are built,
+     * and a constructor parameter cannot express that.
+     */
+    private val providers = mutableMapOf<String, suspend () -> JsonElement?>()
+
+    fun registerProvider(tag: String, name: String, provider: suspend () -> JsonElement?) {
+        providers[key(tag, name)] = provider
+    }
+
+    fun unregisterProvider(tag: String, name: String) {
+        providers.remove(key(tag, name))
+    }
+
+    /** `tag/name` for every registered provider, sorted, for the error message on a miss. */
+    internal fun registeredProviders(): List<String> =
+        providers.keys.map { it.replace('\u0000', '/') }.sorted()
+
+    /**
+     * Answers a host pull by reading the registered provider and recording the result.
+     *
+     * Returns null on success — the row goes out through the normal sink path, carrying
+     * `trigger = request` and [requestId] — or an error string naming what *is* registered.
+     * Errors are replies, never rows: a failed pull must leave nothing in the archive.
+     */
+    internal suspend fun answerProviderRequest(
+        tag: String,
+        name: String,
+        requestId: String,
+    ): String? {
+        val provider = providers[key(tag, name)]
+            ?: return "no provider for $tag/$name; registered: " +
+                registeredProviders().joinToString(", ").ifEmpty { "none" }
+
+        val payload = try {
+            provider()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (cause: Throwable) {
+            // Surfaced rather than swallowed: a provider that throws must not look like an app
+            // that never answered, which is what the host reports on a timeout.
+            return "${cause::class.simpleName}: ${cause.message}"
+        }
+
+        signal(tag, name, payload, trigger = SignalTrigger.Request, requestId = requestId)
+        return null
     }
 
     fun addSink(sink: InspectorSink) {

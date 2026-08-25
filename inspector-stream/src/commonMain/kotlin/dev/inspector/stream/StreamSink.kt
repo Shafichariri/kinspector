@@ -7,9 +7,12 @@ import dev.inspector.model.Hello
 import dev.inspector.model.HelloAck
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
+import dev.inspector.Inspector
 import dev.inspector.model.MarkerMsg
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalError
 import dev.inspector.model.SignalMsg
+import dev.inspector.model.SignalRequest
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
 import dev.inspector.model.NetworkTransaction
@@ -263,11 +266,14 @@ class StreamSink(
                             val message = runCatching {
                                 InspectorJson.decodeFromString<WireMsg>(frame.readText())
                             }.getOrNull()
-                            if (message is SignRequest) {
-                                // Launched rather than awaited inline: signing can touch a hardware
-                                // key and may prompt for user presence, and blocking here would
-                                // stall the liveness read for as long as that takes.
-                                launch { answerSignRequest(message) }
+                            // Launched rather than awaited inline: signing can touch a hardware
+                            // key and may prompt for user presence, and a provider may read a
+                            // cache or a database. Blocking here would stall the liveness read
+                            // for as long as either takes.
+                            when (message) {
+                                is SignRequest -> launch { answerSignRequest(message) }
+                                is SignalRequest -> launch { answerSignalRequest(message) }
+                                else -> Unit
                             }
                         }
                     }
@@ -275,6 +281,35 @@ class StreamSink(
 
                 watcher.invokeOnCompletion { sender.cancel() }
                 sender.invokeOnCompletion { watcher.cancel() }
+            }
+        }
+    }
+
+
+    /**
+     * Answers one [SignalRequest] by reading the app's registered provider.
+     *
+     * On success nothing is sent from here: [Inspector.answerSignalRequest] records the row, which
+     * reaches this sink through [onSignal] and goes out as an ordinary [SignalMsg] carrying
+     * `trigger = request` and the same `requestId`. One path for every row, whoever asked for it.
+     *
+     * On failure a [SignalError] goes back instead, so the host reports why rather than waiting
+     * out its timeout and calling the app unresponsive.
+     */
+    private suspend fun DefaultClientWebSocketSession.answerSignalRequest(request: SignalRequest) {
+        val error = runCatching {
+            Inspector.answerSignalRequest(request.tag, request.name, request.requestId)
+        }.getOrElse { "${it::class.simpleName}: ${it.message}" }
+
+        if (error != null) {
+            runCatching {
+                send(
+                    Frame.Text(
+                        InspectorJson.encodeToString<WireMsg>(
+                            SignalError(requestId = request.requestId, error = error)
+                        )
+                    )
+                )
             }
         }
     }

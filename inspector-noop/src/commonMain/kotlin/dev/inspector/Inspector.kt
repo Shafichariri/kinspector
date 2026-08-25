@@ -50,6 +50,24 @@ object Inspector {
 
     fun signal(tag: String, name: String, text: String) = Unit
 
+    /**
+     * Discards [provider] rather than storing it. Deliberate, and the one thing here that is not
+     * merely "does nothing": a retained lambda holds a reference to whatever it closes over — a
+     * cache, a repository, an object graph — for the life of the process. That is how a no-op
+     * stops being free, and no signature check would catch it.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun registerProvider(tag: String, name: String, provider: suspend () -> JsonElement?) = Unit
+
+    fun unregisterProvider(tag: String, name: String) = Unit
+
+    /**
+     * Always an error, because this build captures nothing and registers nothing. Naming the
+     * build is what stops a host operator reading the empty answer as a broken app.
+     */
+    suspend fun answerSignalRequest(tag: String, name: String, requestId: String): String? =
+        "this build has no capture code; signals are not recorded"
+
     fun requestBody(txn: NetworkTransaction): ByteArray? = null
 
     fun responseBody(txn: NetworkTransaction): ByteArray? = null

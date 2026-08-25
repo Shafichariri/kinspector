@@ -2,14 +2,17 @@
 # Regenerate: ./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true
 
 dev.inspector.Inspector: fun addSink(sink: dev.inspector.InspectorSink): Unit
+dev.inspector.Inspector: fun answerSignalRequest(tag: String, name: String, requestId: String): String?
 dev.inspector.Inspector: fun clear(): Unit
 dev.inspector.Inspector: fun init(config: dev.inspector.InspectorConfig = ...): Unit
 dev.inspector.Inspector: fun install(config: HttpClientConfig<*>): Unit
 dev.inspector.Inspector: fun mark(label: String): Unit
+dev.inspector.Inspector: fun registerProvider(tag: String, name: String, provider: suspend () -> kotlinx.serialization.json.JsonElement?): Unit
 dev.inspector.Inspector: fun requestBody(txn: NetworkTransaction): ByteArray?
 dev.inspector.Inspector: fun responseBody(txn: NetworkTransaction): ByteArray?
 dev.inspector.Inspector: fun signal(tag: String, name: String, data: kotlinx.serialization.json.JsonElement? = ...): Unit
 dev.inspector.Inspector: fun signal(tag: String, name: String, text: String): Unit
+dev.inspector.Inspector: fun unregisterProvider(tag: String, name: String): Unit
 dev.inspector.Inspector: val latest: StateFlow<NetworkTransaction?>
 dev.inspector.Inspector: val markers: StateFlow<List<Marker>>
 dev.inspector.Inspector: val signals: StateFlow<List<Signal>>

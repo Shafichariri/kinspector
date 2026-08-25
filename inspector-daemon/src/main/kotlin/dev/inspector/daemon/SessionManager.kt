@@ -84,11 +84,13 @@ class SessionManager(
         _live.tryEmit(LiveEvent.Transaction(sessionId, stored))
     }
 
-    fun append(sessionId: String, signal: Signal, data: ByteArray?) {
-        val writer = synchronized(lock) { open[sessionId] } ?: return
+    /** Returns the row as stored, or null when the session is not open. */
+    fun append(sessionId: String, signal: Signal, data: ByteArray?): Signal? {
+        val writer = synchronized(lock) { open[sessionId] } ?: return null
         // Broadcast what was stored, not what arrived: only the stored row carries `dataRef`.
         val stored = synchronized(writer) { writer.append(signal, data) }
         _live.tryEmit(LiveEvent.SignalRecorded(sessionId, stored))
+        return stored
     }
 
     fun append(sessionId: String, marker: Marker) {
