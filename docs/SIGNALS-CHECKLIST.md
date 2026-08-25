@@ -82,10 +82,10 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ### 6 — Ship it
 
-- [ ] `docs/schema.md` has the `Signal` section, carrying the unredacted-payload warning verbatim
-- [ ] `get_signal` and `list_signals` MCP descriptions both state that payloads are unredacted
-- [ ] `docs/INTEGRATION.md` at **v16**, §13 saying explicitly that a consumer must do **nothing**
-- [ ] The consumer recipe is a numbered section of `INTEGRATION.md`, not an appendix
+- [x] `docs/schema.md` has the `Signal` section, carrying the unredacted-payload warning verbatim
+- [x] `get_signal` and `list_signals` MCP descriptions both state that payloads are unredacted
+- [x] `docs/INTEGRATION.md` at **v16**, changelog saying explicitly a consumer must do **nothing**
+- [x] The consumer recipe is a numbered section of `INTEGRATION.md`, not an appendix
 - [ ] Version **0.3.0** — new public API is not a patch — and tagged
 - [ ] **0.3.0 resolved from GitHub Packages in a throwaway consumer and compiled for JVM and iOS
       simulator, before announcing.** A published version cannot be replaced; this is the check that

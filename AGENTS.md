@@ -693,7 +693,7 @@ else a scan turns up.
 | `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
 | `docs/ACCESS.md` | Who can get Inspector and how, and the honest answer for someone who cannot. Update it if the distribution story changes — it is the only doc that answers "am I blocked". |
 | `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
-| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a §13 changelog entry saying what they must *do*, not just what changed. |
+| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a changelog entry saying what they must *do*, not just what changed. |
 | `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–3 shipped; Phase 4 (signals) is specified and not started. |
 | `docs/SIGNALS.md` | Phase 4 design spec — app state on the traffic timeline. Nothing built. Read it before writing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |

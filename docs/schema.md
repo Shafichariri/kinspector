@@ -111,6 +111,74 @@ A named point in the session timeline, from app code, the user, or an agent.
 Markers are what turn "what happened when I tapped checkout" into a lookup instead of timestamp
 arithmetic, and they back `since:marker("…")`.
 
+## Signal
+
+An app-defined observation on the same clock as `NetworkTransaction`: which screen was up, what a
+state holder held, what was in a cache. One type covers all three, because all three are *a named
+thing, under a category, at a moment, optionally with a payload*.
+
+| Field | Type | Notes |
+|---|---|---|
+| `v` | int | |
+| `id` | string | 8-char lowercase hex, unique within a session. |
+| `ts` | string | ISO-8601 UTC. Display only. |
+| `mono` | long | Ordering authority, **the same clock transactions use**. This is what makes a merged timeline possible. |
+| `tag` | string | App-defined category. Conventionally `screen`, `state`, `cache`, `session` — but the set is open. |
+| `name` | string | App-defined identity within the tag. `(tag, name)` is the grouping key for last-wins queries. |
+| `data` | JsonElement? | In-memory only. **Null on the wire and null in the archive** — the payload travels beside the row and lands on disk at `dataRef`. |
+| `dataRef` | string? | Host-relative, e.g. `signals/5c1a.json`. Null on the wire; the daemon fills it in on ingest. |
+| `dataTruncated` | bool | Payload exceeded `SignalPolicy.maxPayloadBytes` and was cut. |
+| `bytes` | long | **True** payload size, counted even when truncated. |
+| `redacted` | list<string> | Reserved. **Always empty** — see below. |
+| `trigger` | enum | `app` — the app pushed this. `request` — the host pulled it. |
+| `requestId` | string? | Set when `trigger` is `request`, correlating to the pull that caused it. |
+
+### `tag` is an open set
+
+Inspector ships *conventions*, not an enum, for the same reason `SessionMeta.platform` is a plain
+string: the archive outlives the binary that wrote it. An app emitting `tag = "bluetooth"` gets a
+row that archives, filters, merges into the timeline and reads over MCP exactly like a `screen` row
+does — it simply renders in a generic lane rather than a bespoke one. **A daemon or UI that has
+never heard of a tag must treat it as ordinary and must never drop it.**
+
+### `trigger` is load-bearing
+
+An agent handed a cache snapshot with no provenance reports it as the current state of the cache.
+If that snapshot was pushed at app start and the session is now twenty minutes old, the agent has
+just given a confidently wrong answer about live state — the exact failure `redacted` exists to
+prevent for credentials. Every consumer must surface it, and the MCP tool descriptions say so.
+
+### Point observations and interval claims
+
+A `screen` signal is true *at an instant*. A `cache` snapshot claims to be true *from its `mono`
+until the next observation of the same `(tag, name)`*. That difference is deliberately **not** in
+the schema, because it is derivable: consecutive last-wins rows for a key define the intervals. It
+is a rendering and query rule — the web UI draws `cache` as spans and `screen` as points, and
+`current` reports each observation along with how old it is.
+
+### Signal payloads are never redacted
+
+**Read this before using a session to answer a question about credentials.**
+
+- `Signal.redacted` exists in the schema and is **always empty**.
+- `Redaction.On` covers headers, query parameters and JSON body keys. It does **not** touch
+  `Signal.data`.
+- Therefore a session recorded with `Redaction.On` still archives signal payloads **verbatim**. A
+  cache snapshot or a state dump carries whatever the app put in it — customer records, form
+  contents, tokens held in state.
+
+This is consistent with the project's stance that capture is verbatim and cannot reach production,
+and the archive has always been readable by any agent pointed at it. What is new is that signals
+carry *domain* data rather than *wire* data, so the blast radius is larger.
+
+The practical consequence: an agent asked "were there any credentials in this session" that answers
+from a redacted transaction set will miss an unredacted state dump sitting beside it. The
+`get_signal` and `list_signals` tool descriptions say this too, because that is where an agent
+actually reads.
+
+Extending `Redactor` to `Signal.data` with the existing `bodyKeyPattern` is the obvious next move
+and should be cheap when wanted — the schema field is already reserved for it.
+
 ---
 
 ## SessionMeta
@@ -143,6 +211,9 @@ JSON text frames over `WS /ingest`, discriminated by `"type"`.
 | `helloAck` | daemon → device | `sessionId`, `resumed` |
 | `txn` | device → daemon | `NetworkTransaction` + inline bodies |
 | `marker` | device → daemon | `Marker` |
+| `signal` | device → daemon | `Signal` + inline payload |
+| `signalReq` | daemon → device | `requestId`, `tag`, `name` |
+| `signalErr` | device → daemon | `requestId`, `error` |
 | `bye` | device → daemon | none |
 
 ### Rules
@@ -156,6 +227,15 @@ JSON text frames over `WS /ingest`, discriminated by `"type"`.
 - **Reconnect** with exponential backoff, 250 ms up to 5 s.
 - **Resume** by sending `resumeSessionId`; accepted within `SESSION_RESUME_GRACE_MS`
   (5 minutes) of the previous disconnect, otherwise a new session folder is created.
+- **Signal payloads ride inline** on `signal`, exactly as bodies do, and `Signal.data` is null
+  on the wire. The daemon writes the payload to `signals/` and fills in `dataRef`. Carrying the
+  payload on the row as well would ship it twice.
+- **A pull is one request, one reply.** `signalReq` names both `tag` and `name`, so there is no
+  completion ambiguity. The device answers with an ordinary `signal` frame carrying
+  `trigger = request` and the same `requestId`, or with `signalErr`. There is no provider
+  advertisement in v1: discovery is the error path, so `signalErr` must name what *is* registered
+  — `no provider for cache/orders; registered: cache/response, cache/prefs`.
+- **A failed pull leaves no row.** Errors are replies, never archived rows.
 - **Transactions recorded while disconnected are not replayed** in v1. They remain visible in
   the device ring buffer only. Candidate for v2.
 - An abrupt socket close must be handled identically to `bye`.
@@ -178,6 +258,8 @@ has:error                                       status >= 400 or transport failu
 text:refund                                     host + path + query — never bodies
 since:marker("tapped checkout")                 at or after the last marker with that label
 attempt>1                                       retried or redirected attempts
+tag:screen                                      exact, case-insensitive — signals only
+name:Checkout                                   substring, case-insensitive — signals only
 ```
 
 - Whitespace-separated terms are **ANDed**.
@@ -189,8 +271,15 @@ attempt>1                                       retried or redirected attempts
 - **`path` is dual-mode**: glob when the pattern contains a star, plain substring otherwise. A
   bare `path:/v2/users` typed in a hurry should find `/v2/users/me`, which a strict glob would
   not.
-- **Bodies are never scanned.** Body search needs an index; keeping filters to metadata is what
-  lets the web UI stay smooth at 10k rows.
+- **Bodies and signal payloads are never scanned.** Content search needs an index; keeping
+  filters to metadata is what lets the web UI stay smooth at 10k rows. `text:` reads host, path
+  and query on a transaction, and tag and name on a signal.
+- **A term whose field does not exist on a row type excludes that row type.** This is what lets
+  one grammar span both streams. Because terms are ANDed, `status:500 tag:screen` therefore
+  matches **nothing at all** — correct and consistent, not a bug. Use `|` to span types:
+  `status:500 | tag:screen`. Markers are a row type too, carrying only `mono` and a label, so
+  every typed term drops them while `since:` and `text:` still reach them — a timeline cut at a
+  marker keeps the marker it was cut at.
 - **`since:` with an unknown label matches nothing**, not everything. A typo'd label silently
   becoming "no filter at all" is the more dangerous failure while debugging.
 - **`status:` never matches a transport failure**, which has no status. Use `has:error`.
@@ -227,6 +316,8 @@ Missing operator in 'status'. Use 'key:value', or 'key>=value' for status and at
       markers.jsonl
       bodies/7f3a.req    raw bytes as captured
       bodies/7f3a.res
+      signals.jsonl      one Signal per line, append-only
+      signals/5c1a.json  payload as captured
   latest -> sessions/<newest>
 ```
 
@@ -235,6 +326,15 @@ Session folder name: `<yyyy-MM-dd'T'HH-mm-ss>_<appId last segment>_<device slug>
 Retention: after each session close and on daemon start, prune oldest sessions until at most
 **100 sessions** and **300 MB** remain. Both configurable. The active session is never pruned.
 
+Signals are additionally trimmed **per tag** within a session, because the size distribution
+across tags spans orders of magnitude: a session may reasonably keep every `screen` row for its
+whole life while holding only the last few `cache` snapshots. Defaults are `cache` 20 and
+`state` 500, with every other tag — including one this build has never heard of — kept in full.
+Trimming rewrites `signals.jsonl`, so it runs on session close, never against an open writer.
+
 The split between `index.jsonl` and `bodies/` is the main affordance for agents: the index is
 small enough to read or grep whole, and bodies are fetched only for the few transactions that
-warrant it.
+warrant it. `signals.jsonl` and `signals/` repeat the split for the same reason.
+
+Signals are a **separate stream** rather than merged into `index.jsonl`, so every existing grep,
+REST route, UI query and MCP tool keeps working untouched. Merging happens on read, by `mono`.
