@@ -22,7 +22,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.serialization.json)
+            // `api`, not `implementation`: `Signal.data` is a public `JsonElement`, so every
+            // consumer of this module needs the type on its own compile classpath.
+            api(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

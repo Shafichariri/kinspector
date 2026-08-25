@@ -11,6 +11,9 @@ import dev.inspector.model.MarkerMsg
 import dev.inspector.model.SessionMeta
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
+import dev.inspector.model.SignalError
+import dev.inspector.model.SignalMsg
+import dev.inspector.model.SignalRequest
 import dev.inspector.model.Txn
 import dev.inspector.model.WireMsg
 import io.ktor.http.ContentType
@@ -324,6 +327,7 @@ class InspectorDaemon(
     private fun io.ktor.server.routing.Route.ingestRoute() = webSocket("/ingest") {
         var sessionId: String? = null
         var connection: LiveApps.Connection? = null
+        var warnedAboutSignals = false
         try {
             for (frame in incoming) {
                 if (frame !is Frame.Text) continue
@@ -371,11 +375,26 @@ class InspectorDaemon(
 
                     is SignResponse -> sessionId?.let { liveApps.complete(it, message) }
 
+                    // Signal ingest arrives in stage 2 (docs/SIGNALS.md). Until then, say so once
+                    // per connection: a device built ahead of its daemon should be obvious rather
+                    // than look like signals that vanished.
+                    is SignalMsg -> if (!warnedAboutSignals) {
+                        warnedAboutSignals = true
+                        System.err.println(
+                            "inspector: this daemon does not archive signals yet; dropping them " +
+                                "for this connection. Upgrade the daemon to keep them."
+                        )
+                    }
+
+                    // Correlated reply to a SignalRequest, which nothing sends until stage 3.
+                    is SignalError -> Unit
+
                     Bye -> break
 
-                    // Daemon-to-client only; a client sending either back is simply ignored.
+                    // Daemon-to-client only; a client sending one back is simply ignored.
                     is HelloAck -> Unit
                     is SignRequest -> Unit
+                    is SignalRequest -> Unit
                 }
             }
         } finally {
