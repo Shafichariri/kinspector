@@ -11,6 +11,7 @@ import dev.inspector.model.MarkerMsg
 import dev.inspector.model.SessionMeta
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
+import dev.inspector.model.Signal
 import dev.inspector.model.SignalError
 import dev.inspector.model.SignalMsg
 import dev.inspector.model.SignalRequest
@@ -327,7 +328,6 @@ class InspectorDaemon(
     private fun io.ktor.server.routing.Route.ingestRoute() = webSocket("/ingest") {
         var sessionId: String? = null
         var connection: LiveApps.Connection? = null
-        var warnedAboutSignals = false
         try {
             for (frame in incoming) {
                 if (frame !is Frame.Text) continue
@@ -375,14 +375,12 @@ class InspectorDaemon(
 
                     is SignResponse -> sessionId?.let { liveApps.complete(it, message) }
 
-                    // Signal ingest arrives in stage 2 (docs/SIGNALS.md). Until then, say so once
-                    // per connection: a device built ahead of its daemon should be obvious rather
-                    // than look like signals that vanished.
-                    is SignalMsg -> if (!warnedAboutSignals) {
-                        warnedAboutSignals = true
-                        System.err.println(
-                            "inspector: this daemon does not archive signals yet; dropping them " +
-                                "for this connection. Upgrade the daemon to keep them."
+                    is SignalMsg -> {
+                        val id = sessionId ?: continue
+                        manager.append(
+                            id,
+                            message.signal,
+                            decodeBody(message.data, message.dataB64),
                         )
                     }
 
@@ -425,6 +423,11 @@ class InspectorDaemon(
                 }}"""
                 is LiveEvent.MarkerAdded -> """{"type":"marker","sessionId":"${event.sessionId}","marker":${
                     InspectorJson.encodeToString(event.marker)
+                }}"""
+                // The signal here is the row SessionWriter stored, so `dataRef` is populated.
+                // Broadcasting the row as received is defect #1; this path has its shape exactly.
+                is LiveEvent.SignalRecorded -> """{"type":"signal","sessionId":"${event.sessionId}","signal":${
+                    InspectorJson.encodeToString(event.signal)
                 }}"""
                 is LiveEvent.SessionStarted -> """{"type":"sessionStarted","meta":${
                     InspectorJson.encodeToString(event.meta)
@@ -524,6 +527,52 @@ class InspectorDaemon(
                 bytes,
                 runCatching { ContentType.parse(contentType ?: "") }.getOrNull()
                     ?: ContentType.Application.OctetStream,
+            )
+        }
+
+        get("/api/sessions/{id}/signals") {
+            val dir = call.resolveSession() ?: return@get
+            val tag = call.request.queryParameters["tag"]
+            val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+            val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 100)
+                .coerceIn(1, 1000)
+            // Newest first, ordered by the device's monotonic clock — never by wall clock.
+            val rows = repository.readSignals(dir)
+                .filter { tag == null || it.tag.equals(tag, ignoreCase = true) }
+                .sortedByDescending { it.mono }
+                .drop(offset)
+                .take(limit)
+            call.respondJson(
+                InspectorJson.encodeToString(ListSerializer(Signal.serializer()), rows)
+            )
+        }
+
+        get("/api/sessions/{id}/signals/{signalId}") {
+            val dir = call.resolveSession() ?: return@get
+            val signalId = call.parameters["signalId"].orEmpty()
+            val signal = repository.readSignal(dir, signalId)
+                ?: return@get call.respondError(HttpStatusCode.NotFound, "no signal $signalId")
+            call.respondJson(InspectorJson.encodeToString(signal))
+        }
+
+        get("/api/sessions/{id}/signals/{signalId}/data") {
+            val dir = call.resolveSession() ?: return@get
+            val signalId = call.parameters["signalId"].orEmpty()
+            val bytes = repository.readSignalPayload(dir, signalId)
+                ?: return@get call.respondError(HttpStatusCode.NotFound, "no payload for $signalId")
+            // Payloads are stored as captured: JSON for structured data, a JSON string for a
+            // toString() dump. One type on disk, so one content type here.
+            call.respondBytes(bytes, ContentType.Application.Json)
+        }
+
+        get("/api/sessions/{id}/current") {
+            val dir = call.resolveSession() ?: return@get
+            val tag = call.request.queryParameters["tag"]
+            call.respondJson(
+                InspectorJson.encodeToString(
+                    ListSerializer(Signal.serializer()),
+                    repository.currentSignals(dir, tag),
+                )
             )
         }
 

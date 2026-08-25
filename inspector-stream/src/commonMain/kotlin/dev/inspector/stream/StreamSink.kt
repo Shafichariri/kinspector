@@ -8,6 +8,8 @@ import dev.inspector.model.HelloAck
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.MarkerMsg
+import dev.inspector.model.Signal
+import dev.inspector.model.SignalMsg
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
 import dev.inspector.model.NetworkTransaction
@@ -98,6 +100,7 @@ class StreamSink(
     private sealed interface Outbound {
         class Transaction(val txn: NetworkTransaction, val req: ByteArray?, val res: ByteArray?) : Outbound
         class MarkerOut(val marker: Marker) : Outbound
+        class SignalOut(val signal: Signal, val data: ByteArray?) : Outbound
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -140,6 +143,12 @@ class StreamSink(
 
     override fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
         if (!queue.trySend(Outbound.Transaction(txn, reqBody, resBody)).isSuccess) {
+            _dropped.value += 1
+        }
+    }
+
+    override fun onSignal(signal: Signal, data: ByteArray?) {
+        if (!queue.trySend(Outbound.SignalOut(signal, data)).isSuccess) {
             _dropped.value += 1
         }
     }
@@ -219,6 +228,16 @@ class StreamSink(
                             )
                             is Outbound.MarkerOut ->
                                 InspectorJson.encodeToString<WireMsg>(MarkerMsg(item.marker))
+                            // `data = null` on the row: the payload rides beside it, and the
+                            // daemon is what assigns `dataRef`. Sending both would ship the
+                            // payload twice.
+                            is Outbound.SignalOut -> InspectorJson.encodeToString<WireMsg>(
+                                SignalMsg(
+                                    signal = item.signal.copy(data = null),
+                                    data = item.data?.let { encodeBody(it) },
+                                    dataB64 = item.data?.let { !isUtf8(it) } ?: false,
+                                )
+                            )
                         }
                         send(Frame.Text(frame))
                     }

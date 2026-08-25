@@ -2,6 +2,9 @@ package dev.inspector.daemon
 
 import dev.inspector.model.ClientInfo
 import dev.inspector.model.Marker
+import dev.inspector.model.Signal
+import dev.inspector.model.SignalTags
+import dev.inspector.model.SignalTrigger
 import dev.inspector.model.MarkerSource
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Platforms
@@ -58,6 +61,7 @@ fun writeSession(
     startedAt: String,
     transactions: List<NetworkTransaction> = emptyList(),
     markers: List<Marker> = emptyList(),
+    signals: List<Pair<Signal, ByteArray?>> = emptyList(),
     padBytes: Int = 0,
 ): Path {
     val dir = config.sessionsDir.resolve(sessionId)
@@ -65,6 +69,21 @@ fun writeSession(
     val writer = SessionWriter(dir, meta)
     transactions.forEach { writer.append(it, null, if (padBytes > 0) ByteArray(padBytes) else null) }
     markers.forEach { writer.append(it) }
+    signals.forEach { (signal, data) -> writer.append(signal, data) }
     writer.close()
     return dir
 }
+
+fun signal(
+    id: String = "5c1a0001",
+    tag: String = SignalTags.SCREEN,
+    name: String = "Checkout",
+    mono: Long = 1_000,
+    ts: String = "2026-08-16T10:14:02.311Z",
+    bytes: Long = 0,
+    trigger: SignalTrigger = SignalTrigger.App,
+    requestId: String? = null,
+) = Signal(
+    id = id, ts = ts, mono = mono, tag = tag, name = name, bytes = bytes,
+    trigger = trigger, requestId = requestId,
+)

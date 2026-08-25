@@ -7,6 +7,7 @@ import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.SessionMeta
+import dev.inspector.model.Signal
 import kotlinx.serialization.Serializable
 import java.nio.file.Path
 import kotlin.io.path.exists
@@ -154,6 +155,41 @@ class SessionRepository(private val config: DaemonConfig) {
 
     fun readTransaction(sessionDir: Path, txnId: String): NetworkTransaction? =
         readTransactions(sessionDir).firstOrNull { it.id == txnId }
+
+    fun readSignals(sessionDir: Path): List<Signal> {
+        val file = SessionLayout.signalsFile(sessionDir)
+        if (!file.isRegularFile()) return emptyList()
+        return file.useLines { lines ->
+            lines.filter { it.isNotBlank() }
+                .mapNotNull { runCatching { InspectorJson.decodeFromString<Signal>(it) }.getOrNull() }
+                .toList()
+        }
+    }
+
+    fun readSignal(sessionDir: Path, signalId: String): Signal? =
+        readSignals(sessionDir).firstOrNull { it.id == signalId }
+
+    fun readSignalPayload(sessionDir: Path, signalId: String): ByteArray? {
+        if (!signalId.all { it.isLetterOrDigit() }) return null
+        val file = SessionLayout.signalFile(sessionDir, signalId)
+        if (!file.isRegularFile()) return null
+        return file.readBytes()
+    }
+
+    /**
+     * Latest observation per `(tag, name)`, newest first.
+     *
+     * A `cache` snapshot claims to be true from its `mono` until the next observation of the same
+     * key, so the last row for a key is the current one. That rule is derivable from the stream
+     * rather than stored, which is why it lives here and not in the schema.
+     */
+    fun currentSignals(sessionDir: Path, tag: String? = null): List<Signal> =
+        readSignals(sessionDir)
+            .filter { tag == null || it.tag.equals(tag, ignoreCase = true) }
+            .groupBy { it.tag to it.name }
+            .values
+            .mapNotNull { rows -> rows.maxByOrNull { it.mono } }
+            .sortedByDescending { it.mono }
 
     fun readBody(sessionDir: Path, txnId: String, side: String): ByteArray? {
         if (side != "req" && side != "res") return null

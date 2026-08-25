@@ -2,6 +2,7 @@ package dev.inspector.daemon
 
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
 import dev.inspector.stream.StreamSink
 import dev.inspector.stream.StreamState
 import io.ktor.client.HttpClient
@@ -91,6 +92,71 @@ class LiveTest {
         val result = withTimeoutOrNull(10_000) { received.await() }
         watcher.cancel()
         assertNotNull(result, "no live txn event arrived within 10s")
+    }
+
+    /** Collects the first live `signal` event, or fails. */
+    private suspend fun firstLiveSignal(
+        emit: suspend () -> Unit,
+    ): Signal = coroutineScope {
+        val received = CompletableDeferred<Signal>()
+
+        val watcher = launch {
+            http.webSocket(host = "127.0.0.1", port = config.port, path = "/api/live") {
+                for (frame in incoming) {
+                    if (frame !is Frame.Text) continue
+                    val root = InspectorJson.parseToJsonElement(frame.readText()).jsonObject
+                    if (root["type"]?.toString()?.trim('"') != "signal") continue
+                    received.complete(
+                        InspectorJson.decodeFromJsonElement(
+                            Signal.serializer(),
+                            root.getValue("signal"),
+                        )
+                    )
+                    return@webSocket
+                }
+            }
+        }
+
+        delay(400)
+        emit()
+
+        val result = withTimeoutOrNull(10_000) { received.await() }
+        watcher.cancel()
+        assertNotNull(result, "no live signal event arrived within 10s")
+    }
+
+    @Test
+    fun a_live_signal_carries_the_data_ref_the_viewer_needs_to_fetch_the_payload() = runBlocking {
+        // Defect #1, reproduced in the signal path: the wire contract sends `dataRef` as null, so
+        // a viewer handed the incoming row sees every payload as absent while it sits on disk.
+        // A passing REST test proves nothing here, which is why this lives in LiveTest.
+        val sink = StreamSink(clientInfo(), host = "127.0.0.1", port = config.port)
+            .also { it.start(); this@LiveTest.sink = it }
+        withTimeoutOrNull(10_000) { while (sink.state.value != StreamState.Connected) delay(20) }
+
+        val payload = """{"route":"Checkout","items":3}"""
+        val live = firstLiveSignal {
+            sink.onSignal(signal(id = "cccc3333", bytes = payload.length.toLong()), payload.toByteArray())
+        }
+
+        assertEquals("signals/cccc3333.json", live.dataRef)
+        assertEquals(null, live.data, "the payload travels beside the row, never on it")
+
+        // And the ref must actually resolve through the same API the viewer calls.
+        val repo = SessionRepository(config)
+        val dir = repo.sessionDirs().single()
+        assertEquals(payload, repo.readSignalPayload(dir, "cccc3333")!!.decodeToString())
+    }
+
+    @Test
+    fun a_payload_free_signal_reports_no_ref_rather_than_a_dangling_one() = runBlocking {
+        val sink = StreamSink(clientInfo(), host = "127.0.0.1", port = config.port)
+            .also { it.start(); this@LiveTest.sink = it }
+        withTimeoutOrNull(10_000) { while (sink.state.value != StreamState.Connected) delay(20) }
+
+        val live = firstLiveSignal { sink.onSignal(signal(id = "dddd4444"), null) }
+
+        assertEquals(null, live.dataRef)
     }
 
     @Test
