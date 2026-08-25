@@ -4,10 +4,14 @@ import dev.inspector.model.Filter
 import dev.inspector.model.FilterContext
 import dev.inspector.model.FilterParser
 import dev.inspector.model.InspectorJson
+// Extension: `matches` on the interface takes a Row; this is the transaction overload.
+import dev.inspector.model.matches
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.SessionMeta
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalTags
+import dev.inspector.model.SignalTrigger
 import kotlinx.serialization.Serializable
 import java.nio.file.Path
 import kotlin.io.path.exists
@@ -18,6 +22,63 @@ import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import kotlin.io.path.useLines
+
+/** One page of signal rows, shaped like [TransactionPage] so consumers read them the same way. */
+@Serializable
+data class SignalPage(
+    val total: Int,
+    val matched: Int,
+    val items: List<Signal>,
+)
+
+/**
+ * One line of a merged timeline.
+ *
+ * Deliberately flat and small: this is what an agent reads to orient itself, and a compact line
+ * per event is what keeps a whole session inside a context window. Follow an `id` into
+ * `get_signal` or `get_body` for the detail.
+ */
+@Serializable
+data class TimelineEntry(
+    val kind: String,
+    val mono: Long,
+    val ts: String,
+    val id: String? = null,
+    val label: String,
+    val detail: String? = null,
+    val trigger: String? = null,
+) {
+    companion object {
+        fun of(txn: NetworkTransaction): TimelineEntry = TimelineEntry(
+            kind = "txn",
+            mono = txn.mono,
+            ts = txn.ts,
+            id = txn.id,
+            label = "${txn.method} ${txn.host}${txn.path}",
+            detail = txn.status?.toString() ?: txn.error ?: "in flight",
+        )
+
+        fun of(signal: Signal): TimelineEntry = TimelineEntry(
+            kind = "signal",
+            mono = signal.mono,
+            ts = signal.ts,
+            id = signal.id,
+            label = "${signal.tag}/${signal.name}",
+            detail = if (signal.dataRef != null) "payload ${signal.bytes}B" else null,
+            // Provenance travels with the row. An agent that cannot tell an app-start snapshot
+            // from a fresh read will report stale state as live.
+            trigger = if (signal.trigger == SignalTrigger.Request) "request" else "app",
+        )
+
+        fun of(marker: Marker): TimelineEntry = TimelineEntry(
+            kind = "marker",
+            mono = marker.mono,
+            ts = marker.ts,
+            label = marker.label,
+            detail = marker.source,
+        )
+    }
+}
 
 /** Page of matching transactions, with enough counts for a UI to show "12 of 412". */
 @Serializable
@@ -42,6 +103,12 @@ data class SessionSummary(
     val errors: List<SummaryRow>,
     val moreErrors: Int = 0,
     val markers: List<String>,
+    /** Signal rows per tag. Absent when the app records no signals, keeping the digest small. */
+    val signalsByTag: Map<String, Int> = emptyMap(),
+    /** The last `screen` observation, which is the one orienting question worth answering here. */
+    val currentScreen: String? = null,
+    /** `tag/name` pairs a pull has been answered for this session. */
+    val providersSeen: List<String> = emptyList(),
 )
 
 @Serializable
@@ -166,6 +233,66 @@ class SessionRepository(private val config: DaemonConfig) {
         }
     }
 
+    /**
+     * Filtered, paginated read of the signal stream. Same grammar, same errors as
+     * [queryTransactions] — a `status:` term simply matches nothing here, by the exclusion rule.
+     */
+    fun querySignals(
+        sessionDir: Path,
+        filterText: String = "",
+        offset: Int = 0,
+        limit: Int = 50,
+    ): SignalPage {
+        val filter = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
+        val all = readSignals(sessionDir)
+        val context = FilterContext(readMarkers(sessionDir))
+        val matched = all.filter { filter.matches(it, context) }
+        val ordered = matched.sortedByDescending { it.mono }
+        return SignalPage(
+            total = all.size,
+            matched = ordered.size,
+            items = ordered.drop(offset).take(limit.coerceIn(1, 1000)),
+        )
+    }
+
+    /**
+     * Transactions, signals and markers merged by `mono` — the tool this feature exists for.
+     *
+     * Merged on read rather than stored merged, so every existing grep and route keeps working.
+     * Ordered **oldest first**: a timeline is read forwards, unlike the row listings, which put
+     * the newest first because that is what a live tail wants.
+     */
+    fun timeline(
+        sessionDir: Path,
+        filterText: String = "",
+        since: Long? = null,
+        until: Long? = null,
+        limit: Int = 200,
+    ): List<TimelineEntry> {
+        val filter = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
+        val markers = readMarkers(sessionDir)
+        val context = FilterContext(markers)
+
+        val entries = buildList {
+            readTransactions(sessionDir)
+                .filter { filter.matches(it, context) }
+                .forEach { add(TimelineEntry.of(it)) }
+            readSignals(sessionDir)
+                .filter { filter.matches(it, context) }
+                .forEach { add(TimelineEntry.of(it)) }
+            // Markers go through the same filter. They carry only `mono` and a label, so every
+            // typed term drops them while since: and text: still reach them — which is what keeps
+            // a timeline cut at a marker from losing the marker it was cut at.
+            markers.filter { filter.matches(it, context) }
+                .forEach { add(TimelineEntry.of(it)) }
+        }
+
+        return entries
+            .filter { (since == null || it.mono >= since) && (until == null || it.mono <= until) }
+            .sortedBy { it.mono }
+            .take(limit.coerceIn(1, 2000))
+    }
+
     fun readSignal(sessionDir: Path, signalId: String): Signal? =
         readSignals(sessionDir).firstOrNull { it.id == signalId }
 
@@ -208,6 +335,7 @@ class SessionRepository(private val config: DaemonConfig) {
     fun summarize(sessionDir: Path, maxErrors: Int = 20): SessionSummary? {
         val meta = readMeta(sessionDir) ?: return null
         val txns = readTransactions(sessionDir)
+        val signals = readSignals(sessionDir)
         val errors = txns.filter { it.isError }
 
         return SessionSummary(
@@ -228,6 +356,14 @@ class SessionRepository(private val config: DaemonConfig) {
             errors = errors.take(maxErrors).map { it.toRow() },
             moreErrors = (errors.size - maxErrors).coerceAtLeast(0),
             markers = readMarkers(sessionDir).map { it.label }.distinct(),
+            signalsByTag = signals.groupingBy { it.tag }.eachCount().toSortedMap().toMap(),
+            currentScreen = signals.filter { it.tag == SignalTags.SCREEN }
+                .maxByOrNull { it.mono }?.name,
+            // Only pulls prove a provider exists; a pushed row says nothing about one.
+            providersSeen = signals.filter { it.trigger == SignalTrigger.Request }
+                .map { "${it.tag}/${it.name}" }
+                .distinct()
+                .sorted(),
         )
     }
 

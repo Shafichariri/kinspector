@@ -62,16 +62,16 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ### 4 — Grammar v2 and MCP
 
-- [ ] Acceptance question answered in three calls (see below), as a unit test **and** by piping
+- [x] Acceptance question answered in three calls (see below), as a unit test **and** by piping
       JSON-RPC frames into the built binary
-- [ ] `status:500 tag:screen` returns empty
-- [ ] `status:500 | tag:screen` returns both kinds
-- [ ] `text:` matches signal `tag`+`name`, never payloads
-- [ ] Malformed filter returns the parser's own message
-- [ ] **Every existing filter test passes unchanged** after the row-abstraction refactor
-- [ ] `get_signal` / `list_signals` descriptions state what `trigger` means — an agent must not
+- [x] `status:500 tag:screen` returns empty
+- [x] `status:500 | tag:screen` returns both kinds
+- [x] `text:` matches signal `tag`+`name`, never payloads
+- [x] Malformed filter returns the parser's own message
+- [x] **Every existing filter test passes unchanged** after the row-abstraction refactor
+- [x] `get_signal` / `list_signals` descriptions state what `trigger` means — an agent must not
       report an app-start snapshot as live state
-- [ ] `session_summary` still around a kilobyte with signals included
+- [x] `session_summary` still around a kilobyte with signals included
 
 ### 5 — Web UI
 
