@@ -75,10 +75,10 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 
 ### 5 — Web UI
 
-- [ ] `scripts/render-web-ui.js` extended to assert signal lanes and their ordering
-- [ ] Unknown-tag rows render in the generic lane
-- [ ] Current-state panel renders, showing each observation's `trigger` and age
-- [ ] No console errors
+- [x] `scripts/render-web-ui.js` extended to assert signal lanes and their ordering
+- [x] Unknown-tag rows render in the generic lane
+- [x] Current-state panel renders, showing each observation's `trigger` and age
+- [x] No console errors
 
 ### 6 — Ship it
 
@@ -126,6 +126,20 @@ Three calls, against a real recorded session, verified both ways. Four means som
 under-summarizing.
 
 ---
+
+## Decisions taken while building
+
+Recorded here because `SIGNALS.md` left them open:
+
+- **Default web view.** The merged timeline, but only for a session that *has* signals; traffic
+  stays the landing view otherwise. A session recorded before signals existed therefore behaves
+  exactly as it always did, and nobody lands on an empty timeline.
+- **`timeline` vs `session_summary` as the MCP entry point.** They sit side by side, with
+  `session_summary` still first: it is the cheaper orienting call, and it now reports
+  `currentScreen` and signal counts, which is often enough to decide whether the timeline is
+  worth reading at all.
+- **Per-tag retention defaults.** `cache` 20, `state` 500, everything else uncapped. Still a
+  guess — see below.
 
 ## Known guesses
 
