@@ -24,6 +24,7 @@ object ApiSurface {
         "dev.inspector.Inspector",
         "dev.inspector.InspectorConfig",
         "dev.inspector.InspectorSink",
+        "dev.inspector.SignalPolicy",
         "dev.inspector.Redaction",
         "dev.inspector.Redaction\$Off",
         "dev.inspector.Redaction\$On",

@@ -8,8 +8,11 @@ dev.inspector.Inspector: fun install(config: HttpClientConfig<*>): Unit
 dev.inspector.Inspector: fun mark(label: String): Unit
 dev.inspector.Inspector: fun requestBody(txn: NetworkTransaction): ByteArray?
 dev.inspector.Inspector: fun responseBody(txn: NetworkTransaction): ByteArray?
+dev.inspector.Inspector: fun signal(tag: String, name: String, data: kotlinx.serialization.json.JsonElement? = ...): Unit
+dev.inspector.Inspector: fun signal(tag: String, name: String, text: String): Unit
 dev.inspector.Inspector: val latest: StateFlow<NetworkTransaction?>
 dev.inspector.Inspector: val markers: StateFlow<List<Marker>>
+dev.inspector.Inspector: val signals: StateFlow<List<Signal>>
 dev.inspector.Inspector: val transactions: StateFlow<List<NetworkTransaction>>
 dev.inspector.Inspector: var canary: String (restricted set)
 dev.inspector.InspectorConfig: fun component1(): Long
@@ -17,7 +20,8 @@ dev.inspector.InspectorConfig: fun component2(): Int
 dev.inspector.InspectorConfig: fun component3(): List<String>
 dev.inspector.InspectorConfig: fun component4(): Boolean
 dev.inspector.InspectorConfig: fun component5(): dev.inspector.Redaction
-dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCaptureMaxBytes: Int = ..., captureContentTypes: List<String> = ..., captureAllBodies: Boolean = ..., redaction: dev.inspector.Redaction = ...): dev.inspector.InspectorConfig
+dev.inspector.InspectorConfig: fun component6(): dev.inspector.SignalPolicy
+dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCaptureMaxBytes: Int = ..., captureContentTypes: List<String> = ..., captureAllBodies: Boolean = ..., redaction: dev.inspector.Redaction = ..., signals: dev.inspector.SignalPolicy = ...): dev.inspector.InspectorConfig
 dev.inspector.InspectorConfig: fun equals(other: Any?): Boolean
 dev.inspector.InspectorConfig: fun hashCode(): Int
 dev.inspector.InspectorConfig: fun toString(): String
@@ -26,7 +30,9 @@ dev.inspector.InspectorConfig: val captureAllBodies: Boolean
 dev.inspector.InspectorConfig: val captureContentTypes: List<String>
 dev.inspector.InspectorConfig: val redaction: dev.inspector.Redaction
 dev.inspector.InspectorConfig: val ringBufferMaxBytes: Long
+dev.inspector.InspectorConfig: val signals: dev.inspector.SignalPolicy
 dev.inspector.InspectorSink: fun onMarker(marker: Marker): Unit
+dev.inspector.InspectorSink: fun onSignal(signal: Signal, data: ByteArray?): Unit
 dev.inspector.InspectorSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
 dev.inspector.OkHttpCaptureKt: fun okHttpInterceptor(dev.inspector.Inspector): okhttp3.Interceptor
 dev.inspector.Redaction$Companion: val DEFAULT_BODY_KEY_PATTERN: String
@@ -48,3 +54,15 @@ dev.inspector.Redaction$On: val bodyKeys: Regex
 dev.inspector.Redaction$On: val headers: List<String>
 dev.inspector.Redaction$On: val queryKeyPattern: String
 dev.inspector.Redaction$On: val queryKeys: Regex
+dev.inspector.SignalPolicy: fun component1(): Long
+dev.inspector.SignalPolicy: fun component2(): Boolean
+dev.inspector.SignalPolicy: fun component3(): Int
+dev.inspector.SignalPolicy: fun component4(): Long
+dev.inspector.SignalPolicy: fun copy(minIntervalMs: Long = ..., dropUnchanged: Boolean = ..., maxPayloadBytes: Int = ..., ringBufferMaxBytes: Long = ...): dev.inspector.SignalPolicy
+dev.inspector.SignalPolicy: fun equals(other: Any?): Boolean
+dev.inspector.SignalPolicy: fun hashCode(): Int
+dev.inspector.SignalPolicy: fun toString(): String
+dev.inspector.SignalPolicy: val dropUnchanged: Boolean
+dev.inspector.SignalPolicy: val maxPayloadBytes: Int
+dev.inspector.SignalPolicy: val minIntervalMs: Long
+dev.inspector.SignalPolicy: val ringBufferMaxBytes: Long

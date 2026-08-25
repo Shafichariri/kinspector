@@ -2,6 +2,8 @@ package dev.inspector
 
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
+import kotlinx.serialization.json.JsonElement
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,16 +33,22 @@ object Inspector {
     private val _transactions = MutableStateFlow<List<NetworkTransaction>>(emptyList())
     private val _latest = MutableStateFlow<NetworkTransaction?>(null)
     private val _markers = MutableStateFlow<List<Marker>>(emptyList())
+    private val _signals = MutableStateFlow<List<Signal>>(emptyList())
 
     val transactions: StateFlow<List<NetworkTransaction>> = _transactions.asStateFlow()
     val latest: StateFlow<NetworkTransaction?> = _latest.asStateFlow()
     val markers: StateFlow<List<Marker>> = _markers.asStateFlow()
+    val signals: StateFlow<List<Signal>> = _signals.asStateFlow()
 
     fun init(config: InspectorConfig = InspectorConfig()) = Unit
 
     fun install(config: HttpClientConfig<*>) = Unit
 
     fun mark(label: String) = Unit
+
+    fun signal(tag: String, name: String, data: JsonElement? = null) = Unit
+
+    fun signal(tag: String, name: String, text: String) = Unit
 
     fun requestBody(txn: NetworkTransaction): ByteArray? = null
 

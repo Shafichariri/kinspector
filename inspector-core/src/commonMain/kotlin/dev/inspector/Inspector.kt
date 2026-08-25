@@ -3,6 +3,9 @@ package dev.inspector
 import dev.inspector.internal.installInspector
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.StateFlow
 
@@ -50,6 +53,9 @@ object Inspector {
     /** Session markers, oldest first. */
     val markers: StateFlow<List<Marker>> = recorder.markers
 
+    /** Signal ring contents, newest first. */
+    val signals: StateFlow<List<Signal>> = recorder.signals
+
     /**
      * Idempotent: calling it again simply re-applies [config], and the underlying recorder is
      * never replaced, so flows already being collected stay live. Redaction and body caps take
@@ -73,6 +79,32 @@ object Inspector {
     /** Drops a labelled point into the session timeline. Backs the `since:marker(...)` filter. */
     fun mark(label: String) {
         recorder.mark(label)
+    }
+
+    /**
+     * Records an app-defined observation on the same timeline as captured traffic.
+     *
+     * [tag] and [name] are free strings — Inspector never learns what they mean. Conventional
+     * tags are in [dev.inspector.model.SignalTags]; anything else works identically.
+     *
+     * Emit freely: throttling is the library's job, not the caller's. Values for one
+     * `(tag, name)` are conflated on the capture worker per [SignalPolicy], keeping the last value
+     * of a burst rather than the first. This call itself only offers the observation to a bounded
+     * queue, so a slow or absent host costs dropped signals, never backpressure into the app.
+     */
+    fun signal(tag: String, name: String, data: JsonElement? = null) {
+        recorder.signal(tag, name, data)
+    }
+
+    /**
+     * Records an observation whose payload is plain text.
+     *
+     * The common case is a `toString()` of a state holder: a Kotlin/Native target has no runtime
+     * reflection, so serializing arbitrary app state is not free. The text is stored as a JSON
+     * string, so there is one payload type on disk rather than two.
+     */
+    fun signal(tag: String, name: String, text: String) {
+        recorder.signal(tag, name, JsonPrimitive(text))
     }
 
     /**
