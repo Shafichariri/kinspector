@@ -7,6 +7,10 @@ The build order at the end is numbered in **stages**, not phases, because "Phase
 document means the capture work that already shipped. Stage numbers here are local to this
 feature.
 
+Building it? Keep [`SIGNALS-CHECKLIST.md`](SIGNALS-CHECKLIST.md) open alongside — the same
+acceptance criteria as a flat list of assertions. This file owns the decisions and the rationale;
+that one owns what must be true of a build.
+
 Inspector today answers *what went over the wire*. It cannot answer *what the app was doing at the
 time* — which screen was on top, what the presentation layer held, what was in the cache. Those are
 the questions a person or an agent actually asks when handed a bug, and today they are reconstructed
@@ -21,7 +25,7 @@ the same MCP server.
 ## Scope
 
 **In:** a `Signal` type, one new push frame, one new pull frame pair, device-side conflation, a
-separate ring budget, a `signals.jsonl` stream in the archive, filter grammar v2, four MCP tools,
+separate ring budget, a `signals.jsonl` stream in the archive, filter grammar v2, five MCP tools,
 and a merged timeline.
 
 **Out, deliberately:**
@@ -46,9 +50,10 @@ One type covers a navigation event, a view-model state observation and a cache s
 three are *a named thing, under a category, at a moment, optionally with a payload*.
 
 ```kotlin
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Signal(
-    val v: Int = SCHEMA_VERSION,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val v: Int = SCHEMA_VERSION,
     val id: String,
     val ts: String,
     val mono: Long,
@@ -72,13 +77,13 @@ enum class SignalTrigger {
 
 | Field | Type | Notes |
 |---|---|---|
-| `v` | int | Always present. Additive fields do not bump it; this whole feature is additive, so **`v` stays 1**. |
+| `v` | int | Always present — and that needs `@EncodeDefault(ALWAYS)`, exactly as `NetworkTransaction.v` does. Without it kotlinx omits a value equal to its default, so every archived row silently loses its version marker and version gating has nothing to gate on. Additive fields do not bump it; this whole feature is additive, so **`v` stays 1**. |
 | `id` | string | 8-char lowercase hex, unique within a session. Same generator as `NetworkTransaction.id`. |
 | `ts` | string | ISO-8601 UTC with millis, device wall clock. **Display only.** |
 | `mono` | long | Device monotonic ms — **the same clock `NetworkTransaction.mono` uses**. This is what makes the merged timeline possible; it is not optional and must not be sourced separately. |
 | `tag` | string | App-defined category. Lowercase by convention. See [Tag conventions](#tag-conventions). |
 | `name` | string | App-defined identity within the tag. `(tag, name)` is the grouping key for last-wins queries. |
-| `data` | JsonElement? | Payload. Present on the wire, **null once archived** — the daemon moves it to disk and sets `dataRef`. Non-JSON payloads (a `toString()` dump) travel as `JsonPrimitive(String)`. |
+| `data` | JsonElement? | **In-memory only.** Populated in the device ring and the `signals` StateFlow; **null on the wire and null in the archive**. The payload travels beside the row in `SignalMsg.data` and lands on disk at `dataRef` — the same split `Txn` uses for bodies. Carrying it on the row as well would ship every payload twice. Non-JSON payloads (a `toString()` dump) are held as `JsonPrimitive(String)`. |
 | `dataRef` | string? | Host-relative, e.g. `signals/7f3a.json`. Null on the wire; the daemon fills it in. **See the broadcast rule below — this is a known trap.** |
 | `dataTruncated` | bool | Payload exceeded `SignalPolicy.maxPayloadBytes`. |
 | `bytes` | long | **True** payload size, counted even when the payload was truncated or dropped. Mirrors `reqBytes`/`resBytes`. |
@@ -177,6 +182,10 @@ discovery being an error path rather than a listing. Acceptable for v1; revisit 
 
 Errors are replies, never archived rows. A failed pull must not leave a `Signal` in the archive.
 
+The reply bypasses conflation entirely — see
+[Recorder](#recorder-conflation-belongs-here-not-in-app-code). A pull answered from an unchanged
+cache still produces a row.
+
 ---
 
 ## Wire additions
@@ -216,6 +225,13 @@ object Inspector {
     val signals: StateFlow<List<Signal>>
 }
 ```
+
+`registerProvider` deliberately does **not** follow the `ReplaySigner` pattern. `StreamSink` takes
+its signer as a constructor parameter, added last so existing call sites kept compiling; providers
+cannot work that way, because an app registers and unregisters them at runtime as caches and
+repositories come and go. So the registry lives on the `Inspector` facade, and `:inspector-stream`
+reads it rather than being handed it — a new core→stream seam, and an intentional one. Say so at
+the seam, or stage 3 opens with somebody trying to reconcile the two shapes.
 
 `signal(text:)` exists because the most common consumer payload is a `toString()` of a data class —
 a KMP app has no reflection on Native, so structured serialization of arbitrary state is not free.
@@ -269,6 +285,23 @@ So the app spams `signal()` freely and the **Recorder** conflates, on the worker
 choice: in a rapid sequence of state changes the one you always want is the *last*, because that is
 where the state settled. A leading-edge implementation will look correct in tests and be useless in
 practice.
+
+**That needs a clock the worker does not currently have.** `Recorder`'s worker is `for (event in
+queue)` — purely event-driven, with no notion of time passing. Trailing-edge conflation means a
+held value must be emitted when its window closes *even though no further event arrives*, so a
+burst that simply stops still yields its last value. Without a timer the final value of every burst
+is held forever, which loses precisely the row this rule exists to keep. Use a per-key delayed
+flush launched on the recorder's own single-parallelism scope, or `select` with `onTimeout`; both
+serialize on the worker, so neither reintroduces a lock. `clear()` must discard held values, and a
+value still held at process death is simply lost — acceptable, and worth saying so.
+
+**Conflation applies to `trigger = app` only.** A pull reply must reach the host unconditionally:
+it is a reply to a `requestId` that somebody is awaiting. Route it around both rules, because both
+break it. `dropUnchanged` would swallow a reply whose payload is byte-identical to the last push —
+that is, one taken when the cache had *not* changed — and the host would then time out and report
+the app as unresponsive at the moment it was behaving most predictably. `minIntervalMs` would add
+up to a window's latency to a synchronous round trip. Neither failure looks like conflation from
+the outside, which is why this is a rule and not an optimization.
 
 `signal()` itself keeps the existing efficiency contract — `trySend` into the bounded channel on the
 caller's coroutine, nothing more. A dead or slow daemon costs dropped signals, never backpressure.
@@ -379,11 +412,21 @@ status:500 | tag:screen
 `FilterParser` and `Filter` are extended; there is no parallel signal-only grammar. One grammar
 across both streams is what makes a unified timeline query expressible at all.
 
+**Budget for a refactor, not two new terms.** `Filter.matches` is declared
+`matches(txn: NetworkTransaction, ctx: FilterContext)` on the sealed interface, and every term
+implements that signature — so the exclusion rule requires each existing term to answer for a row
+type it was never written against. Introduce a small row abstraction in `:inspector-model` that
+both `NetworkTransaction` and `Signal` satisfy, rather than adding a second `matches` overload
+across the hierarchy. Nothing outside `:inspector-model` breaks: the overlay stays traffic-only in
+v1, and `api/inspector-public-api.txt` covers the `Inspector` facade, not the filter types. The
+gate is that **every existing filter test still passes unchanged** — this refactor touches the one
+component with the most existing coverage, and that coverage is the safety net.
+
 ---
 
 ## MCP tools
 
-Four new, one extended. Sized for a context window, same discipline as the existing set: summaries
+Five new, one extended. Sized for a context window, same discipline as the existing set: summaries
 before rows, rows before payloads, payloads truncated unless asked.
 
 | Tool | Args | Returns |
