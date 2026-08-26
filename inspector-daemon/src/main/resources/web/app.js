@@ -649,6 +649,10 @@
     $('view-traffic').classList.toggle('active', traffic);
     $('view-timeline').classList.toggle('active', timeline);
     $('view-cache').classList.toggle('active', cache);
+    // The cache table has six columns and long keys; the list pane is sized for one-line rows.
+    // A class rather than `hidden` on the detail pane, because `hidden` loses to any author rule
+    // that sets `display` — the bug this view already shipped once.
+    $('panes').classList.toggle('panes-wide', cache);
     if (timeline) renderTimeline();
     if (cache) renderCache();
   }
@@ -812,6 +816,21 @@
     return cell;
   }
 
+  /**
+   * Percent-decoded for display only.
+   *
+   * A storage key is usually escaped by whatever scheme the app uses to make it a safe filename,
+   * so it arrives full of `%2F`. Reading past that is work the eye should not have to do; the
+   * undecoded original stays on the row's title.
+   */
+  const readableKey = (key) => {
+    try {
+      return decodeURIComponent(String(key));
+    } catch {
+      return String(key);
+    }
+  };
+
   function cacheRow(row) {
     const tr = el('tr', 'cache-row');
     tr.dataset.key = row.key;
@@ -823,8 +842,9 @@
     tr.appendChild(time);
 
     const key = el('td', 'cache-col-key');
-    key.appendChild(el('span', 'cache-key', row.key));
-    if (row.storageKey) key.title = row.storageKey;
+    key.appendChild(el('span', 'cache-key', readableKey(row.key)));
+    // The raw key stays reachable, because it is what the app actually stored under.
+    key.title = row.storageKey || row.key;
     if (row.kind) {
       key.appendChild(el('span', `cache-kind cache-kind-${row.kind.toLowerCase()}`, row.kind.toLowerCase()));
     }

@@ -114,6 +114,12 @@ html, body {
   height: calc(100% - 44px);
 }
 
+/* The cache table is six columns wide and has no per-row detail to show beside it, so it takes
+   the detail pane's track rather than being squeezed into the list column. The track has to go
+   with it: hiding the pane alone would leave the grid holding an empty third column. */
+#panes.panes-wide { grid-template-columns: 220px minmax(320px, 1fr); }
+#panes.panes-wide #detail-pane { display: none; }
+
 #rail {
   border-right: 1px solid var(--divider);
   padding: 12px;
@@ -609,6 +615,9 @@ pre.body {
 /* --- cache view ---------------------------------------------------------- */
 
 .cache { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+/* `display` on the element itself beats the user agent's `[hidden] { display: none }`, so without
+   this the pane stays on screen while hidden and paints over whichever view is selected. */
+.cache[hidden] { display: none; }
 
 .cache-toolbar {
   display: flex;
@@ -643,11 +652,20 @@ pre.body {
 .cache-row:hover { background: rgba(255, 255, 255, 0.04); }
 
 .cache-col-time { white-space: nowrap; width: 1%; }
-.cache-col-key { min-width: 18ch; }
+.cache-col-key { min-width: 18ch; max-width: 52ch; }
+.cache-key {
+  margin-right: 6px;
+  display: inline-block;
+  max-width: 46ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 .cache-col-storage, .cache-col-scope, .cache-col-expired { white-space: nowrap; width: 1%; }
 .cache-col-value { width: 60%; }
 
-.cache-key { margin-right: 6px; }
 .cache-bytes { font-size: 11px; margin-right: 6px; }
 
 /* An expired row is still there — eviction is lazy — so it is dimmed rather than hidden. */
