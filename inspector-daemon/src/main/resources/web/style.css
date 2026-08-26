@@ -509,3 +509,99 @@ pre.body {
   font-family: var(--mono);
   font-size: 12px;
 }
+
+/* --- timeline and signals ------------------------------------------------ */
+
+.view-switch { display: inline-flex; gap: 2px; }
+.view-switch .btn.active { background: var(--accent-bg, #2b3a55); color: var(--fg, #e6e6e6); }
+
+#timeline { overflow-y: auto; height: 100%; }
+
+/* A signal row reads as a sibling of a request row, not as a different kind of object: the
+   whole point of the merge is that they sit on one clock. */
+.tl-signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  font: inherit;
+  line-height: 1.6;
+}
+.tl-signal:hover { background: rgba(255, 255, 255, 0.04); }
+.tl-signal.sel { background: rgba(255, 255, 255, 0.08); }
+
+/* One colour per lane. An unknown tag lands on `other` and still renders. */
+.lane-screen  { border-left-color: #6aa9ff; }
+.lane-state   { border-left-color: #c08cff; }
+.lane-cache   { border-left-color: #59c98a; }
+.lane-session { border-left-color: #ffb454; }
+.lane-other   { border-left-color: #7c8798; }
+
+.tl-glyph { flex: 0 0 auto; display: inline-block; height: 8px; border-radius: 4px; }
+/* A point observation: true at an instant. */
+.tl-point { width: 8px; background: currentColor; opacity: 0.75; }
+/* An interval claim: true from here until the next observation of the same key. */
+.tl-span { background: currentColor; opacity: 0.45; min-width: 2px; }
+
+.lane-screen .tl-glyph  { color: #6aa9ff; }
+.lane-state .tl-glyph   { color: #c08cff; }
+.lane-cache .tl-glyph   { color: #59c98a; }
+.lane-session .tl-glyph { color: #ffb454; }
+.lane-other .tl-glyph   { color: #7c8798; }
+
+.tl-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  opacity: 0.85;
+}
+.tl-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-mono { flex: 0 0 auto; font-size: 11px; }
+.tl-bytes { flex: 0 0 auto; font-size: 11px; }
+
+/* Provenance is never left to be inferred: a pushed snapshot reported as live state is the
+   failure `trigger` exists to prevent. */
+.tl-trigger {
+  flex: 0 0 auto;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: lowercase;
+}
+.tl-pulled { background: rgba(89, 201, 138, 0.18); color: #59c98a; }
+.tl-pushed { background: rgba(124, 135, 152, 0.18); color: #9aa4b2; }
+
+/* --- the "Now" rail panel ------------------------------------------------ */
+
+.current { list-style: none; margin: 0 0 10px; padding: 0; }
+/* Two lines rather than one: the rail is narrow, and a single flex row truncated the name to
+   nothing while wrapping the age awkwardly beneath it. */
+.current-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 6px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.current-item:hover .current-name { text-decoration: underline; }
+.current-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.current-age {
+  grid-column: 2;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.current-age.stale { color: #ffb454; }
+
+.detail-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.detail-title { font-weight: 600; }
+.detail-meta { font-size: 11px; margin-bottom: 8px; }
+.detail-note {
+  font-size: 12px;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  border-left: 2px solid #7c8798;
+  background: rgba(124, 135, 152, 0.08);
+}

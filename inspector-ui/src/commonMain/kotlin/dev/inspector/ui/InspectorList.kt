@@ -37,6 +37,8 @@ import dev.inspector.model.FilterParser
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.duplicateIds
+// Extension: `matches` on the interface takes a Row; this is the transaction overload.
+import dev.inspector.model.matches
 
 /**
  * Transaction list with a live filter bar.

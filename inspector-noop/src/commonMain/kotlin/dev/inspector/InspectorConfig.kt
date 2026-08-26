@@ -2,6 +2,7 @@ package dev.inspector
 
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
 
 /**
  * Mirror of `:inspector-core`'s config so consuming code that constructs one keeps compiling
@@ -24,6 +25,15 @@ data class InspectorConfig(
     ),
     val captureAllBodies: Boolean = false,
     val redaction: Redaction = Redaction.Off,
+    val signals: SignalPolicy = SignalPolicy(),
+)
+
+/** Mirror of `:inspector-core`'s signal policy. Nothing is ever emitted, so nothing is throttled. */
+data class SignalPolicy(
+    val minIntervalMs: Long = 150,
+    val dropUnchanged: Boolean = true,
+    val maxPayloadBytes: Int = 64 * 1024,
+    val ringBufferMaxBytes: Long = 2L * 1024 * 1024,
 )
 
 /** Mirror of `:inspector-core`'s redaction policy. Nothing is ever captured, so nothing is stripped. */
@@ -62,4 +72,5 @@ sealed interface Redaction {
 interface InspectorSink {
     fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?)
     fun onMarker(marker: Marker)
+    fun onSignal(signal: Signal, data: ByteArray?) = Unit
 }

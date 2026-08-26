@@ -69,8 +69,8 @@ maven {
 ```
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.2.1")
-implementation("dev.inspector:inspector-ui:0.2.1")
+implementation("dev.inspector:inspector-core:0.3.0")
+implementation("dev.inspector:inspector-ui:0.3.0")
 ```
 
 Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do §3 — the debug-only swap — before

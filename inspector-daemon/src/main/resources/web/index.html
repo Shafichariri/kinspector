@@ -13,6 +13,11 @@
     <span id="session-app" class="muted">loading…</span>
     <select id="session-picker" title="Session"></select>
     <span id="counts" class="muted mono"></span>
+    <!-- Hidden until the session actually has signals: a toggle to an empty view is noise. -->
+    <span id="view-switch" class="view-switch" hidden>
+      <button id="view-traffic" class="btn btn-sm active" data-view="traffic">traffic</button>
+      <button id="view-timeline" class="btn btn-sm" data-view="timeline">timeline</button>
+    </span>
     <button id="sort-order" class="btn btn-sm">oldest ↓</button>
     <span class="spacer"></span>
     <label class="live-toggle" title="Follow new traffic as it arrives">
@@ -50,6 +55,9 @@
       <div class="rail-label" id="endpoints-label" hidden>Endpoints</div>
       <div class="chips" id="endpoint-chips" hidden></div>
 
+      <div class="rail-label" id="current-label" hidden>Now</div>
+      <ul id="current" class="current" hidden></ul>
+
       <div class="rail-label">Markers</div>
       <ul id="markers" class="markers"><li class="muted">none</li></ul>
 
@@ -67,6 +75,8 @@
     <section id="list-pane">
       <div id="list" role="listbox" aria-label="Transactions"></div>
       <div id="list-empty" class="empty muted">no transactions</div>
+      <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
+      <div id="timeline-empty" class="empty muted" hidden>no entries</div>
     </section>
 
     <section id="detail-pane">

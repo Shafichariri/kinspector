@@ -5,6 +5,7 @@ import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.SESSION_RESUME_GRACE_MS
 import dev.inspector.model.SessionMeta
+import dev.inspector.model.Signal
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import java.time.Instant
@@ -16,6 +17,7 @@ data class OpenedSession(val sessionId: String, val resumed: Boolean)
 sealed interface LiveEvent {
     data class Transaction(val sessionId: String, val txn: NetworkTransaction) : LiveEvent
     data class MarkerAdded(val sessionId: String, val marker: Marker) : LiveEvent
+    data class SignalRecorded(val sessionId: String, val signal: Signal) : LiveEvent
     data class SessionStarted(val meta: SessionMeta) : LiveEvent
     data class SessionEnded(val sessionId: String) : LiveEvent
 }
@@ -82,6 +84,15 @@ class SessionManager(
         _live.tryEmit(LiveEvent.Transaction(sessionId, stored))
     }
 
+    /** Returns the row as stored, or null when the session is not open. */
+    fun append(sessionId: String, signal: Signal, data: ByteArray?): Signal? {
+        val writer = synchronized(lock) { open[sessionId] } ?: return null
+        // Broadcast what was stored, not what arrived: only the stored row carries `dataRef`.
+        val stored = synchronized(writer) { writer.append(signal, data) }
+        _live.tryEmit(LiveEvent.SignalRecorded(sessionId, stored))
+        return stored
+    }
+
     fun append(sessionId: String, marker: Marker) {
         val writer = synchronized(lock) { open[sessionId] } ?: return
         synchronized(writer) { writer.append(marker) }
@@ -98,6 +109,9 @@ class SessionManager(
     fun closeSession(sessionId: String) {
         val writer = synchronized(lock) { open.remove(sessionId) } ?: return
         synchronized(writer) { writer.close(now()) }
+        // Per-tag signal trimming rewrites signals.jsonl, so it runs only once the writer is
+        // closed and this session is no longer open for append.
+        retention.pruneSignals(writer.sessionDir)
         _live.tryEmit(LiveEvent.SessionEnded(sessionId))
         retention.prune(activeSessionId = null)
     }

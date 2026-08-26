@@ -1,7 +1,9 @@
 package dev.inspector.daemon
 
+import dev.inspector.model.InspectorJson
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.isRegularFile
 
 /** What a prune pass did. Returned rather than only logged so tests can assert on it. */
@@ -55,6 +57,53 @@ class Retention(
         }
 
         return PruneResult(pruned, sessions, bytes)
+    }
+
+    /**
+     * Trims `signals.jsonl` to [DaemonConfig.signalCaps] rows per tag, deleting the payload files
+     * of the rows it drops.
+     *
+     * Rewrites the file, so it must only run when nothing holds it open for append — that is, on
+     * session close. The never-prune-the-active-session rule stands here too: this is called after
+     * the writer is closed and the session has left the open map.
+     *
+     * A tag with no cap is kept in full, including one this build has never heard of. Dropping an
+     * unknown tag would silently discard whatever an app chose to record.
+     */
+    fun pruneSignals(sessionDir: Path): Int {
+        val caps = config.signalCaps
+        if (caps.isEmpty()) return 0
+
+        val all = repository.readSignals(sessionDir)
+        if (all.isEmpty()) return 0
+
+        val keep = all.groupBy { it.tag.lowercase() }
+            .flatMap { (tag, rows) ->
+                val cap = caps.entries.firstOrNull { it.key.equals(tag, ignoreCase = true) }?.value
+                if (cap == null || rows.size <= cap) rows
+                else rows.sortedByDescending { it.mono }.take(cap)
+            }
+            .toSet()
+
+        val dropped = all.filterNot { it in keep }
+        if (dropped.isEmpty()) return 0
+
+        // Preserve the original append order for what survives: the file is read as a timeline.
+        val surviving = all.filter { it in keep }
+        val rewritten = surviving.joinToString("") { InspectorJson.encodeToString(it) + "\n" }
+        runCatching {
+            val temp = sessionDir.resolve("signals.jsonl.tmp")
+            Files.writeString(temp, rewritten)
+            Files.move(temp, SessionLayout.signalsFile(sessionDir), StandardCopyOption.REPLACE_EXISTING)
+        }.onFailure {
+            System.err.println("inspector: could not prune signals: ${it.message}")
+            return 0
+        }
+
+        for (row in dropped) {
+            runCatching { Files.deleteIfExists(SessionLayout.signalFile(sessionDir, row.id)) }
+        }
+        return dropped.size
     }
 
     private fun deleteRecursively(dir: Path): Boolean = runCatching {

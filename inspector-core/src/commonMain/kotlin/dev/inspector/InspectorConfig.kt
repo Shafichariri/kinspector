@@ -2,6 +2,7 @@ package dev.inspector
 
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
 
 /**
  * Capture tuning.
@@ -59,6 +60,43 @@ data class InspectorConfig(
      * use [Redaction.On] for that run.
      */
     val redaction: Redaction = Redaction.Off,
+    /**
+     * Conflation and budget for [dev.inspector.model.Signal]s. Appended last, so every existing
+     * positional `InspectorConfig(...)` call site keeps compiling.
+     */
+    val signals: SignalPolicy = SignalPolicy(),
+)
+
+/**
+ * How signals are throttled on the device and how much memory they may hold.
+ *
+ * Conflation lives here — in the library — rather than in app code, because an app emitting one
+ * `state` signal per keystroke across dozens of state holders will saturate the wire and the
+ * archive, and every consumer that reinvents the throttle gets it wrong the same way.
+ */
+data class SignalPolicy(
+    /**
+     * Minimum gap between emissions for one `(tag, name)`. Within the window the newest value is
+     * held and emitted when the window closes — **trailing** edge, because in a rapid sequence of
+     * state changes the one worth keeping is the last, where the state settled.
+     *
+     * A guess, not a measurement. Revisit against a real session before recommending it.
+     */
+    val minIntervalMs: Long = 150,
+    /** Drop a signal whose encoded payload is byte-identical to the last one emitted for its key. */
+    val dropUnchanged: Boolean = true,
+    /**
+     * Cap on one encoded payload. Beyond it the payload is cut and `dataTruncated` is set, while
+     * `bytes` still reports the true size.
+     */
+    val maxPayloadBytes: Int = 64 * 1024,
+    /**
+     * Budget for the signal ring, kept **separate** from [InspectorConfig.ringBufferMaxBytes] so a
+     * single large cache snapshot cannot evict the network history beside it.
+     *
+     * A guess, not a measurement. Revisit against a real session before recommending it.
+     */
+    val ringBufferMaxBytes: Long = 2L * 1024 * 1024,
 )
 
 /**
@@ -125,6 +163,16 @@ sealed interface Redaction {
 interface InspectorSink {
     fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?)
     fun onMarker(marker: Marker)
+
+    /**
+     * One observation, with its encoded payload.
+     *
+     * Defaulted so every sink written before signals existed — including anything a consumer
+     * wrote — compiles untouched. [data] is the payload as it should travel; [Signal.data] carries
+     * the same content in memory, and a sink bound for the wire must null it out rather than send
+     * both.
+     */
+    fun onSignal(signal: Signal, data: ByteArray?) = Unit
 }
 
 /**

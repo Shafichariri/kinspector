@@ -548,7 +548,45 @@ grep of `~/.inspector/latest/index.jsonl` from a terminal answers "which calls 5
 marker and what did the server return?" correctly on the sample session; CLI `query` works with
 daemon stopped (file mode); README dogfooded by integrating inspector into a fresh empty CMP app.
 
-Total: ~3 weeks single-agent full-time equivalent.
+### Phase 4 — signals (est. 17–24 days) — **not started**
+
+App state on the same timeline as traffic: which screen was up, what the presentation layer held,
+what was in the cache, merged with the network rows by `mono`. One generic primitive — the
+`Signal` — carried over the existing transport into the existing archive.
+
+`docs/SIGNALS.md` is the executable spec for this phase, the way this document was for Phases 0–3.
+The numbered items below are its stages; every type, wire frame, filter rule and trap lives there.
+
+1. **Signal core.** `Signal`, `SignalTrigger`, `SignalMsg` in `:inspector-model`. `Recorder`
+   signal path with **trailing-edge** conflation and `dropUnchanged`. `RingBuffer` generalized to
+   an entry-size function, with a signal budget separate from the transaction budget. Public API,
+   no-op twins, golden file, `ApiParityTest`.
+2. **Daemon and archive.** `signals.jsonl`, `signals/`, `dataRef` rewrite on ingest, per-tag
+   retention, the five read routes.
+3. **Pull.** `SignalRequest` / `SignalError`, device-side provider registry, `LiveApps`
+   generalization, `POST /api/sessions/{id}/signals/request`.
+4. **Grammar v2 and MCP.** `tag:` and `name:` terms plus the rule that a term excludes row types
+   lacking its field. Tools `current`, `list_signals`, `get_signal`, `timeline`, `request_signal`;
+   extended `session_summary`.
+5. **Web UI.** Merged timeline as the default view, `screen` as a lane of points, `cache` as
+   spans, a generic lane for unknown tags, a current-state panel.
+6. **Ship it.** `INTEGRATION.md` v16 + §13 entry, `schema.md` `Signal` section, bump to 0.3.0,
+   tag, then verify the published artifact through a throwaway consumer before announcing.
+
+**Accept**: "why did the KYC submit fail?" answered in three MCP calls against a real recorded
+session — `timeline(since: marker(…))` → `get_signal` → `get_body` — proven both as a unit test
+and by piping JSON-RPC frames into the built binary; a live viewer receives `dataRef` **populated**
+(`LiveTest`, not only the REST test); a burst of 100 identical payloads yields one row and 100
+differing ones yield the last per window; the signal ring evicts without touching the transaction
+ring; `status:500 tag:screen` returns empty and is documented as doing so; `ApiParityTest` green;
+`-Pinspector=off` still yields a runtime classpath of no-op modules only.
+
+Stages 1–2 plus the navigation recipe are the thinnest useful slice — about 8–10 days — and
+already answer "which screen was the user on when this 500 happened".
+
+---
+
+Total for Phases 0–3: ~3 weeks single-agent full-time equivalent.
 
 ---
 

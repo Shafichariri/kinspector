@@ -5,6 +5,7 @@ import dev.inspector.model.ClientInfo
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Platforms
+import dev.inspector.model.Signal
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +51,7 @@ class StreamSink(
 
     override fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) = Unit
     override fun onMarker(marker: Marker) = Unit
+    override fun onSignal(signal: Signal, data: ByteArray?) = Unit
 }
 
 fun defaultDaemonHost(): String = "127.0.0.1"

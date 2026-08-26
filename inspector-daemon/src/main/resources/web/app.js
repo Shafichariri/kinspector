@@ -37,6 +37,14 @@
     allSessionId: null,
     // How many endpoint chips to show. 0 hides them.
     endpointLimit: Number(localStorage.getItem('inspector.endpointChipLimit') ?? 10),
+    // App-state observations for this session, and the latest per (tag, name).
+    signals: [],
+    current: [],
+    // 'traffic' | 'timeline'. Chosen per session rather than remembered: a session with no
+    // signals has nothing to merge, so landing on an empty timeline would be worse than useless.
+    // Sessions recorded before signals existed therefore behave exactly as they always did.
+    view: 'traffic',
+    selectedSignalId: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -145,8 +153,34 @@
     }
     state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
     await syncAllTransactions();
+    await loadSignals();
     renderMarkers();
     renderList();
+    renderTimeline();
+  }
+
+  /**
+   * Signals and the current-state panel.
+   *
+   * Failures are swallowed to an empty list on purpose: a daemon older than this page has no
+   * signal routes, and the traffic view must keep working against one rather than going blank.
+   */
+  async function loadSignals() {
+    if (!state.sessionId) return;
+    const id = encodeURIComponent(state.sessionId);
+    const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
+    const page = await api(`/api/sessions/${id}/signals?${q}`).catch(() => null);
+    state.signals = Array.isArray(page) ? page : [];
+    state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
+
+    const has = state.signals.length > 0 || state.current.length > 0;
+    $('view-switch').hidden = !has;
+    if (!has && state.view === 'timeline') state.view = 'traffic';
+    // The merge is the value, so a session that has something to merge opens on it.
+    if (has && !state.viewChosenForSession) state.view = 'timeline';
+    state.viewChosenForSession = true;
+    renderCurrent();
+    applyView();
   }
 
   /**
@@ -270,6 +304,7 @@
       ? 'Newest request at the top — click for oldest first'
       : 'Oldest request at the top — click for newest first';
     renderList();
+    renderTimeline();
   }
 
   /**
@@ -583,6 +618,242 @@
       `/api/sessions/${encodeURIComponent(state.sessionId)}/transactions/${txn.id}/body/${side}`,
     );
     return res.ok ? res.text() : null;
+  }
+
+
+  // --- timeline -----------------------------------------------------------
+
+  /** Tags with a lane of their own. Anything else shares the generic one. */
+  const KNOWN_TAGS = ['screen', 'state', 'cache', 'session'];
+  const laneFor = (tag) =>
+    KNOWN_TAGS.includes(String(tag).toLowerCase()) ? String(tag).toLowerCase() : 'other';
+
+  function applyView() {
+    const timeline = state.view === 'timeline';
+    $('list').hidden = timeline;
+    $('list-empty').hidden = timeline || state.transactions.length > 0;
+    $('timeline').hidden = !timeline;
+    $('timeline-empty').hidden = true;
+    $('view-traffic').classList.toggle('active', !timeline);
+    $('view-timeline').classList.toggle('active', timeline);
+    if (timeline) renderTimeline();
+  }
+
+  /**
+   * Spans for observations that claim to stay true.
+   *
+   * A `screen` signal is true at an instant; a `cache` snapshot claims to be true from its `mono`
+   * until the next observation of the same `(tag, name)`. That difference is not in the schema
+   * because it is derivable - consecutive rows for a key define the intervals - so it is computed
+   * here, where it is a rendering rule.
+   */
+  function spanEndsFor(signals) {
+    const ends = new Map();
+    const byKey = new Map();
+    for (const s of [...signals].sort((a, b) => a.mono - b.mono)) {
+      const key = `${s.tag} ${s.name}`;
+      const previous = byKey.get(key);
+      if (previous) ends.set(previous.id, s.mono);
+      byKey.set(key, s);
+    }
+    return ends;
+  }
+
+  function renderTimeline() {
+    if (state.view !== 'timeline') return;
+    const root = $('timeline');
+    root.innerHTML = '';
+
+    const ends = spanEndsFor(state.signals);
+    const entries = [
+      ...state.transactions.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
+      ...state.signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
+      ...state.markers.map((marker) => ({ kind: 'marker', mono: marker.mono, marker })),
+    ].sort((a, b) => a.mono - b.mono);
+
+    if (state.newestFirst) entries.reverse();
+
+    $('timeline-empty').hidden = entries.length > 0;
+
+    // Spans are scaled against the session's own duration, not a fixed divisor. A fixed one
+    // made a cache snapshot held for 230ms draw narrower than an instantaneous screen event,
+    // which reads as the opposite of what it means.
+    const monos = entries.map((e) => e.mono);
+    const first = monos.length ? Math.min(...monos) : 0;
+    const last = monos.length ? Math.max(...monos) : 0;
+    const span = Math.max(1, last - first);
+    for (const entry of entries) {
+      root.appendChild(timelineRow(entry, ends, last, span));
+    }
+
+    if (state.liveTail) {
+      const pane = root.parentElement;
+      pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
+    }
+  }
+
+  function timelineRow(entry, ends, lastMono, sessionSpan) {
+    if (entry.kind === 'marker') {
+      const node = el('div', 'marker-divider', entry.marker.label);
+      node.dataset.kind = 'marker';
+      return node;
+    }
+
+    if (entry.kind === 'txn') {
+      const node = rowFor(entry.txn);
+      node.classList.add('tl-row');
+      node.dataset.kind = 'txn';
+      node.dataset.lane = 'traffic';
+      return node;
+    }
+
+    const signal = entry.signal;
+    const lane = laneFor(signal.tag);
+    // Deliberately not `.row`: that class means "a transaction row", and `select()` matches
+    // on dataset.id across all of them. Signal and transaction ids come from the same 8-hex
+    // generator, so sharing the class would let a collision highlight the wrong thing.
+    const node = el('div', `tl-row tl-signal lane-${lane}`);
+    node.dataset.kind = 'signal';
+    node.dataset.lane = lane;
+    node.dataset.tag = signal.tag;
+    node.dataset.id = signal.id;
+    node.tabIndex = 0;
+
+    // A point observation gets a dot; an interval claim gets a bar, drawn to the next observation
+    // of the same key or to the end of what we have.
+    const end = ends.get(signal.id);
+    const isSpan = lane === 'cache' || lane === 'session';
+    const glyph = el('span', `tl-glyph ${isSpan ? 'tl-span' : 'tl-point'}`);
+    if (isSpan) {
+      // Never narrower than a point glyph: an interval that looks smaller than an instant is
+      // actively misleading.
+      const held = (end ?? lastMono) - signal.mono;
+      const width = 10 + Math.round(Math.min(1, held / sessionSpan) * 90);
+      glyph.style.width = `${width}px`;
+      glyph.title = end === undefined
+        ? 'still current as far as this session knows'
+        : `held for ${end - signal.mono} ms`;
+    }
+    node.appendChild(glyph);
+
+    node.appendChild(el('span', 'tl-tag', signal.tag));
+    node.appendChild(el('span', 'tl-name', signal.name));
+
+    // Provenance, always visible. An app-start snapshot reported as live state is the exact
+    // failure `trigger` exists to prevent, so the UI never leaves it to be inferred.
+    const trigger = signal.trigger === 'request' ? 'pulled' : 'pushed';
+    const badge = el('span', `tl-trigger tl-${trigger}`, trigger);
+    badge.title = trigger === 'pulled'
+      ? 'the host asked for this value'
+      : 'the app pushed this and has not re-read it since';
+    node.appendChild(badge);
+
+    if (signal.dataRef) node.appendChild(el('span', 'tl-bytes muted mono', fmtBytes(signal.bytes)));
+    node.appendChild(el('span', 'tl-mono muted mono', `${signal.mono}ms`));
+
+    node.addEventListener('click', () => selectSignal(signal.id));
+    return node;
+  }
+
+  /** The rail panel answering "what screen, what is cached" without reading any rows. */
+  function renderCurrent() {
+    const list = $('current');
+    const label = $('current-label');
+    const rows = state.current;
+    label.hidden = rows.length === 0;
+    list.hidden = rows.length === 0;
+    list.innerHTML = '';
+
+    const newest = rows.length ? Math.max(...rows.map((r) => r.mono)) : 0;
+    for (const signal of rows) {
+      const item = el('li', 'current-item');
+      item.dataset.tag = signal.tag;
+      item.appendChild(el('span', 'tl-tag', signal.tag));
+      item.appendChild(el('span', 'current-name', signal.name));
+      // Age is measured against the newest observation, not the wall clock: `mono` is the
+      // device's monotonic clock and has no relationship to this machine's.
+      const age = newest - signal.mono;
+      const trigger = signal.trigger === 'request' ? 'pulled' : 'pushed';
+      const note = el(
+        'span',
+        `current-age muted ${age > 30000 ? 'stale' : ''}`,
+        age === 0 ? trigger : `${trigger} ${fmtMs(age)} earlier`,
+      );
+      note.title = 'age relative to the newest observation in this session';
+      item.appendChild(note);
+      item.addEventListener('click', () => selectSignal(signal.id));
+      list.appendChild(item);
+    }
+  }
+
+  /** Renders one signal into the detail pane, fetching its payload on demand. */
+  async function selectSignal(id) {
+    state.selectedSignalId = id;
+    state.selectedId = null;
+    const signal =
+      state.signals.find((s) => s.id === id) || state.current.find((s) => s.id === id);
+    if (!signal) return;
+
+    for (const node of document.querySelectorAll('.tl-signal.sel')) node.classList.remove('sel');
+    const row = document.querySelector(`.tl-signal[data-id="${id}"]`);
+    if (row) row.classList.add('sel');
+
+    const detail = $('detail');
+    $('detail-empty').hidden = true;
+    detail.hidden = false;
+    detail.innerHTML = '';
+
+    const head = el('div', 'detail-head');
+    head.appendChild(el('span', 'tl-tag', signal.tag));
+    head.appendChild(el('span', 'detail-title', signal.name));
+    detail.appendChild(head);
+
+    const trigger = signal.trigger === 'request' ? 'pulled on demand' : 'pushed by the app';
+    detail.appendChild(
+      el('div', 'detail-meta muted mono', `${signal.ts} - mono ${signal.mono}ms - ${trigger}`),
+    );
+
+    if (signal.trigger !== 'request') {
+      detail.appendChild(
+        el(
+          'div',
+          'detail-note muted',
+          'Pushed by the app at that moment. It has not been re-read since, so this is not ' +
+            'necessarily what the app holds now.',
+        ),
+      );
+    }
+
+    if (!signal.dataRef) {
+      detail.appendChild(el('div', 'empty muted', 'no payload was captured for this signal'));
+      return;
+    }
+
+    const pre = el('pre', 'body');
+    pre.textContent = 'loading...';
+    detail.appendChild(pre);
+
+    const url =
+      `/api/sessions/${encodeURIComponent(state.sessionId)}` +
+      `/signals/${encodeURIComponent(id)}/data`;
+    try {
+      const res = await fetch(url);
+      const text = await res.text();
+      // Payloads are captured verbatim and never redacted; this shows what was recorded.
+      pre.textContent = prettyJson(text);
+    } catch (e) {
+      pre.textContent = `could not read the payload: ${e.message}`;
+    }
+  }
+
+
+
+  /** Re-reads the current-state panel. Cheap, and the derivation lives on the daemon. */
+  async function refreshCurrent() {
+    if (!state.sessionId) return;
+    const id = encodeURIComponent(state.sessionId);
+    state.current = await api(`/api/sessions/${id}/current`).catch(() => state.current);
+    renderCurrent();
   }
 
   // --- interaction --------------------------------------------------------
@@ -975,6 +1246,16 @@
         state.markers.push(message.marker);
         renderMarkers();
         renderList();
+        renderTimeline();
+      } else if (message.type === 'signal') {
+        // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
+        // received. A viewer handed the received row would see every payload as missing.
+        state.signals.push(message.signal);
+        if ($('view-switch').hidden) {
+          $('view-switch').hidden = false;
+        }
+        refreshCurrent();
+        renderTimeline();
       }
     };
     ws.onclose = () => {
@@ -1047,6 +1328,13 @@
   $('server-stop').addEventListener('click', requestStop);
   $('server-restart').addEventListener('click', requestRestart);
   $('sort-order').addEventListener('click', () => setSortOrder(!state.newestFirst));
+
+  for (const button of [$('view-traffic'), $('view-timeline')]) {
+    button.addEventListener('click', () => {
+      state.view = button.dataset.view;
+      applyView();
+    });
+  }
 
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the button to match the remembered preference

@@ -180,18 +180,20 @@ since that file is already a debug-only artifact here. This is the mitmproxy mod
 it without the user explicitly choosing it**: it turns the tool from a library into a piece of
 network infrastructure.
 
+**`DROP_OLDEST` channels never fail a send.** `Recorder` and `StreamSink` both counted dropped
+rows with `if (!queue.trySend(x).isSuccess) dropped++`. That branch is unreachable: a
+`DROP_OLDEST` channel discards the oldest entry and returns success, so the counter read zero no
+matter how far behind the consumer fell. Measured directly — 100 sends into a 4-slot buffer gave 0
+`trySend` failures and 96 `onUndeliveredElement` callbacks. Both now report through
+`onUndeliveredElement`, which is the only thing the channel tells about a discarded element. Any
+new bounded queue here must do the same.
+
 ### Also outstanding
 
 - **Someone should look at the web UI** and say what is ugly. It renders correctly; nobody has
   judged it.
 - **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
   module and an Xcode project; the UI module already compiles for both.
-- **Bump the GitHub Actions versions.** Both workflows use `actions/checkout@v4`,
-  `actions/setup-java@v4` and `gradle/actions/setup-gradle@v4`. CI passes, but every run now warns
-  that these target Node.js 20 and are being *forced* onto Node.js 24, and that `setup-java@v4` is
-  end-of-life. Check each action's current major first rather than assuming v5 across the board,
-  then change `ci.yml` and `release.yml` together — a release that fails on a deprecation is a
-  release you cannot cut on the day you need it.
 - **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
 
 ---
@@ -658,6 +660,32 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 
 ---
 
+## No client names in this repository
+
+**This repository is public.** Nothing committed here may name a client, an employer, or one of
+their products or domains. That includes prose, comments, test fixtures, sample data, commit
+messages and branch names — history is as public as the working tree.
+
+The rule exists because the design docs are strongest when argued from a real app, and the
+temptation is to name it for credibility. Do not. Say "one real consuming app", describe the
+constraint that mattered ("its navigation destinations are already `@Serializable`"), and drop the
+identity — the constraint is what carries the argument, never the name.
+
+History was scrubbed once already, with `filter-branch` across every commit, before the repository
+went public. Doing that again after a push is not a cleanup — the old objects survive on the remote
+and in every clone — so the check belongs before the commit, not after.
+
+**The terms to grep for are deliberately not listed in this file.** Writing them here would publish
+exactly the list of things that were removed, which defeats the removal. They live in the
+maintainer's local notes; ask if you do not have them. Commit author identity is the GitHub noreply
+address for the same reason — check it stays that way if you ever configure git in a fresh clone.
+
+`gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
+compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
+else a scan turns up.
+
+---
+
 ## Key files
 
 | Path | Why it matters |
@@ -665,8 +693,9 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
 | `docs/ACCESS.md` | Who can get Inspector and how, and the honest answer for someone who cannot. Update it if the distribution story changes — it is the only doc that answers "am I blocked". |
 | `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
-| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a §13 changelog entry saying what they must *do*, not just what changed. |
-| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. |
+| `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a changelog entry saying what they must *do*, not just what changed. |
+| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–3 shipped; Phase 4 (signals) is specified and not started. |
+| `docs/SIGNALS.md` | Phase 4 design spec — app state on the traffic timeline. Nothing built. Read it before writing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
