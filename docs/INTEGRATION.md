@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v17 — 2026-08-26.**
+**Document version: v19 — 2026-08-26.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -421,14 +421,35 @@ works too, but it permits cleartext to *everywhere* rather than just your Mac.
 
 ### 6e. What the web UI shows
 
-Traffic, newest or oldest first, with marker dividers, filters, endpoint shortcuts and a detail
-pane carrying headers, bodies and copy-as-cURL.
+One tab per kind of thing the session recorded, because each kind reads differently.
 
-If the session also has signals (§12), a **timeline** toggle appears and the session opens on it:
-traffic, app state and markers merged on the device clock, with `screen` and `state` drawn as
-points, `cache` as spans showing how long a value was held, and any tag Inspector has no styling
-for in a generic lane. A "Now" panel answers what screen was up and what was cached. A session
-without signals has no toggle and behaves exactly as it always did.
+| Tab | What it is |
+|---|---|
+| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL |
+| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12), and the session opens on it |
+| one per tag | A key list beside one key's detail, for `cache`, `screen`, `state`, and any tag Inspector has never heard of |
+
+On `all`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value was
+held, and an unrecognised tag gets a generic lane. A **Now** panel in the rail answers what screen
+was up and what was cached, whatever tab you are on, with an age counted against your device's own
+timestamp.
+
+A tag tab lists one entry per key — the cache key, or the signal name — with its freshness
+and how long ago it was last seen. Selecting one shows its current value pretty-printed, with a copy
+button, and every observation of that key underneath, so you can step back through what it held.
+Filters are a key search plus a chip per facet the payloads actually vary on: a facet with one
+value is not drawn, because a filter you can only leave on is not a filter. Where a provider has
+been seen to answer, a **pull latest** button asks the app for a fresh snapshot.
+
+Reading order — oldest first or newest first — is a rail control, and it applies to the key list
+and to each key's history as well as to the traffic list.
+
+The columns are filled from your payload — see §12d for the field names the tag browser reads.
+
+**Sessions** can be deleted from the UI: the `✕` beside the session picker removes the one on
+screen, and Settings → Sessions lists every session with a per-row delete and a **clear all**.
+Both arm on the first click and fire on the second. A session the app is still writing to is never
+deleted — pulling the folder out from under an open writer would lose the traffic on screen.
 
 ### 6f. Note for physical devices
 
@@ -919,6 +940,34 @@ Inspector.registerProvider("cache", "response") { cache.debugDump() } // on dema
 Your app owns `debugDump()`; Inspector never learns what a cache is. The provider is called off the
 main thread and may suspend. If it throws, the host is told why rather than being left to time out.
 
+#### Field names the cache table reads
+
+Inspector does not define what a cache payload contains — `tag` is yours and so is the payload. The
+web UI's cache table therefore reads a small set of **conventional field names** and leaves a
+column blank when it finds none, so any payload still renders and a payload that follows the
+convention gets the full table:
+
+| Field | Type | Column |
+|---|---|---|
+| `key` | string | key (falls back to the signal's `name`) |
+| `storage` | string | storage — your word, e.g. `Memory`, `Disk` |
+| `scopes` (or `scope`) | list of strings, or one string | scope |
+| `expired` | bool | expired — **tri-state**: absent means "not stated", and is not shown as live |
+| `value` | any | value, rendered as JSON |
+| `payloadBytes` | number | size, shown beside the value |
+
+Two payload shapes both feed that table, and emitting both is worth it:
+
+- **A whole-cache snapshot,** `{ "items": [ … ] }`, each item using the fields above. This is what a
+  provider answers with, and it expands to one row per entry.
+- **A single entry,** the fields above at the top level, pushed as that entry changes.
+
+Emit the second one. A cache that is only ever described at startup and on demand leaves the
+timeline asserting an empty cache for the whole session — a cache row is an interval claim, true
+from its `mono` until the next observation of the same key, so two observations hours apart is not
+merely sparse, it is wrong. Name each entry's signal by a key that survives your own invalidation
+bookkeeping, so one entry keeps one identity across a session.
+
 The two are told apart in the archive by `trigger`: `app` for a push, `request` for a pull. **This
 distinction is load-bearing.** An agent handed a cache snapshot with no provenance will report it
 as the current state of the cache — and if that snapshot was pushed at app start twenty minutes
@@ -1017,7 +1066,53 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v17 — 2026-08-26 (this document)
+### v19 — 2026-08-26 (this document)
+
+**Nothing to do.** The web UI's view switch became a tab bar, and each tag got a view built for
+its own data.
+
+`traffic` and `timeline` are now `network` and `all`, and every tag in the session gets a tab of
+its own beside them — including one this build has never heard of, which is what the schema
+already promised and the old two-button switch could not express.
+
+The cache tab is no longer a flat table of every observation. It is a key list beside one key's
+detail: the list answers *what is cached and is it fresh*, the panel answers *what is in this one
+and what happened to it*, with the value pretty-printed instead of clipped to 160 characters.
+"Latest per key" stopped being a checkbox and became the structure. The same view serves every
+other tag, so `state` and `screen` are browsable the same way.
+
+Two fixes worth knowing about if you read the UI closely:
+
+- **Ages are wall-clock now.** The "Now" panel measured each row against the newest observation in
+  the session, which has no clock in it — it could not tick, a refresh never moved it, and a pull
+  moved every row at once because it shifted the reference point. Ages come from the signal's own
+  `ts` and update every second. It is still your device's clock, so a simulator whose clock has
+  drifted reports the drift.
+- **Sessions can be deleted.** `DELETE /api/sessions/{id}` and `POST /api/sessions/clear`, both
+  behind `X-Inspector-Control: 1`, with buttons for each in the UI. A session still being written
+  is never deleted, and the `latest` alias is refused as a delete target rather than resolved.
+
+### v18 — 2026-08-26
+
+**Nothing to do, but §12d is worth two minutes if you record cache signals.**
+
+The web UI has a **cache** tab on any session that recorded one: a table of what was cached and
+when — storage, key, scope, expired, value — with filters, a "latest per key" collapse, and a
+button that pulls a fresh snapshot from every cache provider the session has seen answer.
+
+Nothing about the schema changed and no call site moves. What is new is written down rather than
+required: §12d now lists the **field names** the table reads out of your payload (`key`,
+`storage`, `scopes`, `expired`, `value`, `payloadBytes`). A payload using none of them still
+renders; one that follows the convention gets every column.
+
+The other half of §12d is a correction worth acting on. Pushing a cache snapshot only at startup
+and on demand is not merely sparse — a cache row is an interval claim, true from its `mono` until
+the next observation of the same key, so a session with two observations hours apart *asserts* the
+cache was empty throughout. If your cache can tell you when it changes, emit a signal per entry as
+it changes. §12d says how, and what to name them so an entry keeps one identity across a scope
+invalidation.
+
+### v17 — 2026-08-26
 
 **Nothing to do.** v16 introduced signals in §12 but left the rest of the document describing
 traffic only, which made the feature easy to miss if you were not reading §12 in particular. Four

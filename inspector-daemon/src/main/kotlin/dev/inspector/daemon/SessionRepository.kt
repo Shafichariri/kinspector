@@ -13,7 +13,10 @@ import dev.inspector.model.Signal
 import dev.inspector.model.SignalTags
 import dev.inspector.model.SignalTrigger
 import kotlinx.serialization.Serializable
+import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.Path
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.fileSize
 import kotlin.io.path.isDirectory
@@ -371,6 +374,52 @@ class SessionRepository(private val config: DaemonConfig) {
         val root = config.sessionsDir
         if (!root.isDirectory()) return emptyList()
         return root.listDirectoryEntries().filter { it.isDirectory() }
+    }
+
+    /**
+     * Removes a session folder and everything under it. Returns false if anything survived.
+     *
+     * Repairs the `latest` link rather than leaving it dangling. Every agent and every CLI
+     * subcommand accepts the literal `latest`, so a link pointing at a folder that no longer
+     * exists does not fail one session — it fails "the session I just ran" for the whole archive.
+     *
+     * Refusing to delete a session that is still being written is the caller's job. [Retention]
+     * and the REST layer each learn the active id a different way, and neither can be derived
+     * from the folder alone.
+     */
+    fun deleteSession(sessionDir: Path): Boolean {
+        // Resolved before the delete, while the link still has something to resolve to.
+        val wasLatest = runCatching {
+            config.latestLink.exists(LinkOption.NOFOLLOW_LINKS) &&
+                config.latestLink.toRealPath() == sessionDir.toRealPath()
+        }.getOrDefault(false)
+
+        val gone = deleteRecursively(sessionDir)
+        if (gone && wasLatest) repointLatestLink()
+        return gone
+    }
+
+    /** Points `latest` at the newest surviving session, or removes it when none is left. */
+    private fun repointLatestLink() {
+        val newest = sessionDirs().maxByOrNull { readMeta(it)?.startedAt ?: "" }
+        if (newest == null) {
+            runCatching { config.latestLink.deleteIfExists() }
+            return
+        }
+        SessionWriter.updateLatestLink(config.dataDir, newest)
+    }
+
+    /** Depth-first delete. Shared with [Retention], which prunes for a different reason. */
+    fun deleteRecursively(dir: Path): Boolean = runCatching {
+        Files.walk(dir).use { stream ->
+            stream.sorted(Comparator.reverseOrder()).forEach { path ->
+                runCatching { Files.deleteIfExists(path) }
+            }
+        }
+        !Files.exists(dir)
+    }.getOrElse {
+        System.err.println("inspector: could not delete $dir: ${it.message}")
+        false
     }
 
     fun sessionBytes(sessionDir: Path): Long =
