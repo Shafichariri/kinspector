@@ -17,6 +17,7 @@
     <span id="view-switch" class="view-switch" hidden>
       <button id="view-traffic" class="btn btn-sm active" data-view="traffic">traffic</button>
       <button id="view-timeline" class="btn btn-sm" data-view="timeline">timeline</button>
+      <button id="view-cache" class="btn btn-sm" data-view="cache" hidden>cache</button>
     </span>
     <button id="sort-order" class="btn btn-sm">oldest ↓</button>
     <span class="spacer"></span>
@@ -77,6 +78,58 @@
       <div id="list-empty" class="empty muted">no transactions</div>
       <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
       <div id="timeline-empty" class="empty muted" hidden>no entries</div>
+
+      <div id="cache" class="cache" hidden>
+        <div class="cache-toolbar">
+          <button id="cache-pull" class="btn btn-sm"
+                  title="Ask the running app for a fresh snapshot from every cache provider it has answered before">
+            pull latest
+          </button>
+          <span id="cache-pull-status" class="muted cache-status"></span>
+          <span class="spacer"></span>
+          <label class="cache-field">
+            <span class="muted">key</span>
+            <input id="cache-filter-key" type="search" spellcheck="false" autocomplete="off"
+                   placeholder="portfolio">
+          </label>
+          <label class="cache-field">
+            <span class="muted">storage</span>
+            <select id="cache-filter-storage"><option value="">any</option></select>
+          </label>
+          <label class="cache-field">
+            <span class="muted">scope</span>
+            <select id="cache-filter-scope"><option value="">any</option></select>
+          </label>
+          <label class="cache-field">
+            <span class="muted">expired</span>
+            <select id="cache-filter-expired">
+              <option value="">any</option>
+              <option value="yes">expired</option>
+              <option value="no">live</option>
+            </select>
+          </label>
+          <label class="cache-field" title="Collapse to the most recent row per key">
+            <input type="checkbox" id="cache-latest-only"> <span class="muted">latest per key</span>
+          </label>
+        </div>
+
+        <div class="cache-scroll">
+          <table class="cache-table">
+            <thead>
+              <tr>
+                <th class="cache-col-time">time</th>
+                <th class="cache-col-key">key</th>
+                <th class="cache-col-storage">storage</th>
+                <th class="cache-col-scope">scope</th>
+                <th class="cache-col-expired">expired</th>
+                <th class="cache-col-value">value</th>
+              </tr>
+            </thead>
+            <tbody id="cache-rows"></tbody>
+          </table>
+        </div>
+        <div id="cache-empty" class="empty muted" hidden>no cache signals</div>
+      </div>
     </section>
 
     <section id="detail-pane">

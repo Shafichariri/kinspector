@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v17 — 2026-08-26.**
+**Document version: v18 — 2026-08-26.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -429,6 +429,11 @@ traffic, app state and markers merged on the device clock, with `screen` and `st
 points, `cache` as spans showing how long a value was held, and any tag Inspector has no styling
 for in a generic lane. A "Now" panel answers what screen was up and what was cached. A session
 without signals has no toggle and behaves exactly as it always did.
+
+A session that recorded any `cache` signal also gets a **cache** tab: one table of what was cached
+and when, with columns for storage, key, scope, expired and value, filters on each, a "latest per
+key" collapse, and a button that pulls a fresh snapshot from every cache provider the session has
+seen answer one. The columns are filled from your payload — see §12d for the field names it reads.
 
 ### 6f. Note for physical devices
 
@@ -919,6 +924,34 @@ Inspector.registerProvider("cache", "response") { cache.debugDump() } // on dema
 Your app owns `debugDump()`; Inspector never learns what a cache is. The provider is called off the
 main thread and may suspend. If it throws, the host is told why rather than being left to time out.
 
+#### Field names the cache table reads
+
+Inspector does not define what a cache payload contains — `tag` is yours and so is the payload. The
+web UI's cache table therefore reads a small set of **conventional field names** and leaves a
+column blank when it finds none, so any payload still renders and a payload that follows the
+convention gets the full table:
+
+| Field | Type | Column |
+|---|---|---|
+| `key` | string | key (falls back to the signal's `name`) |
+| `storage` | string | storage — your word, e.g. `Memory`, `Disk` |
+| `scopes` (or `scope`) | list of strings, or one string | scope |
+| `expired` | bool | expired — **tri-state**: absent means "not stated", and is not shown as live |
+| `value` | any | value, rendered as JSON |
+| `payloadBytes` | number | size, shown beside the value |
+
+Two payload shapes both feed that table, and emitting both is worth it:
+
+- **A whole-cache snapshot,** `{ "items": [ … ] }`, each item using the fields above. This is what a
+  provider answers with, and it expands to one row per entry.
+- **A single entry,** the fields above at the top level, pushed as that entry changes.
+
+Emit the second one. A cache that is only ever described at startup and on demand leaves the
+timeline asserting an empty cache for the whole session — a cache row is an interval claim, true
+from its `mono` until the next observation of the same key, so two observations hours apart is not
+merely sparse, it is wrong. Name each entry's signal by a key that survives your own invalidation
+bookkeeping, so one entry keeps one identity across a session.
+
 The two are told apart in the archive by `trigger`: `app` for a push, `request` for a pull. **This
 distinction is load-bearing.** An agent handed a cache snapshot with no provenance will report it
 as the current state of the cache — and if that snapshot was pushed at app start twenty minutes
@@ -1017,7 +1050,27 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v17 — 2026-08-26 (this document)
+### v18 — 2026-08-26 (this document)
+
+**Nothing to do, but §12d is worth two minutes if you record cache signals.**
+
+The web UI has a **cache** tab on any session that recorded one: a table of what was cached and
+when — storage, key, scope, expired, value — with filters, a "latest per key" collapse, and a
+button that pulls a fresh snapshot from every cache provider the session has seen answer.
+
+Nothing about the schema changed and no call site moves. What is new is written down rather than
+required: §12d now lists the **field names** the table reads out of your payload (`key`,
+`storage`, `scopes`, `expired`, `value`, `payloadBytes`). A payload using none of them still
+renders; one that follows the convention gets every column.
+
+The other half of §12d is a correction worth acting on. Pushing a cache snapshot only at startup
+and on demand is not merely sparse — a cache row is an interval claim, true from its `mono` until
+the next observation of the same key, so a session with two observations hours apart *asserts* the
+cache was empty throughout. If your cache can tell you when it changes, emit a signal per entry as
+it changes. §12d says how, and what to name them so an entry keeps one identity across a scope
+invalidation.
+
+### v17 — 2026-08-26
 
 **Nothing to do.** v16 introduced signals in §12 but left the rest of the document describing
 traffic only, which made the feature easy to miss if you were not reading §12 in particular. Four
