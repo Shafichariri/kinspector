@@ -422,10 +422,41 @@ window.navigator.clipboard = { writeText: async () => {} };
 
     const pull = doc.getElementById('cache-pull');
     result.pullButton = pull && !pull.disabled ? 'present and enabled' : 'MISSING or disabled';
+
     return result;
   }
 
+  /**
+   * A hidden pane must actually be invisible.
+   *
+   * `hidden` only works because of a user agent rule, `[hidden] { display: none }`, and any author
+   * rule setting `display` on the same element outranks it — the pane then paints over whichever
+   * view is selected while its `hidden` property still reads true. This is checked against the
+   * stylesheet text rather than through `getComputedStyle`, because jsdom resolves a hidden
+   * element to `display: none` whatever the CSS says: the computed-style version of this check
+   * passes just as happily with the guard rule deleted, which makes it worse than no check at all.
+   */
+  function auditHiddenPanes(cssText) {
+    // Panes the app shows and hides by toggling `hidden`.
+    const panes = ['.cache', '#cache', '#timeline', '#list'];
+    const setsDisplay = new Set();
+    const guarded = new Set();
+    for (const [, selector, body] of cssText.matchAll(/([.#][A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
+      if (/(^|;)\s*display\s*:/.test(body)) setsDisplay.add(selector);
+    }
+    for (const [, selector] of cssText.matchAll(
+      /([.#][A-Za-z0-9_-]+)\[hidden\]\s*\{[^}]*display\s*:\s*none/g,
+    )) {
+      guarded.add(selector);
+    }
+    const offenders = panes.filter((s) => setsDisplay.has(s) && !guarded.has(s));
+    return offenders.length
+      ? `NO - ${offenders.join(', ')} sets display without a [hidden] override`
+      : 'yes';
+  }
+
   const cacheProbe = await probeCache();
+  const hiddenPaneAudit = auditHiddenPanes(css);
 
   const methodClasses = [...new Set(
     [...doc.querySelectorAll('#list .row .method')].map((n) => n.className.replace('method ', '')),
@@ -524,6 +555,7 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('expired filter     :', cacheProbe.expiredFilterWorks);
   console.error('latest per key     :', cacheProbe.latestOnlyCollapses);
   console.error('pull button        :', cacheProbe.pullButton);
+  console.error('hidden panes hide  :', hiddenPaneAudit);
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
 
   // Freeze as a static, self-contained page.
