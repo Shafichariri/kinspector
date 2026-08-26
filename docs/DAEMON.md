@@ -292,6 +292,41 @@ debugging tool that will not start because of its own settings file is worse tha
 Nothing here is encrypted and, with redaction off (the default), bodies and headers contain real
 credentials. Treat `~/.inspector` as you would a log directory full of tokens.
 
+### Deleting sessions
+
+A pile of one-run simulator sessions is the normal state of this directory. Retention prunes the
+oldest once the archive passes `maxSessions` or `maxTotalMb`, but you can remove them yourself.
+
+From the web UI: the `✕` beside the session picker deletes the session on screen, and
+**Settings → Sessions** lists every session with a per-row delete and a **clear all**. Both arm on
+the first click and fire on the second.
+
+From a terminal:
+
+```bash
+curl -X DELETE -H 'X-Inspector-Control: 1' \
+  http://127.0.0.1:8099/api/sessions/2026-08-17T05-57-58_myapp_Pixel-8_debug
+```
+
+```bash
+curl -X POST -H 'X-Inspector-Control: 1' http://127.0.0.1:8099/api/sessions/clear
+```
+
+Both report what went, what stayed and how many bytes came back. Two rules the daemon enforces
+rather than trusting the caller with:
+
+- **A session still being written is never deleted.** Removing the folder underneath an open
+  writer corrupts the append stream and throws away the traffic you are looking at. `clear` skips
+  it and names it in `kept`; a single delete returns `409`.
+- **`latest` is refused as a delete target, not resolved.** It names a different folder depending
+  on when you call it, which is fine for a read and is not fine for a delete — the session it
+  points at is the one you are most likely to still want. Name the session explicitly.
+
+Deleting the session `latest` points at repoints the link at the newest survivor, so `latest` keeps
+working; deleting the last session removes the link rather than leaving it dangling.
+
+Nothing is recoverable. There is no trash.
+
 ---
 
 ## 7. Reading sessions without the web UI

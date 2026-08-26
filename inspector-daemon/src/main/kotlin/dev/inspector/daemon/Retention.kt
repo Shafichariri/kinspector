@@ -4,7 +4,6 @@ import dev.inspector.model.InspectorJson
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import kotlin.io.path.isRegularFile
 
 /** What a prune pass did. Returned rather than only logged so tests can assert on it. */
 data class PruneResult(
@@ -48,7 +47,7 @@ class Retention(
             if (withinLimits) break
             if (candidate.sessionId == activeSessionId) continue
 
-            if (deleteRecursively(candidate.dir)) {
+            if (repository.deleteRecursively(candidate.dir)) {
                 pruned += candidate.sessionId
                 sessions--
                 bytes -= candidate.bytes
@@ -104,18 +103,6 @@ class Retention(
             runCatching { Files.deleteIfExists(SessionLayout.signalFile(sessionDir, row.id)) }
         }
         return dropped.size
-    }
-
-    private fun deleteRecursively(dir: Path): Boolean = runCatching {
-        Files.walk(dir).use { stream ->
-            stream.sorted(Comparator.reverseOrder()).forEach { path ->
-                runCatching { if (path.isRegularFile() || true) Files.deleteIfExists(path) }
-            }
-        }
-        !Files.exists(dir)
-    }.getOrElse {
-        System.err.println("inspector: could not prune $dir: ${it.message}")
-        false
     }
 
     private data class Candidate(
