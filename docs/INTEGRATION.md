@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v16 — 2026-08-25.**
+**Document version: v17 — 2026-08-26.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,6 +34,10 @@ separate rows so you can see the whole chain.
 Firebase, analytics, image loaders with their own clients, WebViews, native `NSURLSession`. No
 WebSocket or SSE frames. **Anything built on OkHttp can be added with one line, and Auth0 on
 Android with one small class** (section 11); iOS-native transports cannot yet.
+
+**You can also get app state** — which screen was up, what a state holder held, what was cached —
+recorded on the same timeline as the traffic, if you add the few lines in section 12. That part is
+opt-in and additive; skip it and everything else works exactly as described.
 
 **It must never ship to production.** Section 3 is not optional — it is how that is enforced.
 
@@ -415,7 +419,18 @@ reach production, matching how the rest of the tool is gated.
 If you prefer the blunt instrument, `android:usesCleartextTraffic="true"` in the debug manifest
 works too, but it permits cleartext to *everywhere* rather than just your Mac.
 
-### 6e. Note for physical devices
+### 6e. What the web UI shows
+
+Traffic, newest or oldest first, with marker dividers, filters, endpoint shortcuts and a detail
+pane carrying headers, bodies and copy-as-cURL.
+
+If the session also has signals (§12), a **timeline** toggle appears and the session opens on it:
+traffic, app state and markers merged on the device clock, with `screen` and `state` drawn as
+points, `cache` as spans showing how long a value was held, and any tag Inspector has no styling
+for in a generic lane. A "Now" panel answers what screen was up and what was cached. A session
+without signals has no toggle and behaves exactly as it always did.
+
+### 6f. Note for physical devices
 
 `10.0.2.2` and `127.0.0.1` only work on emulators and simulators. On a real phone the daemon is
 not reachable at those addresses, so the overlay works but the web UI gets nothing. Physical
@@ -440,6 +455,7 @@ Inspector.init(
         ),
         captureAllBodies = false,                // see below
         redaction = Redaction.Off,
+        signals = SignalPolicy(),                // app-state capture; see §12h
     )
 )
 ```
@@ -562,7 +578,7 @@ Your app never connected. Work through these in order:
 4. **Check the daemon's console.** It prints `inspector: started session …` on every connect.
    Nothing there means nothing reached it.
 5. `stream.start()` was never called, or `Inspector.addSink(stream)` was missed.
-6. You are on a physical device (see 6e).
+6. You are on a physical device (see §6f).
 
 **Web UI shows an old session that is not yours**
 You are looking at an archive from a different daemon run. Check which directory it is using —
@@ -586,9 +602,17 @@ questions about a recorded session directly instead of you pasting logs. It read
 straight off disk, so it works on old sessions with no daemon running. It needs **no change to
 the app integration above**.
 
-Tools: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
-`get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`. The last one needs a running
-daemon, since a marker has to land in a session that is currently recording.
+Tools for traffic: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
+`get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`.
+
+Tools for app state, if you record signals (§12): `timeline(filter, since, until, limit)` merges
+traffic, signals and markers on the device clock; `current(tag)` gives the latest observation per
+`(tag, name)` with its age; `list_signals(filter, limit, offset)` and `get_signal(id, maxBytes)`
+mirror the transaction pair; `request_signal(tag, name)` pulls a fresh value from a live app.
+
+`add_marker` and `request_signal` need a running daemon — one has to land in a session that is
+currently recording, the other has to reach an app that is currently attached. The rest read the
+archive off disk.
 
 Register it once, using the absolute path to your launcher — whichever of the two from §6c you
 ended up with. The examples below show the source-build path; if you downloaded the release,
@@ -623,6 +647,10 @@ Then ask, in plain language: *"What failed after the 'tapped checkout' marker, a
 server return?"* The agent calls `session_summary`, filters with
 `since:marker("tapped checkout") has:error`, and reads the one body that matters — three calls,
 about two kilobytes of context.
+
+With signals recorded, *"why did the KYC submit fail?"* is answerable the same way:
+`timeline(since: the marker)` to see the screen, the state and the failing call in order, then
+`get_signal` for the state payload and `get_body` for the response. Also three calls.
 
 Point it at a different archive with `--data /path/to/dir`, or a non-default daemon port for
 `add_marker` with `--port N`.
@@ -989,7 +1017,17 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v16 — 2026-08-25 (this document)
+### v17 — 2026-08-26 (this document)
+
+**Nothing to do.** v16 introduced signals in §12 but left the rest of the document describing
+traffic only, which made the feature easy to miss if you were not reading §12 in particular. Four
+places now mention it: the "what you get" summary, the §7 configuration reference, the §10 MCP
+tool list, and a new §6e on what the web UI shows. No behaviour changed and no coordinates moved —
+`0.3.0` is still current.
+
+If you are on v16 and have already read §12, there is nothing new here for you.
+
+### v16 — 2026-08-25
 
 **Nothing to do.** Inspector can now record app state — which screen was up, what a state holder
 held, what was in a cache — on the same timeline as your traffic. It is entirely opt-in: every
