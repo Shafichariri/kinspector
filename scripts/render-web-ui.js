@@ -188,7 +188,8 @@ window.navigator.clipboard = { writeText: async () => {} };
   // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the
   // real .row order matters — asserting on the state flag would only prove the flag changed, not
   // that the list re-rendered from it.
-  const sortButton = doc.getElementById('sort-order');
+  const orderNewest = doc.getElementById('order-newest');
+  const orderOldest = doc.getElementById('order-oldest');
   const rowIds = () => [...doc.querySelectorAll('#list .row')].map((r) => r.dataset.id);
   const click = async (node) => {
     node.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -204,15 +205,19 @@ window.navigator.clipboard = { writeText: async () => {} };
 
   const beforeFlip = rowIds();
   const beforeSequence = sequence();
-  await click(sortButton);
+  const startedNewest = orderNewest.classList.contains('on');
+  await click(startedNewest ? orderOldest : orderNewest);
   const afterFlip = rowIds();
   const afterSequence = sequence();
   const reversed =
     beforeFlip.length > 1 &&
     afterFlip.length === beforeFlip.length &&
     afterFlip.every((id, i) => id === beforeFlip[beforeFlip.length - 1 - i]);
-  const flippedLabel = sortButton.textContent;
-  await click(sortButton);
+  // Exactly one chip must read as selected. Two lit chips, or none, is a control that no longer
+  // says what the list is doing.
+  const litChips = [orderOldest, orderNewest].filter((c) => c.classList.contains('on')).length;
+  const flippedLabel = `${litChips} chip lit`;
+  await click(startedNewest ? orderNewest : orderOldest);
   const restored = rowIds().every((id, i) => id === beforeFlip[i]);
 
 
@@ -224,12 +229,11 @@ window.navigator.clipboard = { writeText: async () => {} };
    * changed, not that the page turned data into rows.
    */
   async function probeSignals() {
-    const switchEl = doc.getElementById('view-switch');
+    const tabFor = (id) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === id);
+    const allTab = tabFor('all');
     const result = {
-      switchShown: switchEl && !switchEl.hidden,
-      defaultView: doc.getElementById('view-timeline')?.classList.contains('active')
-        ? 'timeline'
-        : 'traffic',
+      switchShown: Boolean(allTab),
+      defaultView: (doc.querySelector('#tabs .tab.active') || {}).dataset?.view || 'none',
       entries: 0,
       lanes: [],
       unknownTagRendered: 'n/a',
@@ -244,8 +248,8 @@ window.navigator.clipboard = { writeText: async () => {} };
     };
     if (!result.switchShown) return result;
 
-    // Into the timeline, however the session happened to open.
-    await click(doc.getElementById('view-timeline'));
+    // Into the merged timeline, however the session happened to open.
+    await click(allTab);
     await new Promise((r) => setTimeout(r, 400));
 
     const children = [...doc.getElementById('timeline').children];
@@ -313,6 +317,290 @@ window.navigator.clipboard = { writeText: async () => {} };
 
   const signalProbe = await probeSignals();
 
+  // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
+  // before the report reads the detail pane, or `detail sections` measures the wrong pane.
+  await click(doc.querySelector('#tabs .tab[data-view="network"]'));
+  await new Promise((r) => setTimeout(r, 300));
+  const backToRow = doc.querySelector('#list .row');
+  if (backToRow) {
+    await click(backToRow);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  /**
+   * Tabs: one per kind of thing the session recorded.
+   *
+   * The load-bearing assertion is that a tag this build has never heard of still gets a tab. The
+   * schema says tags are app-defined; a tab bar built from a hardcoded list would make Inspector
+   * quietly under-report what the app recorded, and that failure looks like nothing at all.
+   */
+  function probeTabs() {
+    const tabs = [...doc.querySelectorAll('#tabs .tab')];
+    const ids = tabs.map((t) => t.dataset.view);
+    const knownIds = ['all', 'network', 'cache', 'screen', 'state'];
+    return {
+      count: tabs.length,
+      ids,
+      unknownTagsTabbed: ids.filter((id) => !knownIds.includes(id)),
+      activeCount: tabs.filter((t) => t.classList.contains('active')).length,
+      hasNetwork: ids.includes('network'),
+    };
+  }
+
+  /**
+   * The tag browser: does a key list plus one key's detail come out of app-defined payloads?
+   *
+   * Driven through the real tab, real input and real clicks rather than by calling render
+   * functions — asserting on state would only prove a variable changed, not that the page drew
+   * anything.
+   */
+  async function probeBrowser(tag) {
+    const tab = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === tag);
+    const result = {
+      tag,
+      tabShown: Boolean(tab),
+      keys: 0,
+      observations: 0,
+      facets: [],
+      dotStates: [],
+      detailRendered: false,
+      valueShown: 'n/a',
+      historyRows: 0,
+      historySwitches: 'n/a',
+      keyFilterWorks: 'n/a',
+      facetFilterWorks: 'n/a',
+      pullButton: 'n/a',
+      anyValueRendered: 'n/a',
+    };
+    if (!tab) return result;
+
+    await click(tab);
+    await new Promise((r) => setTimeout(r, 700));
+
+    const keysOf = () => [...doc.querySelectorAll('#browser-list .bkey')];
+    const keys = keysOf();
+    result.keys = keys.length;
+    const countText = doc.getElementById('browser-count').textContent;
+    result.observations = Number((countText.match(/(\d+) observations/) || [])[1] || 0);
+    result.facets = [...doc.querySelectorAll('#browser-facets .facet')].map(
+      (f) => f.querySelector('.facet-label').textContent,
+    );
+    result.dotStates = [...new Set(keys.map((k) => {
+      const dot = k.querySelector('.bkey-dot');
+      return dot.className.replace('bkey-dot', '').trim() || 'unknown';
+    }))].sort();
+    if (!keys.length) return result;
+
+    // --- detail ------------------------------------------------------------
+    // The key with the longest history, because that is the one whose history list and
+    // observation switching can actually be exercised.
+    const withHistory = keys.find((k) => /\d+×/.test(k.textContent)) || keys[0];
+    await click(withHistory);
+    await new Promise((r) => setTimeout(r, 500));
+
+    // Whether *this* key has a value depends on what happened to it — a cleared entry correctly
+    // has none — so the "did any payload render at all" assertion walks until one does. Without
+    // it, landing on a cleared key reports no value and calls that a pass.
+    result.anyValueRendered = 'NO - no key in this tag rendered a payload';
+    for (const key of keys) {
+      await click(key);
+      await new Promise((r) => setTimeout(r, 250));
+      const body = doc.querySelector('#browser-detail .bvalue-body');
+      if (body && body.textContent.trim()) {
+        result.anyValueRendered = `yes (${key.querySelector('.bkey-name').textContent})`;
+        break;
+      }
+    }
+    await click(withHistory);
+    await new Promise((r) => setTimeout(r, 400));
+
+    result.detailRendered = Boolean(doc.querySelector('#browser-detail .bdetail-key'));
+    const pre = doc.querySelector('#browser-detail .bvalue-body');
+    const none = doc.querySelector('#browser-detail .bvalue-none');
+    // A pretty-printed payload is the point of the detail panel — a one-line blob is what the
+    // flat table already did badly, so the assertion is on the newlines, not on the presence.
+    result.valueShown = pre
+      ? `yes (${pre.textContent.length} chars, ${pre.textContent.split('\n').length} lines)`
+      : none
+        ? `no value: "${none.textContent.trim().slice(0, 48)}"`
+        : 'NO - neither a value nor an explanation';
+
+    const historyItems = () => [...doc.querySelectorAll('#browser-detail .bhistory-item')];
+    result.historyRows = historyItems().length;
+    if (result.historyRows > 1) {
+      const before = doc.querySelector('#browser-detail .bhistory-item.sel');
+      const other = historyItems().find((i) => !i.classList.contains('sel'));
+      await click(other);
+      await new Promise((r) => setTimeout(r, 400));
+      const after = doc.querySelector('#browser-detail .bhistory-item.sel');
+      result.historySwitches =
+        after && before && after.textContent !== before.textContent
+          ? `yes (${before.textContent.trim()} -> ${after.textContent.trim()})`
+          : 'NO - selecting another observation changed nothing';
+    }
+
+    // --- filters, each asserted to actually narrow the list -----------------
+    const input = doc.getElementById('browser-filter');
+    // A token belonging to exactly one key. Neither end of a cache key is safe to guess at: the
+    // head is a shared namespace prefix and the tail is a shared scope epoch, so filtering on
+    // either matches everything and the assertion passes while proving nothing.
+    // The same three haystacks `groupMatches` searches: what the list shows, the raw stored key,
+    // and the storage key on the row's title. Modelling only the display name reports a filter as
+    // broken when it merely matched on one of the other two.
+    const haystacks = keys.map((k) => [
+      decodeURIComponent(String(k.dataset.key)),
+      String(k.dataset.key),
+      k.querySelector('.bkey-name').title || '',
+    ].map((t) => t.toLowerCase()));
+    const names = haystacks.map((h) => h[0]);
+    // A token that *narrows* — matching at least one key and not all of them. Insisting on a
+    // uniquely-matching token does not work here: the same logical key appears once per scope
+    // epoch, so almost nothing matches exactly one, and the search falls back to the whole key.
+    // Filtering by the entire string it was given is a test that cannot fail.
+    const tokens = [...new Set(names.flatMap((n) => n.split(/[^A-Za-z0-9]+/)))]
+      .filter((t) => t.length > 3);
+    const hits = (t) => haystacks.filter((h) => h.some((k) => k.includes(t.toLowerCase()))).length;
+    const token = tokens.find((t) => hits(t) > 0 && hits(t) < haystacks.length) || names[0];
+    input.value = token;
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    const narrowed = keysOf().length;
+    result.keyFilterWorks =
+      narrowed > 0 && narrowed < result.keys
+        ? `yes (${result.keys} -> ${narrowed} for "${token}")`
+        : narrowed === result.keys
+          ? `NO - matched every key for "${token}"`
+          : `NO (${result.keys} -> ${narrowed})`;
+    input.value = '';
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+
+    const facetChip = doc.querySelector('#browser-facets .chip-facet');
+    if (facetChip) {
+      const label = facetChip.textContent;
+      await click(facetChip);
+      await new Promise((r) => setTimeout(r, 200));
+      const on = keysOf().length;
+      // Re-queried, not reused: renderFacets rebuilds the chips, so the node clicked a moment ago
+      // is detached and its classList says nothing about what is on screen now.
+      const relit = [...doc.querySelectorAll('#browser-facets .chip-facet')]
+        .find((c) => c.textContent === label);
+      const lit = Boolean(relit && relit.classList.contains('on'));
+      // Clicking the lit chip again must clear it, or a facet is a one-way door.
+      await click(relit || facetChip);
+      await new Promise((r) => setTimeout(r, 200));
+      const restoredKeys = keysOf().length;
+      result.facetFilterWorks =
+        lit && on <= result.keys && restoredKeys === result.keys
+          ? `yes (${result.keys} -> ${on} -> ${restoredKeys}, chip toggles off)`
+          : `NO (lit=${lit}, ${result.keys} -> ${on} -> ${restoredKeys})`;
+    }
+
+    const pull = doc.getElementById('browser-pull');
+    result.pullButton = pull.hidden ? 'hidden (no provider seen)' : 'present and enabled';
+    return result;
+  }
+
+  /**
+   * Ages must move on their own.
+   *
+   * They used to be measured against the newest observation in the session, which has no clock
+   * in it: it cannot tick, a refresh never moves it, and a pull moves every row at once. The
+   * check is therefore that the *text* changes across a second without anything re-rendering —
+   * the property the old implementation could not have had.
+   */
+  async function probeAges() {
+    const node = doc.querySelector('#current .current-age') || doc.querySelector('.bkey-age');
+    if (!node) return { present: false, ticks: 'n/a' };
+    const before = node.textContent;
+    // `window.Date` is not Node's `Date`: the app runs inside the jsdom realm, so overriding the
+    // outer one moves a clock nothing reads. That mistake makes this probe report a stuck age
+    // whatever the page does.
+    const realNow = window.Date.now;
+    // Jump the clock rather than waiting out a real minute; the ticker reads Date.now() on every
+    // repaint, so this is the same code path a slow-moving age takes. The jump has to be big
+    // enough to cross a bucket from *any* starting age — +2 minutes leaves an hour-old row still
+    // reading "1h ago", which is a pass that proves nothing.
+    window.Date.now = () => realNow() + 25 * 3600 * 1000;
+    await new Promise((r) => setTimeout(r, 1400));
+    const after = node.textContent;
+    window.Date.now = realNow;
+    return {
+      present: true,
+      before,
+      after,
+      ticks: before !== after ? `yes ("${before}" -> "${after}")` : `NO - stuck at "${before}"`,
+    };
+  }
+
+  /**
+   * Sessions can be deleted from the UI, and the one being recorded cannot.
+   *
+   * Nothing is actually deleted here — the probe runs against the user's real archive. It checks
+   * that the controls exist, that a live session's delete is disabled, and that the destructive
+   * buttons arm before they fire rather than deleting on the first click.
+   */
+  async function probeSessions() {
+    const rows = [...doc.querySelectorAll('#session-rows .session-row')];
+    const clearAll = doc.getElementById('sessions-clear');
+    const result = {
+      rows: rows.length,
+      disabledDeletes: rows.filter((r) => r.querySelector('button').disabled).length,
+      clearArms: 'n/a',
+      headerDelete: Boolean(doc.getElementById('session-delete')),
+    };
+    if (clearAll) {
+      const idle = clearAll.textContent;
+      clearAll.dispatchEvent(new window.Event('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 80));
+      const armed = clearAll.textContent !== idle && clearAll.classList.contains('armed');
+      // Disarm without firing: a second click here would wipe the archive this probe is reading.
+      clearAll.dataset.armed = '0';
+      clearAll.textContent = idle;
+      clearAll.classList.remove('armed');
+      result.clearArms = armed
+        ? `yes (one click armed it, it did not delete)`
+        : 'NO - the first click was not a confirmation step';
+    }
+    return result;
+  }
+
+  const tabProbe = probeTabs();
+  const browserProbe = await probeBrowser('cache');
+  const stateProbe = await probeBrowser('state');
+  const ageProbe = await probeAges();
+
+  /**
+   * A hidden pane must actually be invisible.
+   *
+   * `hidden` only works because of a user agent rule, `[hidden] { display: none }`, and any author
+   * rule setting `display` on the same element outranks it — the pane then paints over whichever
+   * view is selected while its `hidden` property still reads true. This is checked against the
+   * stylesheet text rather than through `getComputedStyle`, because jsdom resolves a hidden
+   * element to `display: none` whatever the CSS says: the computed-style version of this check
+   * passes just as happily with the guard rule deleted, which makes it worse than no check at all.
+   */
+  function auditHiddenPanes(cssText) {
+    // Panes the app shows and hides by toggling `hidden`.
+    const panes = ['.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list'];
+    const setsDisplay = new Set();
+    const guarded = new Set();
+    for (const [, selector, body] of cssText.matchAll(/([.#][A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
+      if (/(^|;)\s*display\s*:/.test(body)) setsDisplay.add(selector);
+    }
+    for (const [, selector] of cssText.matchAll(
+      /([.#][A-Za-z0-9_-]+)\[hidden\]\s*\{[^}]*display\s*:\s*none/g,
+    )) {
+      guarded.add(selector);
+    }
+    const offenders = panes.filter((s) => setsDisplay.has(s) && !guarded.has(s));
+    return offenders.length
+      ? `NO - ${offenders.join(', ')} sets display without a [hidden] override`
+      : 'yes';
+  }
+
+  const hiddenPaneAudit = auditHiddenPanes(css);
+
   const methodClasses = [...new Set(
     [...doc.querySelectorAll('#list .row .method')].map((n) => n.className.replace('method ', '')),
   )].sort();
@@ -333,6 +621,8 @@ window.navigator.clipboard = { writeText: async () => {} };
   const selfKillButtons = selfRows
     .filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill'))
     .length;
+  // Only reachable once the dialog is open, which is also the only place the session list lives.
+  const sessionProbe = await probeSessions();
 
   console.error('--- render report ---');
   console.error('rows rendered      :', doc.querySelectorAll('#list .row').length);
@@ -353,7 +643,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
   const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
-  const dupBadges = [...doc.querySelectorAll('.dup-badge')].length;
+  // Scoped to the list. The timeline draws transactions too, so an unscoped count double-counts
+  // every duplicate and turns "badges must equal rows" into a permanent, meaningless failure.
+  const dupBadges = [...doc.querySelectorAll('#list .dup-badge')].length;
   const clocks = [...doc.querySelectorAll('#list .row .clock')].filter((n) => n.textContent.trim()).length;
 
   console.error('duplicate rows     :', dupRows.length);
@@ -379,8 +671,8 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('limit restored to  :', limitProbe.restored);
   console.error('limit summary      :', limitProbe.summary);
   console.error('--- signals ---');
-  console.error('view switch shown  :', signalProbe.switchShown);
-  console.error('opened on view     :', signalProbe.defaultView, '(timeline when the session has signals)');
+  console.error('all tab present    :', signalProbe.switchShown);
+  console.error('opened on view     :', signalProbe.defaultView, "('all' when the session has signals)");
   console.error('timeline entries   :', signalProbe.entries);
   console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
   console.error('unknown tag renders:', signalProbe.unknownTagRendered);
@@ -396,6 +688,39 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons, '(must be 0)');
+  console.error('--- sessions ---');
+  console.error('session rows       :', sessionProbe.rows);
+  console.error('deletes disabled   :', sessionProbe.disabledDeletes, '(sessions still recording)');
+  console.error('clear all arms     :', sessionProbe.clearArms);
+  console.error('header delete      :', sessionProbe.headerDelete);
+
+  console.error('--- tabs ---');
+  console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
+  console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
+  console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
+
+  for (const probe of [browserProbe, stateProbe]) {
+    console.error(`--- ${probe.tag} browser ---`);
+    console.error('tab present        :', probe.tabShown);
+    if (!probe.tabShown) continue;
+    console.error('keys               :', probe.keys);
+    console.error('observations       :', probe.observations);
+    console.error('facets             :', probe.facets.join(', ') || 'none (fewer than two values)');
+    console.error('freshness dots     :', probe.dotStates.join(', ') || 'none');
+    console.error('detail rendered    :', probe.detailRendered);
+    console.error('value              :', probe.valueShown);
+    console.error('some key has value :', probe.anyValueRendered);
+    console.error('history rows       :', probe.historyRows);
+    console.error('history switches   :', probe.historySwitches);
+    console.error('key filter         :', probe.keyFilterWorks);
+    console.error('facet filter       :', probe.facetFilterWorks);
+    console.error('pull button        :', probe.pullButton);
+  }
+
+  console.error('--- ages ---');
+  console.error('age nodes present  :', ageProbe.present);
+  console.error('ages tick          :', ageProbe.ticks);
+  console.error('hidden panes hide  :', hiddenPaneAudit);
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
 
   // Freeze as a static, self-contained page.

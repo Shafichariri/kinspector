@@ -12,13 +12,9 @@
     <span class="sep">·</span>
     <span id="session-app" class="muted">loading…</span>
     <select id="session-picker" title="Session"></select>
+    <button id="session-delete" class="btn btn-sm btn-quiet"
+            title="Delete this session from ~/.inspector. Permanent.">✕</button>
     <span id="counts" class="muted mono"></span>
-    <!-- Hidden until the session actually has signals: a toggle to an empty view is noise. -->
-    <span id="view-switch" class="view-switch" hidden>
-      <button id="view-traffic" class="btn btn-sm active" data-view="traffic">traffic</button>
-      <button id="view-timeline" class="btn btn-sm" data-view="timeline">timeline</button>
-    </span>
-    <button id="sort-order" class="btn btn-sm">oldest ↓</button>
     <span class="spacer"></span>
     <label class="live-toggle" title="Follow new traffic as it arrives">
       <input type="checkbox" id="live-tail" checked>
@@ -35,6 +31,14 @@
 
   <!-- A stopped daemon otherwise looks exactly like an idle one. -->
   <div id="server-banner" class="server-banner" hidden></div>
+
+  <!--
+    One tab per kind of thing the session recorded, because each kind reads differently: traffic
+    is a list of calls, a cache is a set of keys with histories, a screen trail is a sequence.
+    The tabs after `network` are built from the tags actually present — an app emitting a tag this
+    build has never heard of gets a tab for it too.
+  -->
+  <nav id="tabs" class="tabs" aria-label="Views"></nav>
 
   <main id="panes">
     <aside id="rail">
@@ -58,6 +62,12 @@
       <div class="rail-label" id="current-label" hidden>Now</div>
       <ul id="current" class="current" hidden></ul>
 
+      <div class="rail-label">Order</div>
+      <div class="chips" id="order-chips">
+        <button class="chip" id="order-oldest" data-newest="0" title="Causal reading order">oldest first</button>
+        <button class="chip" id="order-newest" data-newest="1" title="Tail-a-log order">newest first</button>
+      </div>
+
       <div class="rail-label">Markers</div>
       <ul id="markers" class="markers"><li class="muted">none</li></ul>
 
@@ -77,6 +87,40 @@
       <div id="list-empty" class="empty muted">no transactions</div>
       <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
       <div id="timeline-empty" class="empty muted" hidden>no entries</div>
+
+      <!--
+        A key list beside one key's detail, rather than a row per observation.
+
+        A cache is a set of keys whose values change; a flat table of every observation buries
+        that under repetition, and a value wide enough to read does not fit a column. The list
+        answers "what is cached and is it fresh", the panel answers "what is in this one, and
+        what happened to it" — which is the same shape any tag wants, so every tag gets it.
+      -->
+      <div id="browser" class="browser" hidden>
+        <div class="browser-toolbar">
+          <input id="browser-filter" type="search" spellcheck="false" autocomplete="off"
+                 placeholder="filter keys">
+          <div class="chips browser-facets" id="browser-facets"></div>
+          <span class="spacer"></span>
+          <span id="browser-pull-status" class="muted browser-status"></span>
+          <button id="browser-pull" class="btn btn-sm" hidden
+                  title="Ask the running app for a fresh snapshot from every provider it has answered before">
+            pull latest
+          </button>
+        </div>
+
+        <div class="browser-body">
+          <div class="browser-keys">
+            <ul id="browser-list" class="browser-list"></ul>
+            <div id="browser-list-empty" class="empty muted" hidden></div>
+            <div id="browser-count" class="browser-count muted"></div>
+          </div>
+          <div id="browser-detail" class="browser-detail">
+            <div class="empty muted">select a key</div>
+          </div>
+        </div>
+      </div>
+
     </section>
 
     <section id="detail-pane">
@@ -103,6 +147,21 @@
       <div class="settings-actions">
         <button id="peers-refresh" class="btn btn-sm">refresh</button>
         <span id="peers-status" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <div class="settings-title">Sessions</div>
+      <p class="settings-note muted">
+        Every run of the app is a folder under <code>~/.inspector/sessions</code>. Deleting one is
+        permanent — there is no trash — and a session the app is still writing to is never removed,
+        because pulling the folder out from under an open writer loses the traffic on screen.
+      </p>
+      <div id="session-rows" class="session-rows"></div>
+      <div class="settings-actions">
+        <button id="sessions-clear" class="btn btn-sm btn-danger">clear all</button>
+        <button id="sessions-refresh" class="btn btn-sm">refresh</button>
+        <span id="sessions-status" class="muted"></span>
       </div>
     </section>
 
