@@ -86,8 +86,8 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 - [x] `get_signal` and `list_signals` MCP descriptions both state that payloads are unredacted
 - [x] `docs/INTEGRATION.md` at **v16**, changelog saying explicitly a consumer must do **nothing**
 - [x] The consumer recipe is a numbered section of `INTEGRATION.md`, not an appendix
-- [ ] Version **0.3.0** — new public API is not a patch — and tagged
-- [ ] **0.3.0 resolved from GitHub Packages in a throwaway consumer and compiled for JVM and iOS
+- [x] Version **0.3.0** — new public API is not a patch — and tagged
+- [x] **0.3.0 resolved from GitHub Packages in a throwaway consumer and compiled for JVM and iOS
       simulator, before announcing.** A published version cannot be replaced; this is the check that
       caught 0.2.0 shipping with no licence in its POM
 
