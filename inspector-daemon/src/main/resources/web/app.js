@@ -40,15 +40,22 @@
     // App-state observations for this session, and the latest per (tag, name).
     signals: [],
     current: [],
-    // Cache payloads, keyed by signal id. Fetched lazily and only for the cache view: a row's
-    // fields live in its payload, which the signal list deliberately does not carry.
-    cachePayloads: new Map(),
-    cacheFilters: { key: '', storage: '', scope: '', expired: '', latestOnly: false },
-    // 'traffic' | 'timeline' | 'cache'. Chosen per session rather than remembered: a session with
-    // no signals has nothing to merge, so landing on an empty timeline would be worse than useless.
+    // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
+    // them — a session can hold thousands — but every field a browser row shows lives in one.
+    payloads: new Map(),
+    // 'all' (merged timeline) | 'network' (traffic) | a tag name such as 'cache'.
+    //
+    // Chosen per session rather than remembered: a session with no signals has nothing to merge
+    // and no tags to tab through, so landing on an empty view would be worse than useless.
     // Sessions recorded before signals existed therefore behave exactly as they always did.
-    view: 'traffic',
+    view: 'network',
     selectedSignalId: null,
+    // Tag-browser state. Facets are per-tag and rebuilt on every switch, because the words in a
+    // payload are the app's — one app's `storage` values mean nothing to the next.
+    browserFilter: '',
+    browserFacets: {},
+    browserKey: null,
+    browserObservation: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -80,6 +87,66 @@
     if (n < 1024) return `${n} B`;
     if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / 1048576).toFixed(1)} MB`;
+  };
+
+  /**
+   * How long ago something happened, from the device's own wall clock.
+   *
+   * `mono` cannot answer this. It is the *device's* monotonic clock, with no relationship to this
+   * machine's, so subtracting it from `Date.now()` is meaningless — which is why ages used to be
+   * measured against the newest observation in the session instead. That has a defect you only
+   * see by watching it: there is no clock in it, so it cannot tick, a refresh never moves it, and
+   * a pull moves every other row at once because it shifts the reference point.
+   *
+   * `ts` is a real timestamp, so this is answerable. It is still the device's clock: a simulator
+   * whose clock has drifted reports the drift, and an age that comes out negative is clamped
+   * rather than rendered as the future.
+   */
+  const ageOf = (ts) => {
+    const at = Date.parse(ts);
+    if (!Number.isFinite(at)) return null;
+    return Math.max(0, Date.now() - at);
+  };
+
+  const fmtAge = (ms) => {
+    if (ms === null || ms === undefined) return '—';
+    if (ms < 2000) return 'just now';
+    if (ms < 60000) return `${Math.round(ms / 1000)}s ago`;
+    if (ms < 3600000) return `${Math.round(ms / 60000)}m ago`;
+    if (ms < 86400000) return `${Math.round(ms / 3600000)}h ago`;
+    return `${Math.round(ms / 86400000)}d ago`;
+  };
+
+  /**
+   * An age that keeps itself current.
+   *
+   * The timestamp travels on the node, so [paintAges] can refresh every age on the page without
+   * re-rendering anything around them.
+   */
+  function ageNode(ts, cls) {
+    const node = el('span', cls || 'age');
+    node.dataset.ageTs = ts;
+    node.title = "measured against this machine's clock, using the device's own timestamp";
+    paintAge(node);
+    return node;
+  }
+
+  function paintAge(node) {
+    const age = ageOf(node.dataset.ageTs);
+    node.textContent = fmtAge(age);
+    // Only while an app is attached. In a session that ended hours ago *everything* is old, so
+    // colouring every row would mark the whole panel stale and say nothing — the warning has to
+    // mean "this has stopped updating while you watch", which is only a claim a live session can
+    // make.
+    node.classList.toggle('stale', sessionIsLive() && age !== null && age > 60000);
+  }
+
+  const paintAges = () => document.querySelectorAll('[data-age-ts]').forEach(paintAge);
+
+  /** True while the app is still writing to the session on screen: `endedAt` is set on close. */
+  const sessionIsLive = () => {
+    const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
+    return Boolean(meta) && !meta.endedAt;
   };
 
   const prettyJson = (text) => {
@@ -125,7 +192,9 @@
     const picker = $('session-picker');
     picker.innerHTML = '';
     for (const s of state.sessions) {
-      const option = el('option', null, `${s.sessionId}  (${s.txnCount})`);
+      // `?? 0`, not `||`: kotlinx omits a field equal to its default, so a session with no
+      // traffic arrives with `txnCount` missing rather than zero, and reads as "(undefined)".
+      const option = el('option', null, `${s.sessionId}  (${s.txnCount ?? 0})`);
       option.value = s.sessionId;
       picker.appendChild(option);
     }
@@ -163,6 +232,85 @@
     renderTimeline();
   }
 
+  // --- tabs ---------------------------------------------------------------
+
+  /**
+   * Tags Inspector has an opinion about, in the order they are worth reading.
+   *
+   * The list is a *preference*, not a filter. A tag this build has never heard of still gets a
+   * tab — the schema says tags are app-defined, and a view that silently drops one would make
+   * Inspector lie about what the app recorded.
+   */
+  const TAB_ORDER = ['cache', 'screen', 'state'];
+  const TAG_LABELS = { screen: 'screens' };
+
+  const tagOf = (signal) => String(signal.tag).toLowerCase();
+  const signalsForTag = (tag) => state.signals.filter((signal) => tagOf(signal) === tag);
+
+  function tagsInSession() {
+    const tags = [...new Set(state.signals.map(tagOf))];
+    const rank = (tag) => {
+      const at = TAB_ORDER.indexOf(tag);
+      return at === -1 ? TAB_ORDER.length : at;
+    };
+    return tags.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  }
+
+  /** Every view this session can offer, in tab order. */
+  function availableViews() {
+    const views = [];
+    // Merging is only worth a tab when there is something to merge with the traffic.
+    if (state.signals.length) {
+      views.push({ id: 'all', label: 'all', title: 'Traffic, signals and markers on one timeline' });
+    }
+    views.push({ id: 'network', label: 'network', title: 'HTTP calls', count: state.transactions.length });
+    for (const tag of tagsInSession()) {
+      views.push({
+        id: tag,
+        label: TAG_LABELS[tag] || tag,
+        title: `${tag} signals recorded by the app`,
+        count: signalsForTag(tag).length,
+      });
+    }
+    return views;
+  }
+
+  function renderTabs() {
+    const bar = $('tabs');
+    const views = availableViews();
+    // A single tab is a label, not a choice. Sessions with no signals therefore look exactly as
+    // they did before tabs existed.
+    bar.hidden = views.length < 2;
+    bar.innerHTML = '';
+    for (const view of views) {
+      const tab = el('button', 'tab');
+      tab.dataset.view = view.id;
+      tab.title = view.title;
+      tab.appendChild(el('span', 'tab-label', view.label));
+      if (view.count !== undefined) tab.appendChild(el('span', 'tab-count muted mono', String(view.count)));
+      tab.classList.toggle('active', view.id === state.view);
+      tab.addEventListener('click', () => selectView(view.id));
+      bar.appendChild(tab);
+    }
+  }
+
+  async function selectView(id) {
+    if (state.view !== id) {
+      state.browserKey = null;
+      state.browserObservation = null;
+      state.browserFilter = '';
+      state.browserFacets = {};
+      const input = $('browser-filter');
+      if (input) input.value = '';
+    }
+    state.view = id;
+    // A cache key only exists inside a payload, so the browser cannot draw its list without
+    // them. Fetched on the way in rather than for every session that happens to hold cache rows.
+    if (id === 'cache') await loadPayloadsFor('cache');
+    renderTabs();
+    applyView();
+  }
+
   /**
    * Signals and the current-state panel.
    *
@@ -177,17 +325,15 @@
     state.signals = Array.isArray(page) ? page : [];
     state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
 
-    const has = state.signals.length > 0 || state.current.length > 0;
-    $('view-switch').hidden = !has;
-    // A cache tab on a session that never recorded one is a dead end, so it appears only when
-    // there is something behind it.
-    const hasCache = cacheSignals().length > 0;
-    $('view-cache').hidden = !hasCache;
-    if (!hasCache && state.view === 'cache') state.view = 'traffic';
-    if (!has && state.view === 'timeline') state.view = 'traffic';
+    // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
+    // session and the current view falls back rather than pointing at nothing.
+    const ids = availableViews().map((view) => view.id);
+    if (!ids.includes(state.view)) state.view = 'network';
     // The merge is the value, so a session that has something to merge opens on it.
-    if (has && !state.viewChosenForSession) state.view = 'timeline';
+    if (!state.viewChosenForSession && ids.includes('all')) state.view = 'all';
     state.viewChosenForSession = true;
+
+    renderTabs();
     renderCurrent();
     applyView();
   }
@@ -307,13 +453,13 @@
   function setSortOrder(newestFirst) {
     state.newestFirst = newestFirst;
     localStorage.setItem('inspector.newestFirst', newestFirst ? '1' : '0');
-    const button = $('sort-order');
-    button.textContent = newestFirst ? 'newest ↑' : 'oldest ↓';
-    button.title = newestFirst
-      ? 'Newest request at the top — click for oldest first'
-      : 'Oldest request at the top — click for newest first';
+    $('order-oldest').classList.toggle('on', !newestFirst);
+    $('order-newest').classList.toggle('on', newestFirst);
     renderList();
     renderTimeline();
+    // Order is a reading preference, not a view: it applies to the key list and to every
+    // history under it too.
+    if (state.view !== 'all' && state.view !== 'network') renderBrowser();
   }
 
   /**
@@ -638,67 +784,68 @@
     KNOWN_TAGS.includes(String(tag).toLowerCase()) ? String(tag).toLowerCase() : 'other';
 
   function applyView() {
-    const timeline = state.view === 'timeline';
-    const cache = state.view === 'cache';
-    const traffic = !timeline && !cache;
-    $('list').hidden = !traffic;
-    $('list-empty').hidden = !traffic || state.transactions.length > 0;
-    $('timeline').hidden = !timeline;
+    const all = state.view === 'all';
+    const network = state.view === 'network';
+    const browsing = !all && !network;
+
+    $('list').hidden = !network;
+    $('list-empty').hidden = !network || state.transactions.length > 0;
+    $('timeline').hidden = !all;
     $('timeline-empty').hidden = true;
-    $('cache').hidden = !cache;
-    $('view-traffic').classList.toggle('active', traffic);
-    $('view-timeline').classList.toggle('active', timeline);
-    $('view-cache').classList.toggle('active', cache);
-    // The cache table has six columns and long keys; the list pane is sized for one-line rows.
-    // A class rather than `hidden` on the detail pane, because `hidden` loses to any author rule
-    // that sets `display` — the bug this view already shipped once.
-    $('panes').classList.toggle('panes-wide', cache);
-    if (timeline) renderTimeline();
-    if (cache) renderCache();
+    $('browser').hidden = !browsing;
+    for (const tab of $('tabs').querySelectorAll('.tab')) {
+      tab.classList.toggle('active', tab.dataset.view === state.view);
+    }
+    // The browser carries its own detail panel, so the transaction one would be a second, empty
+    // detail column. A class rather than `hidden`, because `hidden` loses to any author rule that
+    // sets `display` — the bug this pane already shipped once.
+    $('panes').classList.toggle('panes-wide', browsing);
+    if (all) renderTimeline();
+    if (browsing) renderBrowser();
   }
 
-  // --- cache view ---------------------------------------------------------
+  // --- tag browser --------------------------------------------------------
 
   /**
-   * A table of what the app had cached, and when.
+   * A key list beside one key's detail, for any tag.
    *
-   * Inspector does not define what a cache row contains — `tag` is app-defined and so is the
+   * Inspector does not define what a signal payload contains — `tag` is app-defined and so is the
    * payload — so this reads a set of conventional field names and degrades rather than failing:
-   * `storage`, `scopes` (or `scope`), `expired`, `key`, `value`, `payloadBytes`. A payload that
-   * uses none of them still gets a row with its time, name and raw value; an app that follows the
-   * convention gets the full table. Documented in INTEGRATION.md §12d.
+   * `storage`, `scopes` (or `scope`), `expired`, `key`, `value`, `payloadBytes`. A payload using
+   * none of them still gets a key with its time and raw value; an app following the convention
+   * gets the facets too. Documented in INTEGRATION.md §12d.
    *
-   * Two payload shapes both feed this table, because both are useful and apps emit both:
-   *   - a **whole-cache snapshot**, `{ items: [ … ] }`, which expands to one row per entry;
-   *   - a **single entry**, one row, typically pushed as the entry changes.
+   * Two payload shapes both feed this, because both are useful and apps emit both:
+   *   - a **whole-cache snapshot**, `{ items: [ … ] }`, which expands to one key per entry;
+   *   - a **single entry**, one observation, typically pushed as the entry changes.
    */
-  const cacheSignals = () =>
-    state.signals.filter((signal) => String(signal.tag).toLowerCase() === 'cache');
 
   /**
-   * Payloads are fetched only for this view, and only once per signal.
+   * Payloads for one tag, fetched once per signal.
    *
-   * The signal list deliberately omits payloads — a session can hold thousands — but every column
-   * except time and key lives inside one, so the table cannot be drawn without them.
+   * Only `cache` needs them up front: a cache key lives *inside* the payload, so the list cannot
+   * be drawn without it. Every other tag names its key in `signal.name`, so the list draws from
+   * the rows alone and a payload is fetched only when someone opens one.
    */
-  async function loadCachePayloads() {
-    const missing = cacheSignals().filter(
-      (signal) => signal.dataRef && !state.cachePayloads.has(signal.id),
+  async function loadPayloadsFor(tag) {
+    const missing = signalsForTag(tag).filter(
+      (signal) => signal.dataRef && !state.payloads.has(signal.id),
     );
     if (!missing.length || !state.sessionId) return;
+    await Promise.all(missing.map(loadPayload));
+  }
+
+  async function loadPayload(signal) {
+    if (!signal || !signal.dataRef || state.payloads.has(signal.id)) return;
     const id = encodeURIComponent(state.sessionId);
-    await Promise.all(
-      missing.map(async (signal) => {
-        try {
-          const res = await fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
-          state.cachePayloads.set(signal.id, JSON.parse(await res.text()));
-        } catch {
-          // A payload that will not parse is still a row; it just has nothing to put in the
-          // columns. Recording the failure stops us retrying it on every render.
-          state.cachePayloads.set(signal.id, null);
-        }
-      }),
-    );
+    try {
+      const res = await fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
+      state.payloads.set(signal.id, JSON.parse(await res.text()));
+    } catch {
+      // A payload that will not parse is still an observation; it just has nothing to show.
+      // Recording the failure stops us retrying it on every render.
+      state.payloads.set(signal.id, null);
+    }
   }
 
   const asScopes = (o) => {
@@ -721,15 +868,19 @@
     };
   }
 
-  function cacheRowsFor(signal) {
-    const payload = state.cachePayloads.get(signal.id);
-    const base = {
-      ts: signal.ts,
-      mono: signal.mono,
-      signalId: signal.id,
-      trigger: signal.trigger === 'request' ? 'request' : 'app',
-    };
-    if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+  const baseRow = (signal) => ({
+    ts: signal.ts,
+    mono: signal.mono,
+    signalId: signal.id,
+    trigger: signal.trigger === 'request' ? 'request' : 'app',
+  });
+
+  /** Observations contributed by one signal — many, when it carries a whole-cache snapshot. */
+  function rowsForSignal(signal, tag) {
+    const payload = state.payloads.get(signal.id);
+    const base = baseRow(signal);
+
+    if (tag === 'cache' && payload && typeof payload === 'object' && Array.isArray(payload.items)) {
       return payload.items.map((item) => ({
         ...base,
         ...cacheFieldsOf(item),
@@ -739,7 +890,7 @@
         fromSnapshot: true,
       }));
     }
-    if (payload && typeof payload === 'object') {
+    if (tag === 'cache' && payload && typeof payload === 'object') {
       return [{ ...base, ...cacheFieldsOf(payload), key: signal.name, fromSnapshot: false }];
     }
     return [{
@@ -748,72 +899,32 @@
       storage: '',
       scopes: [],
       expired: null,
-      value: payload == null ? null : payload,
-      bytes: null,
       kind: null,
       storageKey: null,
+      bytes: typeof signal.bytes === 'number' && signal.bytes > 0 ? signal.bytes : null,
+      // `undefined` is "not fetched yet" and `null` is "there is nothing"; the detail panel
+      // fetches on the first and says so on the second.
+      value: signal.dataRef ? (state.payloads.has(signal.id) ? payload : undefined) : null,
       fromSnapshot: false,
     }];
   }
 
-  function allCacheRows() {
-    const rows = [];
-    for (const signal of cacheSignals()) rows.push(...cacheRowsFor(signal));
-    rows.sort((a, b) => a.mono - b.mono);
-    return state.newestFirst ? rows.reverse() : rows;
-  }
-
-  function cacheRowMatches(row) {
-    const f = state.cacheFilters;
-    if (f.key && !String(row.key).toLowerCase().includes(f.key.toLowerCase())) return false;
-    if (f.storage && row.storage !== f.storage) return false;
-    if (f.scope && !row.scopes.includes(f.scope)) return false;
-    if (f.expired === 'yes' && row.expired !== true) return false;
-    if (f.expired === 'no' && row.expired !== false) return false;
-    return true;
-  }
-
-  /** Collapses to the most recent row per key, which is what "what is cached now" means. */
-  function latestPerKey(rows) {
-    const latest = new Map();
-    for (const row of rows) {
-      const previous = latest.get(row.key);
-      if (!previous || row.mono >= previous.mono) latest.set(row.key, row);
+  /** One entry per key, carrying every observation of it in causal order. */
+  function browserGroups(tag) {
+    const groups = new Map();
+    for (const signal of signalsForTag(tag)) {
+      for (const row of rowsForSignal(signal, tag)) {
+        const group = groups.get(row.key) || { key: row.key, rows: [] };
+        group.rows.push(row);
+        groups.set(row.key, group);
+      }
     }
-    const collapsed = [...latest.values()].sort((a, b) => a.mono - b.mono);
-    return state.newestFirst ? collapsed.reverse() : collapsed;
-  }
-
-  /** Long enough to recognise a value, short enough that a row stays one line. */
-  const CACHE_VALUE_CLIP = 160;
-
-  const cacheValueText = (value) => {
-    if (value === null || value === undefined) return '—';
-    if (typeof value === 'string') return value;
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return String(value);
+    for (const group of groups.values()) {
+      group.rows.sort((a, b) => a.mono - b.mono);
+      group.latest = group.rows[group.rows.length - 1];
     }
-  };
-
-  function cacheValueCell(row) {
-    const cell = el('td', 'cache-col-value');
-    if (row.bytes != null) cell.appendChild(el('span', 'cache-bytes muted', `${fmtBytes(row.bytes)} `));
-    const full = cacheValueText(row.value);
-    const clipped = full.length > CACHE_VALUE_CLIP;
-    const short = clipped ? `${full.slice(0, CACHE_VALUE_CLIP)}…` : full;
-    const text = el('span', 'cache-value mono', short);
-    if (clipped) {
-      text.classList.add('cache-value-clip');
-      text.title = 'click to expand';
-      text.addEventListener('click', () => {
-        const open = text.classList.toggle('cache-value-open');
-        text.textContent = open ? full : short;
-      });
-    }
-    cell.appendChild(text);
-    return cell;
+    const ordered = [...groups.values()].sort((a, b) => a.latest.mono - b.latest.mono);
+    return state.newestFirst ? ordered.reverse() : ordered;
   }
 
   /**
@@ -831,85 +942,293 @@
     }
   };
 
-  function cacheRow(row) {
-    const tr = el('tr', 'cache-row');
-    tr.dataset.key = row.key;
-    tr.dataset.signalId = row.signalId;
-    if (row.expired === true) tr.classList.add('cache-row-expired');
+  /**
+   * The distinctive tail of a key.
+   *
+   * Cache keys share their head — a namespace, a method, a version prefix — so a list truncated
+   * from the left is a list of identical rows. The last two segments are what tells them apart;
+   * the whole key stays on the line below and in the title.
+   */
+  function shortKey(key) {
+    const readable = readableKey(key).replace(/\/+$/, '');
+    const parts = readable.split('/').filter(Boolean);
+    if (parts.length <= 2) return readable;
+    return parts.slice(-2).join('/');
+  }
 
-    const time = el('td', 'cache-col-time mono muted', fmtClock(row.ts));
-    time.title = `mono ${row.mono}ms`;
-    tr.appendChild(time);
+  // --- facets ---------------------------------------------------------------
 
-    const key = el('td', 'cache-col-key');
-    key.appendChild(el('span', 'cache-key', readableKey(row.key)));
-    // The raw key stays reachable, because it is what the app actually stored under.
-    key.title = row.storageKey || row.key;
-    if (row.kind) {
-      key.appendChild(el('span', `cache-kind cache-kind-${row.kind.toLowerCase()}`, row.kind.toLowerCase()));
+  /**
+   * Filter chips built from the rows themselves.
+   *
+   * `storage` and `scope` are the app's words, so a hardcoded set would be wrong for every app
+   * but the one it was written against. A facet with nothing to choose between — one value, or
+   * none — is not drawn: a chip you can only leave on is not a filter.
+   */
+  function facetsFor(groups) {
+    const storages = [...new Set(groups.map((g) => g.latest.storage).filter(Boolean))].sort();
+    const scopes = [...new Set(groups.flatMap((g) => g.latest.scopes))].sort();
+    const expiries = [...new Set(groups.map((g) => g.latest.expired).filter((e) => e !== null))];
+    const kinds = [...new Set(groups.map((g) => g.latest.kind).filter(Boolean))]
+      .map((k) => k.toLowerCase()).sort();
+    const facets = [];
+    if (kinds.length > 1) facets.push({ field: 'kind', label: 'last change', values: kinds });
+    if (storages.length > 1) facets.push({ field: 'storage', label: 'storage', values: storages });
+    if (scopes.length > 1) facets.push({ field: 'scope', label: 'scope', values: scopes });
+    if (expiries.length) {
+      facets.push({
+        field: 'expired',
+        label: 'state',
+        values: ['live', 'expired'].filter(
+          (v) => expiries.includes(v === 'expired'),
+        ),
+      });
     }
+    return facets.filter((facet) => facet.values.length > 1 || facet.field !== 'expired');
+  }
+
+  function renderFacets(facets) {
+    const box = $('browser-facets');
+    box.innerHTML = '';
+    for (const facet of facets) {
+      const group = el('span', 'facet');
+      group.appendChild(el('span', 'facet-label muted', facet.label));
+      for (const value of facet.values) {
+        const chip = el('button', 'chip chip-facet', value);
+        chip.classList.toggle('on', state.browserFacets[facet.field] === value);
+        chip.addEventListener('click', () => {
+          // Clicking the chip that is already on clears the facet, so every filter can be
+          // undone with the control that set it.
+          state.browserFacets[facet.field] =
+            state.browserFacets[facet.field] === value ? '' : value;
+          renderBrowser();
+        });
+        group.appendChild(chip);
+      }
+      box.appendChild(group);
+    }
+  }
+
+  function groupMatches(group) {
+    const text = state.browserFilter.trim().toLowerCase();
+    if (text) {
+      // Both forms, because both are things a person types here: the readable key is what the
+      // list shows, and the raw one is what you paste out of a log or a filename.
+      const haystacks = [readableKey(group.key), group.key, group.latest.storageKey || '']
+        .map((k) => String(k).toLowerCase());
+      if (!haystacks.some((k) => k.includes(text))) return false;
+    }
+    const facets = state.browserFacets;
+    if (facets.kind && String(group.latest.kind).toLowerCase() !== facets.kind) return false;
+    if (facets.storage && group.latest.storage !== facets.storage) return false;
+    if (facets.scope && !group.latest.scopes.includes(facets.scope)) return false;
+    if (facets.expired === 'expired' && group.latest.expired !== true) return false;
+    if (facets.expired === 'live' && group.latest.expired !== false) return false;
+    return true;
+  }
+
+  // --- key list -------------------------------------------------------------
+
+  /** `cleared` and `removed` mean the value is gone; the dot says so before you read the row. */
+  const isGone = (row) => row.kind === 'Cleared' || row.kind === 'Removed';
+
+  function keyItem(group, tag) {
+    const latest = group.latest;
+    const item = el('li', 'bkey');
+    item.dataset.key = group.key;
+    item.classList.toggle('sel', group.key === state.browserKey);
+
+    // Only where the app said something. A tag that reports no freshness at all — `state`, say —
+    // would otherwise get a column of identical hollow dots, which reads as a status and is not
+    // one. The column collapses instead.
+    const dot = el('span', 'bkey-dot');
+    if (isGone(latest)) {
+      dot.classList.add('gone');
+      dot.title = `${latest.kind.toLowerCase()} — the value is gone`;
+    } else if (latest.expired === true) {
+      dot.classList.add('expired');
+      dot.title = 'expired';
+    } else if (latest.expired === false) {
+      dot.classList.add('live');
+      dot.title = 'live';
+    } else if (latest.kind) {
+      dot.title = 'the app did not say whether this is still live';
+    } else {
+      dot.classList.add('bkey-dot-none');
+    }
+    item.appendChild(dot);
+
+    const text = el('span', 'bkey-text');
+    const name = el('span', 'bkey-name', shortKey(group.key));
+    name.title = latest.storageKey || group.key;
+    text.appendChild(name);
+
+    const meta = [];
+    if (latest.storage) meta.push(latest.storage);
+    if (latest.scopes.length) meta.push(latest.scopes.join(', '));
+    if (group.rows.length > 1) meta.push(`${group.rows.length}×`);
+    if (meta.length) text.appendChild(el('span', 'bkey-meta muted', meta.join(' · ')));
+    item.appendChild(text);
+
+    item.appendChild(ageNode(latest.ts, 'bkey-age muted mono'));
+
+    item.addEventListener('click', () => {
+      state.browserKey = group.key;
+      state.browserObservation = null;
+      renderBrowser();
+    });
+    return item;
+  }
+
+  function renderBrowser() {
+    const tag = state.view;
+    if (tag === 'all' || tag === 'network') return;
+
+    const groups = browserGroups(tag);
+    renderFacets(facetsFor(groups));
+
+    const shown = groups.filter(groupMatches);
+    const list = $('browser-list');
+    list.innerHTML = '';
+    for (const group of shown) list.appendChild(keyItem(group, tag));
+
+    const empty = $('browser-list-empty');
+    empty.hidden = shown.length > 0;
+    empty.textContent = groups.length
+      ? 'nothing matches these filters'
+      : `no ${tag} signals in this session`;
+
+    const observations = groups.reduce((n, g) => n + g.rows.length, 0);
+    $('browser-count').textContent = groups.length
+      ? `${shown.length}/${groups.length} keys · ${observations} observations`
+      : '';
+
+    // A pull is only offered where a provider has been proven to exist, so the button never
+    // promises something the app cannot answer.
+    const providers = providerNames(tag);
+    $('browser-pull').hidden = providers.length === 0;
+
+    const selected = shown.find((g) => g.key === state.browserKey)
+      || shown.find((g) => g.key === state.browserKey)
+      || null;
+    renderBrowserDetail(selected || (state.browserKey ? groups.find((g) => g.key === state.browserKey) : null));
+  }
+
+  // --- detail ---------------------------------------------------------------
+
+  function renderBrowserDetail(group) {
+    const pane = $('browser-detail');
+    pane.innerHTML = '';
+    if (!group) {
+      pane.appendChild(el('div', 'empty muted', 'select a key'));
+      return;
+    }
+
+    const rows = state.newestFirst ? [...group.rows].reverse() : group.rows;
+    const chosen = group.rows.find((r) => r.signalId === state.browserObservation) || group.latest;
+
+    const head = el('div', 'bdetail-head');
+    head.appendChild(el('div', 'bdetail-key mono', readableKey(group.key)));
+    const raw = chosen.storageKey || group.key;
+    // The raw key stays on screen, not just in a tooltip: it is what the app actually stored
+    // under, and it is what you paste into a log search.
+    if (raw !== readableKey(group.key)) head.appendChild(el('div', 'bdetail-raw muted mono', raw));
+    pane.appendChild(head);
+
+    pane.appendChild(metaLine(chosen));
+    pane.appendChild(valueBlock(chosen));
+    if (group.rows.length > 1) pane.appendChild(historyBlock(group, rows));
+  }
+
+  function metaLine(row) {
+    const line = el('div', 'bdetail-meta');
+    const add = (text, cls) => line.appendChild(el('span', cls || 'bdetail-chip', text));
+    if (row.kind) add(row.kind.toLowerCase(), `bdetail-chip bkind bkind-${row.kind.toLowerCase()}`);
+    if (row.storage) add(row.storage);
+    if (row.scopes.length) add(row.scopes.join(', '));
+    if (row.expired !== null) add(row.expired ? 'expired' : 'live', `bdetail-chip ${row.expired ? 'bad' : 'good'}`);
+    if (row.bytes != null) add(fmtBytes(row.bytes));
     // Provenance, for the same reason the timeline badges it: a snapshot pushed an hour ago read
     // as the current state of the cache is the mistake this view exists to prevent.
-    key.appendChild(
+    line.appendChild(
       row.trigger === 'request'
         ? el('span', 'tl-trigger tl-pulled', 'pulled')
         : el('span', 'tl-trigger tl-pushed', 'pushed'),
     );
-    tr.appendChild(key);
-
-    tr.appendChild(el('td', 'cache-col-storage', row.storage || '—'));
-    tr.appendChild(el('td', 'cache-col-scope', row.scopes.join(', ') || '—'));
-
-    const expired = el('td', 'cache-col-expired', row.expired === null ? '—' : row.expired ? 'yes' : 'no');
-    if (row.expired === true) expired.classList.add('cache-expired');
-    tr.appendChild(expired);
-
-    tr.appendChild(cacheValueCell(row));
-    return tr;
+    line.appendChild(el('span', 'bdetail-clock muted mono', fmtClock(row.ts)));
+    line.appendChild(ageNode(row.ts, 'bdetail-age muted mono'));
+    return line;
   }
 
-  /**
-   * Options come from the rows themselves rather than a fixed list, because `storage` and `scope`
-   * are the app's words. A hardcoded set would be wrong for every app but the one it was written
-   * against.
-   */
-  function refreshCacheFilterOptions(rows) {
-    const fill = (id, values, selected) => {
-      const select = $(id);
-      const wanted = ['', ...values];
-      const current = [...select.options].map((o) => o.value);
-      if (current.length === wanted.length && current.every((v, i) => v === wanted[i])) return;
-      select.innerHTML = '';
-      select.appendChild(el('option', '', 'any'));
-      for (const value of values) {
-        const option = el('option', '', value);
-        option.value = value;
-        select.appendChild(option);
-      }
-      select.value = values.includes(selected) ? selected : '';
-    };
-    fill('cache-filter-storage', [...new Set(rows.map((r) => r.storage).filter(Boolean))].sort(),
-      state.cacheFilters.storage);
-    fill('cache-filter-scope', [...new Set(rows.flatMap((r) => r.scopes))].sort(),
-      state.cacheFilters.scope);
+  const valueText = (value) => {
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  };
+
+  function valueBlock(row) {
+    const box = el('div', 'bvalue');
+    const head = el('div', 'bvalue-head');
+    head.appendChild(el('span', 'rail-label', 'Value'));
+    head.appendChild(el('span', 'spacer'));
+
+    if (row.value === undefined) {
+      // Not fetched yet — every tag but cache loads a payload only when someone opens it.
+      head.appendChild(el('span', 'muted', 'loading…'));
+      box.appendChild(head);
+      const signal = state.signals.find((s) => s.id === row.signalId);
+      loadPayload(signal).then(renderBrowser);
+      return box;
+    }
+
+    const text = row.value === null ? null : valueText(row.value);
+    if (text !== null) {
+      const copy = el('button', 'btn btn-sm', 'copy');
+      copy.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          copy.textContent = 'copied';
+          setTimeout(() => (copy.textContent = 'copy'), 1200);
+        });
+      });
+      head.appendChild(copy);
+    }
+    box.appendChild(head);
+
+    box.appendChild(
+      text === null
+        ? el('div', 'bvalue-none muted', isGone(row)
+          ? 'no value — this observation records the entry going away'
+          : 'this signal carried no payload')
+        : el('pre', 'bvalue-body mono', text),
+    );
+    return box;
   }
 
-  function renderCache() {
-    if (state.view !== 'cache') return;
-    const all = allCacheRows();
-    refreshCacheFilterOptions(all);
-
-    let rows = all.filter(cacheRowMatches);
-    if (state.cacheFilters.latestOnly) rows = latestPerKey(rows);
-
-    const body = $('cache-rows');
-    body.innerHTML = '';
-    for (const row of rows) body.appendChild(cacheRow(row));
-    $('cache-empty').hidden = rows.length > 0;
-    $('cache-empty').textContent = all.length
-      ? 'no rows match these filters'
-      : 'no cache signals in this session';
+  function historyBlock(group, rows) {
+    const box = el('div', 'bhistory');
+    box.appendChild(el('div', 'rail-label', `History (${group.rows.length})`));
+    const list = el('ul', 'bhistory-list');
+    const chosenId = state.browserObservation || group.latest.signalId;
+    for (const row of rows) {
+      const item = el('li', 'bhistory-item');
+      item.classList.toggle('sel', row.signalId === chosenId);
+      item.appendChild(el('span', 'bhistory-clock mono muted', fmtClock(row.ts)));
+      item.appendChild(el('span', 'bhistory-kind', row.kind ? row.kind.toLowerCase() : 'observed'));
+      if (row.bytes != null) item.appendChild(el('span', 'bhistory-bytes muted mono', fmtBytes(row.bytes)));
+      item.addEventListener('click', () => {
+        state.browserObservation = row.signalId;
+        renderBrowser();
+      });
+      list.appendChild(item);
+    }
+    box.appendChild(list);
+    return box;
   }
+
+  // --- pulling --------------------------------------------------------------
 
   /**
    * Which names a "pull latest" should ask for.
@@ -923,14 +1242,14 @@
    * Per-entry change rows are excluded, so a session with fifty cached keys does not fire fifty
    * doomed requests at the app.
    */
-  function cacheProviderNames() {
+  function providerNames(tag) {
     const names = new Set();
-    for (const signal of cacheSignals()) {
+    for (const signal of signalsForTag(tag)) {
       if (signal.trigger === 'request') {
         names.add(signal.name);
         continue;
       }
-      const payload = state.cachePayloads.get(signal.id);
+      const payload = state.payloads.get(signal.id);
       if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
         names.add(signal.name);
       }
@@ -938,15 +1257,17 @@
     return [...names];
   }
 
-  async function pullCaches() {
-    const status = $('cache-pull-status');
-    const names = cacheProviderNames();
+  async function pullProviders() {
+    const tag = state.view;
+    const status = $('browser-pull-status');
+    const names = providerNames(tag);
     if (!names.length) {
       status.textContent =
-        'no cache provider has been seen yet — the app registers one with Inspector.registerProvider';
+        `no ${tag} provider has been seen yet — the app registers one with Inspector.registerProvider`;
       return;
     }
-    $('cache-pull').disabled = true;
+    $('browser-pull').disabled = true;
+    status.classList.remove('browser-status-error');
     status.textContent = `pulling ${names.length}…`;
     const failures = [];
     for (const name of names) {
@@ -956,7 +1277,7 @@
           {
             method: 'POST',
             headers: { 'X-Inspector-Control': '1', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tag: 'cache', name }),
+            body: JSON.stringify({ tag, name }),
           },
         );
         if (!res.ok) {
@@ -969,18 +1290,17 @@
         failures.push(`${name}: ${e.message}`);
       }
     }
-    $('cache-pull').disabled = false;
+    $('browser-pull').disabled = false;
     if (failures.length) {
       status.textContent = failures.join(' · ');
-      status.classList.add('cache-status-error');
+      status.classList.add('browser-status-error');
       return;
     }
-    status.classList.remove('cache-status-error');
     status.textContent = `pulled ${names.length} at ${fmtClock(new Date().toISOString())}`;
     // The pulled rows arrive over the live socket; re-read so they are on screen either way.
     await loadSignals();
-    await loadCachePayloads();
-    renderCache();
+    await loadPayloadsFor(tag);
+    renderBrowser();
   }
 
   /**
@@ -1004,7 +1324,7 @@
   }
 
   function renderTimeline() {
-    if (state.view !== 'timeline') return;
+    if (state.view !== 'all') return;
     const root = $('timeline');
     root.innerHTML = '';
 
@@ -1099,7 +1419,12 @@
     return node;
   }
 
-  /** The rail panel answering "what screen, what is cached" without reading any rows. */
+  /**
+   * The rail panel answering "what screen, what is cached" without reading any rows.
+   *
+   * The last observation of each `(tag, name)`, whatever tab you are on — which is the point of
+   * it being in the rail rather than inside one view.
+   */
   function renderCurrent() {
     const list = $('current');
     const label = $('current-label');
@@ -1108,23 +1433,17 @@
     list.hidden = rows.length === 0;
     list.innerHTML = '';
 
-    const newest = rows.length ? Math.max(...rows.map((r) => r.mono)) : 0;
     for (const signal of rows) {
       const item = el('li', 'current-item');
       item.dataset.tag = signal.tag;
       item.appendChild(el('span', 'tl-tag', signal.tag));
       item.appendChild(el('span', 'current-name', signal.name));
-      // Age is measured against the newest observation, not the wall clock: `mono` is the
-      // device's monotonic clock and has no relationship to this machine's.
-      const age = newest - signal.mono;
-      const trigger = signal.trigger === 'request' ? 'pulled' : 'pushed';
-      const note = el(
-        'span',
-        `current-age muted ${age > 30000 ? 'stale' : ''}`,
-        age === 0 ? trigger : `${trigger} ${fmtMs(age)} earlier`,
+      item.appendChild(
+        signal.trigger === 'request'
+          ? el('span', 'tl-trigger tl-pulled', 'pulled')
+          : el('span', 'tl-trigger tl-pushed', 'pushed'),
       );
-      note.title = 'age relative to the newest observation in this session';
-      item.appendChild(note);
+      item.appendChild(ageNode(signal.ts, 'current-age muted'));
       item.addEventListener('click', () => selectSignal(signal.id));
       list.appendChild(item);
     }
@@ -1226,7 +1545,7 @@
     clearTimeout(filterTimer);
     filterTimer = setTimeout(() => {
       state.filter = $('filter').value;
-      for (const chip of document.querySelectorAll('.chip')) {
+      for (const chip of document.querySelectorAll('#chips .chip, #endpoint-chips .chip')) {
         chip.classList.toggle('active', chip.dataset.filter === state.filter);
       }
       loadTransactions();
@@ -1595,11 +1914,15 @@
         // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
         // received. A viewer handed the received row would see every payload as missing.
         state.signals.push(message.signal);
-        if ($('view-switch').hidden) {
-          $('view-switch').hidden = false;
-        }
+        // A tag's first signal is the moment its tab becomes reachable, and the moment `all`
+        // starts having something to merge. Both are decided by what the session holds, so the
+        // bar is rebuilt rather than revealed.
+        renderTabs();
         refreshCurrent();
         renderTimeline();
+        if (tagOf(message.signal) === state.view) {
+          loadPayload(message.signal).then(renderBrowser);
+        }
       }
     };
     ws.onclose = () => {
@@ -1625,6 +1948,150 @@
         loadSessions().then(loadTransactions);
       }
     };
+  }
+
+  // --- sessions -----------------------------------------------------------
+
+  /**
+   * Two clicks, not a browser dialog.
+   *
+   * Deleting from the archive is permanent — there is no trash — so it needs a deliberate second
+   * action. `confirm()` would do that, but it also blocks the event loop and cannot be driven by
+   * the UI probe, so the second click lives on the button itself and expires on its own.
+   */
+  function confirmThen(button, idle, armed, run) {
+    if (button.dataset.armed === '1') {
+      clearTimeout(Number(button.dataset.armTimer));
+      button.dataset.armed = '0';
+      button.textContent = idle;
+      button.classList.remove('armed');
+      run();
+      return;
+    }
+    button.dataset.armed = '1';
+    button.textContent = armed;
+    button.classList.add('armed');
+    button.dataset.armTimer = String(setTimeout(() => {
+      button.dataset.armed = '0';
+      button.textContent = idle;
+      button.classList.remove('armed');
+    }, 4000));
+  }
+
+  async function sessionApi(path, method) {
+    const res = await fetch(path, { method, headers: { 'X-Inspector-Control': '1' } });
+    const text = await res.text();
+    if (!res.ok) {
+      let message = text;
+      try { message = JSON.parse(text).error || text; } catch { /* keep raw */ }
+      throw new Error(message);
+    }
+    return JSON.parse(text);
+  }
+
+  function sessionStatus(text, isError) {
+    const node = $('sessions-status');
+    if (!node) return;
+    node.textContent = text || '';
+    node.classList.toggle('cache-status-error', !!isError);
+  }
+
+  async function deleteSession(id) {
+    try {
+      const result = await sessionApi(`/api/sessions/${encodeURIComponent(id)}`, 'DELETE');
+      sessionStatus(`deleted ${id} · freed ${fmtBytes(result.freedBytes)}`, false);
+      // The session on screen just stopped existing, so pick another before re-reading anything
+      // that would ask the daemon about it.
+      if (state.sessionId === id) {
+        state.sessionId = null;
+        state.selectedId = null;
+        state.viewChosenForSession = false;
+      }
+      await afterSessionChange();
+    } catch (e) {
+      // The daemon's refusals name the reason — a live session, a bad id — so show them verbatim.
+      sessionStatus(e.message, true);
+    }
+  }
+
+  async function clearSessions() {
+    try {
+      const result = await sessionApi('/api/sessions/clear', 'POST');
+      const kept = result.kept.length ? ` · kept ${result.kept.length} still recording` : '';
+      sessionStatus(
+        `deleted ${result.deleted.length} · freed ${fmtBytes(result.freedBytes)}${kept}`,
+        false,
+      );
+      if (!result.kept.includes(state.sessionId)) {
+        state.sessionId = null;
+        state.selectedId = null;
+        state.viewChosenForSession = false;
+      }
+      await afterSessionChange();
+    } catch (e) {
+      sessionStatus(e.message, true);
+    }
+  }
+
+  /** Everything on screen was derived from a session list that has just changed. */
+  async function afterSessionChange() {
+    state.payloads.clear();
+    state.browserKey = null;
+    state.browserObservation = null;
+    await loadSessions();
+    renderSessionRows();
+    if (state.sessionId) {
+      await loadTransactions();
+    } else {
+      state.transactions = [];
+      state.allTransactions = [];
+      state.signals = [];
+      state.current = [];
+      state.markers = [];
+      renderList();
+      renderMarkers();
+      renderCurrent();
+      renderTabs();
+      applyView();
+    }
+  }
+
+  function renderSessionRows() {
+    const box = $('session-rows');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!state.sessions.length) {
+      box.appendChild(el('div', 'muted', 'no sessions'));
+      return;
+    }
+    for (const meta of state.sessions) {
+      const row = el('div', 'session-row');
+      if (meta.sessionId === state.sessionId) row.classList.add('sel');
+
+      const name = el('div', 'session-row-id mono', meta.sessionId);
+      row.appendChild(name);
+
+      const bits = [`${meta.txnCount ?? 0} calls`];
+      if (meta.errorCount) bits.push(`${meta.errorCount} errors`);
+      // `endedAt` is the only signal on this list of whether the app is still attached, and it
+      // is exactly what decides whether the daemon will allow the delete.
+      const live = !meta.endedAt;
+      if (live) bits.push('recording');
+      row.appendChild(el('div', 'session-row-meta muted', bits.join(' · ')));
+
+      const remove = el('button', 'btn btn-sm btn-quiet', '✕');
+      if (live) {
+        remove.disabled = true;
+        remove.title = 'still being written — disconnect the app first';
+      } else {
+        remove.title = `Delete ${meta.sessionId}. Permanent.`;
+        remove.addEventListener('click', () => {
+          confirmThen(remove, '✕', 'sure?', () => deleteSession(meta.sessionId));
+        });
+      }
+      row.appendChild(remove);
+      box.appendChild(row);
+    }
   }
 
   document.addEventListener('keydown', (e) => {
@@ -1661,7 +2128,10 @@
     loadTransactions();
   });
   $('live-tail').addEventListener('change', (e) => { state.liveTail = e.target.checked; });
-  for (const chip of document.querySelectorAll('.chip')) {
+  // Scoped to the filter rail, not every `.chip` on the page. Order chips and facet chips are
+  // chips too, and they carry no `data-filter` — a blanket handler set the filter box to
+  // `undefined`, which parses as a bad filter and empties the whole list.
+  for (const chip of document.querySelectorAll('#chips .chip')) {
     chip.addEventListener('click', () => {
       const value = chip.dataset.filter;
       $('filter').value = $('filter').value === value ? '' : value;
@@ -1671,38 +2141,28 @@
 
   $('server-stop').addEventListener('click', requestStop);
   $('server-restart').addEventListener('click', requestRestart);
-  $('sort-order').addEventListener('click', () => setSortOrder(!state.newestFirst));
+  $('order-oldest').addEventListener('click', () => setSortOrder(false));
+  $('order-newest').addEventListener('click', () => setSortOrder(true));
 
-  for (const button of [$('view-traffic'), $('view-timeline'), $('view-cache')]) {
-    button.addEventListener('click', async () => {
-      state.view = button.dataset.view;
-      // Payloads are only needed by the cache table, so they are fetched on the way in rather
-      // than for every session that happens to have cache rows.
-      if (state.view === 'cache') await loadCachePayloads();
-      applyView();
-    });
-  }
+  $('browser-pull').addEventListener('click', pullProviders);
+  $('browser-filter').addEventListener('input', (e) => {
+    state.browserFilter = e.target.value;
+    renderBrowser();
+  });
 
-  $('cache-pull').addEventListener('click', pullCaches);
-
-  for (const [id, field] of [
-    ['cache-filter-key', 'key'],
-    ['cache-filter-storage', 'storage'],
-    ['cache-filter-scope', 'scope'],
-    ['cache-filter-expired', 'expired'],
-  ]) {
-    $(id).addEventListener('input', () => {
-      state.cacheFilters[field] = $(id).value;
-      renderCache();
-    });
-  }
-  $('cache-latest-only').addEventListener('change', () => {
-    state.cacheFilters.latestOnly = $('cache-latest-only').checked;
-    renderCache();
+  $('session-delete').addEventListener('click', () => {
+    if (state.sessionId) confirmThen($('session-delete'), '✕', 'delete?', () => deleteSession(state.sessionId));
+  });
+  $('sessions-clear').addEventListener('click', () => {
+    confirmThen($('sessions-clear'), 'clear all', 'delete every session?', clearSessions);
+  });
+  $('sessions-refresh').addEventListener('click', async () => {
+    await loadSessions();
+    renderSessionRows();
   });
 
   (async function init() {
-    setSortOrder(state.newestFirst);   // paints the button to match the remembered preference
+    setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
 
     $('open-settings').addEventListener('click', () => {
       $('settings').showModal();
@@ -1710,6 +2170,7 @@
       loadMcp();
       applyDuplicateWindow(state.duplicateWindowMs);   // refreshes the count for this session
       applyEndpointLimit(state.endpointLimit);
+      renderSessionRows();
     });
     $('peers-refresh').addEventListener('click', loadPeers);
     $('dup-window').value = state.duplicateWindowMs;
@@ -1725,6 +2186,10 @@
         setTimeout(() => (button.textContent = 'copy command'), 1200);
       });
     });
+
+    // Ages are wall-clock now, so they have to be repainted or they are wrong the moment they
+    // are drawn. Only the text of the age nodes changes; nothing re-renders around them.
+    setInterval(paintAges, 1000);
 
     await loadServerInfo();
     await loadSessions();

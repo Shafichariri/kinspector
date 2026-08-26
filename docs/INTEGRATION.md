@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v18 — 2026-08-26.**
+**Document version: v19 — 2026-08-26.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -421,19 +421,35 @@ works too, but it permits cleartext to *everywhere* rather than just your Mac.
 
 ### 6e. What the web UI shows
 
-Traffic, newest or oldest first, with marker dividers, filters, endpoint shortcuts and a detail
-pane carrying headers, bodies and copy-as-cURL.
+One tab per kind of thing the session recorded, because each kind reads differently.
 
-If the session also has signals (§12), a **timeline** toggle appears and the session opens on it:
-traffic, app state and markers merged on the device clock, with `screen` and `state` drawn as
-points, `cache` as spans showing how long a value was held, and any tag Inspector has no styling
-for in a generic lane. A "Now" panel answers what screen was up and what was cached. A session
-without signals has no toggle and behaves exactly as it always did.
+| Tab | What it is |
+|---|---|
+| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL |
+| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12), and the session opens on it |
+| one per tag | A key list beside one key's detail, for `cache`, `screen`, `state`, and any tag Inspector has never heard of |
 
-A session that recorded any `cache` signal also gets a **cache** tab: one table of what was cached
-and when, with columns for storage, key, scope, expired and value, filters on each, a "latest per
-key" collapse, and a button that pulls a fresh snapshot from every cache provider the session has
-seen answer one. The columns are filled from your payload — see §12d for the field names it reads.
+On `all`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value was
+held, and an unrecognised tag gets a generic lane. A **Now** panel in the rail answers what screen
+was up and what was cached, whatever tab you are on, with an age counted against your device's own
+timestamp.
+
+A tag tab lists one entry per key — the cache key, or the signal name — with its freshness
+and how long ago it was last seen. Selecting one shows its current value pretty-printed, with a copy
+button, and every observation of that key underneath, so you can step back through what it held.
+Filters are a key search plus a chip per facet the payloads actually vary on: a facet with one
+value is not drawn, because a filter you can only leave on is not a filter. Where a provider has
+been seen to answer, a **pull latest** button asks the app for a fresh snapshot.
+
+Reading order — oldest first or newest first — is a rail control, and it applies to the key list
+and to each key's history as well as to the traffic list.
+
+The columns are filled from your payload — see §12d for the field names the tag browser reads.
+
+**Sessions** can be deleted from the UI: the `✕` beside the session picker removes the one on
+screen, and Settings → Sessions lists every session with a per-row delete and a **clear all**.
+Both arm on the first click and fire on the second. A session the app is still writing to is never
+deleted — pulling the folder out from under an open writer would lose the traffic on screen.
 
 ### 6f. Note for physical devices
 
@@ -1050,7 +1066,33 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v18 — 2026-08-26 (this document)
+### v19 — 2026-08-26 (this document)
+
+**Nothing to do.** The web UI's view switch became a tab bar, and each tag got a view built for
+its own data.
+
+`traffic` and `timeline` are now `network` and `all`, and every tag in the session gets a tab of
+its own beside them — including one this build has never heard of, which is what the schema
+already promised and the old two-button switch could not express.
+
+The cache tab is no longer a flat table of every observation. It is a key list beside one key's
+detail: the list answers *what is cached and is it fresh*, the panel answers *what is in this one
+and what happened to it*, with the value pretty-printed instead of clipped to 160 characters.
+"Latest per key" stopped being a checkbox and became the structure. The same view serves every
+other tag, so `state` and `screen` are browsable the same way.
+
+Two fixes worth knowing about if you read the UI closely:
+
+- **Ages are wall-clock now.** The "Now" panel measured each row against the newest observation in
+  the session, which has no clock in it — it could not tick, a refresh never moved it, and a pull
+  moved every row at once because it shifted the reference point. Ages come from the signal's own
+  `ts` and update every second. It is still your device's clock, so a simulator whose clock has
+  drifted reports the drift.
+- **Sessions can be deleted.** `DELETE /api/sessions/{id}` and `POST /api/sessions/clear`, both
+  behind `X-Inspector-Control: 1`, with buttons for each in the UI. A session still being written
+  is never deleted, and the `latest` alias is refused as a delete target rather than resolved.
+
+### v18 — 2026-08-26
 
 **Nothing to do, but §12d is worth two minutes if you record cache signals.**
 
