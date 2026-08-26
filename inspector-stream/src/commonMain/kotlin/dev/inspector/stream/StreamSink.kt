@@ -7,7 +7,12 @@ import dev.inspector.model.Hello
 import dev.inspector.model.HelloAck
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
+import dev.inspector.Inspector
 import dev.inspector.model.MarkerMsg
+import dev.inspector.model.Signal
+import dev.inspector.model.SignalError
+import dev.inspector.model.SignalMsg
+import dev.inspector.model.SignalRequest
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
 import dev.inspector.model.NetworkTransaction
@@ -98,6 +103,7 @@ class StreamSink(
     private sealed interface Outbound {
         class Transaction(val txn: NetworkTransaction, val req: ByteArray?, val res: ByteArray?) : Outbound
         class MarkerOut(val marker: Marker) : Outbound
+        class SignalOut(val signal: Signal, val data: ByteArray?) : Outbound
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -105,12 +111,26 @@ class StreamSink(
         SupervisorJob() + Dispatchers.Default.limitedParallelism(1)
     )
 
-    private val queue = Channel<Outbound>(capacity = 512, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Declared before [queue], which reports into it. */
+    private val _dropped = MutableStateFlow(0L)
+
+    /**
+     * Rows discarded because the daemon could not keep up. Reported through
+     * [onUndeliveredElement], not through `trySend`.
+     *
+     * A `DROP_OLDEST` channel always accepts — it discards the oldest entry and returns success —
+     * so a `trySend(...).isSuccess` check can never observe a drop and would leave this counter at
+     * zero however far behind the daemon fell.
+     */
+    private val queue = Channel<Outbound>(
+        capacity = 512,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onUndeliveredElement = { _dropped.value += 1 },
+    )
 
     private val _state = MutableStateFlow(StreamState.Disconnected)
     val state: StateFlow<StreamState> = _state.asStateFlow()
 
-    private val _dropped = MutableStateFlow(0L)
     val dropped: StateFlow<Long> = _dropped.asStateFlow()
 
     /**
@@ -139,15 +159,15 @@ class StreamSink(
     }
 
     override fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?) {
-        if (!queue.trySend(Outbound.Transaction(txn, reqBody, resBody)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Outbound.Transaction(txn, reqBody, resBody))
+    }
+
+    override fun onSignal(signal: Signal, data: ByteArray?) {
+        queue.trySend(Outbound.SignalOut(signal, data))
     }
 
     override fun onMarker(marker: Marker) {
-        if (!queue.trySend(Outbound.MarkerOut(marker)).isSuccess) {
-            _dropped.value += 1
-        }
+        queue.trySend(Outbound.MarkerOut(marker))
     }
 
     private suspend fun runConnectionLoop() {
@@ -219,6 +239,16 @@ class StreamSink(
                             )
                             is Outbound.MarkerOut ->
                                 InspectorJson.encodeToString<WireMsg>(MarkerMsg(item.marker))
+                            // `data = null` on the row: the payload rides beside it, and the
+                            // daemon is what assigns `dataRef`. Sending both would ship the
+                            // payload twice.
+                            is Outbound.SignalOut -> InspectorJson.encodeToString<WireMsg>(
+                                SignalMsg(
+                                    signal = item.signal.copy(data = null),
+                                    data = item.data?.let { encodeBody(it) },
+                                    dataB64 = item.data?.let { !isUtf8(it) } ?: false,
+                                )
+                            )
                         }
                         send(Frame.Text(frame))
                     }
@@ -236,11 +266,14 @@ class StreamSink(
                             val message = runCatching {
                                 InspectorJson.decodeFromString<WireMsg>(frame.readText())
                             }.getOrNull()
-                            if (message is SignRequest) {
-                                // Launched rather than awaited inline: signing can touch a hardware
-                                // key and may prompt for user presence, and blocking here would
-                                // stall the liveness read for as long as that takes.
-                                launch { answerSignRequest(message) }
+                            // Launched rather than awaited inline: signing can touch a hardware
+                            // key and may prompt for user presence, and a provider may read a
+                            // cache or a database. Blocking here would stall the liveness read
+                            // for as long as either takes.
+                            when (message) {
+                                is SignRequest -> launch { answerSignRequest(message) }
+                                is SignalRequest -> launch { answerSignalRequest(message) }
+                                else -> Unit
                             }
                         }
                     }
@@ -248,6 +281,35 @@ class StreamSink(
 
                 watcher.invokeOnCompletion { sender.cancel() }
                 sender.invokeOnCompletion { watcher.cancel() }
+            }
+        }
+    }
+
+
+    /**
+     * Answers one [SignalRequest] by reading the app's registered provider.
+     *
+     * On success nothing is sent from here: [Inspector.answerSignalRequest] records the row, which
+     * reaches this sink through [onSignal] and goes out as an ordinary [SignalMsg] carrying
+     * `trigger = request` and the same `requestId`. One path for every row, whoever asked for it.
+     *
+     * On failure a [SignalError] goes back instead, so the host reports why rather than waiting
+     * out its timeout and calling the app unresponsive.
+     */
+    private suspend fun DefaultClientWebSocketSession.answerSignalRequest(request: SignalRequest) {
+        val error = runCatching {
+            Inspector.answerSignalRequest(request.tag, request.name, request.requestId)
+        }.getOrElse { "${it::class.simpleName}: ${it.message}" }
+
+        if (error != null) {
+            runCatching {
+                send(
+                    Frame.Text(
+                        InspectorJson.encodeToString<WireMsg>(
+                            SignalError(requestId = request.requestId, error = error)
+                        )
+                    )
+                )
             }
         }
     }

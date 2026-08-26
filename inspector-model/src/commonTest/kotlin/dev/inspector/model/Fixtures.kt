@@ -1,5 +1,7 @@
 package dev.inspector.model
 
+import kotlinx.serialization.json.JsonElement
+
 /** Baseline transaction; tests override only the fields they exercise. */
 fun txn(
     id: String = "7f3a0001",
@@ -41,3 +43,21 @@ fun marker(
     ts: String = "2026-08-16T10:14:02.311Z",
     source: String = MarkerSource.APP,
 ) = Marker(ts = ts, mono = mono, label = label, source = source)
+
+/** Baseline signal; tests override only the fields they exercise. */
+fun signal(
+    id: String = "5c1a0001",
+    ts: String = "2026-08-16T10:14:02.311Z",
+    mono: Long = 1_000,
+    tag: String = SignalTags.SCREEN,
+    name: String = "PortfolioDetail",
+    data: JsonElement? = null,
+    dataRef: String? = null,
+    dataTruncated: Boolean = false,
+    bytes: Long = 0,
+    trigger: SignalTrigger = SignalTrigger.App,
+    requestId: String? = null,
+) = Signal(
+    id = id, ts = ts, mono = mono, tag = tag, name = name, data = data, dataRef = dataRef,
+    dataTruncated = dataTruncated, bytes = bytes, trigger = trigger, requestId = requestId,
+)

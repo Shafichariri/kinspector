@@ -2,7 +2,11 @@ package dev.inspector.daemon
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import dev.inspector.model.SignalTags
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -15,6 +19,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** The HTTP surface the web UI, CLI and (later) MCP tools all read through. */
@@ -40,6 +45,13 @@ class RestApiTest {
                 txn("cccc3333", path = "/v2/orders", status = 404, mono = 300),
             ),
             markers = listOf(marker("tapped checkout")),
+            signals = listOf(
+                signal(id = "s1a", tag = SignalTags.SCREEN, name = "Route", mono = 100) to null,
+                signal(id = "s2b", tag = SignalTags.SCREEN, name = "Route", mono = 250) to null,
+                signal(id = "s3c", tag = SignalTags.CACHE, name = "response", mono = 200)
+                    to """{"entries":7}""".toByteArray(),
+                signal(id = "s4d", tag = "bluetooth", name = "pairing", mono = 275) to null,
+            ),
         )
         SessionWriter.updateLatestLink(config.dataDir, config.sessionsDir.resolve("2026-08-16T10-14-02_app_dev_debug"))
 
@@ -129,4 +141,63 @@ class RestApiTest {
         assertEquals(200, http.get(url("/app.js")).status.value)
         assertEquals(200, http.get(url("/style.css")).status.value)
     }
+
+    @Test
+    fun signals_are_served_newest_first_and_filterable_by_tag() = runBlocking {
+        val all = http.get(url("/api/sessions/latest/signals")).bodyAsText()
+        assertContains(all, "s2b")
+        assertContains(all, "bluetooth")
+        // Ordered by the device's monotonic clock, newest first.
+        assertTrue(all.indexOf("s4d") < all.indexOf("s3c"), "newest must come first: $all")
+
+        val screens = http.get(url("/api/sessions/latest/signals?tag=screen")).bodyAsText()
+        assertContains(screens, "s1a")
+        assertFalse(screens.contains("bluetooth"), "tag filter must exclude other tags: $screens")
+    }
+
+    @Test
+    fun a_signal_and_its_payload_are_each_addressable() = runBlocking {
+        assertContains(http.get(url("/api/sessions/latest/signals/s3c")).bodyAsText(), "signals/s3c.json")
+        assertEquals(
+            """{"entries":7}""",
+            http.get(url("/api/sessions/latest/signals/s3c/data")).bodyAsText(),
+        )
+    }
+
+    @Test
+    fun current_answers_what_screen_and_what_is_cached_in_one_call() = runBlocking {
+        val body = http.get(url("/api/sessions/latest/current")).bodyAsText()
+        // Last observation per (tag, name): the newer Route row wins, the older is absent.
+        assertContains(body, "s2b")
+        assertFalse(body.contains("\"s1a\""), "only the latest per key: $body")
+        assertContains(body, "s3c")
+    }
+
+    @Test
+    fun a_missing_signal_or_payload_is_a_404_not_an_empty_200() = runBlocking {
+        assertEquals(404, http.get(url("/api/sessions/latest/signals/nope")).status.value)
+        assertEquals(404, http.get(url("/api/sessions/latest/signals/s1a/data")).status.value)
+    }
+
+
+    @Test
+    fun a_pull_against_a_session_with_no_attached_app_is_a_conflict_not_a_hang() = runBlocking {
+        // The archive holds this session, but nothing is attached to answer for it. Saying so
+        // beats waiting out a timeout and reporting something vague.
+        val response = http.post(url("/api/sessions/latest/signals/request")) {
+            header("X-Inspector-Control", "1")
+            setBody("""{"tag":"cache","name":"response"}""")
+        }
+        assertEquals(409, response.status.value)
+        assertContains(response.bodyAsText(), "no app is attached")
+    }
+
+    @Test
+    fun a_pull_without_the_control_header_is_refused() = runBlocking {
+        val response = http.post(url("/api/sessions/latest/signals/request")) {
+            setBody("""{"tag":"cache","name":"response"}""")
+        }
+        assertEquals(403, response.status.value, "a mutating route must carry the control header")
+    }
+
 }

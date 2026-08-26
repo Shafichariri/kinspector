@@ -6,7 +6,8 @@ import kotlinx.serialization.Serializable
 /**
  * Ingest protocol, sent as JSON text frames over `WS /ingest`.
  *
- * Mostly device → daemon, but not exclusively: [HelloAck] and [SignRequest] travel the other way.
+ * Mostly device → daemon, but not exclusively: [HelloAck], [SignRequest] and [SignalRequest]
+ * travel the other way.
  * That the socket is genuinely bidirectional is what makes host-driven replay of a signed request
  * possible at all — see `docs/REPLAY.md`.
  * The `type` discriminator is configured on [InspectorJson].
@@ -64,6 +65,55 @@ data class Txn(
 @SerialName("marker")
 data class MarkerMsg(
     val marker: Marker,
+) : WireMsg
+
+/**
+ * One app-defined observation, with its payload inline.
+ *
+ * Deliberately shaped exactly like [Txn]: the payload rides as a string rather than on the row, so
+ * the device never touches the filesystem and the daemon is the only thing that assigns
+ * [Signal.dataRef]. [Signal.data] is therefore null on the wire — carrying it in both places would
+ * ship every payload twice.
+ *
+ * [data] is UTF-8 when the captured payload is valid UTF-8, otherwise base64 with [dataB64] set.
+ */
+@Serializable
+@SerialName("signal")
+data class SignalMsg(
+    val signal: Signal,
+    val data: String? = null,
+    val dataB64: Boolean = false,
+) : WireMsg
+
+/**
+ * Daemon → device: read a registered provider and report what it returns now.
+ *
+ * [name] is required, so one request yields exactly one reply and there is no completion ambiguity
+ * to resolve. There is no provider advertisement in v1; discovery is the error path — see
+ * [SignalError].
+ */
+@Serializable
+@SerialName("signalReq")
+data class SignalRequest(
+    val requestId: String,
+    val tag: String,
+    val name: String,
+) : WireMsg
+
+/**
+ * Device → daemon: [SignalRequest] could not be answered, correlated by `requestId`.
+ *
+ * [error] must name what *is* registered, e.g.
+ * `no provider for cache/orders; registered: cache/response, cache/prefs`. That makes the error
+ * self-documenting and costs one frame rather than a second discovery mechanism.
+ *
+ * Errors are replies, never archived rows: a failed pull must leave no [Signal] in the archive.
+ */
+@Serializable
+@SerialName("signalErr")
+data class SignalError(
+    val requestId: String,
+    val error: String,
 ) : WireMsg
 
 /**

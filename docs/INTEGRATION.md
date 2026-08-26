@@ -1,7 +1,7 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v15 — 2026-08-21.**
-Already integrated from an earlier copy? Go to **[§13 Changelog](#13-changelog)** first — it says
+**Document version: v16 — 2026-08-25.**
+Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
 
@@ -124,8 +124,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.2.1")
-            implementation("dev.inspector:inspector-ui:0.2.1")
+            implementation("dev.inspector:inspector-core:0.3.0")
+            implementation("dev.inspector:inspector-ui:0.3.0")
         }
     }
 }
@@ -185,11 +185,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.2.1")
-                implementation("dev.inspector:inspector-noop-ui:0.2.1")
+                implementation("dev.inspector:inspector-noop:0.3.0")
+                implementation("dev.inspector:inspector-noop-ui:0.3.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.2.1")
-                implementation("dev.inspector:inspector-ui:0.2.1")
+                implementation("dev.inspector:inspector-core:0.3.0")
+                implementation("dev.inspector:inspector-ui:0.3.0")
             }
         }
     }
@@ -316,13 +316,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.2.1")
-    implementation("dev.inspector:inspector-noop-ui:0.2.1")
-    implementation("dev.inspector:inspector-noop-stream:0.2.1")
+    implementation("dev.inspector:inspector-noop:0.3.0")
+    implementation("dev.inspector:inspector-noop-ui:0.3.0")
+    implementation("dev.inspector:inspector-noop-stream:0.3.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.2.1")
-    implementation("dev.inspector:inspector-ui:0.2.1")
-    implementation("dev.inspector:inspector-stream:0.2.1")
+    implementation("dev.inspector:inspector-core:0.3.0")
+    implementation("dev.inspector:inspector-ui:0.3.0")
+    implementation("dev.inspector:inspector-stream:0.3.0")
 }
 ```
 
@@ -804,7 +804,158 @@ trusts. That is a substantially larger piece of work and has not been started; s
 
 ---
 
-## 12. What to report back
+## 12. Recording app state alongside traffic (signals)
+
+**Optional, and additive.** If you skip this section entirely, everything you already have keeps
+working exactly as before. Nothing below is required to upgrade.
+
+Inspector answers *what went over the wire*. On its own it cannot answer *what your app was doing
+at the time* — which screen was up, what your state holder held, what was in a cache. A **signal**
+is an app-defined observation recorded on the same clock as a transaction, so both appear on one
+timeline.
+
+The payoff is a question that used to take inference: *"the KYC submit returned 502 — what was the
+app doing?"* becomes one merged view showing the screen, the state, the cache age, and the failing
+call in order.
+
+### 12a. Emitting signals
+
+Two calls, and Inspector never learns what your categories mean — `tag` and `name` are your words:
+
+```kotlin
+// Structured payload.
+Inspector.signal(
+    tag = "screen",
+    name = "Checkout",
+    data = Json.encodeToJsonElement(destination),
+)
+
+// Text payload — the common case, because Kotlin/Native has no runtime reflection and
+// serialising arbitrary app state is not free.
+Inspector.signal("state", viewModelName, text = state.toString())
+```
+
+Conventional tags are `screen`, `state`, `cache` and `session`, and the web UI gives each its own
+lane. **Any other tag works identically** — `featureflags`, `bluetooth`, whatever your app cares
+about. It archives, filters, merges into the timeline and reads over MCP the same way; it simply
+renders in a generic lane.
+
+### 12b. Emit freely — throttling is the library's job
+
+**Do not throttle in your own code.** Values for one `(tag, name)` are conflated on Inspector's
+capture worker, keeping the **last** value of a burst rather than the first, because in a rapid
+sequence of state changes the one worth having is where the state settled.
+
+That matters most for the state hook, which is a firehose by nature:
+
+```kotlin
+scope.launch {
+    viewModel.state.collect { Inspector.signal("state", viewModelName, text = it.toString()) }
+}
+```
+
+No throttling in that code, deliberately. If conflation lived in app code, every consuming team
+would reinvent it and most would get it wrong the same way — dropping everything after the first
+in a burst, which looks correct in a test and is useless in practice.
+
+`signal()` itself only offers the observation to a bounded queue on your coroutine. A slow or
+absent daemon costs dropped signals, never backpressure into your app.
+
+### 12c. Navigation
+
+If your destinations are `@Serializable`, their arguments come free:
+
+```kotlin
+LaunchedEffect(backStack) {
+    snapshotFlow { backStack.lastOrNull() }
+        .filterNotNull()
+        .collect { destination ->
+            Inspector.signal(
+                tag = "screen",
+                name = destination::class.simpleName.orEmpty(),
+                data = Json.encodeToJsonElement(destination),
+            )
+        }
+}
+```
+
+### 12d. Caches, and answering "what is in there *now*"
+
+A push records what was true at a moment. A **provider** lets the host ask what is true now:
+
+```kotlin
+Inspector.signal("cache", "response", data = cache.debugDump())      // at ready
+Inspector.registerProvider("cache", "response") { cache.debugDump() } // on demand
+```
+
+Your app owns `debugDump()`; Inspector never learns what a cache is. The provider is called off the
+main thread and may suspend. If it throws, the host is told why rather than being left to time out.
+
+The two are told apart in the archive by `trigger`: `app` for a push, `request` for a pull. **This
+distinction is load-bearing.** An agent handed a cache snapshot with no provenance will report it
+as the current state of the cache — and if that snapshot was pushed at app start twenty minutes
+ago, it has just given you a confidently wrong answer. The web UI badges every row, and the MCP
+tool descriptions say so.
+
+### 12e. Where this code lives
+
+All of it belongs in your app's composition root, behind whatever gate you already use for
+internal builds, and it compiles unchanged against `:inspector-noop` — see §3. No production module
+should depend on Inspector; declare your own no-op-default port and install an Inspector-backed
+implementation only where capture is wanted.
+
+`registerProvider` in the no-op **discards** the lambda rather than storing it, so a release build
+retains no reference to whatever your provider closes over.
+
+### 12f. Reading them back
+
+- **Web UI.** A session with signals opens on the merged timeline; sessions without them are
+  unchanged. The "Now" panel answers "what screen, what's cached" at a glance.
+- **Filter.** `tag:screen`, `name:Checkout`. One rule is worth knowing: *a term whose field does
+  not exist on a row type excludes that row type*. So `status:500 tag:screen` matches **nothing**
+  — `status` excludes signals and `tag` excludes transactions. Use `|` to span both:
+  `status:500 | tag:screen`.
+- **MCP.** `timeline` merges traffic, signals and markers by the device clock; `current` gives the
+  latest observation per key with its age; `get_signal` fetches one payload; `request_signal` pulls
+  a fresh value from a live app.
+
+### 12g. Signal payloads are not redacted
+
+`Redaction.On` covers headers, query parameters and JSON body keys. It does **not** touch signal
+payloads. A session recorded with redaction on still archives your state dumps and cache snapshots
+verbatim, including anything your app was holding — customer records, form contents, tokens in
+state.
+
+This is the same verbatim-capture stance as the rest of Inspector, and the same mitigation applies:
+debug builds only, §3. The difference worth stating plainly is that signals carry *your domain*
+data rather than wire data, so the blast radius is larger. Do not emit a payload you would not want
+sitting in `~/.inspector` on your own machine.
+
+### 12h. Tuning
+
+```kotlin
+Inspector.init(
+    InspectorConfig(
+        signals = SignalPolicy(
+            minIntervalMs = 150,                 // conflation window per (tag, name)
+            dropUnchanged = true,                // skip a byte-identical repeat
+            maxPayloadBytes = 64 * 1024,         // per-payload cap; `bytes` still reports the truth
+            ringBufferMaxBytes = 2L * 1024 * 1024,  // separate from the transaction budget
+        ),
+    )
+)
+```
+
+The signal ring is budgeted **separately** on purpose: sharing one budget would let a single large
+cache snapshot evict your whole network history, at exactly the moment you needed both side by
+side.
+
+Both `minIntervalMs` and `ringBufferMaxBytes` are starting guesses rather than measurements. If you
+tune them against a real session, that is worth reporting back (§13).
+
+---
+
+## 13. What to report back
 
 1. **Your Ktor engine per target** — settles the redirect-chain question.
 2. **Whether the overlay looks right on real hardware.** It has been exercised on desktop, an
@@ -815,7 +966,7 @@ trusts. That is a substantially larger piece of work and has not been started; s
 
 ---
 
-## 13. Changelog
+## 14. Changelog
 
 Find the version you integrated from, then read downward. Everything below your row applies to you.
 
@@ -838,7 +989,30 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v15 — 2026-08-21 (this document)
+### v16 — 2026-08-25 (this document)
+
+**Nothing to do.** Inspector can now record app state — which screen was up, what a state holder
+held, what was in a cache — on the same timeline as your traffic. It is entirely opt-in: every
+call site you already have compiles and behaves identically, and a session with no signals looks
+and works exactly as it did before, including in the web UI.
+
+If you want it, §12 is the whole of it: two calls at your composition root, and the library does
+the throttling. Move to `dev.inspector:*:0.3.0` when you do — the version bump is because the
+public API grew, not because anything changed under you.
+
+Three things are worth knowing even if you skip the feature:
+
+- **`InspectorSink` gained `onSignal`,** with a default no-op body. A sink you wrote compiles
+  untouched. If you want your own sink to receive signals, override it.
+- **Signal payloads are never redacted,** including in a session recorded with `Redaction.On`.
+  They carry your domain data rather than wire data, so read §12g before instrumenting anything
+  that holds customer information.
+- **The `dropped` counter now works.** `Inspector.recorder.dropped` and `StreamSink.dropped` have
+  read zero since they were written — a `DROP_OLDEST` channel returns success when it discards, so
+  the check that guarded them was unreachable. If you have ever looked at that number and read it
+  as "nothing was dropped", it was not telling you that. It is now.
+
+### v15 — 2026-08-21
 
 **Nothing to do.** Inspector is now a public, Apache-2.0 repository, so §0 no longer talks about
 being granted access — there is nobody to ask. Everything you already configured keeps working
@@ -864,7 +1038,8 @@ to use: searching an iOS artifact for the canary string finds nothing whether or
 is present, since Kotlin/Native stores string literals as UTF-16. A guard written that way passes
 forever. Grep for `dev/inspector/` and `dev.inspector.` instead.
 
-Also corrected: §12 no longer says the overlay has only been seen on desktop.
+Also corrected: "What to report back" no longer says the overlay has only been seen on
+desktop.
 
 ### v13 — 2026-08-19
 

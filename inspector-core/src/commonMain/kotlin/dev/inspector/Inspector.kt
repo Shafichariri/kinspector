@@ -3,6 +3,9 @@ package dev.inspector
 import dev.inspector.internal.installInspector
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.StateFlow
 
@@ -50,6 +53,9 @@ object Inspector {
     /** Session markers, oldest first. */
     val markers: StateFlow<List<Marker>> = recorder.markers
 
+    /** Signal ring contents, newest first. */
+    val signals: StateFlow<List<Signal>> = recorder.signals
+
     /**
      * Idempotent: calling it again simply re-applies [config], and the underlying recorder is
      * never replaced, so flows already being collected stay live. Redaction and body caps take
@@ -74,6 +80,71 @@ object Inspector {
     fun mark(label: String) {
         recorder.mark(label)
     }
+
+    /**
+     * Records an app-defined observation on the same timeline as captured traffic.
+     *
+     * [tag] and [name] are free strings — Inspector never learns what they mean. Conventional
+     * tags are in [dev.inspector.model.SignalTags]; anything else works identically.
+     *
+     * Emit freely: throttling is the library's job, not the caller's. Values for one
+     * `(tag, name)` are conflated on the capture worker per [SignalPolicy], keeping the last value
+     * of a burst rather than the first. This call itself only offers the observation to a bounded
+     * queue, so a slow or absent host costs dropped signals, never backpressure into the app.
+     */
+    fun signal(tag: String, name: String, data: JsonElement? = null) {
+        recorder.signal(tag, name, data)
+    }
+
+    /**
+     * Records an observation whose payload is plain text.
+     *
+     * The common case is a `toString()` of a state holder: a Kotlin/Native target has no runtime
+     * reflection, so serializing arbitrary app state is not free. The text is stored as a JSON
+     * string, so there is one payload type on disk rather than two.
+     */
+    fun signal(tag: String, name: String, text: String) {
+        recorder.signal(tag, name, JsonPrimitive(text))
+    }
+
+    /**
+     * Registers an answer the host can pull on demand, for one `(tag, name)`.
+     *
+     * A push records what was true at a moment; a provider answers "what is in there *now*". The
+     * two are distinguishable in the archive by `trigger`, which every consumer must surface —
+     * reporting an app-start snapshot as live state is the failure this whole distinction exists
+     * to prevent.
+     *
+     * [provider] is called off the main thread and may suspend. Throwing is reported to the host
+     * as a failed pull rather than swallowed, because a pull that silently returns nothing looks
+     * exactly like an app that has gone away.
+     *
+     * Debug builds only, like everything else here: `:inspector-noop` discards [provider] without
+     * storing it, so a release build retains no reference to whatever it closes over.
+     */
+    fun registerProvider(tag: String, name: String, provider: suspend () -> JsonElement?) {
+        recorder.registerProvider(tag, name, provider)
+    }
+
+    /** Removes a provider registered by [registerProvider]. Unknown pairs are ignored. */
+    fun unregisterProvider(tag: String, name: String) {
+        recorder.unregisterProvider(tag, name)
+    }
+
+    /**
+     * Reads the provider for `(tag, name)` and records its answer with `trigger = request`.
+     *
+     * **Wiring for `:inspector-stream`, not for apps.** It is public only because `internal` is
+     * module-scoped and the stream module is where the host's request arrives. The registry lives
+     * here rather than being handed to `StreamSink` at construction, the way `ReplaySigner` is,
+     * because providers are registered and removed at runtime as caches and repositories come and
+     * go — a constructor parameter cannot express that.
+     *
+     * Returns null when the answer was recorded, or a message naming what *is* registered. The
+     * error is a reply, never a row: a failed pull must leave nothing in the archive.
+     */
+    suspend fun answerSignalRequest(tag: String, name: String, requestId: String): String? =
+        recorder.answerProviderRequest(tag, name, requestId)
 
     /**
      * Captured request body for [txn], or null when it was not captured — either the content type

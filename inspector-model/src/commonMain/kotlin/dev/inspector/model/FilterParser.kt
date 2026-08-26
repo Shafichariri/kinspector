@@ -17,6 +17,9 @@ object FilterParser {
 
     private val VALID_KEYS = listOf(
         "status", "method", "host", "path", "slower", "larger", "has", "text", "since", "attempt",
+        // Grammar v2. A term whose field does not exist on a row type excludes that row type, so
+        // these two match signals only — see the rule on `Filter`.
+        "tag", "name",
     )
 
     private val keyList = VALID_KEYS.joinToString(", ")
@@ -153,6 +156,8 @@ object FilterParser {
             "slower" -> SlowerTerm(parseDuration(requireEq(key, op, value)))
             "larger" -> LargerTerm(parseSize(requireEq(key, op, value)))
             "since" -> SinceMarkerTerm(parseMarkerRef(requireEq(key, op, value)))
+            "tag" -> TagTerm(requireEq(key, op, value))
+            "name" -> NameTerm(requireEq(key, op, value))
             else -> error("unreachable: key '$key' passed validation but has no branch")
         }
     }
@@ -168,6 +173,8 @@ object FilterParser {
         "text" -> "text:refund"
         "since" -> "since:marker(\"tapped checkout\")"
         "attempt" -> "attempt>1"
+        "tag" -> "tag:screen"
+        "name" -> "name:Checkout"
         else -> "status>=400"
     }
 

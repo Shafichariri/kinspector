@@ -84,7 +84,7 @@ window.navigator.clipboard = { writeText: async () => {} };
     }
   }
 
-  const rows = window.document.querySelectorAll('.row');
+  const rows = window.document.querySelectorAll('#list .row');
   const interesting =
     [...rows].find((r) => r.querySelector('.status')?.textContent === '500') || rows[rows.length - 1];
   if (interesting) interesting.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -102,7 +102,7 @@ window.navigator.clipboard = { writeText: async () => {} };
    */
   const settle = async (timeoutMs = 4000) => {
     const sample = () => [
-      doc.querySelectorAll('.row').length,
+      doc.querySelectorAll('#list .row').length,
       doc.querySelectorAll('#endpoint-chips .chip').length,
       doc.getElementById('counts').textContent,
     ].join('|');
@@ -128,7 +128,7 @@ window.navigator.clipboard = { writeText: async () => {} };
    */
   async function probeEndpointChip() {
     const chip = doc.querySelector('#endpoint-chips .chip');
-    const before = doc.querySelectorAll('.row').length;
+    const before = doc.querySelectorAll('#list .row').length;
     if (!chip) return { before, after: before, narrowed: 'no chips', survived: 'n/a', active: 'n/a', chipsAfter: 0 };
 
     const chipsBefore = doc.querySelectorAll('#endpoint-chips .chip').length;
@@ -136,7 +136,7 @@ window.navigator.clipboard = { writeText: async () => {} };
     chip.dispatchEvent(new window.Event('click', { bubbles: true }));
     await settle();
 
-    const after = doc.querySelectorAll('.row').length;
+    const after = doc.querySelectorAll('#list .row').length;
     const chipsAfter = doc.querySelectorAll('#endpoint-chips .chip').length;
     const actives = [...doc.querySelectorAll('#endpoint-chips .chip.active')];
 
@@ -189,7 +189,7 @@ window.navigator.clipboard = { writeText: async () => {} };
   // real .row order matters — asserting on the state flag would only prove the flag changed, not
   // that the list re-rendered from it.
   const sortButton = doc.getElementById('sort-order');
-  const rowIds = () => [...doc.querySelectorAll('.row')].map((r) => r.dataset.id);
+  const rowIds = () => [...doc.querySelectorAll('#list .row')].map((r) => r.dataset.id);
   const click = async (node) => {
     node.dispatchEvent(new window.Event('click', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 100));
@@ -215,8 +215,106 @@ window.navigator.clipboard = { writeText: async () => {} };
   await click(sortButton);
   const restored = rowIds().every((id, i) => id === beforeFlip[i]);
 
+
+  /**
+   * The timeline view: lanes, spans, provenance, and the payload viewer.
+   *
+   * Driven through the real toggle and real clicks rather than by calling render functions, for
+   * the same reason the endpoint-chip probe is: asserting on state would only prove a variable
+   * changed, not that the page turned data into rows.
+   */
+  async function probeSignals() {
+    const switchEl = doc.getElementById('view-switch');
+    const result = {
+      switchShown: switchEl && !switchEl.hidden,
+      defaultView: doc.getElementById('view-timeline')?.classList.contains('active')
+        ? 'timeline'
+        : 'traffic',
+      entries: 0,
+      lanes: [],
+      unknownTagRendered: 'n/a',
+      spans: 0,
+      points: 0,
+      triggers: [],
+      merged: 'n/a',
+      currentRows: 0,
+      currentHasAge: false,
+      payloadShown: 'n/a',
+      pushedWarned: 'n/a',
+    };
+    if (!result.switchShown) return result;
+
+    // Into the timeline, however the session happened to open.
+    await click(doc.getElementById('view-timeline'));
+    await new Promise((r) => setTimeout(r, 400));
+
+    const children = [...doc.getElementById('timeline').children];
+    result.entries = children.length;
+    result.lanes = [...new Set(children.map((n) => n.dataset.lane).filter(Boolean))].sort();
+    result.spans = doc.querySelectorAll('#timeline .tl-span').length;
+    result.points = doc.querySelectorAll('#timeline .tl-point').length;
+    result.triggers = [...new Set(
+      [...doc.querySelectorAll('#timeline .tl-trigger')].map((n) => n.textContent),
+    )].sort();
+
+    // A tag this build has no styling for must still render, in the generic lane. Dropping it
+    // would silently discard whatever an app chose to record.
+    const tags = [...doc.querySelectorAll('#timeline .tl-signal')].map((n) => n.dataset.tag);
+    const known = ['screen', 'state', 'cache', 'session'];
+    const unknown = tags.filter((t) => !known.includes(t));
+    if (unknown.length) {
+      const laneOf = [...doc.querySelectorAll('#timeline .tl-signal')]
+        .filter((n) => !known.includes(n.dataset.tag))
+        .map((n) => n.dataset.lane);
+      result.unknownTagRendered = laneOf.every((l) => l === 'other')
+        ? `yes (${unknown.length} in lane 'other')`
+        : `NO - landed in ${laneOf.join(',')}`;
+    } else {
+      result.unknownTagRendered = 'no unknown tags in this session';
+    }
+
+    // The merge is the whole point: traffic and signals must interleave by mono, not sit in
+    // separate blocks. Check that both kinds appear and that the order is monotonic.
+    const kinds = children.map((n) => n.dataset.kind).filter(Boolean);
+    const hasBoth = kinds.includes('txn') && kinds.includes('signal');
+    const firstSignal = kinds.indexOf('signal');
+    const lastTxn = kinds.lastIndexOf('txn');
+    result.merged = hasBoth
+      ? firstSignal < lastTxn
+        ? 'yes (interleaved)'
+        : 'NO - signals all after traffic'
+      : `n/a (kinds: ${[...new Set(kinds)].join(',') || 'none'})`;
+
+    // The "Now" panel.
+    const currentItems = [...doc.querySelectorAll('#current .current-item')];
+    result.currentRows = currentItems.length;
+    result.currentHasAge = currentItems.every((n) => n.querySelector('.current-age'));
+
+    // Click a signal and confirm the payload viewer actually fetched and rendered it.
+    const withPayload = [...doc.querySelectorAll('#timeline .tl-signal')].find(
+      (n) => n.querySelector('.tl-bytes'),
+    );
+    if (withPayload) {
+      await click(withPayload);
+      await new Promise((r) => setTimeout(r, 600));
+      const pre = doc.querySelector('#detail pre.body');
+      const text = pre ? pre.textContent : '';
+      result.payloadShown =
+        text && text !== 'loading...' && !text.startsWith('could not read')
+          ? `yes (${text.length} chars)`
+          : `NO (${text ? text.slice(0, 40) : 'no pre'})`;
+      const pushed = withPayload.querySelector('.tl-pushed');
+      const note = doc.querySelector('#detail .detail-note');
+      result.pushedWarned = pushed ? Boolean(note) : 'n/a (row was pulled)';
+    }
+
+    return result;
+  }
+
+  const signalProbe = await probeSignals();
+
   const methodClasses = [...new Set(
-    [...doc.querySelectorAll('.row .method')].map((n) => n.className.replace('method ', '')),
+    [...doc.querySelectorAll('#list .row .method')].map((n) => n.className.replace('method ', '')),
   )].sort();
 
   // Settings dialog: jsdom has no real <dialog>, so showModal is stubbed before opening it.
@@ -237,7 +335,7 @@ window.navigator.clipboard = { writeText: async () => {} };
     .length;
 
   console.error('--- render report ---');
-  console.error('rows rendered      :', doc.querySelectorAll('.row').length);
+  console.error('rows rendered      :', doc.querySelectorAll('#list .row').length);
   console.error('sort flip reverses :', reversed, `(button then read "${flippedLabel}")`);
   console.error('sort flip restores :', restored);
   console.error(
@@ -254,13 +352,13 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('detail sections    :', doc.querySelectorAll('#detail .section-title').length);
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
-  const dupRows = [...doc.querySelectorAll('.row.duplicate')];
+  const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
   const dupBadges = [...doc.querySelectorAll('.dup-badge')].length;
-  const clocks = [...doc.querySelectorAll('.row .clock')].filter((n) => n.textContent.trim()).length;
+  const clocks = [...doc.querySelectorAll('#list .row .clock')].filter((n) => n.textContent.trim()).length;
 
   console.error('duplicate rows     :', dupRows.length);
   console.error('duplicate badges   :', dupBadges, '(must equal the rows — colour alone is not enough)');
-  console.error('start times shown  :', clocks, 'of', doc.querySelectorAll('.row').length);
+  console.error('start times shown  :', clocks, 'of', doc.querySelectorAll('#list .row').length);
   // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
   // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
   // also matched `profile/status` would quietly be lying.
@@ -280,6 +378,21 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('limit 0 hides      :', limitProbe.off);
   console.error('limit restored to  :', limitProbe.restored);
   console.error('limit summary      :', limitProbe.summary);
+  console.error('--- signals ---');
+  console.error('view switch shown  :', signalProbe.switchShown);
+  console.error('opened on view     :', signalProbe.defaultView, '(timeline when the session has signals)');
+  console.error('timeline entries   :', signalProbe.entries);
+  console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
+  console.error('unknown tag renders:', signalProbe.unknownTagRendered);
+  console.error('span glyphs        :', signalProbe.spans, '(cache/session: interval claims)');
+  console.error('point glyphs       :', signalProbe.points, '(screen/state: instants)');
+  console.error('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
+  console.error('traffic + signals  :', signalProbe.merged);
+  console.error('now panel rows     :', signalProbe.currentRows);
+  console.error('now rows show age  :', signalProbe.currentHasAge);
+  console.error('payload viewer     :', signalProbe.payloadShown);
+  console.error('pushed row warned  :', signalProbe.pushedWarned, '(a snapshot is not live state)');
+  console.error('--- peers ---');
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons, '(must be 0)');

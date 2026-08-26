@@ -4,6 +4,7 @@ import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.SessionMeta
+import dev.inspector.model.Signal
 import java.io.BufferedWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -31,6 +32,7 @@ class SessionWriter(
 ) {
     private val indexWriter: BufferedWriter
     private val markersWriter: BufferedWriter
+    private val signalsWriter: BufferedWriter
 
     private var txnCount = meta.txnCount
     private var errorCount = meta.errorCount
@@ -39,8 +41,10 @@ class SessionWriter(
     init {
         sessionDir.createDirectories()
         SessionLayout.bodiesDir(sessionDir).createDirectories()
+        SessionLayout.signalsDir(sessionDir).createDirectories()
         indexWriter = openAppend(SessionLayout.indexFile(sessionDir))
         markersWriter = openAppend(SessionLayout.markersFile(sessionDir))
+        signalsWriter = openAppend(SessionLayout.signalsFile(sessionDir))
         writeMeta()
     }
 
@@ -78,6 +82,32 @@ class SessionWriter(
         return stored
     }
 
+    /**
+     * Persists one observation, writing its payload to `signals/` and rewriting [Signal.dataRef]
+     * so the stored row points at it. The payload arrives beside the row over the wire, exactly as
+     * bodies do, so the device never has to touch a filesystem.
+     *
+     * Returns the row **as stored**, ref included, for the same reason the transaction overload
+     * does: the wire contract sends `dataRef` as null, so a live viewer handed the incoming row
+     * sees every payload as absent while it sits on disk. That is defect #1, and this path has the
+     * identical shape.
+     */
+    fun append(signal: Signal, data: ByteArray?): Signal {
+        var stored = signal.copy(data = null)
+
+        if (data != null) {
+            Files.write(SessionLayout.signalFile(sessionDir, signal.id), data)
+            stored = stored.copy(dataRef = SessionLayout.signalRef(signal.id))
+        }
+
+        signalsWriter.write(InspectorJson.encodeToString(stored))
+        signalsWriter.newLine()
+        signalsWriter.flush()
+        dirtySinceFlush = true
+
+        return stored
+    }
+
     fun append(marker: Marker) {
         markersWriter.write(InspectorJson.encodeToString(marker))
         markersWriter.newLine()
@@ -97,6 +127,7 @@ class SessionWriter(
         writeMeta()
         runCatching { indexWriter.close() }
         runCatching { markersWriter.close() }
+        runCatching { signalsWriter.close() }
     }
 
     private fun writeMeta() {
