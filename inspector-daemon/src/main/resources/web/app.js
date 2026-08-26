@@ -40,8 +40,12 @@
     // App-state observations for this session, and the latest per (tag, name).
     signals: [],
     current: [],
-    // 'traffic' | 'timeline'. Chosen per session rather than remembered: a session with no
-    // signals has nothing to merge, so landing on an empty timeline would be worse than useless.
+    // Cache payloads, keyed by signal id. Fetched lazily and only for the cache view: a row's
+    // fields live in its payload, which the signal list deliberately does not carry.
+    cachePayloads: new Map(),
+    cacheFilters: { key: '', storage: '', scope: '', expired: '', latestOnly: false },
+    // 'traffic' | 'timeline' | 'cache'. Chosen per session rather than remembered: a session with
+    // no signals has nothing to merge, so landing on an empty timeline would be worse than useless.
     // Sessions recorded before signals existed therefore behave exactly as they always did.
     view: 'traffic',
     selectedSignalId: null,
@@ -175,6 +179,11 @@
 
     const has = state.signals.length > 0 || state.current.length > 0;
     $('view-switch').hidden = !has;
+    // A cache tab on a session that never recorded one is a dead end, so it appears only when
+    // there is something behind it.
+    const hasCache = cacheSignals().length > 0;
+    $('view-cache').hidden = !hasCache;
+    if (!hasCache && state.view === 'cache') state.view = 'traffic';
     if (!has && state.view === 'timeline') state.view = 'traffic';
     // The merge is the value, so a session that has something to merge opens on it.
     if (has && !state.viewChosenForSession) state.view = 'timeline';
@@ -630,13 +639,328 @@
 
   function applyView() {
     const timeline = state.view === 'timeline';
-    $('list').hidden = timeline;
-    $('list-empty').hidden = timeline || state.transactions.length > 0;
+    const cache = state.view === 'cache';
+    const traffic = !timeline && !cache;
+    $('list').hidden = !traffic;
+    $('list-empty').hidden = !traffic || state.transactions.length > 0;
     $('timeline').hidden = !timeline;
     $('timeline-empty').hidden = true;
-    $('view-traffic').classList.toggle('active', !timeline);
+    $('cache').hidden = !cache;
+    $('view-traffic').classList.toggle('active', traffic);
     $('view-timeline').classList.toggle('active', timeline);
+    $('view-cache').classList.toggle('active', cache);
     if (timeline) renderTimeline();
+    if (cache) renderCache();
+  }
+
+  // --- cache view ---------------------------------------------------------
+
+  /**
+   * A table of what the app had cached, and when.
+   *
+   * Inspector does not define what a cache row contains — `tag` is app-defined and so is the
+   * payload — so this reads a set of conventional field names and degrades rather than failing:
+   * `storage`, `scopes` (or `scope`), `expired`, `key`, `value`, `payloadBytes`. A payload that
+   * uses none of them still gets a row with its time, name and raw value; an app that follows the
+   * convention gets the full table. Documented in INTEGRATION.md §12d.
+   *
+   * Two payload shapes both feed this table, because both are useful and apps emit both:
+   *   - a **whole-cache snapshot**, `{ items: [ … ] }`, which expands to one row per entry;
+   *   - a **single entry**, one row, typically pushed as the entry changes.
+   */
+  const cacheSignals = () =>
+    state.signals.filter((signal) => String(signal.tag).toLowerCase() === 'cache');
+
+  /**
+   * Payloads are fetched only for this view, and only once per signal.
+   *
+   * The signal list deliberately omits payloads — a session can hold thousands — but every column
+   * except time and key lives inside one, so the table cannot be drawn without them.
+   */
+  async function loadCachePayloads() {
+    const missing = cacheSignals().filter(
+      (signal) => signal.dataRef && !state.cachePayloads.has(signal.id),
+    );
+    if (!missing.length || !state.sessionId) return;
+    const id = encodeURIComponent(state.sessionId);
+    await Promise.all(
+      missing.map(async (signal) => {
+        try {
+          const res = await fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
+          state.cachePayloads.set(signal.id, JSON.parse(await res.text()));
+        } catch {
+          // A payload that will not parse is still a row; it just has nothing to put in the
+          // columns. Recording the failure stops us retrying it on every render.
+          state.cachePayloads.set(signal.id, null);
+        }
+      }),
+    );
+  }
+
+  const asScopes = (o) => {
+    if (Array.isArray(o.scopes)) return o.scopes.map(String);
+    if (typeof o.scope === 'string') return [o.scope];
+    return [];
+  };
+
+  function cacheFieldsOf(o) {
+    return {
+      storage: typeof o.storage === 'string' ? o.storage : '',
+      scopes: asScopes(o),
+      // Tri-state on purpose: `false` means the app said it is live, `null` means it said
+      // nothing. Collapsing them would report an unknown as healthy.
+      expired: typeof o.expired === 'boolean' ? o.expired : null,
+      value: o.value === undefined ? null : o.value,
+      bytes: typeof o.payloadBytes === 'number' ? o.payloadBytes : null,
+      kind: typeof o.kind === 'string' ? o.kind : null,
+      storageKey: typeof o.key === 'string' ? o.key : null,
+    };
+  }
+
+  function cacheRowsFor(signal) {
+    const payload = state.cachePayloads.get(signal.id);
+    const base = {
+      ts: signal.ts,
+      mono: signal.mono,
+      signalId: signal.id,
+      trigger: signal.trigger === 'request' ? 'request' : 'app',
+    };
+    if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+      return payload.items.map((item) => ({
+        ...base,
+        ...cacheFieldsOf(item),
+        // In a whole-cache snapshot the entry's own id is the only identity it has; the signal
+        // name identifies the snapshot, not the entry.
+        key: (typeof item.id === 'string' && item.id) || signal.name,
+        fromSnapshot: true,
+      }));
+    }
+    if (payload && typeof payload === 'object') {
+      return [{ ...base, ...cacheFieldsOf(payload), key: signal.name, fromSnapshot: false }];
+    }
+    return [{
+      ...base,
+      key: signal.name,
+      storage: '',
+      scopes: [],
+      expired: null,
+      value: payload == null ? null : payload,
+      bytes: null,
+      kind: null,
+      storageKey: null,
+      fromSnapshot: false,
+    }];
+  }
+
+  function allCacheRows() {
+    const rows = [];
+    for (const signal of cacheSignals()) rows.push(...cacheRowsFor(signal));
+    rows.sort((a, b) => a.mono - b.mono);
+    return state.newestFirst ? rows.reverse() : rows;
+  }
+
+  function cacheRowMatches(row) {
+    const f = state.cacheFilters;
+    if (f.key && !String(row.key).toLowerCase().includes(f.key.toLowerCase())) return false;
+    if (f.storage && row.storage !== f.storage) return false;
+    if (f.scope && !row.scopes.includes(f.scope)) return false;
+    if (f.expired === 'yes' && row.expired !== true) return false;
+    if (f.expired === 'no' && row.expired !== false) return false;
+    return true;
+  }
+
+  /** Collapses to the most recent row per key, which is what "what is cached now" means. */
+  function latestPerKey(rows) {
+    const latest = new Map();
+    for (const row of rows) {
+      const previous = latest.get(row.key);
+      if (!previous || row.mono >= previous.mono) latest.set(row.key, row);
+    }
+    const collapsed = [...latest.values()].sort((a, b) => a.mono - b.mono);
+    return state.newestFirst ? collapsed.reverse() : collapsed;
+  }
+
+  /** Long enough to recognise a value, short enough that a row stays one line. */
+  const CACHE_VALUE_CLIP = 160;
+
+  const cacheValueText = (value) => {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'string') return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
+  function cacheValueCell(row) {
+    const cell = el('td', 'cache-col-value');
+    if (row.bytes != null) cell.appendChild(el('span', 'cache-bytes muted', `${fmtBytes(row.bytes)} `));
+    const full = cacheValueText(row.value);
+    const clipped = full.length > CACHE_VALUE_CLIP;
+    const short = clipped ? `${full.slice(0, CACHE_VALUE_CLIP)}…` : full;
+    const text = el('span', 'cache-value mono', short);
+    if (clipped) {
+      text.classList.add('cache-value-clip');
+      text.title = 'click to expand';
+      text.addEventListener('click', () => {
+        const open = text.classList.toggle('cache-value-open');
+        text.textContent = open ? full : short;
+      });
+    }
+    cell.appendChild(text);
+    return cell;
+  }
+
+  function cacheRow(row) {
+    const tr = el('tr', 'cache-row');
+    tr.dataset.key = row.key;
+    tr.dataset.signalId = row.signalId;
+    if (row.expired === true) tr.classList.add('cache-row-expired');
+
+    const time = el('td', 'cache-col-time mono muted', fmtClock(row.ts));
+    time.title = `mono ${row.mono}ms`;
+    tr.appendChild(time);
+
+    const key = el('td', 'cache-col-key');
+    key.appendChild(el('span', 'cache-key', row.key));
+    if (row.storageKey) key.title = row.storageKey;
+    if (row.kind) {
+      key.appendChild(el('span', `cache-kind cache-kind-${row.kind.toLowerCase()}`, row.kind.toLowerCase()));
+    }
+    // Provenance, for the same reason the timeline badges it: a snapshot pushed an hour ago read
+    // as the current state of the cache is the mistake this view exists to prevent.
+    key.appendChild(
+      row.trigger === 'request'
+        ? el('span', 'tl-trigger tl-pulled', 'pulled')
+        : el('span', 'tl-trigger tl-pushed', 'pushed'),
+    );
+    tr.appendChild(key);
+
+    tr.appendChild(el('td', 'cache-col-storage', row.storage || '—'));
+    tr.appendChild(el('td', 'cache-col-scope', row.scopes.join(', ') || '—'));
+
+    const expired = el('td', 'cache-col-expired', row.expired === null ? '—' : row.expired ? 'yes' : 'no');
+    if (row.expired === true) expired.classList.add('cache-expired');
+    tr.appendChild(expired);
+
+    tr.appendChild(cacheValueCell(row));
+    return tr;
+  }
+
+  /**
+   * Options come from the rows themselves rather than a fixed list, because `storage` and `scope`
+   * are the app's words. A hardcoded set would be wrong for every app but the one it was written
+   * against.
+   */
+  function refreshCacheFilterOptions(rows) {
+    const fill = (id, values, selected) => {
+      const select = $(id);
+      const wanted = ['', ...values];
+      const current = [...select.options].map((o) => o.value);
+      if (current.length === wanted.length && current.every((v, i) => v === wanted[i])) return;
+      select.innerHTML = '';
+      select.appendChild(el('option', '', 'any'));
+      for (const value of values) {
+        const option = el('option', '', value);
+        option.value = value;
+        select.appendChild(option);
+      }
+      select.value = values.includes(selected) ? selected : '';
+    };
+    fill('cache-filter-storage', [...new Set(rows.map((r) => r.storage).filter(Boolean))].sort(),
+      state.cacheFilters.storage);
+    fill('cache-filter-scope', [...new Set(rows.flatMap((r) => r.scopes))].sort(),
+      state.cacheFilters.scope);
+  }
+
+  function renderCache() {
+    if (state.view !== 'cache') return;
+    const all = allCacheRows();
+    refreshCacheFilterOptions(all);
+
+    let rows = all.filter(cacheRowMatches);
+    if (state.cacheFilters.latestOnly) rows = latestPerKey(rows);
+
+    const body = $('cache-rows');
+    body.innerHTML = '';
+    for (const row of rows) body.appendChild(cacheRow(row));
+    $('cache-empty').hidden = rows.length > 0;
+    $('cache-empty').textContent = all.length
+      ? 'no rows match these filters'
+      : 'no cache signals in this session';
+  }
+
+  /**
+   * Which names a "pull latest" should ask for.
+   *
+   * The daemon cannot enumerate an app's providers — it only learns a name once one has answered —
+   * so this infers them from what the session already holds, and is deliberately conservative:
+   *
+   *   - anything that has answered a pull before is a provider, by proof;
+   *   - anything that describes a whole cache (`items`) is the shape a provider answers with.
+   *
+   * Per-entry change rows are excluded, so a session with fifty cached keys does not fire fifty
+   * doomed requests at the app.
+   */
+  function cacheProviderNames() {
+    const names = new Set();
+    for (const signal of cacheSignals()) {
+      if (signal.trigger === 'request') {
+        names.add(signal.name);
+        continue;
+      }
+      const payload = state.cachePayloads.get(signal.id);
+      if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+        names.add(signal.name);
+      }
+    }
+    return [...names];
+  }
+
+  async function pullCaches() {
+    const status = $('cache-pull-status');
+    const names = cacheProviderNames();
+    if (!names.length) {
+      status.textContent =
+        'no cache provider has been seen yet — the app registers one with Inspector.registerProvider';
+      return;
+    }
+    $('cache-pull').disabled = true;
+    status.textContent = `pulling ${names.length}…`;
+    const failures = [];
+    for (const name of names) {
+      try {
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(state.sessionId || 'latest')}/signals/request`,
+          {
+            method: 'POST',
+            headers: { 'X-Inspector-Control': '1', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag: 'cache', name }),
+          },
+        );
+        if (!res.ok) {
+          // The app's own message names what it does have registered; surfacing it verbatim is
+          // more use than "pull failed".
+          const body = await res.text().catch(() => '');
+          failures.push(`${name}: ${body.slice(0, 200) || res.status}`);
+        }
+      } catch (e) {
+        failures.push(`${name}: ${e.message}`);
+      }
+    }
+    $('cache-pull').disabled = false;
+    if (failures.length) {
+      status.textContent = failures.join(' · ');
+      status.classList.add('cache-status-error');
+      return;
+    }
+    status.classList.remove('cache-status-error');
+    status.textContent = `pulled ${names.length} at ${fmtClock(new Date().toISOString())}`;
+    // The pulled rows arrive over the live socket; re-read so they are on screen either way.
+    await loadSignals();
+    await loadCachePayloads();
+    renderCache();
   }
 
   /**
@@ -1329,12 +1653,33 @@
   $('server-restart').addEventListener('click', requestRestart);
   $('sort-order').addEventListener('click', () => setSortOrder(!state.newestFirst));
 
-  for (const button of [$('view-traffic'), $('view-timeline')]) {
-    button.addEventListener('click', () => {
+  for (const button of [$('view-traffic'), $('view-timeline'), $('view-cache')]) {
+    button.addEventListener('click', async () => {
       state.view = button.dataset.view;
+      // Payloads are only needed by the cache table, so they are fetched on the way in rather
+      // than for every session that happens to have cache rows.
+      if (state.view === 'cache') await loadCachePayloads();
       applyView();
     });
   }
+
+  $('cache-pull').addEventListener('click', pullCaches);
+
+  for (const [id, field] of [
+    ['cache-filter-key', 'key'],
+    ['cache-filter-storage', 'storage'],
+    ['cache-filter-scope', 'scope'],
+    ['cache-filter-expired', 'expired'],
+  ]) {
+    $(id).addEventListener('input', () => {
+      state.cacheFilters[field] = $(id).value;
+      renderCache();
+    });
+  }
+  $('cache-latest-only').addEventListener('change', () => {
+    state.cacheFilters.latestOnly = $('cache-latest-only').checked;
+    renderCache();
+  });
 
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the button to match the remembered preference

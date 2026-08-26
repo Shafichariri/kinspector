@@ -313,6 +313,120 @@ window.navigator.clipboard = { writeText: async () => {} };
 
   const signalProbe = await probeSignals();
 
+  /**
+   * The cache view: does the table turn app-defined payloads into columns, and do the filters
+   * actually filter?
+   *
+   * Driven through the real toggle and real inputs rather than by calling render functions —
+   * asserting on state would only prove a variable changed, not that the page drew a table.
+   */
+  async function probeCache() {
+    const button = doc.getElementById('view-cache');
+    const result = {
+      tabShown: Boolean(button) && !button.hidden,
+      rows: 0,
+      columnsFilled: 'n/a',
+      distinctKeys: 0,
+      triggers: [],
+      kinds: [],
+      storages: [],
+      scopeOptions: 0,
+      keyFilterWorks: 'n/a',
+      expiredFilterWorks: 'n/a',
+      latestOnlyCollapses: 'n/a',
+      pullButton: 'n/a',
+    };
+    if (!result.tabShown) return result;
+
+    await click(button);
+    await new Promise((r) => setTimeout(r, 600));
+
+    const rowsOf = () => [...doc.querySelectorAll('#cache-rows .cache-row')];
+    const rows = rowsOf();
+    result.rows = rows.length;
+    if (!rows.length) return result;
+
+    result.distinctKeys = new Set(rows.map((r) => r.dataset.key)).size;
+    result.triggers = [...new Set(
+      [...doc.querySelectorAll('#cache-rows .tl-trigger')].map((n) => n.textContent),
+    )].sort();
+    result.kinds = [...new Set(
+      [...doc.querySelectorAll('#cache-rows .cache-kind')].map((n) => n.textContent),
+    )].sort();
+    result.storages = [...new Set(
+      rows.map((r) => r.querySelector('.cache-col-storage')?.textContent).filter((s) => s && s !== '—'),
+    )].sort();
+    result.scopeOptions = doc.getElementById('cache-filter-scope').options.length;
+
+    // Every column should carry something for at least one row; a table of em-dashes means the
+    // payload convention was not read at all.
+    const cellText = (r, col) => {
+      // The value column carries a byte count beside the value; reading the whole cell would
+      // count "77 B —" as a filled value, which is the opposite of what this checks.
+      const node = col === 'value' ? r.querySelector('.cache-value') : r.querySelector(`.cache-col-${col}`);
+      return node ? node.textContent.trim() : '';
+    };
+    const filled = ['time', 'key', 'storage', 'scope', 'expired', 'value'].filter((col) =>
+      rows.some((r) => cellText(r, col) && cellText(r, col) !== '—'),
+    );
+    result.columnsFilled = `${filled.length}/6 (${filled.join(',')})`;
+    result.valuesPresent = rows.filter((r) => cellText(r, 'value') !== '—').length;
+
+    // --- filters, each asserted to actually narrow the table -----------------
+    const keyInput = doc.getElementById('cache-filter-key');
+    // A token that belongs to exactly one row. Neither end of a cache key is safe to guess at:
+    // the head is a shared namespace prefix and the tail is a shared scope epoch, so filtering on
+    // either matches everything and the assertion passes while proving nothing.
+    const keys = rows.map((r) => String(r.dataset.key));
+    const someKey =
+      (keys[0].split(/[^A-Za-z0-9]+/).filter((t) => t.length > 3)
+        .find((token) => keys.filter((k) => k.includes(token)).length === 1)) || keys[0];
+    keyInput.value = someKey;
+    keyInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const narrowed = rowsOf().length;
+    result.keyFilterWorks =
+      narrowed > 0 && narrowed < result.rows
+        ? `yes (${result.rows} -> ${narrowed} for "${someKey}")`
+        : narrowed === result.rows
+          ? `NO - matched every row for "${someKey}"`
+          : `NO (${result.rows} -> ${narrowed})`;
+    keyInput.value = '';
+    keyInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+
+    const expiredSelect = doc.getElementById('cache-filter-expired');
+    expiredSelect.value = 'no';
+    expiredSelect.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const live = rowsOf().length;
+    expiredSelect.value = '';
+    expiredSelect.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    result.expiredFilterWorks =
+      rowsOf().length === result.rows ? `yes (live only: ${live}, restored: ${result.rows})` : 'NO - did not restore';
+
+    // "latest per key" must collapse to exactly one row per key, which is what "cached now" means.
+    const latest = doc.getElementById('cache-latest-only');
+    latest.checked = true;
+    latest.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 150));
+    const collapsed = rowsOf();
+    const collapsedKeys = new Set(collapsed.map((r) => r.dataset.key)).size;
+    result.latestOnlyCollapses =
+      collapsed.length === collapsedKeys && collapsedKeys === result.distinctKeys
+        ? `yes (${result.rows} -> ${collapsed.length}, one per key)`
+        : `NO (${collapsed.length} rows for ${collapsedKeys} keys, expected ${result.distinctKeys})`;
+    latest.checked = false;
+    latest.dispatchEvent(new window.Event('change', { bubbles: true }));
+
+    const pull = doc.getElementById('cache-pull');
+    result.pullButton = pull && !pull.disabled ? 'present and enabled' : 'MISSING or disabled';
+    return result;
+  }
+
+  const cacheProbe = await probeCache();
+
   const methodClasses = [...new Set(
     [...doc.querySelectorAll('#list .row .method')].map((n) => n.className.replace('method ', '')),
   )].sort();
@@ -396,6 +510,20 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons, '(must be 0)');
+  console.error('--- cache view ---');
+  console.error('cache tab shown    :', cacheProbe.tabShown);
+  console.error('table rows         :', cacheProbe.rows);
+  console.error('distinct keys      :', cacheProbe.distinctKeys);
+  console.error('columns filled     :', cacheProbe.columnsFilled);
+  console.error('rows with a value  :', cacheProbe.valuesPresent, 'of', cacheProbe.rows);
+  console.error('storages seen      :', cacheProbe.storages.join(', ') || 'none');
+  console.error('scope options      :', cacheProbe.scopeOptions, '(built from the rows, not hardcoded)');
+  console.error('change kinds       :', cacheProbe.kinds.join(', ') || 'none');
+  console.error('trigger badges     :', cacheProbe.triggers.join(', ') || 'none');
+  console.error('key filter         :', cacheProbe.keyFilterWorks);
+  console.error('expired filter     :', cacheProbe.expiredFilterWorks);
+  console.error('latest per key     :', cacheProbe.latestOnlyCollapses);
+  console.error('pull button        :', cacheProbe.pullButton);
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
 
   // Freeze as a static, self-contained page.

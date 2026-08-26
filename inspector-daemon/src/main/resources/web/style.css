@@ -605,3 +605,67 @@ pre.body {
   border-left: 2px solid #7c8798;
   background: rgba(124, 135, 152, 0.08);
 }
+
+/* --- cache view ---------------------------------------------------------- */
+
+.cache { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
+.cache-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+.cache-field { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.cache-field input[type="search"] { width: 120px; }
+.cache-field select { font-size: 12px; }
+.cache-status { font-size: 11px; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cache-status-error { color: #ff8f8f; }
+
+/* The table scrolls inside its own box; the page itself must never scroll sideways. */
+.cache-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; }
+
+.cache-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.cache-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  padding: 4px 8px;
+  background: var(--bg, #131313);
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  white-space: nowrap;
+}
+.cache-table td { padding: 3px 8px; vertical-align: top; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.cache-row:hover { background: rgba(255, 255, 255, 0.04); }
+
+.cache-col-time { white-space: nowrap; width: 1%; }
+.cache-col-key { min-width: 18ch; }
+.cache-col-storage, .cache-col-scope, .cache-col-expired { white-space: nowrap; width: 1%; }
+.cache-col-value { width: 60%; }
+
+.cache-key { margin-right: 6px; }
+.cache-bytes { font-size: 11px; margin-right: 6px; }
+
+/* An expired row is still there — eviction is lazy — so it is dimmed rather than hidden. */
+.cache-row-expired { opacity: 0.65; }
+.cache-expired { color: #ffb454; }
+
+.cache-kind {
+  font-size: 10px;
+  padding: 1px 5px;
+  margin-right: 4px;
+  border-radius: 3px;
+  text-transform: lowercase;
+}
+.cache-kind-written { background: rgba(89, 201, 138, 0.18); color: #59c98a; }
+.cache-kind-removed { background: rgba(255, 143, 143, 0.18); color: #ff8f8f; }
+.cache-kind-cleared { background: rgba(255, 180, 84, 0.18); color: #ffb454; }
+
+.cache-value { white-space: pre-wrap; word-break: break-word; }
+.cache-value-clip { cursor: pointer; }
+.cache-value-clip:hover { text-decoration: underline dotted; }
+.cache-value-open { display: block; max-height: 40vh; overflow: auto; }
