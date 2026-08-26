@@ -58,6 +58,11 @@ html, body {
   font-size: 13px;
 }
 
+/* A column, rather than panes sized by `calc(100% - <height of the bars above>)`. That arithmetic
+   is wrong the moment a row is added to the header, and it fails silently — the panes just run
+   off the bottom of the window. */
+body { display: flex; flex-direction: column; }
+
 .mono { font-family: var(--mono); }
 .muted { color: var(--fg-muted); }
 .spacer { flex: 1; }
@@ -111,13 +116,14 @@ html, body {
 #panes {
   display: grid;
   grid-template-columns: 220px minmax(320px, 1fr) minmax(360px, 1.1fr);
-  height: calc(100% - 44px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-/* The cache table is six columns wide and has no per-row detail to show beside it, so it takes
-   the detail pane's track rather than being squeezed into the list column. The track has to go
-   with it: hiding the pane alone would leave the grid holding an empty third column. */
-#panes.panes-wide { grid-template-columns: 220px minmax(320px, 1fr); }
+/* The tag browser carries its own detail panel, so it takes the transaction detail pane's track
+   rather than being squeezed into the list column. The track has to go with it: hiding the pane
+   alone would leave the grid holding an empty third column. */
+#panes.panes-wide { grid-template-columns: 220px minmax(520px, 1fr); }
 #panes.panes-wide #detail-pane { display: none; }
 
 #rail {
@@ -168,6 +174,13 @@ html, body {
 }
 .chip:hover { background: var(--bg-hover); color: var(--fg); }
 .chip.active { border-color: var(--accent); color: var(--accent); }
+/* `on` is a chip acting as a toggle — an order or a facet — where `active` is a chip that set the
+   text filter. They look the same on purpose; they are told apart by what clicking again does. */
+.chip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgb(106 169 255 / 0.12);
+}
 
 /* Endpoint chips carry a call count. Monospaced and dimmer than the label so the segment stays
    the thing you read, and tabular figures so the counts do not jitter as they tick up. */
@@ -612,78 +625,227 @@ pre.body {
   background: rgba(124, 135, 152, 0.08);
 }
 
-/* --- cache view ---------------------------------------------------------- */
+/* --- tabs ---------------------------------------------------------------- */
 
-.cache { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-/* `display` on the element itself beats the user agent's `[hidden] { display: none }`, so without
-   this the pane stays on screen while hidden and paints over whichever view is selected. */
-.cache[hidden] { display: none; }
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
+}
+/* `display` on the element itself outranks the user agent's `[hidden] { display: none }`, so a
+   flex or grid container that can be hidden must say so itself. */
+.tabs[hidden] { display: none; }
 
-.cache-toolbar {
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 12px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab:hover { color: var(--fg); background: var(--bg-hover); }
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.tab-count { font-size: 10px; font-variant-numeric: tabular-nums; }
+
+/* --- tag browser --------------------------------------------------------- */
+
+.browser { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.browser[hidden] { display: none; }
+
+.browser-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
   flex-wrap: wrap;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border, #2a2a2a);
 }
-.cache-field { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
-.cache-field input[type="search"] { width: 120px; }
-.cache-field select { font-size: 12px; }
-.cache-status { font-size: 11px; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cache-status-error { color: #ff8f8f; }
-
-/* The table scrolls inside its own box; the page itself must never scroll sideways. */
-.cache-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; }
-
-.cache-table { border-collapse: collapse; width: 100%; font-size: 12px; }
-.cache-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  text-align: left;
-  font-weight: 600;
+.browser-toolbar input[type="search"] {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
   padding: 4px 8px;
-  background: var(--bg, #131313);
-  border-bottom: 1px solid var(--border, #2a2a2a);
-  white-space: nowrap;
+  font-size: 12px;
+  width: 180px;
 }
-.cache-table td { padding: 3px 8px; vertical-align: top; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.cache-row:hover { background: rgba(255, 255, 255, 0.04); }
+.browser-facets { margin-top: 0; align-items: center; }
+.facet { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+.facet-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.browser-status { font-size: 11px; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-status-error, .cache-status-error { color: #ff8f8f; }
 
-.cache-col-time { white-space: nowrap; width: 1%; }
-.cache-col-key { min-width: 18ch; max-width: 52ch; }
-.cache-key {
-  margin-right: 6px;
-  display: inline-block;
-  max-width: 46ch;
+/* The key list is fixed and the detail takes the rest: a value is the wide thing here, and a key
+   that needs more than this is one the eye skims anyway. */
+.browser-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.browser-keys {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--divider);
+}
+.browser-list { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.browser-count {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--divider);
+  flex: 0 0 auto;
+}
+
+.bkey {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.bkey:hover { background: var(--bg-hover); }
+.bkey.sel { background: var(--bg-hover); border-left-color: var(--accent); }
+
+/* Freshness before you read the row. Hollow means the app said nothing about it, which is not
+   the same as saying it is live — see the tri-state in cacheFieldsOf. */
+.bkey-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--neutral);
+}
+.bkey-dot.live { background: var(--ok); border-color: var(--ok); }
+.bkey-dot.expired { background: var(--warn); border-color: var(--warn); }
+.bkey-dot.gone { background: none; border-color: var(--err); }
+.bkey-dot-none { border-color: transparent; }
+
+.bkey-text { min-width: 0; }
+.bkey-name {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
+  font-size: 12px;
 }
-
-.cache-col-storage, .cache-col-scope, .cache-col-expired { white-space: nowrap; width: 1%; }
-.cache-col-value { width: 60%; }
-
-.cache-bytes { font-size: 11px; margin-right: 6px; }
-
-/* An expired row is still there — eviction is lazy — so it is dimmed rather than hidden. */
-.cache-row-expired { opacity: 0.65; }
-.cache-expired { color: #ffb454; }
-
-.cache-kind {
+.bkey-meta {
+  display: block;
   font-size: 10px;
-  padding: 1px 5px;
-  margin-right: 4px;
-  border-radius: 3px;
-  text-transform: lowercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.cache-kind-written { background: rgba(89, 201, 138, 0.18); color: #59c98a; }
-.cache-kind-removed { background: rgba(255, 143, 143, 0.18); color: #ff8f8f; }
-.cache-kind-cleared { background: rgba(255, 180, 84, 0.18); color: #ffb454; }
+.bkey-age { font-size: 10px; white-space: nowrap; }
+.bkey-age.stale, .current-age.stale { color: var(--warn); }
 
-.cache-value { white-space: pre-wrap; word-break: break-word; }
-.cache-value-clip { cursor: pointer; }
-.cache-value-clip:hover { text-decoration: underline dotted; }
-.cache-value-open { display: block; max-height: 40vh; overflow: auto; }
+.browser-detail { overflow-y: auto; padding: 12px 14px; min-height: 0; }
+
+.bdetail-key { font-size: 13px; word-break: break-all; }
+.bdetail-raw { font-size: 11px; word-break: break-all; margin-top: 2px; }
+
+.bdetail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+.bdetail-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  color: var(--fg-muted);
+}
+.bdetail-chip.good { color: var(--ok); border-color: rgb(76 195 138 / 0.4); }
+.bdetail-chip.bad { color: var(--warn); border-color: rgb(224 160 48 / 0.4); }
+.bdetail-clock, .bdetail-age { font-size: 11px; }
+
+.bkind { text-transform: lowercase; }
+.bkind-written { background: rgba(89, 201, 138, 0.18); color: #59c98a; border-color: transparent; }
+.bkind-removed { background: rgba(255, 143, 143, 0.18); color: #ff8f8f; border-color: transparent; }
+.bkind-cleared { background: rgba(255, 180, 84, 0.18); color: #ffb454; border-color: transparent; }
+
+.bvalue { margin-bottom: 14px; }
+.bvalue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.bvalue-body {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  max-height: 46vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bvalue-none {
+  font-size: 12px;
+  padding: 8px 11px;
+  border-left: 2px solid var(--divider);
+}
+
+.bhistory-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.bhistory-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.bhistory-item:hover { background: var(--bg-hover); }
+.bhistory-item.sel { background: var(--bg-hover); outline: 1px solid var(--divider); }
+.bhistory-clock { font-size: 11px; }
+.bhistory-kind { font-size: 11px; }
+.bhistory-bytes { font-size: 11px; margin-left: auto; }
+
+/* --- sessions ------------------------------------------------------------ */
+
+.session-rows { max-height: 240px; overflow-y: auto; margin: 8px 0; }
+.session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 7px;
+  border-radius: 4px;
+}
+.session-row:hover { background: var(--bg-hover); }
+.session-row.sel { outline: 1px solid var(--divider); }
+.session-row-id { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row-meta { font-size: 11px; white-space: nowrap; }
+
+.btn-quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--fg-muted);
+  padding: 2px 7px;
+}
+.btn-quiet:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg); }
+.btn-quiet:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* An armed button is one click from deleting something permanently, so it stops looking quiet. */
+.btn.armed {
+  border-color: var(--err);
+  color: var(--err);
+  background: rgb(229 72 77 / 0.12);
+}
