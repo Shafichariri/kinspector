@@ -1,7 +1,10 @@
 # Signals — app state on the same timeline as traffic
 
-Status: **design, nothing built.** This is the handover spec for **Phase 4** of
-[`implementation-plan.md`](implementation-plan.md).
+Status: **built and released in 0.3.0.** This was the handover spec for **Phase 4** of
+[`implementation-plan.md`](implementation-plan.md); it is kept as the record of why the design is
+what it is. Where the code and this document disagree, the code won — the decisions taken while
+building are listed at the end of
+[`SIGNALS-CHECKLIST.md`](SIGNALS-CHECKLIST.md).
 
 The build order at the end is numbered in **stages**, not phases, because "Phase 1" in that
 document means the capture work that already shipped. Stage numbers here are local to this

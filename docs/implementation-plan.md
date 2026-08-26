@@ -548,7 +548,7 @@ grep of `~/.inspector/latest/index.jsonl` from a terminal answers "which calls 5
 marker and what did the server return?" correctly on the sample session; CLI `query` works with
 daemon stopped (file mode); README dogfooded by integrating inspector into a fresh empty CMP app.
 
-### Phase 4 — signals (est. 17–24 days) — **not started**
+### Phase 4 — signals — **shipped in 0.3.0**
 
 App state on the same timeline as traffic: which screen was up, what the presentation layer held,
 what was in the cache, merged with the network rows by `mono`. One generic primitive — the
