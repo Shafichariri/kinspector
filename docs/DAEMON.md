@@ -272,10 +272,15 @@ the web UI is not the one you expect.
 └── sessions/
     └── 2026-08-17T05-57-58_myapp_Pixel-8_debug/
         ├── meta.json           # session metadata
-        ├── index.jsonl         # one transaction per line
+        ├── index.jsonl         # one transaction per line, append-only
         ├── markers.jsonl
-        └── bodies/             # request and response bodies, by ref
+        ├── signals.jsonl       # one signal per line, append-only
+        ├── bodies/             # request and response bodies, by ref
+        └── signals/            # signal payloads, by ref
 ```
+
+Both `.jsonl` files are append-only and both keep their payloads beside them rather than inline, so
+a row stays one greppable line however large the body or the signal behind it.
 
 `latest` is what the CLI and MCP tools mean by the session id `latest`.
 

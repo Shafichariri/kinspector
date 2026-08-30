@@ -22,6 +22,47 @@ a tool — ignore it.)
 Sections 1–5 give you the overlay. Section 6 adds the web UI and the archive. Do them in order;
 the overlay working is how you know capture works before adding a second moving part.
 
+### The short version
+
+Enough to see traffic, if you would rather skim first and read properly after. Every line has a
+section behind it.
+
+```properties
+# ~/.gradle/gradle.properties — once per machine, never committed. §2
+gpr.user=your-github-username
+gpr.key=ghp_yourClassicToken          # classic token, read:packages. Fine-grained returns 401.
+```
+
+```kotlin
+// settings.gradle.kts, in dependencyResolutionManagement { repositories { … } }. §2
+maven {
+    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+    credentials {
+        username = providers.gradleProperty("gpr.user").orNull
+        password = providers.gradleProperty("gpr.key").orNull
+    }
+}
+```
+
+```kotlin
+// your module's build file. §2 — and check §1 first, version alignment is the usual failure
+implementation("dev.inspector:inspector-core:0.3.0")
+implementation("dev.inspector:inspector-ui:0.3.0")
+```
+
+```kotlin
+Inspector.init()                        // optional; defaults are fine. §4
+val client = HttpClient(engine) {
+    Inspector.install(this)             // add last, after your other plugins. §4
+}
+InspectorOverlay { App() }              // wrap your root once. §5
+```
+
+Then **do §3 before you write any more app code.** It is the debug-only swap that keeps this out of
+release builds, and retrofitting it costs more than starting with it.
+
+For the web UI and the on-disk archive, add `inspector-stream` and run the daemon — §6.
+
 ---
 
 ## What you get, and what you don't
@@ -940,26 +981,31 @@ Inspector.registerProvider("cache", "response") { cache.debugDump() } // on dema
 Your app owns `debugDump()`; Inspector never learns what a cache is. The provider is called off the
 main thread and may suspend. If it throws, the host is told why rather than being left to time out.
 
-#### Field names the cache table reads
+#### Field names the tag browser reads
 
-Inspector does not define what a cache payload contains — `tag` is yours and so is the payload. The
-web UI's cache table therefore reads a small set of **conventional field names** and leaves a
-column blank when it finds none, so any payload still renders and a payload that follows the
-convention gets the full table:
+Inspector does not define what a payload contains — `tag` is yours and so is the payload. The web
+UI's tag browser therefore reads a small set of **conventional field names** and omits what it does
+not find, so any payload still gets a key and a value, and one that follows the convention gets the
+facets and the full detail panel:
 
-| Field | Type | Column |
+| Field | Type | Where it shows |
 |---|---|---|
-| `key` | string | key (falls back to the signal's `name`) |
-| `storage` | string | storage — your word, e.g. `Memory`, `Disk` |
-| `scopes` (or `scope`) | list of strings, or one string | scope |
-| `expired` | bool | expired — **tri-state**: absent means "not stated", and is not shown as live |
-| `value` | any | value, rendered as JSON |
-| `payloadBytes` | number | size, shown beside the value |
+| `key` | string | the key in the list (falls back to the signal's `name`) |
+| `storage` | string | under the key, and a filter chip — your word, e.g. `Memory`, `Disk` |
+| `scopes` (or `scope`) | list of strings, or one string | under the key, and a filter chip |
+| `expired` | bool | the freshness dot, and a filter chip — **tri-state**: absent means "not stated", and is drawn as unknown rather than live |
+| `kind` | string | a badge, and a filter chip — e.g. `Written`, `Removed`, `Cleared` |
+| `value` | any | the detail panel, pretty-printed and copyable |
+| `payloadBytes` | number | size, beside the value and in the history |
 
-Two payload shapes both feed that table, and emitting both is worth it:
+A facet chip only appears when the payloads actually vary on that field: a filter with one
+value is not a filter. Nothing here is required — a payload using none of these still gets a
+row with its time and raw value.
+
+Two payload shapes both feed that view, and emitting both is worth it:
 
 - **A whole-cache snapshot,** `{ "items": [ … ] }`, each item using the fields above. This is what a
-  provider answers with, and it expands to one row per entry.
+  provider answers with, and it expands to one key per entry.
 - **A single entry,** the fields above at the top level, pushed as that entry changes.
 
 Emit the second one. A cache that is only ever described at startup and on demand leaves the
@@ -1068,8 +1114,9 @@ If your copy has no version line at the top, identify it by what it contains:
 
 ### v19 — 2026-08-26 (this document)
 
-**Nothing to do.** The web UI's view switch became a tab bar, and each tag got a view built for
-its own data.
+**Nothing to do.** There is now a **short version** at the top — the whole install as four code
+blocks with section numbers beside them — for skimming before you read properly. The web UI's view
+switch became a tab bar, and each tag got a view built for its own data.
 
 `traffic` and `timeline` are now `network` and `all`, and every tag in the session gets a tab of
 its own beside them — including one this build has never heard of, which is what the schema
