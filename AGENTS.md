@@ -40,10 +40,16 @@ Three consumers of the same captured data:
 | **1** | Capture, ring buffer, redaction, overlay + inspector UI | ✅ done |
 | **2** | Host daemon, session archive, stream sink, web UI | ✅ done |
 | **3** | MCP server over the archive | ✅ done |
+| **4** | Signals — screens, view-model state and caches on the traffic timeline | ✅ done, 0.3.0 |
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
+| **4b** | Report what we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**259 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+The lettered rows are **capture mechanisms** and are lettered independently of Phase 4, which is
+signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
+owns the phases, and the letters only ever appear in the capture roadmap below.
+
+**389 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -89,12 +95,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 - **The web UI renders.** `scripts/render-web-ui.js` runs the real `app.js` against the real
   `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
   marker dividers, session picker, detail pane, attempt chain, method classes, console errors. It
-  also drives the sort toggle and asserts the rendered order reverses, restores, and that the
-  row/divider sequence is an exact mirror. It clicks an endpoint chip and asserts three things:
-  the row count narrows, the chip list *survives* (proving chips come from the unfiltered
-  session), and exactly one chip goes active. It then drives the settings input to prove the cap
-  applies and `0` hides them. `INSPECTOR_UI_SESSION=<id or substring>` targets a session other
-  than the newest, which is otherwise whatever ran last on the machine.
+  drives the order chips and asserts the rendered order reverses, restores, that exactly one chip
+  reads as selected, and that the row/divider sequence is an exact mirror. It clicks an endpoint
+  chip and asserts three things: the row count narrows, the chip list *survives* (proving chips
+  come from the unfiltered session), and exactly one chip goes active. It then drives the settings
+  input to prove the cap applies and `0` hides them. It walks the tab bar, and for each tag browser
+  asserts keys, facets, a pretty-printed value, history switching, and that the key filter and
+  facet chips each change the list and toggle back off. It jumps the *window's* clock to prove ages
+  tick — `window.Date` is not Node's `Date`, and overriding the wrong one silently proves nothing.
+  It audits the stylesheet text for panes that set `display` without a `[hidden]` override, because
+  jsdom resolves a hidden element to `display: none` whatever the CSS says, so the computed-style
+  version of that check passes with the guard deleted. `INSPECTOR_UI_SESSION=<id or substring>`
+  targets a session other than the newest, which is otherwise whatever ran last on the machine.
 - **Daemon stop and restart, against a live daemon** — not only the unit tests. An unheadered POST
   is refused 403 and the daemon survives; restart swapped one pid for another in about a second
   with the whole archive still served; stop released the port and left no `serve` process.
@@ -694,8 +706,10 @@ else a scan turns up.
 | `docs/ACCESS.md` | Who can get Inspector and how, and the honest answer for someone who cannot. Update it if the distribution story changes — it is the only doc that answers "am I blocked". |
 | `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
 | `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a changelog entry saying what they must *do*, not just what changed. |
-| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–3 shipped; Phase 4 (signals) is specified and not started. |
-| `docs/SIGNALS.md` | Phase 4 design spec — app state on the traffic timeline. Nothing built. Read it before writing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
+| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–4 shipped, signals in 0.3.0; of the capture mechanisms, 4a shipped and 4b/4c have not started. |
+| `docs/SIGNALS.md` | Why signals are shaped the way they are — app state on the traffic timeline. **Built and released in 0.3.0**; kept as the design record, so where it and the code disagree, the code won. Read it before changing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
+| `docs/SIGNALS-CHECKLIST.md` | What must be true of a build that records signals — assertions only, no rationale. The live companion to the spec above; update this one when the bar moves. |
+| `docs/REPLAY.md` | Replay, on-device re-signing and daemon control. Steps 1–2 are built; the edit UI and template generators are specified and not written. Read it before touching replay — the signing constraint decides the whole architecture. |
 | `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |

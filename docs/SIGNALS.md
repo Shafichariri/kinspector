@@ -489,24 +489,27 @@ should be cheap when wanted — the schema field is already reserved for it.
 
 ## Production safety checklist
 
-The existing mechanism is unchanged; this is what the new surface must do to stay inside it.
+The existing mechanism is unchanged; this is what the new surface had to do to stay inside it. All
+of it holds as of 0.3.0 — the live copy, the one to update when the bar moves, is
+[`SIGNALS-CHECKLIST.md`](SIGNALS-CHECKLIST.md). This list is kept here because the reasoning under
+each item is the reason it is on the list at all.
 
-- [ ] Every new public symbol added to `api/inspector-public-api.txt`
+- [x] Every new public symbol added to `api/inspector-public-api.txt`
       (`./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true`).
-- [ ] Identical signatures in `:inspector-noop` — `signal`, `registerProvider`,
+- [x] Identical signatures in `:inspector-noop` — `signal`, `registerProvider`,
       `unregisterProvider`, `signals`, `SignalPolicy`, and the widened `InspectorConfig` and
       `InspectorSink`.
-- [ ] **`registerProvider` in the no-op must discard the lambda, not store it.** A retained closure
+- [x] **`registerProvider` in the no-op must discard the lambda, not store it.** A retained closure
       in a release build holds a reference to whatever the provider closes over — a cache, a
       repository, a whole graph. That is the one way a no-op stops being free, and it will not show
       up in any signature check.
-- [ ] `signals` in the no-op is a permanently empty `MutableStateFlow`, matching how `_markers` is
+- [x] `signals` in the no-op is a permanently empty `MutableStateFlow`, matching how `_markers` is
       already handled there.
-- [ ] `:inspector-noop-stream` mirrors any `StreamSink` surface change.
-- [ ] No new canary. The new code lives in existing modules, so `scripts/check-release-clean.sh`
+- [x] `:inspector-noop-stream` mirrors any `StreamSink` surface change.
+- [x] No new canary. The new code lives in existing modules, so `scripts/check-release-clean.sh`
       already covers it — confirm this rather than assuming it.
-- [ ] `ApiParityTest` passing is the gate. It is not advisory.
-- [ ] Prove the guard in **both** directions on the new code, as was done originally: it must fail
+- [x] `ApiParityTest` passing is the gate. It is not advisory.
+- [x] Prove the guard in **both** directions on the new code, as was done originally: it must fail
       when signal capture is present in a release artifact, and pass when it is not.
 
 ---
