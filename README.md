@@ -25,15 +25,16 @@ CI — see [Production safety](#production-safety).
 | **1** | Capture, ring buffer, redaction, overlay + inspector UI | ✅ |
 | **2** | Host daemon, session archive, stream sink, web UI | ✅ |
 | **3** | MCP server over the archive | ✅ |
+| **4** | Signals — screens, view-model state and caches on the traffic timeline | ✅ |
 | **4a** | OkHttp capture, for SDKs that own their transport (Auth0, Retrofit, Coil) | ✅ |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**259 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
-Compose Multiplatform app on Android.
+**389 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+Compose Multiplatform app, on an Android emulator and the iOS simulator.
 
-Honest gaps: the overlay has been run on one Android device and desktop, never on iOS hardware; the
-Auth0 adapter compiles against the real SDK but has not been run against a live tenant; and nothing
-non-Ktor is captured on iOS.
+Honest gaps: the overlay has been run on one Android device, the iOS simulator and desktop, never on
+iOS hardware; the Auth0 adapter compiles against the real SDK but has not been run against a live
+tenant; and nothing non-Ktor is captured on iOS.
 
 ---
 
@@ -62,26 +63,37 @@ can target it.
 
 ---
 
-## Quick start
+## Install
 
-### See it working, without touching your app
+Three parts, and you can take any subset. Each is independent — the library works with no daemon,
+the daemon runs with no app, the MCP server reads an archive with neither.
+
+### Try it first, installing nothing
 
 ```bash
 ./gradlew :sample:desktop:run
 ```
 
-Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to collapse.
+Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to collapse. This is
+the whole overlay, running against a real Ktor client, with nothing else set up.
 
-### Add it to your app
+---
 
-Full guide: **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — versioned, with a changelog so an app
-that integrated from an older copy can see exactly what changed.
+### 1. The library — capture and the in-app overlay
 
-You do not need this repository checked out — the library is published to GitHub Packages. You do
-need a **classic** GitHub token with `read:packages`, because that registry requires an
-authenticated download even for public packages. [`docs/ACCESS.md`](docs/ACCESS.md) covers it.
+**You need:** a GitHub account and a **classic** token with `read:packages`. GitHub Packages
+requires an authenticated download even for public packages; there is no way around it, and a
+fine-grained token returns 401 however you scope it. [`docs/ACCESS.md`](docs/ACCESS.md) has the
+detail.
 
-The short version. In `settings.gradle.kts`, alongside your other repositories:
+Once per machine, in `~/.gradle/gradle.properties` — outside any repository, never committed:
+
+```properties
+gpr.user=your-github-username
+gpr.key=ghp_yourClassicToken
+```
+
+In your app's `settings.gradle.kts`, inside `dependencyResolutionManagement { repositories { … } }`:
 
 ```kotlin
 maven {
@@ -93,10 +105,15 @@ maven {
 }
 ```
 
-with a `read:packages` token in your own `~/.gradle/gradle.properties`, then depend on
-`dev.inspector:inspector-core` and `dev.inspector:inspector-ui`.
+Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
-Then three lines of code:
+```kotlin
+implementation("dev.inspector:inspector-core:0.3.0")
+implementation("dev.inspector:inspector-ui:0.3.0")
+implementation("dev.inspector:inspector-stream:0.3.0")
+```
+
+Three lines of code:
 
 ```kotlin
 Inspector.init()                        // optional; defaults are fine
@@ -110,28 +127,64 @@ InspectorOverlay { App() }              // wrap your root once
 
 No `Context` to thread through, no platform code, no permissions.
 
+**Do the debug-only swap before you write app code, not after** —
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md) §3. It is what keeps this out of your release builds,
+and retrofitting it is harder than starting with it.
+
 Redaction defaults to `Redaction.Off` — credentials are captured **verbatim**, because a debugger
 that hides the auth header is useless when the bug *is* the auth header. Opt in with
 `Inspector.init(InspectorConfig(redaction = Redaction.On()))`.
 
-### Run the web UI
+---
 
-The daemon is the one half that ships as a file. If you are not changing Inspector itself, download
-it — a JDK 21 is the only requirement:
+### 2. The daemon — web UI, session archive, CLI
+
+**You need:** a JDK 21. No token, no GitHub account, no checkout.
 
 ```bash
-gh release download --repo Shafichariri/kinspector --pattern '*.zip' && unzip inspector-*.zip
+gh release download --repo Shafichariri/kinspector --pattern '*.zip'
+unzip inspector-*.zip
+inspector-*/bin/inspector serve
 ```
 
-Or build it from this checkout:
+The Releases page also works in a browser with no account at all. If you have this repository
+checked out and are changing Inspector itself, build it instead:
 
 ```bash
 ./gradlew :inspector-daemon:installDist
 inspector-daemon/build/install/inspector/bin/inspector serve
 ```
 
-Open **http://127.0.0.1:8099**. Starting, stopping, restarting, killing, the CLI, the archive layout
-and troubleshooting are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
+Open **http://127.0.0.1:8099**. It shows an empty archive until an app with `inspector-stream` in it
+connects. Start, stop, restart, the CLI, the archive layout, deleting sessions and troubleshooting
+are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
+
+---
+
+### 3. The MCP server — let an AI agent read your sessions
+
+**You need:** the daemon from step 2. Nothing changes in your app.
+
+It speaks stdio, so your editor starts it — there is no server to run. Register it once with the
+absolute path to the same launcher:
+
+```bash
+claude mcp add inspector -- /absolute/path/to/inspector/bin/inspector mcp
+```
+
+Cursor and Codex take the same command as JSON and TOML respectively —
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md) §10 has both, and the full tool list.
+
+It reads the archive straight off disk, so it answers questions about old sessions with no daemon
+running. Only `add_marker` and `request_signal` need a live one.
+
+---
+
+### Adding it to your app, properly
+
+The full guide is **[`docs/INTEGRATION.md`](docs/INTEGRATION.md)** — versioned, with a changelog, so
+an app that integrated from an older copy can see exactly what changed and what it must do about it.
+Read §1 first: **version alignment is the single most common integration failure.**
 
 ---
 
@@ -142,6 +195,8 @@ and troubleshooting are all in **[`docs/DAEMON.md`](docs/DAEMON.md)**.
 | [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: the token GitHub Packages requires, and what the daemon needs instead (nothing). |
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Adding Inspector to a consuming CMP app. Self-contained and versioned. |
 | [`docs/DAEMON.md`](docs/DAEMON.md) | Running the daemon: start, stop, restart, kill, CLI, archive layout. |
+| [`docs/SIGNALS.md`](docs/SIGNALS.md) | Why signals are shaped the way they are. Shipped in 0.3.0; kept as the design record. |
+| [`docs/SIGNALS-CHECKLIST.md`](docs/SIGNALS-CHECKLIST.md) | What must be true of a build that records signals. Assertions only. |
 | [`docs/REPLAY.md`](docs/REPLAY.md) | Design for request replay, re-signing, and daemon control. |
 | [`docs/schema.md`](docs/schema.md) | The data contract. Read before touching `:inspector-model`. |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Full build order, phases, acceptance criteria. |
