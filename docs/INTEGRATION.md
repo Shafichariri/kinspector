@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v19 — 2026-08-26.**
+**Document version: v20 — 2026-09-10.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.3.0")
-implementation("dev.inspector:inspector-ui:0.3.0")
+implementation("dev.inspector:inspector-core:0.4.0")
+implementation("dev.inspector:inspector-ui:0.4.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.3.0")
-            implementation("dev.inspector:inspector-ui:0.3.0")
+            implementation("dev.inspector:inspector-core:0.4.0")
+            implementation("dev.inspector:inspector-ui:0.4.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.3.0")
-                implementation("dev.inspector:inspector-noop-ui:0.3.0")
+                implementation("dev.inspector:inspector-noop:0.4.0")
+                implementation("dev.inspector:inspector-noop-ui:0.4.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.3.0")
-                implementation("dev.inspector:inspector-ui:0.3.0")
+                implementation("dev.inspector:inspector-core:0.4.0")
+                implementation("dev.inspector:inspector-ui:0.4.0")
             }
         }
     }
@@ -361,13 +361,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.3.0")
-    implementation("dev.inspector:inspector-noop-ui:0.3.0")
-    implementation("dev.inspector:inspector-noop-stream:0.3.0")
+    implementation("dev.inspector:inspector-noop:0.4.0")
+    implementation("dev.inspector:inspector-noop-ui:0.4.0")
+    implementation("dev.inspector:inspector-noop-stream:0.4.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.3.0")
-    implementation("dev.inspector:inspector-ui:0.3.0")
-    implementation("dev.inspector:inspector-stream:0.3.0")
+    implementation("dev.inspector:inspector-core:0.4.0")
+    implementation("dev.inspector:inspector-ui:0.4.0")
+    implementation("dev.inspector:inspector-stream:0.4.0")
 }
 ```
 
@@ -1112,7 +1112,36 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v19 — 2026-08-26 (this document)
+### v20 — 2026-09-10 (this document)
+
+**Released as 0.4.0. Rebuild the daemon; the library needs nothing.**
+
+Everything v18 and v19 describe is in this release. The coordinates in this document now read
+`0.4.0`, but **the library modules are byte-for-byte unchanged from 0.3.0** — nothing in
+`:inspector-core`, `:inspector-ui`, `:inspector-stream` or any no-op twin was touched, and
+`api/inspector-public-api.txt` did not move. Bump the coordinate if you prefer your versions to
+match; staying on `0.3.0` gets you exactly the same library.
+
+What you do want is the **new daemon**, because everything in this release is on that side:
+
+- The tab bar, and a view per tag — `network` and `all` are what `traffic` and `timeline` were.
+- The cache view as a key list beside one key's detail, with the value pretty-printed rather than
+  clipped, and every observation of that key underneath it.
+- Ages that tick. They were measured against the newest observation in the session, which has no
+  clock in it — a refresh never moved them and a pull moved every row at once.
+- Session deletion, from the UI or from `DELETE /api/sessions/{id}` and
+  `POST /api/sessions/clear`.
+
+```bash
+gh release download v0.4.0 --repo Shafichariri/kinspector --pattern '*.zip'
+unzip inspector-0.4.0.zip
+```
+
+If you run the daemon from a checkout instead, `./gradlew :inspector-daemon:installDist` — and
+note that the launcher runs the *installed* copy, so a web-UI change that is not reinstalled simply
+will not appear.
+
+### v19 — 2026-08-26
 
 **Nothing to do.** There is now a **short version** at the top — the whole install as four code
 blocks with section numbers beside them — for skimming before you read properly. The web UI's view
