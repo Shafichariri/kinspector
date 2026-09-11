@@ -312,6 +312,44 @@ window.navigator.clipboard = { writeText: async () => {} };
       result.pushedWarned = pushed ? Boolean(note) : 'n/a (row was pulled)';
     }
 
+    // Runs of identical adjacent observations collapse to one row.
+    //
+    // The check that matters is that collapsing is *lossless*: expanding a run must put back
+    // exactly the rows it stood for. A collapse that quietly dropped observations would look
+    // like a tidier timeline and be a lie about what the app recorded.
+    await click(doc.querySelector('#tabs .tab[data-view=\"all\"]'));
+    await new Promise((r) => setTimeout(r, 400));
+    const timeline = doc.getElementById('timeline');
+    const runRows = [...timeline.children].filter((n) => n.dataset.kind === 'run');
+    result.runsCollapsed = runRows.length;
+    if (runRows.length) {
+      const biggest = runRows
+        .map((n) => ({ node: n, n: Number((n.querySelector('.tl-run-count')?.textContent || '').slice(1)) }))
+        .sort((a, b) => b.n - a.n)[0];
+      const before = timeline.children.length;
+      await click(biggest.node);
+      await new Promise((r) => setTimeout(r, 300));
+      const expanded = timeline.children.length;
+      // Collapsed, a run is one row. Expanded, it is that row kept as a header plus all n
+      // members — so the delta is exactly n, and anything less means observations were dropped.
+      result.runExpandsLossless = expanded - before === biggest.n
+        ? `yes (x${biggest.n} put back ${expanded - before} rows)`
+        : `NO - x${biggest.n} put back ${expanded - before}`;
+      const reopened = [...timeline.children].find(
+        (n) => n.dataset.kind === 'run' && n.dataset.runId === biggest.node.dataset.runId,
+      );
+      await click(reopened);
+      await new Promise((r) => setTimeout(r, 300));
+      result.runCollapsesBack = timeline.children.length === before
+        ? 'yes'
+        : `NO - ${timeline.children.length} rows, expected ${before}`;
+      result.biggestRun = biggest.n;
+    } else {
+      result.runExpandsLossless = 'n/a (no run reached the threshold)';
+      result.runCollapsesBack = 'n/a';
+      result.biggestRun = 0;
+    }
+
     return result;
   }
 
@@ -344,7 +382,33 @@ window.navigator.clipboard = { writeText: async () => {} };
       unknownTagsTabbed: ids.filter((id) => !knownIds.includes(id)),
       activeCount: tabs.filter((t) => t.classList.contains('active')).length,
       hasNetwork: ids.includes('network'),
+      // Traffic leads. This is a network debugger, and in a real session the merged timeline ran
+      // 126 rows of which 13 were calls — opening there buries what you came for.
+      trafficFirst: ids[0] === 'network'
+        ? 'yes'
+        : `NO - first tab is '${ids[0]}'`,
+      labels: tabs.map((t) => t.querySelector('.tab-label')?.textContent).join(', '),
     };
+  }
+
+  /**
+   * A long unbroken token must not be able to widen the detail pane.
+   *
+   * Checked against the stylesheet text, not `getComputedStyle`: jsdom has no layout engine, so
+   * it reports neither the 7139px line box this guards against nor whether the rule prevented it.
+   * A computed-style version of this check passes just as happily with the rule deleted — the
+   * same reason `auditHiddenPanes` reads the CSS source. The real measurement belongs in a
+   * browser, and is recorded in the commit that added the rule.
+   */
+  function auditLongTokenWrap(cssText) {
+    const block = cssText.match(/\.headers\s*\{([^}]*)\}/);
+    if (!block) return 'NO - no .headers rule at all';
+    const wrap = block[1].match(/overflow-wrap\s*:\s*([a-z-]+)/);
+    const breaks = block[1].match(/word-break\s*:\s*([a-z-]+)/);
+    const value = wrap?.[1] || breaks?.[1];
+    return value && ['anywhere', 'break-all', 'break-word'].includes(value)
+      ? `yes (${value})`
+      : 'NO - a bearer token will paint outside the pane and scroll the page';
   }
 
   /**
@@ -565,6 +629,281 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * Controls belong to the view they act on.
+   *
+   * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
+   * something else entirely, above a list it cannot filter — which is what the rail was, for a
+   * fifth of the window, on five tabs out of seven.
+   */
+  async function probeToolbar() {
+    const result = { onTraffic: 'n/a', onBrowser: 'n/a', railGone: !doc.getElementById('rail') };
+    const tabOf = (view) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === view);
+
+    const network = tabOf('network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'shown';
+    }
+
+    const browser = [...doc.querySelectorAll('#tabs .tab')]
+      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    if (browser) {
+      await click(browser);
+      await new Promise((r) => setTimeout(r, 700));
+      result.onBrowser = doc.getElementById('toolbar').hidden
+        ? `hidden (on '${browser.dataset.view}')`
+        : `NO - still shown on '${browser.dataset.view}'`;
+      result.ownFilterInstead = doc.getElementById('browser-filter') ? 'yes' : 'NO';
+    }
+    return result;
+  }
+
+  /**
+   * `Now` is a summary, and a summary that takes 70% of a column is not one.
+   *
+   * The assertion is that it opens collapsed and still says something useful collapsed — a strip
+   * reading only "now" would have moved the problem rather than fixed it.
+   */
+  async function probeNowStrip() {
+    const all = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'all');
+    const result = { present: false, collapsedSummary: 'n/a', expandsTo: 0, collapsesBack: 'n/a' };
+    if (!all) return result;
+    await click(all);
+    await new Promise((r) => setTimeout(r, 500));
+
+    const strip = doc.getElementById('now-strip');
+    result.present = Boolean(strip) && !strip.hidden;
+    if (!result.present) return result;
+
+    const list = doc.getElementById('current');
+    result.startsCollapsed = list.hidden ? 'yes' : 'NO - opens expanded';
+    const summary = doc.getElementById('now-summary-text').textContent.trim();
+    result.collapsedSummary = summary || 'NO - the strip says nothing collapsed';
+
+    await click(doc.getElementById('now-toggle'));
+    await new Promise((r) => setTimeout(r, 250));
+    result.expandsTo = doc.querySelectorAll('#current .current-item').length;
+    await click(doc.getElementById('now-toggle'));
+    await new Promise((r) => setTimeout(r, 250));
+    result.collapsesBack = doc.getElementById('current').hidden ? 'yes' : 'NO';
+    return result;
+  }
+
+  /**
+   * The narrow-width drawer.
+   *
+   * Split in two on purpose. Whether it *opens and closes* is behaviour and is driven here;
+   * whether it is a drawer *at all* is a media query, and jsdom has no layout, so that half is
+   * read out of the stylesheet — a computed-style check would pass with the whole media block
+   * deleted, the same trap `auditHiddenPanes` and the long-token guard already avoid. The
+   * geometry itself was measured in a browser and is recorded in the commit.
+   */
+  async function probeDrawer() {
+    const result = { opensOnSelect: 'n/a', scrim: 'n/a', closeButton: 'n/a', escape: 'n/a', tabSwitch: 'n/a' };
+    const panes = doc.getElementById('panes');
+    const isOpen = () => panes.classList.contains('drawer-open');
+
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    const row = doc.querySelector('#list .row');
+    if (!row) return result;
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 400));
+    result.opensOnSelect = isOpen() ? 'yes' : 'NO - selecting a row left it shut';
+    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'shown';
+
+    await click(doc.getElementById('drawer-close'));
+    await new Promise((r) => setTimeout(r, 200));
+    result.closeButton = isOpen() ? 'NO' : 'closes';
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    await click(doc.getElementById('drawer-scrim'));
+    await new Promise((r) => setTimeout(r, 200));
+    result.scrimCloses = isOpen() ? 'NO' : 'closes';
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    result.escape = isOpen() ? 'NO' : 'closes';
+
+    // A drawer covers the list it came from; carrying it across a tab switch would leave it
+    // sitting over a list that never produced it.
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    const other = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view !== 'network');
+    if (other) {
+      await click(other);
+      await new Promise((r) => setTimeout(r, 700));
+      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'closes';
+    }
+    return result;
+  }
+
+  /** Is the detail pane a drawer at all below the breakpoint? Read from the stylesheet. */
+  function auditDrawerCss(cssText) {
+    const block = cssText.match(/@media \(max-width: \d+px\) \{([\s\S]*?)\n\}/);
+    if (!block) return 'NO - no narrow-width media block';
+    const body = block[1];
+    // Anchored at the end of the declaration: `1fr` alone also prefix-matches `1fr 1fr`, which
+    // is the exact two-column layout this is supposed to catch.
+    const oneColumn = /#panes[^{]*\{[^}]*grid-template-columns:\s*1fr\s*[;}]/.test(body);
+    const floats = /#detail-pane\s*\{[^}]*position:\s*absolute/.test(body);
+    const slides = /drawer-open[^{]*#detail-pane\s*\{[^}]*translateX\(0\)/.test(body);
+    const missing = [
+      !oneColumn && 'the list does not take the full width',
+      !floats && 'the detail pane is still in flow',
+      !slides && 'nothing brings the drawer on screen',
+    ].filter(Boolean);
+    return missing.length ? `NO - ${missing.join('; ')}` : 'yes';
+  }
+
+  /**
+   * The transaction detail: one face at a time, response first.
+   *
+   * The assertions that matter are ordering ones. That the response body is the *first* thing in
+   * the default tab is the entire change — it used to be the last of five sections, behind every
+   * header on both sides of the call. And that redaction and the attempt chain stay *outside* the
+   * tabs: both are corrections to what the rest of the pane appears to say, and a correction you
+   * have to go and find is not one.
+   */
+  async function probeDetailTabs() {
+    const result = { tabs: [], defaultTab: 'n/a', firstSection: 'n/a', onePanel: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    const rows = [...doc.querySelectorAll('#list .row')];
+    let withChain = null;
+    for (const row of rows) {
+      await click(row);
+      await new Promise((r) => setTimeout(r, 260));
+      if (doc.querySelectorAll('#detail .chain-row').length) { withChain = row; break; }
+    }
+    if (withChain) {
+      const kids = [...doc.getElementById('detail').children];
+      const tabsAt = kids.findIndex((k) => k.classList.contains('dtabs'));
+      const chainAt = kids.findIndex((k) => k.classList.contains('chain-row'));
+      result.chainPinned = chainAt !== -1 && chainAt < tabsAt
+        ? 'above the tabs'
+        : 'NO - an attempt chain is tabbed away';
+    } else {
+      result.chainPinned = 'n/a (no chained call in this session)';
+    }
+
+    const row = rows.find(Boolean);
+    if (!row) return result;
+    await click(row);
+    await new Promise((r) => setTimeout(r, 500));
+
+    const detail = doc.getElementById('detail');
+    result.tabs = [...detail.querySelectorAll('.dtab')].map((t) => t.dataset.dtab);
+    result.defaultTab = detail.querySelector('.dtab.active')?.dataset.dtab ?? 'none';
+    const open = detail.querySelector('.dtab-panel:not([hidden])');
+    result.firstSection = open?.querySelector('.section-title')?.textContent ?? 'none';
+    result.bodyBeforeHeaders = (() => {
+      if (!open) return 'n/a';
+      const kids = [...open.children];
+      const body = kids.findIndex((k) => k.tagName === 'PRE' || k.classList.contains('muted'));
+      const headers = kids.findIndex((k) => k.classList.contains('headers'));
+      return body !== -1 && headers !== -1 && body < headers
+        ? 'yes'
+        : `NO - body at ${body}, headers at ${headers}`;
+    })();
+    result.onePanel = detail.querySelectorAll('.dtab-panel:not([hidden])').length === 1
+      ? 'yes'
+      : `NO - ${detail.querySelectorAll('.dtab-panel:not([hidden])').length} showing`;
+
+    const req = [...detail.querySelectorAll('.dtab')].find((t) => t.dataset.dtab === 'req');
+    if (req) {
+      await click(req);
+      await new Promise((r) => setTimeout(r, 200));
+      result.switches = detail.querySelector('.dtab.active')?.dataset.dtab === 'req'
+        ? 'yes'
+        : 'NO';
+      // Comparing one field down a list means picking the same tab on every row otherwise.
+      const other = rows[1] || rows[0];
+      await click(other);
+      await new Promise((r) => setTimeout(r, 400));
+      result.remembersAcrossRows = doc.querySelector('#detail .dtab.active')?.dataset.dtab === 'req'
+        ? 'yes'
+        : 'NO - reset to response';
+    }
+    return result;
+  }
+
+  /**
+   * An empty pane that orients you instead of naming itself.
+   *
+   * The assertion with teeth is that the rows are *ways in*, not a readout — clicking the slowest
+   * call has to select it. A summary you can only look at would have replaced three words with a
+   * paragraph and still spent half the window saying nothing you can act on.
+   */
+  async function probeGlance() {
+    const result = { session: 'n/a', clickable: 0, slowestSelects: 'n/a', tag: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    // Esc drops any selection probeDetailTabs left behind, which is what puts the pane back.
+    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    const pane = doc.getElementById('detail-empty');
+    const rows = [...pane.querySelectorAll('.glance-row')];
+    result.session = rows.length
+      ? `${rows.length} rows`
+      : `NO - still reads "${pane.textContent.trim()}"`;
+    result.clickable = pane.querySelectorAll('.glance-click').length;
+
+    // Read the value span, not textContent: the spans concatenate without a separator, so a
+    // slowest row reads "2.0sGET /path" and a `\bGET` never matches.
+    const slow = [...pane.querySelectorAll('.glance-click')].find((r) =>
+      /^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS) /.test(
+        r.querySelector('.glance-value')?.textContent || '',
+      ));
+    if (slow) {
+      await click(slow);
+      await new Promise((r) => setTimeout(r, 600));
+      result.slowestSelects = doc.getElementById('detail').hidden
+        ? 'NO - clicking a slow call did nothing'
+        : 'selects it';
+      doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      result.escRestores = doc.querySelectorAll('#detail-empty .glance-row').length
+        ? 'yes'
+        : 'NO';
+    }
+
+    const browser = [...doc.querySelectorAll('#tabs .tab')]
+      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    if (browser) {
+      await click(browser);
+      await new Promise((r) => setTimeout(r, 900));
+      const detail = doc.getElementById('browser-detail');
+      const tagRows = detail.querySelectorAll('.glance-row').length;
+      result.tag = tagRows
+        ? `${tagRows} rows on '${browser.dataset.view}'`
+        : `NO - still reads "${detail.textContent.trim()}"`;
+    }
+    return result;
+  }
+
+  const glanceProbe = await probeGlance();
+  const detailTabProbe = await probeDetailTabs();
+  const drawerProbe = await probeDrawer();
+  const toolbarProbe = await probeToolbar();
+  const nowProbe = await probeNowStrip();
   const tabProbe = probeTabs();
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
@@ -582,7 +921,12 @@ window.navigator.clipboard = { writeText: async () => {} };
    */
   function auditHiddenPanes(cssText) {
     // Panes the app shows and hides by toggling `hidden`.
-    const panes = ['.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list'];
+    // `.toolbar` and `.now-strip` join the list because they are the newest members of exactly
+    // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
+    const panes = [
+      '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
+      '.drawer-scrim',
+    ];
     const setsDisplay = new Set();
     const guarded = new Set();
     for (const [, selector, body] of cssText.matchAll(/([.#][A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
@@ -639,7 +983,10 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('session label      :', doc.getElementById('session-app').textContent);
   console.error('markers listed     :', doc.querySelectorAll('#markers li').length);
   console.error('detail visible     :', !doc.getElementById('detail').hidden);
-  console.error('detail sections    :', doc.querySelectorAll('#detail .section-title').length);
+  console.error(
+    'detail sections    :', doc.querySelectorAll('#detail .section-title').length,
+    '(pinned ones plus the open tab, not all five faces)',
+  );
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
   const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
@@ -672,7 +1019,7 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('limit summary      :', limitProbe.summary);
   console.error('--- signals ---');
   console.error('all tab present    :', signalProbe.switchShown);
-  console.error('opened on view     :', signalProbe.defaultView, "('all' when the session has signals)");
+  console.error('opened on view     :', signalProbe.defaultView, "('network' — traffic leads)");
   console.error('timeline entries   :', signalProbe.entries);
   console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
   console.error('unknown tag renders:', signalProbe.unknownTagRendered);
@@ -684,6 +1031,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
   console.error('pushed row warned  :', signalProbe.pushedWarned, '(a snapshot is not live state)');
+  console.error('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun})`);
+  console.error('run expands whole  :', signalProbe.runExpandsLossless, '(collapsing must lose nothing)');
+  console.error('run collapses back :', signalProbe.runCollapsesBack);
   console.error('--- peers ---');
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
@@ -698,6 +1048,30 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
   console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
+  console.error('traffic tab first  :', tabProbe.trafficFirst);
+  console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
+  console.error('toolbar on traffic :', toolbarProbe.onTraffic);
+  console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
+  console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
+  console.error('now strip present  :', nowProbe.present);
+  console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
+  console.error('now says collapsed :', nowProbe.collapsedSummary);
+  console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
+  console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
+  console.error('empty pane (tag)   :', glanceProbe.tag);
+  console.error('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
+  console.error('detail default tab :', detailTabProbe.defaultTab, '- opens on:', detailTabProbe.firstSection);
+  console.error('body before headers:', detailTabProbe.bodyBeforeHeaders ?? 'n/a', '(the reason you opened the row)');
+  console.error('one panel at a time:', detailTabProbe.onePanel);
+  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a', '- remembered:', detailTabProbe.remembersAcrossRows ?? 'n/a');
+  console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
+  console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
+  console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
+  console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
+  console.error('drawer on tab swap :', drawerProbe.tabSwitch);
+  console.error('tab labels         :', tabProbe.labels);
+  console.error('long tokens wrap   :', auditLongTokenWrap(css), '(a bearer token must not widen the pane)');
 
   for (const probe of [browserProbe, stateProbe]) {
     console.error(`--- ${probe.tag} browser ---`);

@@ -56,6 +56,12 @@
     browserFacets: {},
     browserKey: null,
     browserObservation: null,
+    // Which face of the transaction detail is showing. Remembered across selections: comparing
+    // request bodies down a list means picking the same tab on every row otherwise.
+    detailTab: 'res',
+    // Collapsed timeline runs the user has opened, by run key. Held in state rather than in the
+    // DOM so an expanded run survives the re-render that every live signal triggers.
+    expandedRuns: new Set(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -259,11 +265,19 @@
   /** Every view this session can offer, in tab order. */
   function availableViews() {
     const views = [];
+    // Traffic first, and it is where a session opens. This is a network debugger: in a real
+    // session the merged timeline ran 126 rows of which 13 were calls, so landing there puts
+    // what you came for at one row in ten. The merge is a correlation tool you reach for once
+    // you know which call you care about, which makes it the second tab, not the first.
+    views.push({ id: 'network', label: 'traffic', title: 'HTTP calls', count: state.transactions.length });
     // Merging is only worth a tab when there is something to merge with the traffic.
     if (state.signals.length) {
-      views.push({ id: 'all', label: 'all', title: 'Traffic, signals and markers on one timeline' });
+      views.push({
+        id: 'all',
+        label: 'timeline',
+        title: 'Traffic, signals and markers on one timeline',
+      });
     }
-    views.push({ id: 'network', label: 'network', title: 'HTTP calls', count: state.transactions.length });
     for (const tag of tagsInSession()) {
       views.push({
         id: tag,
@@ -329,13 +343,12 @@
     // session and the current view falls back rather than pointing at nothing.
     const ids = availableViews().map((view) => view.id);
     if (!ids.includes(state.view)) state.view = 'network';
-    // The merge is the value, so a session that has something to merge opens on it.
-    if (!state.viewChosenForSession && ids.includes('all')) state.view = 'all';
     state.viewChosenForSession = true;
 
     renderTabs();
     renderCurrent();
     applyView();
+    if ($('detail').hidden) renderSessionGlance();
   }
 
   /**
@@ -531,7 +544,6 @@
     const shortcuts = endpointShortcuts(state.allTransactions, state.endpointLimit);
     box.innerHTML = '';
     box.hidden = shortcuts.length === 0;
-    $('endpoints-label').hidden = shortcuts.length === 0;
 
     for (const { segment, count } of shortcuts) {
       const value = endpointFilter(segment);
@@ -635,6 +647,7 @@
     $('detail-empty').hidden = true;
     pane.hidden = false;
     pane.innerHTML = '';
+    openDrawer();
 
     const head = el('div', 'detail-head');
     head.appendChild(el('span', `status s${statusClass(txn.status)}`, txn.status ?? 'ERR'));
@@ -660,21 +673,13 @@
     replayBtn.onclick = () => runReplay(txn, pane, replayBtn);
     head.appendChild(replayBtn);
 
-    pane.appendChild(el('div', 'section-title', 'Overview'));
-    const kv = el('dl', 'kv');
-    const put = (k, v) => { kv.appendChild(el('dt', null, k)); kv.appendChild(el('dd', null, v)); };
-    put('URL', urlOf(txn));
-    put('Status', txn.status ?? 'transport failure');
-    if (txn.error) put('Error', txn.error);
-    put('Duration', fmtMs(txn.ms));
-    put('Request size', fmtBytes(txn.reqBytes));
-    put('Response size', fmtBytes(txn.resBytes));
-    put('Started', txn.ts);
-    pane.appendChild(kv);
-
+    // Pinned above the tabs, both of them, because neither is something to go looking for.
+    //
+    // Redaction says credentials were *removed*, and a reader who does not see it concludes none
+    // were sent. An attempt chain means this row is one of several for the same call — read it as
+    // the whole story and you are reading a retry as the only try. Tabbing away either of those
+    // would hide a correction to what the rest of the pane appears to say.
     if (txn.redacted && txn.redacted.length) {
-      // Say it was removed, not that it was absent — otherwise a reader concludes no
-      // credentials were sent.
       pane.appendChild(el('div', 'section-title', 'Redacted at capture'));
       pane.appendChild(el('div', 'banner redacted', txn.redacted.join(', ')));
     }
@@ -693,8 +698,63 @@
       }
     }
 
-    appendSide(pane, 'Request', txn, 'req', reqBody);
-    appendSide(pane, 'Response', txn, 'res', resBody);
+    /*
+      One face at a time, response first.
+
+      This was a single scroll: overview, request headers, request body, response headers,
+      response body. The response body is what you opened the row for and it was last, behind
+      roughly forty lines of headers — and headers are exactly the thing that is long, unreadable
+      and rarely what you want. Three tabs, and the one you came for is already showing.
+    */
+    const panels = {
+      res: sidePanel(txn, 'res', resBody),
+      req: sidePanel(txn, 'req', reqBody),
+      overview: overviewPanel(txn),
+    };
+
+    const bar = el('div', 'dtabs');
+    const faces = [
+      ['res', 'response', fmtBytes(txn.resBytes)],
+      ['req', 'request', txn.reqBytes ? fmtBytes(txn.reqBytes) : null],
+      ['overview', 'overview', null],
+    ];
+    if (!panels[state.detailTab]) state.detailTab = 'res';
+
+    const paint = () => {
+      for (const button of bar.querySelectorAll('.dtab')) {
+        button.classList.toggle('active', button.dataset.dtab === state.detailTab);
+      }
+      for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== state.detailTab;
+    };
+
+    for (const [name, label, hint] of faces) {
+      const button = el('button', 'dtab');
+      button.dataset.dtab = name;
+      button.appendChild(el('span', null, label));
+      // The size on the tab answers "is there even a body in there" without opening it.
+      if (hint) button.appendChild(el('span', 'dtab-hint muted mono', hint));
+      button.addEventListener('click', () => { state.detailTab = name; paint(); });
+      bar.appendChild(button);
+    }
+    pane.appendChild(bar);
+    for (const panel of Object.values(panels)) pane.appendChild(panel);
+    paint();
+  }
+
+  function overviewPanel(txn) {
+    const panel = el('div', 'dtab-panel');
+    panel.dataset.dtab = 'overview';
+    const kv = el('dl', 'kv');
+    const put = (k, v) => { kv.appendChild(el('dt', null, k)); kv.appendChild(el('dd', null, v)); };
+    put('URL', urlOf(txn));
+    put('Status', txn.status ?? 'transport failure');
+    if (txn.error) put('Error', txn.error);
+    put('Duration', fmtMs(txn.ms));
+    put('Request size', fmtBytes(txn.reqBytes));
+    put('Response size', fmtBytes(txn.resBytes));
+    put('Started', txn.ts);
+    panel.appendChild(kv);
+    return panel;
   }
 
   /**
@@ -731,13 +791,38 @@
     return `${size} captured, but ${ref} could not be read`;
   }
 
-  function appendSide(pane, title, txn, side, body) {
+  /**
+   * One side of the call: body first, then its headers.
+   *
+   * Body before headers is the whole point of the change. Headers are long, mostly boilerplate,
+   * and the same on every call; the body is the one part that differs and the reason the row was
+   * opened. They are still one scroll apart — just the other way round.
+   */
+  function sidePanel(txn, side, body) {
+    const title = side === 'req' ? 'Request' : 'Response';
     const headers = side === 'req' ? txn.reqHeaders : txn.resHeaders;
     const truncated = side === 'req' ? txn.reqBodyTruncated : txn.resBodyTruncated;
     const contentType = side === 'req' ? txn.reqContentType : txn.resContentType;
     const totalBytes = side === 'req' ? txn.reqBytes : txn.resBytes;
 
-    pane.appendChild(el('div', 'section-title', `${title} headers`));
+    const panel = el('div', 'dtab-panel');
+    panel.dataset.dtab = side;
+
+    panel.appendChild(el('div', 'section-title', `${title} body`));
+    const absent = bodyAbsenceReason(txn, side, body);
+    if (absent !== null) {
+      panel.appendChild(el('div', 'muted', absent));
+    } else {
+      if (truncated) {
+        panel.appendChild(
+          el('div', 'banner', `truncated at ${fmtBytes(body.length)} of ${fmtBytes(totalBytes)}`),
+        );
+      }
+      const isJson = (contentType || '').includes('json') || /^\s*[{[]/.test(body);
+      panel.appendChild(el('pre', 'body', isJson ? prettyJson(body) : body));
+    }
+
+    panel.appendChild(el('div', 'section-title', `${title} headers`));
     const box = el('div', 'headers');
     const entries = Object.entries(headers || {});
     if (!entries.length) {
@@ -750,19 +835,8 @@
         box.appendChild(line);
       }
     }
-    pane.appendChild(box);
-
-    pane.appendChild(el('div', 'section-title', `${title} body`));
-    const absent = bodyAbsenceReason(txn, side, body);
-    if (absent !== null) {
-      pane.appendChild(el('div', 'muted', absent));
-      return;
-    }
-    if (truncated) {
-      pane.appendChild(el('div', 'banner', `truncated at ${fmtBytes(body.length)} of ${fmtBytes(totalBytes)}`));
-    }
-    const isJson = (contentType || '').includes('json') || /^\s*[{[]/.test(body);
-    pane.appendChild(el('pre', 'body', isJson ? prettyJson(body) : body));
+    panel.appendChild(box);
+    return panel;
   }
 
   async function fetchBody(txn, side) {
@@ -800,8 +874,80 @@
     // detail column. A class rather than `hidden`, because `hidden` loses to any author rule that
     // sets `display` — the bug this pane already shipped once.
     $('panes').classList.toggle('panes-wide', browsing);
+
+    // The toolbar filters transactions, which is what both of these views are built from. The tag
+    // browser filters payload keys instead and carries its own toolbar for it, so showing this one
+    // there would put two filter boxes on screen that mean different things.
+    $('toolbar').hidden = browsing;
+    if (browsing) closePops();
+    // The drawer covers the list it was opened from. Carrying it across a tab switch would leave
+    // it sitting over a list that never produced it.
+    closeDrawer();
+    // Nothing selected means the pane is free to say something useful about the session instead.
+    if (!browsing && $('detail').hidden) renderSessionGlance();
+    // `Now` is the app's current state, which is only ever read beside the merged timeline.
+    $('now-strip').hidden = !all || state.current.length === 0;
+
     if (all) renderTimeline();
     if (browsing) renderBrowser();
+  }
+
+  /**
+   * The detail pane, when it is a drawer rather than a column.
+   *
+   * The class is set at every width and only means anything under the media query, so there is no
+   * breakpoint to track in JS and nothing to re-synchronise on resize: drag the window wider and
+   * the drawer is simply a column again, still showing what it was showing.
+   */
+  function openDrawer() {
+    $('panes').classList.add('drawer-open');
+    $('drawer-scrim').hidden = false;
+  }
+
+  function closeDrawer() {
+    $('panes').classList.remove('drawer-open');
+    $('drawer-scrim').hidden = true;
+  }
+
+  /**
+   * Markers and the shortcut legend, one click away.
+   *
+   * Both were permanent rail sections and both sat below the fold, which is the worst of both:
+   * space spent, and not readable anyway. A popover costs a click and is the first time the
+   * shortcut list has been visible at all.
+   */
+  function closePops() {
+    for (const [button, pop] of POPS) {
+      $(pop).hidden = true;
+      $(button).setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  const POPS = [
+    ['markers-button', 'markers-pop'],
+    ['keys-button', 'keys-pop'],
+  ];
+
+  function wirePops() {
+    for (const [button, pop] of POPS) {
+      $(button).addEventListener('click', (event) => {
+        event.stopPropagation();
+        const open = $(pop).hidden;
+        closePops();
+        $(pop).hidden = !open;
+        $(button).setAttribute('aria-expanded', String(open));
+        if (open) {
+          // Anchored under its own button rather than at a fixed offset, so it stays put when
+          // the chips wrap and move the button to a second row.
+          const rect = $(button).getBoundingClientRect();
+          $(pop).style.top = `${rect.bottom + 4}px`;
+        }
+      });
+    }
+    document.addEventListener('click', closePops);
+    for (const [, pop] of POPS) {
+      $(pop).addEventListener('click', (event) => event.stopPropagation());
+    }
   }
 
   // --- tag browser --------------------------------------------------------
@@ -1111,18 +1257,146 @@
     const selected = shown.find((g) => g.key === state.browserKey)
       || shown.find((g) => g.key === state.browserKey)
       || null;
-    renderBrowserDetail(selected || (state.browserKey ? groups.find((g) => g.key === state.browserKey) : null));
+    renderBrowserDetail(
+      selected || (state.browserKey ? groups.find((g) => g.key === state.browserKey) : null),
+      groups,
+      tag,
+    );
   }
 
   // --- detail ---------------------------------------------------------------
 
-  function renderBrowserDetail(group) {
-    const pane = $('browser-detail');
+  /**
+   * The empty state, doing the orienting.
+   *
+   * "select a transaction" occupied more than half the window and told you something you could
+   * already see. The session it is sitting in front of has an answer to "what happened here",
+   * and the page already holds every number needed to give it — so nothing new is fetched and
+   * this works identically on an archive recorded months ago.
+   *
+   * Every line is a way in, not a readout: a slow call selects it, an error filters to the
+   * errors, a tag opens that tag's tab. An empty state that can only be read is a poster.
+   */
+  function glanceRow(label, value, onClick) {
+    const row = el('div', `glance-row${onClick ? ' glance-click' : ''}`);
+    row.appendChild(el('span', 'glance-label muted', label));
+    row.appendChild(el('span', 'glance-value', value));
+    if (onClick) {
+      row.tabIndex = 0;
+      row.addEventListener('click', onClick);
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); }
+      });
+    }
+    return row;
+  }
+
+  function renderSessionGlance() {
+    const pane = $('detail-empty');
     pane.innerHTML = '';
-    if (!group) {
+    const txns = state.allTransactions.length ? state.allTransactions : state.transactions;
+    if (!txns.length && !state.signals.length) {
+      pane.className = 'empty muted';
+      pane.textContent = 'select a transaction';
+      return;
+    }
+    pane.className = 'glance';
+
+    const failed = txns.filter((t) => t.error || (t.status ?? 0) >= 400);
+    pane.appendChild(el('div', 'glance-title', 'This session'));
+    pane.appendChild(glanceRow('calls', String(txns.length)));
+    if (failed.length) {
+      pane.appendChild(glanceRow(
+        'failed',
+        `${failed.length} — show them`,
+        () => { $('filter').value = 'status>=400 | has:error'; applyFilter(); },
+      ));
+    }
+
+    // Hosts, because "which backend is this even talking to" is the first question on an app you
+    // did not write.
+    const hosts = new Map();
+    for (const txn of txns) hosts.set(txn.host, (hosts.get(txn.host) || 0) + 1);
+    const topHosts = [...hosts].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    for (const [host, n] of topHosts) {
+      pane.appendChild(glanceRow('host', `${host} · ${n}`, () => {
+        $('filter').value = `host:${host}`;
+        applyFilter();
+      }));
+    }
+
+    const slowest = [...txns].filter((t) => t.ms != null).sort((a, b) => b.ms - a.ms).slice(0, 3);
+    if (slowest.length) {
+      pane.appendChild(el('div', 'glance-title', 'Slowest'));
+      for (const txn of slowest) {
+        pane.appendChild(glanceRow(fmtMs(txn.ms), `${txn.method} ${txn.path}`, () => select(txn.id)));
+      }
+    }
+
+    if (state.signals.length) {
+      pane.appendChild(el('div', 'glance-title', 'Recorded alongside'));
+      const byTag = new Map();
+      for (const signal of state.signals) {
+        const tag = tagOf(signal);
+        byTag.set(tag, (byTag.get(tag) || 0) + 1);
+      }
+      for (const [tag, n] of [...byTag].sort((a, b) => b[1] - a[1])) {
+        pane.appendChild(glanceRow(tag, `${n} — open`, () => selectView(tag)));
+      }
+    }
+
+    const screen = state.current.find((signal) => tagOf(signal) === 'screen');
+    if (screen) pane.appendChild(glanceRow('on screen', screen.name));
+  }
+
+  /** The same idea, for a tag browser: what is in here, and what changed most recently. */
+  function renderTagGlance(groups, tag) {
+    const pane = $('browser-detail');
+    pane.className = 'browser-detail glance';
+    pane.innerHTML = '';
+    if (!groups.length) {
+      pane.className = 'browser-detail';
       pane.appendChild(el('div', 'empty muted', 'select a key'));
       return;
     }
+
+    const observations = groups.reduce((n, group) => n + group.rows.length, 0);
+    pane.appendChild(el('div', 'glance-title', `${tag} in this session`));
+    pane.appendChild(glanceRow('keys', String(groups.length)));
+    pane.appendChild(glanceRow('observations', String(observations)));
+
+    // Newest first regardless of the sort toggle: "what changed last" does not reverse.
+    const byRecency = [...groups].sort((a, b) => b.latest.mono - a.latest.mono);
+    pane.appendChild(el('div', 'glance-title', 'Changed most recently'));
+    for (const group of byRecency.slice(0, 5)) {
+      const row = glanceRow(
+        readableKey(group.key),
+        `${group.rows.length}\u00d7`,
+        () => { state.browserKey = group.key; state.browserObservation = null; renderBrowser(); },
+      );
+      row.appendChild(ageNode(group.latest.ts, 'glance-age muted mono'));
+      pane.appendChild(row);
+    }
+
+    const busiest = [...groups].sort((a, b) => b.rows.length - a.rows.length)[0];
+    if (busiest && busiest.rows.length > 1) {
+      pane.appendChild(el('div', 'glance-title', 'Changed most often'));
+      pane.appendChild(glanceRow(
+        readableKey(busiest.key),
+        `${busiest.rows.length}\u00d7`,
+        () => { state.browserKey = busiest.key; state.browserObservation = null; renderBrowser(); },
+      ));
+    }
+  }
+
+  function renderBrowserDetail(group, groups, tag) {
+    const pane = $('browser-detail');
+    pane.innerHTML = '';
+    if (!group) {
+      renderTagGlance(groups || [], tag || state.view);
+      return;
+    }
+    pane.className = 'browser-detail';
 
     const rows = state.newestFirst ? [...group.rows].reverse() : group.rows;
     const chosen = group.rows.find((r) => r.signalId === state.browserObservation) || group.latest;
@@ -1323,6 +1597,43 @@
     return ends;
   }
 
+  /**
+   * How many adjacent identical observations it takes before they are worth collapsing.
+   *
+   * Two is not clutter and hiding it behind a twisty costs more than it saves. Three is where a
+   * run starts pushing other lanes off the screen.
+   */
+  const RUN_THRESHOLD = 3;
+
+  /** What makes two adjacent rows "the same thing happening again". Transactions never group. */
+  const runKeyOf = (entry) =>
+    entry.kind === 'signal' ? `${entry.signal.tag}\u0000${entry.signal.name}` : null;
+
+  /**
+   * Groups *consecutive* identical observations.
+   *
+   * A state holder that emits on every keystroke produces dozens of adjacent rows differing only
+   * in a payload you cannot see from the row — one real session had 48 in a row — and they push
+   * the traffic the timeline exists to correlate clean off the screen.
+   *
+   * Only adjacent rows group. A run interrupted by a call or a screen change is information: it
+   * says the state settled, something else happened, and it moved again. Collapsing across that
+   * gap would erase the very ordering the merged view is for.
+   */
+  function timelineRuns(entries) {
+    const runs = [];
+    for (const entry of entries) {
+      const key = runKeyOf(entry);
+      const open = runs[runs.length - 1];
+      if (key !== null && open && open.key === key) open.entries.push(entry);
+      else runs.push({ key, entries: [entry] });
+    }
+    return runs;
+  }
+
+  /** Stable across re-renders: signal ids are, and the first of a run does not move. */
+  const runIdOf = (run) => `${run.key}\u0000${run.entries[0].signal.id}`;
+
   function renderTimeline() {
     if (state.view !== 'all') return;
     const root = $('timeline');
@@ -1346,14 +1657,66 @@
     const first = monos.length ? Math.min(...monos) : 0;
     const last = monos.length ? Math.max(...monos) : 0;
     const span = Math.max(1, last - first);
-    for (const entry of entries) {
-      root.appendChild(timelineRow(entry, ends, last, span));
+    for (const run of timelineRuns(entries)) {
+      const collapsible = run.entries.length >= RUN_THRESHOLD;
+      if (collapsible && !state.expandedRuns.has(runIdOf(run))) {
+        root.appendChild(runRow(run));
+        continue;
+      }
+      if (collapsible) root.appendChild(runRow(run, { expanded: true }));
+      for (const entry of run.entries) root.appendChild(timelineRow(entry, ends, last, span));
     }
 
     if (state.liveTail) {
       const pane = root.parentElement;
       pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
     }
+  }
+
+  /**
+   * One row standing in for a run of identical observations, or the header above an expanded one.
+   *
+   * It reports the count and the wall of time the run covers, which is the part a collapsed run
+   * must not lose: "48 times" and "48 times over 23 seconds" mean different things about the app.
+   */
+  function runRow(run, { expanded = false } = {}) {
+    const first = run.entries[0].signal;
+    const lane = laneFor(first.tag);
+    const node = el('div', `tl-row tl-run lane-${lane}${expanded ? ' tl-run-open' : ''}`);
+    node.dataset.kind = 'run';
+    node.dataset.lane = lane;
+    node.dataset.tag = first.tag;
+    node.dataset.runId = runIdOf(run);
+    node.tabIndex = 0;
+
+    node.appendChild(el('span', 'tl-twisty', expanded ? '\u25be' : '\u25b8'));
+    node.appendChild(el('span', 'tl-tag', first.tag));
+    node.appendChild(el('span', 'tl-name', first.name));
+    node.appendChild(el('span', 'tl-run-count mono', `\u00d7${run.entries.length}`));
+
+    const monos = run.entries.map((entry) => entry.mono);
+    const from = Math.min(...monos);
+    const to = Math.max(...monos);
+    const held = el('span', 'tl-mono muted mono', from === to ? `${from}ms` : `${from}\u2013${to}ms`);
+    held.title = expanded
+      ? 'collapse these observations'
+      : `${run.entries.length} observations over ${to - from} ms — click to expand`;
+    node.appendChild(held);
+
+    const toggle = () => {
+      const id = runIdOf(run);
+      if (state.expandedRuns.has(id)) state.expandedRuns.delete(id);
+      else state.expandedRuns.add(id);
+      renderTimeline();
+    };
+    node.addEventListener('click', toggle);
+    node.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+    return node;
   }
 
   function timelineRow(entry, ends, lastMono, sessionSpan) {
@@ -1427,11 +1790,22 @@
    */
   function renderCurrent() {
     const list = $('current');
-    const label = $('current-label');
     const rows = state.current;
-    label.hidden = rows.length === 0;
-    list.hidden = rows.length === 0;
+    $('now-strip').hidden = state.view !== 'all' || rows.length === 0;
     list.innerHTML = '';
+
+    // Collapsed, the strip has to earn its line: how much there is, and how stale the oldest of
+    // it is — which is the question the panel exists to answer and the one a count alone dodges.
+    const oldest = rows.reduce(
+      (worst, signal) => Math.max(worst, ageOf(signal.ts) ?? 0),
+      0,
+    );
+    const byTag = new Map();
+    for (const signal of rows) byTag.set(signal.tag, (byTag.get(signal.tag) || 0) + 1);
+    const parts = [...byTag].map(([tag, n]) => `${n} ${tag}`);
+    $('now-summary-text').textContent = rows.length
+      ? `${parts.join(' · ')} — oldest ${fmtAge(oldest)}`
+      : '';
 
     for (const signal of rows) {
       const item = el('li', 'current-item');
@@ -1465,6 +1839,7 @@
     $('detail-empty').hidden = true;
     detail.hidden = false;
     detail.innerHTML = '';
+    openDrawer();
 
     const head = el('div', 'detail-head');
     head.appendChild(el('span', 'tl-tag', signal.tag));
@@ -2110,6 +2485,8 @@
         state.selectedId = null;
         $('detail').hidden = true;
         $('detail-empty').hidden = false;
+        renderSessionGlance();
+        closeDrawer();
         for (const row of document.querySelectorAll('.row')) row.classList.remove('selected');
         break;
       case 'c': {
@@ -2163,6 +2540,18 @@
 
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
+    wirePops();
+    $('drawer-close').addEventListener('click', closeDrawer);
+    // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
+    $('drawer-scrim').addEventListener('click', closeDrawer);
+
+    $('now-toggle').addEventListener('click', () => {
+      const strip = $('now-strip');
+      const open = $('current').hidden;
+      $('current').hidden = !open;
+      strip.classList.toggle('open', open);
+      $('now-toggle').setAttribute('aria-expanded', String(open));
+    });
 
     $('open-settings').addEventListener('click', () => {
       $('settings').showModal();
