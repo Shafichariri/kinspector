@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.4.0")
-implementation("dev.inspector:inspector-ui:0.4.0")
+implementation("dev.inspector:inspector-core:0.5.0")
+implementation("dev.inspector:inspector-ui:0.5.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.4.0")
-            implementation("dev.inspector:inspector-ui:0.4.0")
+            implementation("dev.inspector:inspector-core:0.5.0")
+            implementation("dev.inspector:inspector-ui:0.5.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.4.0")
-                implementation("dev.inspector:inspector-noop-ui:0.4.0")
+                implementation("dev.inspector:inspector-noop:0.5.0")
+                implementation("dev.inspector:inspector-noop-ui:0.5.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.4.0")
-                implementation("dev.inspector:inspector-ui:0.4.0")
+                implementation("dev.inspector:inspector-core:0.5.0")
+                implementation("dev.inspector:inspector-ui:0.5.0")
             }
         }
     }
@@ -361,13 +361,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.4.0")
-    implementation("dev.inspector:inspector-noop-ui:0.4.0")
-    implementation("dev.inspector:inspector-noop-stream:0.4.0")
+    implementation("dev.inspector:inspector-noop:0.5.0")
+    implementation("dev.inspector:inspector-noop-ui:0.5.0")
+    implementation("dev.inspector:inspector-noop-stream:0.5.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.4.0")
-    implementation("dev.inspector:inspector-ui:0.4.0")
-    implementation("dev.inspector:inspector-stream:0.4.0")
+    implementation("dev.inspector:inspector-core:0.5.0")
+    implementation("dev.inspector:inspector-ui:0.5.0")
+    implementation("dev.inspector:inspector-stream:0.5.0")
 }
 ```
 
@@ -1132,7 +1132,8 @@ If your copy has no version line at the top, identify it by what it contains:
 
 ### v21 — 2026-09-11 (this document)
 
-**Rebuild the daemon if you record per-entry `cache` signals — you were losing them.**
+**Released as 0.5.0. Rebuild the daemon — and if you record per-entry `cache` signals, you
+were losing them.**
 
 The archive trims signal rows per tag when a session closes. `cache` was capped at 20, set when a
 cache signal meant one whole-cache snapshot and 20 rows bought 20 points in time. Since v18 this
@@ -1140,9 +1141,13 @@ document tells you to emit a row per entry write, removal and scope invalidation
 which 20 rows does not reliably span 20 distinct *keys*, so past the cap the cache tab stops losing
 history and starts losing whole keys. It bound routinely rather than at an extreme.
 
-**The default is now 500**, matching `state`. Nothing you emit changes, no call site moves, and the
-library is untouched — this is daemon-side only, so a new daemon is the whole upgrade. Sessions
-already trimmed on disk cannot be recovered; re-record one if you were relying on it.
+**The default is now 500**, matching `state`. Nothing you emit changes and no call site moves.
+Sessions already trimmed on disk cannot be recovered; re-record one if you were relying on it.
+
+As in v20, **the library modules are byte-for-byte unchanged from 0.3.0** — this release is
+entirely daemon-side, so a new daemon is the whole upgrade. The coordinates below now read
+`0.5.0` if you prefer your versions to match; staying where you are gets you exactly the same
+library.
 
 The caps are also **configurable now**, which they were advertised as being and silently were not:
 a `signalCaps` block in `~/.inspector/config.json` parsed, was discarded, and said nothing. It is
