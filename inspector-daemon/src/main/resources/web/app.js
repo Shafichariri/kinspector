@@ -540,7 +540,6 @@
     const shortcuts = endpointShortcuts(state.allTransactions, state.endpointLimit);
     box.innerHTML = '';
     box.hidden = shortcuts.length === 0;
-    $('endpoints-label').hidden = shortcuts.length === 0;
 
     for (const { segment, count } of shortcuts) {
       const value = endpointFilter(segment);
@@ -809,8 +808,58 @@
     // detail column. A class rather than `hidden`, because `hidden` loses to any author rule that
     // sets `display` — the bug this pane already shipped once.
     $('panes').classList.toggle('panes-wide', browsing);
+
+    // The toolbar filters transactions, which is what both of these views are built from. The tag
+    // browser filters payload keys instead and carries its own toolbar for it, so showing this one
+    // there would put two filter boxes on screen that mean different things.
+    $('toolbar').hidden = browsing;
+    if (browsing) closePops();
+    // `Now` is the app's current state, which is only ever read beside the merged timeline.
+    $('now-strip').hidden = !all || state.current.length === 0;
+
     if (all) renderTimeline();
     if (browsing) renderBrowser();
+  }
+
+  /**
+   * Markers and the shortcut legend, one click away.
+   *
+   * Both were permanent rail sections and both sat below the fold, which is the worst of both:
+   * space spent, and not readable anyway. A popover costs a click and is the first time the
+   * shortcut list has been visible at all.
+   */
+  function closePops() {
+    for (const [button, pop] of POPS) {
+      $(pop).hidden = true;
+      $(button).setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  const POPS = [
+    ['markers-button', 'markers-pop'],
+    ['keys-button', 'keys-pop'],
+  ];
+
+  function wirePops() {
+    for (const [button, pop] of POPS) {
+      $(button).addEventListener('click', (event) => {
+        event.stopPropagation();
+        const open = $(pop).hidden;
+        closePops();
+        $(pop).hidden = !open;
+        $(button).setAttribute('aria-expanded', String(open));
+        if (open) {
+          // Anchored under its own button rather than at a fixed offset, so it stays put when
+          // the chips wrap and move the button to a second row.
+          const rect = $(button).getBoundingClientRect();
+          $(pop).style.top = `${rect.bottom + 4}px`;
+        }
+      });
+    }
+    document.addEventListener('click', closePops);
+    for (const [, pop] of POPS) {
+      $(pop).addEventListener('click', (event) => event.stopPropagation());
+    }
   }
 
   // --- tag browser --------------------------------------------------------
@@ -1525,11 +1574,22 @@
    */
   function renderCurrent() {
     const list = $('current');
-    const label = $('current-label');
     const rows = state.current;
-    label.hidden = rows.length === 0;
-    list.hidden = rows.length === 0;
+    $('now-strip').hidden = state.view !== 'all' || rows.length === 0;
     list.innerHTML = '';
+
+    // Collapsed, the strip has to earn its line: how much there is, and how stale the oldest of
+    // it is — which is the question the panel exists to answer and the one a count alone dodges.
+    const oldest = rows.reduce(
+      (worst, signal) => Math.max(worst, ageOf(signal.ts) ?? 0),
+      0,
+    );
+    const byTag = new Map();
+    for (const signal of rows) byTag.set(signal.tag, (byTag.get(signal.tag) || 0) + 1);
+    const parts = [...byTag].map(([tag, n]) => `${n} ${tag}`);
+    $('now-summary-text').textContent = rows.length
+      ? `${parts.join(' · ')} — oldest ${fmtAge(oldest)}`
+      : '';
 
     for (const signal of rows) {
       const item = el('li', 'current-item');
@@ -2261,6 +2321,15 @@
 
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
+    wirePops();
+
+    $('now-toggle').addEventListener('click', () => {
+      const strip = $('now-strip');
+      const open = $('current').hidden;
+      $('current').hidden = !open;
+      strip.classList.toggle('open', open);
+      $('now-toggle').setAttribute('aria-expanded', String(open));
+    });
 
     $('open-settings').addEventListener('click', () => {
       $('settings').showModal();
