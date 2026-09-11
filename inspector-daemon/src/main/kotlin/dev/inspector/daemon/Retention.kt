@@ -47,11 +47,12 @@ class Retention(
             if (withinLimits) break
             if (candidate.sessionId == activeSessionId) continue
 
-            if (repository.deleteRecursively(candidate.dir)) {
+            // The line this used to print itself now comes from the primitive, which logs every
+            // removal and names its cause -- one format, and no path that can delete in silence.
+            if (repository.deleteRecursively(candidate.dir, DeletionCause.PRUNED, candidate.bytes)) {
                 pruned += candidate.sessionId
                 sessions--
                 bytes -= candidate.bytes
-                println("inspector: pruned session ${candidate.sessionId} (${candidate.bytes / 1024} KB)")
             }
         }
 
