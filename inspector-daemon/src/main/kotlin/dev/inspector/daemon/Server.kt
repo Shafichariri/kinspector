@@ -530,7 +530,7 @@ class InspectorDaemon(
             }
 
             val bytes = repository.sessionBytes(dir)
-            if (!repository.deleteSession(dir)) {
+            if (!repository.deleteSession(dir, DeletionCause.REQUESTED)) {
                 return@delete call.respondError(
                     HttpStatusCode.InternalServerError,
                     "could not delete $sessionId; check permissions on ${config.sessionsDir}",
@@ -569,13 +569,20 @@ class InspectorDaemon(
                     continue
                 }
                 val bytes = repository.sessionBytes(dir)
-                if (repository.deleteSession(dir)) {
+                if (repository.deleteSession(dir, DeletionCause.CLEARED)) {
                     deleted += sessionId
                     freed += bytes
                 } else {
                     kept += sessionId
                 }
             }
+
+            // A total beside the per-session lines. This is the call that removes many at once,
+            // so it is the one whose shape you want to recognise in a scrollback without counting.
+            println(
+                "inspector: cleared ${deleted.size} session(s), kept ${kept.size}, " +
+                    "freed ${freed / 1024} KB"
+            )
 
             call.respondJson(
                 InspectorJson.encodeToString(
