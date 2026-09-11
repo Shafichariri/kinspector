@@ -79,8 +79,10 @@ class Retention(
         val keep = all.groupBy { it.tag.lowercase() }
             .flatMap { (tag, rows) ->
                 val cap = caps.entries.firstOrNull { it.key.equals(tag, ignoreCase = true) }?.value
+                // coerced, not trusted: this runs on session close, where a thrown `take(-1)` would
+                // cost the user the session they just recorded. `load` rejects negatives loudly.
                 if (cap == null || rows.size <= cap) rows
-                else rows.sortedByDescending { it.mono }.take(cap)
+                else rows.sortedByDescending { it.mono }.take(cap.coerceAtLeast(0))
             }
             .toSet()
 
