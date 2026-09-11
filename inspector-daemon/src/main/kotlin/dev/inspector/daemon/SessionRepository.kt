@@ -124,6 +124,25 @@ data class SummaryRow(
 )
 
 /**
+ * Why a session was removed, named in the line the daemon logs for it.
+ *
+ * An enum rather than a string because the value exists to be read by a person reconstructing
+ * where an archive went, months later, from a terminal scrollback — and "which of these three
+ * things took it" is the whole question. A free-form string would drift into three spellings of
+ * the same cause.
+ */
+enum class DeletionCause(val label: String) {
+    /** `DELETE /api/sessions/{id}` — someone named this session and asked for it to go. */
+    REQUESTED("requested"),
+
+    /** `POST /api/sessions/clear` — the sweep, which is the one that removes many at once. */
+    CLEARED("clear all"),
+
+    /** [Retention] hit `maxSessions` or `maxTotalMb` and dropped the oldest. */
+    PRUNED("retention"),
+}
+
+/**
  * All reads of the archive go through here.
  *
  * One implementation serves the REST API, the CLI's direct-file mode and the MCP tools, so a
@@ -387,14 +406,14 @@ class SessionRepository(private val config: DaemonConfig) {
      * and the REST layer each learn the active id a different way, and neither can be derived
      * from the folder alone.
      */
-    fun deleteSession(sessionDir: Path): Boolean {
+    fun deleteSession(sessionDir: Path, cause: DeletionCause): Boolean {
         // Resolved before the delete, while the link still has something to resolve to.
         val wasLatest = runCatching {
             config.latestLink.exists(LinkOption.NOFOLLOW_LINKS) &&
                 config.latestLink.toRealPath() == sessionDir.toRealPath()
         }.getOrDefault(false)
 
-        val gone = deleteRecursively(sessionDir)
+        val gone = deleteRecursively(sessionDir, cause)
         if (gone && wasLatest) repointLatestLink()
         return gone
     }
@@ -409,16 +428,40 @@ class SessionRepository(private val config: DaemonConfig) {
         SessionWriter.updateLatestLink(config.dataDir, newest)
     }
 
-    /** Depth-first delete. Shared with [Retention], which prunes for a different reason. */
-    fun deleteRecursively(dir: Path): Boolean = runCatching {
+    /**
+     * Depth-first delete, and **the one place a session folder is removed** — [Retention] prunes
+     * through here too, for a different reason.
+     *
+     * It logs every removal, which is why [cause] is not optional. A session that disappears with
+     * nothing in the daemon's output to say what took it is indistinguishable from data loss, and
+     * the archive is the only copy: there is no trash, and `deleteIfExists` does not ask twice.
+     * Requiring the reason at the choke point means a deletion path added later cannot stay quiet
+     * — it has to name itself to compile.
+     *
+     * [bytes] defaults to measuring the folder, and is a parameter only so a caller that already
+     * walked it (both REST routes, and [Retention]) does not walk it a second time. The number
+     * logged is then the same one the caller reports, which is the point — a log and an API
+     * response that disagree about what was freed are worse than either alone.
+     */
+    fun deleteRecursively(
+        dir: Path,
+        cause: DeletionCause,
+        bytes: Long = sessionBytes(dir),
+    ): Boolean = runCatching {
         Files.walk(dir).use { stream ->
             stream.sorted(Comparator.reverseOrder()).forEach { path ->
                 runCatching { Files.deleteIfExists(path) }
             }
         }
-        !Files.exists(dir)
+        val gone = !Files.exists(dir)
+        if (gone) {
+            println("inspector: deleted session ${dir.fileName} (${bytes / 1024} KB, ${cause.label})")
+        } else {
+            System.err.println("inspector: could not delete ${dir.fileName} (${cause.label}); something survived")
+        }
+        gone
     }.getOrElse {
-        System.err.println("inspector: could not delete $dir: ${it.message}")
+        System.err.println("inspector: could not delete $dir (${cause.label}): ${it.message}")
         false
     }
 

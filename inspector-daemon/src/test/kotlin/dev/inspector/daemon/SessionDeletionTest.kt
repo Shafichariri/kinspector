@@ -12,6 +12,8 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -81,6 +83,27 @@ class SessionDeletionTest {
 
     private fun url(path: String) = "http://127.0.0.1:${config.port}$path"
     private fun dir(id: String) = config.sessionsDir.resolve(id)
+
+    /**
+     * Captures stdout for the duration of [block].
+     *
+     * Asserting on a log line is unusual and is the point here: the line *is* the feature. An
+     * archive that loses sessions with nothing in the output to say what took them is
+     * indistinguishable from a bug in the daemon, which is exactly the position a missing-session
+     * report leaves you in. Every deletion happens inside the awaited call, so there is nothing
+     * to wait for once it returns.
+     */
+    private fun capturingStdout(block: () -> Unit): String {
+        val captured = ByteArrayOutputStream()
+        val original = System.out
+        System.setOut(PrintStream(captured, true))
+        try {
+            block()
+        } finally {
+            System.setOut(original)
+        }
+        return captured.toString()
+    }
 
     @Test
     fun deleting_a_session_removes_its_folder_and_leaves_the_others_alone() = runBlocking {
@@ -203,5 +226,51 @@ class SessionDeletionTest {
         assertEquals(409, response.status.value)
         assertContains(response.bodyAsText(), "still being written")
         assertTrue(dir(liveId).isDirectory())
+    }
+
+    @Test
+    fun deleting_a_session_says_so_on_stdout_with_its_size_and_its_cause() = runBlocking {
+        val log = capturingStdout {
+            runBlocking {
+                http.delete(url("/api/sessions/$older")) { header("X-Inspector-Control", "1") }
+            }
+        }
+
+        val line = log.lines().single { it.contains("deleted session") }
+        assertContains(line, older, message = "the line must name the session that went")
+        assertContains(line, "KB", message = "how much went is half of what you want to know")
+        assertContains(line, "requested", message = "and which of the three paths took it")
+    }
+
+    @Test
+    fun clearing_names_every_session_it_took_and_totals_them() = runBlocking {
+        val log = capturingStdout {
+            runBlocking { http.post(url("/api/sessions/clear")) { header("X-Inspector-Control", "1") } }
+        }
+
+        val perSession = log.lines().filter { it.contains("deleted session") }
+        assertEquals(2, perSession.size, "one line per session, not one line for the sweep")
+        assertTrue(perSession.any { it.contains(older) } && perSession.any { it.contains(newer) })
+        assertTrue(perSession.all { it.contains("clear all") }, "a sweep is not a single request")
+
+        // The summary is what you recognise in a scrollback without counting lines.
+        val summary = log.lines().single { it.contains("cleared") }
+        assertContains(summary, "2 session(s)")
+        assertContains(summary, "kept 0")
+    }
+
+    @Test
+    fun retention_names_itself_rather_than_looking_like_someone_asked() {
+        // Three causes exist so that a missing session can be attributed. If they all logged the
+        // same words the line would say a deletion happened and not which path took it, which is
+        // the half of the question that is hard to answer afterwards.
+        val log = capturingStdout {
+            Retention(config.copy(maxSessions = 1), repository).prune()
+        }
+
+        val line = log.lines().single { it.contains("deleted session") }
+        assertContains(line, older, message = "retention drops the oldest")
+        assertContains(line, "retention")
+        assertFalse(line.contains("requested"), "a prune is not a request")
     }
 }
