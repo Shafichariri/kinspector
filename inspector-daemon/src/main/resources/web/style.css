@@ -115,22 +115,37 @@ body { display: flex; flex-direction: column; }
 
 #panes {
   display: grid;
-  grid-template-columns: 220px minmax(320px, 1fr) minmax(360px, 1.1fr);
+  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* The tag browser carries its own detail panel, so it takes the transaction detail pane's track
    rather than being squeezed into the list column. The track has to go with it: hiding the pane
-   alone would leave the grid holding an empty third column. */
-#panes.panes-wide { grid-template-columns: 220px minmax(520px, 1fr); }
+   alone would leave the grid holding an empty second column. */
+#panes.panes-wide { grid-template-columns: minmax(520px, 1fr); }
 #panes.panes-wide #detail-pane { display: none; }
 
-#rail {
-  border-right: 1px solid var(--divider);
-  padding: 12px;
-  overflow-y: auto;
+/* --- the per-view toolbar ----------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
 }
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* `hidden` alone loses to the `display: flex` above — the same bug the panes already shipped
+   once. Every element this app shows and hides by toggling `hidden` needs its own override. */
+.toolbar[hidden] { display: none !important; }
 
 .rail-label {
   font-size: 11px;
@@ -138,30 +153,71 @@ body { display: flex; flex-direction: column; }
   color: var(--fg-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin: 16px 0 6px;
 }
-.rail-label:first-child { margin-top: 0; }
 
 #filter {
-  width: 100%;
+  /* Wide enough for a real filter expression, and the first thing to give width back when the
+     chips need to wrap. */
+  flex: 1 1 240px;
+  max-width: 380px;
+  min-width: 150px;
   background: var(--bg-elevated);
   color: var(--fg);
   border: 1px solid var(--divider);
   border-radius: 5px;
-  padding: 7px 8px;
+  padding: 5px 8px;
   font-family: var(--mono);
   font-size: 12px;
 }
 #filter:focus { outline: none; border-color: var(--accent); }
 
 .filter-error {
-  margin-top: 6px;
+  padding: 5px 10px;
   color: var(--warn);
   font-size: 11px;
   line-height: 1.4;
+  border-bottom: 1px solid var(--divider);
 }
 
-.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips[hidden] { display: none !important; }
+
+/* Popovers for the two things that were reference material taking up permanent space. */
+.pop {
+  position: absolute;
+  right: 10px;
+  z-index: 40;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+
+/* --- the now strip ------------------------------------------------------ */
+
+.now-strip { border-bottom: 1px solid var(--divider); flex: 0 0 auto; }
+.now-strip[hidden] { display: none !important; }
+
+.now-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.now-summary:hover { background: var(--bg-hover); }
+.now-caret { font-size: 9px; color: var(--fg-muted); }
+.now-strip.open .now-caret { transform: rotate(90deg); }
+/* Open, it is the same list it always was — capped, because "everything the app holds" can be
+   long and this is a strip, not a pane. */
+.now-strip .current { max-height: 220px; overflow-y: auto; padding: 0 10px 8px; }
 
 .chip {
   background: var(--bg-elevated);
@@ -209,6 +265,8 @@ kbd {
 
 #list-pane, #detail-pane { overflow-y: auto; position: relative; }
 #list-pane { border-right: 1px solid var(--divider); }
+/* One column, so the divider has nothing to divide. */
+#panes.panes-wide #list-pane { border-right: 0; }
 
 .row {
   display: flex;

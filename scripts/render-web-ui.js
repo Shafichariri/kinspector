@@ -629,6 +629,70 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * Controls belong to the view they act on.
+   *
+   * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
+   * something else entirely, above a list it cannot filter — which is what the rail was, for a
+   * fifth of the window, on five tabs out of seven.
+   */
+  async function probeToolbar() {
+    const result = { onTraffic: 'n/a', onBrowser: 'n/a', railGone: !doc.getElementById('rail') };
+    const tabOf = (view) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === view);
+
+    const network = tabOf('network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'shown';
+    }
+
+    const browser = [...doc.querySelectorAll('#tabs .tab')]
+      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    if (browser) {
+      await click(browser);
+      await new Promise((r) => setTimeout(r, 700));
+      result.onBrowser = doc.getElementById('toolbar').hidden
+        ? `hidden (on '${browser.dataset.view}')`
+        : `NO - still shown on '${browser.dataset.view}'`;
+      result.ownFilterInstead = doc.getElementById('browser-filter') ? 'yes' : 'NO';
+    }
+    return result;
+  }
+
+  /**
+   * `Now` is a summary, and a summary that takes 70% of a column is not one.
+   *
+   * The assertion is that it opens collapsed and still says something useful collapsed — a strip
+   * reading only "now" would have moved the problem rather than fixed it.
+   */
+  async function probeNowStrip() {
+    const all = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'all');
+    const result = { present: false, collapsedSummary: 'n/a', expandsTo: 0, collapsesBack: 'n/a' };
+    if (!all) return result;
+    await click(all);
+    await new Promise((r) => setTimeout(r, 500));
+
+    const strip = doc.getElementById('now-strip');
+    result.present = Boolean(strip) && !strip.hidden;
+    if (!result.present) return result;
+
+    const list = doc.getElementById('current');
+    result.startsCollapsed = list.hidden ? 'yes' : 'NO - opens expanded';
+    const summary = doc.getElementById('now-summary-text').textContent.trim();
+    result.collapsedSummary = summary || 'NO - the strip says nothing collapsed';
+
+    await click(doc.getElementById('now-toggle'));
+    await new Promise((r) => setTimeout(r, 250));
+    result.expandsTo = doc.querySelectorAll('#current .current-item').length;
+    await click(doc.getElementById('now-toggle'));
+    await new Promise((r) => setTimeout(r, 250));
+    result.collapsesBack = doc.getElementById('current').hidden ? 'yes' : 'NO';
+    return result;
+  }
+
+  const toolbarProbe = await probeToolbar();
+  const nowProbe = await probeNowStrip();
   const tabProbe = probeTabs();
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
@@ -646,7 +710,11 @@ window.navigator.clipboard = { writeText: async () => {} };
    */
   function auditHiddenPanes(cssText) {
     // Panes the app shows and hides by toggling `hidden`.
-    const panes = ['.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list'];
+    // `.toolbar` and `.now-strip` join the list because they are the newest members of exactly
+    // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
+    const panes = [
+      '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
+    ];
     const setsDisplay = new Set();
     const guarded = new Set();
     for (const [, selector, body] of cssText.matchAll(/([.#][A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
@@ -766,6 +834,14 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
   console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
   console.error('traffic tab first  :', tabProbe.trafficFirst);
+  console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
+  console.error('toolbar on traffic :', toolbarProbe.onTraffic);
+  console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
+  console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
+  console.error('now strip present  :', nowProbe.present);
+  console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
+  console.error('now says collapsed :', nowProbe.collapsedSummary);
+  console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
   console.error('tab labels         :', tabProbe.labels);
   console.error('long tokens wrap   :', auditLongTokenWrap(css), '(a bearer token must not widen the pane)');
 
