@@ -643,6 +643,7 @@
     $('detail-empty').hidden = true;
     pane.hidden = false;
     pane.innerHTML = '';
+    openDrawer();
 
     const head = el('div', 'detail-head');
     head.appendChild(el('span', `status s${statusClass(txn.status)}`, txn.status ?? 'ERR'));
@@ -814,11 +815,31 @@
     // there would put two filter boxes on screen that mean different things.
     $('toolbar').hidden = browsing;
     if (browsing) closePops();
+    // The drawer covers the list it was opened from. Carrying it across a tab switch would leave
+    // it sitting over a list that never produced it.
+    closeDrawer();
     // `Now` is the app's current state, which is only ever read beside the merged timeline.
     $('now-strip').hidden = !all || state.current.length === 0;
 
     if (all) renderTimeline();
     if (browsing) renderBrowser();
+  }
+
+  /**
+   * The detail pane, when it is a drawer rather than a column.
+   *
+   * The class is set at every width and only means anything under the media query, so there is no
+   * breakpoint to track in JS and nothing to re-synchronise on resize: drag the window wider and
+   * the drawer is simply a column again, still showing what it was showing.
+   */
+  function openDrawer() {
+    $('panes').classList.add('drawer-open');
+    $('drawer-scrim').hidden = false;
+  }
+
+  function closeDrawer() {
+    $('panes').classList.remove('drawer-open');
+    $('drawer-scrim').hidden = true;
   }
 
   /**
@@ -1623,6 +1644,7 @@
     $('detail-empty').hidden = true;
     detail.hidden = false;
     detail.innerHTML = '';
+    openDrawer();
 
     const head = el('div', 'detail-head');
     head.appendChild(el('span', 'tl-tag', signal.tag));
@@ -2268,6 +2290,7 @@
         state.selectedId = null;
         $('detail').hidden = true;
         $('detail-empty').hidden = false;
+        closeDrawer();
         for (const row of document.querySelectorAll('.row')) row.classList.remove('selected');
         break;
       case 'c': {
@@ -2322,6 +2345,9 @@
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
     wirePops();
+    $('drawer-close').addEventListener('click', closeDrawer);
+    // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
+    $('drawer-scrim').addEventListener('click', closeDrawer);
 
     $('now-toggle').addEventListener('click', () => {
       const strip = $('now-strip');

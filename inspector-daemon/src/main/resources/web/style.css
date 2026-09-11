@@ -118,6 +118,8 @@ body { display: flex; flex-direction: column; }
   grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);
   flex: 1 1 auto;
   min-height: 0;
+  /* The narrow-width drawer anchors to this. */
+  position: relative;
 }
 
 /* The tag browser carries its own detail panel, so it takes the transaction detail pane's track
@@ -267,6 +269,69 @@ kbd {
 #list-pane { border-right: 1px solid var(--divider); }
 /* One column, so the divider has nothing to divide. */
 #panes.panes-wide #list-pane { border-right: 0; }
+
+/* The close control and the scrim exist only in drawer mode; as a column there is nothing to
+   close and nothing to dim. */
+.drawer-close { display: none; }
+.drawer-scrim { display: none; }
+
+/* --- narrow: the detail pane becomes a drawer ---------------------------- */
+
+/*
+  Two columns need roughly 1200px before the list starts lying about what it holds. At 1100 the
+  list had 524px against a detail pane that was showing the words "select a transaction", and 37
+  of 40 paths truncated — the pane was spending more than half the window to say nothing.
+
+  So below the breakpoint the list takes the width and the detail slides over it on demand. A
+  drawer rather than a swap to a separate screen: the row you came from stays visible behind it,
+  which is the thing that makes "which call was this?" answerable without closing anything.
+*/
+@media (max-width: 1199px) {
+  #panes,
+  #panes.panes-wide { grid-template-columns: 1fr; }
+  #list-pane { border-right: 0; }
+
+  #detail-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(640px, 88%);
+    z-index: 30;
+    background: var(--bg);
+    border-left: 1px solid var(--divider);
+    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
+    transform: translateX(101%);   /* past its own border, so no sliver shows */
+    transition: transform 140ms ease-out;
+  }
+  #panes.drawer-open #detail-pane { transform: translateX(0); }
+
+  /* Nothing to open a drawer *to* while the tag browser owns the pane. */
+  #panes.panes-wide #detail-pane { display: none; }
+
+  .drawer-close {
+    display: block;
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 1;
+  }
+
+  .drawer-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgb(0 0 0 / 0.32);
+  }
+  .drawer-scrim[hidden] { display: none; }
+}
+
+/* Prefers-reduced-motion is not a style preference — a pane that flies in can be genuinely
+   unpleasant, and the drawer is just as usable arriving instantly. */
+@media (prefers-reduced-motion: reduce) {
+  #detail-pane { transition: none; }
+}
 
 .row {
   display: flex;
