@@ -294,6 +294,41 @@ the file, and the file wins over defaults:
 A malformed `config.json` is reported on stderr and ignored rather than blocking startup — a
 debugging tool that will not start because of its own settings file is worse than one on defaults.
 
+#### `signalCaps` — how many signal rows a session keeps, per tag
+
+The archive ceilings above count sessions and bytes. Inside one session, signals are trimmed per
+tag on close, because what a row costs varies by orders of magnitude: a `screen` row is a route
+name and a few arguments, while `cache` and `state` rows carry the value they observed.
+
+| Tag | Default | |
+|---|---|---|
+| `cache` | 500 | |
+| `state` | 500 | |
+| everything else | uncapped | including a tag this build has never heard of |
+
+Treat the defaults as a runaway guard for one unusually chatty session rather than a size budget —
+`maxSessions` and `maxTotalMb` are what actually bound the disk, and they apply across sessions
+where a per-tag cap cannot. There is no flag for this; it is `config.json` only.
+
+```json
+{ "signalCaps": { "cache": 2000, "screen": 5000, "state": null } }
+```
+
+Overrides **merge** over the defaults rather than replacing them, so naming one tag does not
+silently uncap the rest. That means:
+
+- **a number** caps that tag. `0` is honoured — "do not archive this tag" is a real thing to want.
+- **`null`** uncaps it. Since merging is the rule, this is the only way to say "keep every row".
+- **a negative number** is reported on stderr and ignored, like a malformed file.
+
+Tags match case-insensitively. Trimming happens when the session closes, keeps the newest rows by
+`mono`, writes the survivors back in their original append order, and deletes the payload files of
+the rows it drops.
+
+Uncapped is the default for a reason worth knowing before you change it: `screen` rows are the
+backbone of the merged timeline, so losing old ones leaves gaps in the very thing signals exist to
+build.
+
 Nothing here is encrypted and, with redaction off (the default), bodies and headers contain real
 credentials. Treat `~/.inspector` as you would a log directory full of tokens.
 
