@@ -613,6 +613,14 @@ Cutting a daemon release — the tag is the trigger, and the only thing that shi
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+**The docs half of a release goes through a pull request like anything else.** The coordinate bump
+and the `INTEGRATION.md` entry are a normal change to `main`, not part of the tag push, so they get
+a branch and a PR. `main` requires a review and both checks; `enforce_admins` is off, so an admin
+push *succeeds* and GitHub reports `Bypassed rule violations for refs/heads/main` after the fact.
+That a bypass is available is not a reason to take it, and release-docs commits being mechanical is
+not either — it is the mechanical-looking commits that get the least scrutiny. Waiting costs
+nothing: the tag is a separate step that comes after the docs land, and tags are not protected.
+
 `.github/workflows/release.yml` does two independent things on that tag. The **daemon** job builds
 the zip, unzips it, starts it and checks the web UI and the MCP server both answer, and only then
 publishes the release. The **library** job publishes all seven modules to GitHub Packages, and runs
