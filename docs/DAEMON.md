@@ -367,6 +367,30 @@ working; deleting the last session removes the link rather than leaving it dangl
 
 Nothing is recoverable. There is no trash.
 
+### What removed a session
+
+Because nothing is recoverable, every removal writes a line naming the session, its size and
+which of the three paths took it — a single request, the clear-all sweep, or retention hitting a
+ceiling:
+
+```
+inspector: deleted session 2026-08-17T05-57-58_myapp_Pixel-8_debug (412 KB, requested)
+inspector: deleted session 2026-08-16T21-03-11_myapp_Pixel-8_debug (1180 KB, clear all)
+inspector: deleted session 2026-08-14T08-22-40_myapp_Pixel-8_debug (904 KB, retention)
+inspector: cleared 2 session(s), kept 1, freed 1592 KB
+```
+
+`clear` adds that last total beside the per-session lines, since it is the call that removes many
+at once. A session that is skipped is named in the response's `kept`, not logged.
+
+This matters more than it looks. Sessions vanishing with nothing in the output to say what took
+them is indistinguishable from a bug in the daemon, and the archive is the only copy — so if you
+are ever short a session, the daemon's terminal is the first place to look, and the cause in that
+line is the half of the question that is hard to answer afterwards.
+
+If you run the daemon detached, keep its output: `inspector serve > ~/.inspector/daemon.log 2>&1 &`.
+Nothing rotates it, and nothing else writes these lines.
+
 ---
 
 ## 7. Reading sessions without the web UI
