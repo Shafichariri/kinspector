@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v21 — 2026-09-11.**
+**Document version: v22 — 2026-09-11.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.5.0")
-implementation("dev.inspector:inspector-ui:0.5.0")
+implementation("dev.inspector:inspector-core:0.5.1")
+implementation("dev.inspector:inspector-ui:0.5.1")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.5.0")
-            implementation("dev.inspector:inspector-ui:0.5.0")
+            implementation("dev.inspector:inspector-core:0.5.1")
+            implementation("dev.inspector:inspector-ui:0.5.1")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.5.0")
-                implementation("dev.inspector:inspector-noop-ui:0.5.0")
+                implementation("dev.inspector:inspector-noop:0.5.1")
+                implementation("dev.inspector:inspector-noop-ui:0.5.1")
             } else {
-                implementation("dev.inspector:inspector-core:0.5.0")
-                implementation("dev.inspector:inspector-ui:0.5.0")
+                implementation("dev.inspector:inspector-core:0.5.1")
+                implementation("dev.inspector:inspector-ui:0.5.1")
             }
         }
     }
@@ -361,13 +361,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.5.0")
-    implementation("dev.inspector:inspector-noop-ui:0.5.0")
-    implementation("dev.inspector:inspector-noop-stream:0.5.0")
+    implementation("dev.inspector:inspector-noop:0.5.1")
+    implementation("dev.inspector:inspector-noop-ui:0.5.1")
+    implementation("dev.inspector:inspector-noop-stream:0.5.1")
 } else {
-    implementation("dev.inspector:inspector-core:0.5.0")
-    implementation("dev.inspector:inspector-ui:0.5.0")
-    implementation("dev.inspector:inspector-stream:0.5.0")
+    implementation("dev.inspector:inspector-core:0.5.1")
+    implementation("dev.inspector:inspector-ui:0.5.1")
+    implementation("dev.inspector:inspector-stream:0.5.1")
 }
 ```
 
@@ -1130,7 +1130,34 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v21 — 2026-09-11 (this document)
+### v22 — 2026-09-11 (this document)
+
+**Nothing to do. Worth knowing the day an archived session is missing.**
+
+Deleting a session used to be silent. The archive is the only copy and there is no trash, so a
+session that vanished was indistinguishable from a bug in the daemon — and the hard question
+afterwards was never *that* something went, it was **which path took it**.
+
+Every removal now writes a line naming the session, its size and its cause:
+
+```
+inspector: deleted session 2026-08-17T05-57-58_app_dev_debug (412 KB, requested)
+inspector: deleted session 2026-08-16T21-03-11_app_dev_debug (1180 KB, clear all)
+inspector: deleted session 2026-08-14T08-22-40_app_dev_debug (904 KB, retention)
+inspector: cleared 2 session(s), kept 1, freed 1592 KB
+```
+
+`requested` is `DELETE /api/sessions/{id}` and the `✕` in the UI, `clear all` is the sweep, and
+`retention` is the daemon dropping the oldest to stay under `maxSessions` / `maxTotalMb`. The line
+comes from the one place a session folder is removed, so no deletion path can be silent.
+
+**If you run the daemon detached, keep its output** — `inspector serve > ~/.inspector/daemon.log
+2>&1 &`. Nothing rotates it, and nothing else writes these lines. `DAEMON.md` §6 has the detail.
+
+Released as 0.5.1, daemon-only again: the library modules are still byte-for-byte unchanged from
+0.3.0.
+
+### v21 — 2026-09-11
 
 **Released as 0.5.0. Rebuild the daemon — and if you record per-entry `cache` signals, you
 were losing them.**
