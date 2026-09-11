@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v22 — 2026-09-11.**
+**Document version: v23 — 2026-09-11.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -667,6 +667,13 @@ the app integration above**.
 Tools for traffic: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
 `get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`.
 
+`explain(id)` is the one to reach for when the question is **why** rather than **what**. It joins,
+in one call, what the others make you assemble by hand: the screen the app was on when the call
+started and how long it had been there, every attempt of a retried call, how often the same
+endpoint was hit, the signals either side of it — and the calls that were *in flight at the same
+moment*, which no other tool can tell you, because a call is an interval and everything else
+treats it as the instant it began. Headers are not inlined; `get_transaction` still has those.
+
 Tools for app state, if you record signals (§12): `timeline(filter, since, until, limit)` merges
 traffic, signals and markers on the device clock; `current(tag)` gives the latest observation per
 `(tag, name)` with its age; `list_signals(filter, limit, offset)` and `get_signal(id, maxBytes)`
@@ -1130,7 +1137,45 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v22 — 2026-09-11 (this document)
+### v23 — 2026-09-11 (this document)
+
+**Nothing to do. One new MCP tool, if you point an agent at your sessions.**
+
+`explain(session, id)` answers "why did this call go wrong" in one call. Everything in it was
+derivable before, and that was the problem: it took `get_transaction`, two windowed `timeline`
+calls, a scan for the shared `callId`, and interval arithmetic nothing exposed at all.
+
+```
+explain(session: "latest", id: "56f60e95")
+```
+
+```jsonc
+{
+  "call":   { "id": "56f60e95", "method": "GET", "url": "…/variables", "status": 200, "ms": 359 },
+  "screen": { "name": "KycReview", "arrivedMsBefore": 38 },   // the call fired 38ms after arriving
+  "concurrent": [ … ],                                        // what was in flight alongside it
+  "repeats": { "total": 2, "monos": [18, 73433] },
+  "attempts": [ … ],                                          // every try, when it was retried
+  "before": [ … ], "after": [ … ],                            // the signals either side
+  "notes": [ "1 other call(s) were in flight while this one ran" ]
+}
+```
+
+Three things worth knowing about the shape:
+
+- **`concurrent` is the part nothing else could give you.** A call is an interval; every other
+  tool treats it as the instant it started. This is what separates "slow" from "queued behind
+  four others".
+- **Headers are not inlined.** They were 3 KB of an 11 KB answer on a real call, and
+  `get_transaction` already returns them. A note in the reply says so.
+- **Empty fields are still present.** An empty `concurrent` means "nothing ran alongside this",
+  which is a finding — an agent that saw no key at all could not tell that from a daemon that
+  does not report overlap.
+
+This is daemon-side. Rebuild the daemon; nothing in your app or its build changes, and the
+library is untouched.
+
+### v22 — 2026-09-11
 
 **Nothing to do. Worth knowing the day an archived session is missing.**
 
