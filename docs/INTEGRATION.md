@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v20 — 2026-09-10.**
+**Document version: v21 — 2026-09-11.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1014,6 +1014,10 @@ from its `mono` until the next observation of the same key, so two observations 
 merely sparse, it is wrong. Name each entry's signal by a key that survives your own invalidation
 bookkeeping, so one entry keeps one identity across a session.
 
+One row per entry adds up, and the archive trims `cache` to its newest 500 rows per session when
+the session closes. That is generous for most caches and is not for all of them; §12h says how to
+raise it.
+
 The two are told apart in the archive by `trigger`: `app` for a push, `request` for a pull. **This
 distinction is load-bearing.** An agent handed a cache snapshot with no provenance will report it
 as the current state of the cache — and if that snapshot was pushed at app start twenty minutes
@@ -1076,6 +1080,20 @@ side.
 Both `minIntervalMs` and `ringBufferMaxBytes` are starting guesses rather than measurements. If you
 tune them against a real session, that is worth reporting back (§13).
 
+**The archive has its own, separate cap.** Everything above bounds what the *library* holds in
+memory and sends. What the daemon *keeps on disk* is trimmed per tag when a session closes:
+`cache` and `state` keep their newest 500 rows, and every other tag is kept in full. So a signal
+can be delivered, shown live, and still not be in the session you open tomorrow.
+
+Raise it in `~/.inspector/config.json` on your Mac — it is daemon-side, so it is not in
+`InspectorConfig` and does not need a rebuild of your app:
+
+```json
+{ "signalCaps": { "cache": 2000 } }
+```
+
+Overrides merge over the defaults, `null` uncaps a tag, and `DAEMON.md` §6 has the full rules.
+
 ---
 
 ## 13. What to report back
@@ -1112,7 +1130,34 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v20 — 2026-09-10 (this document)
+### v21 — 2026-09-11 (this document)
+
+**Rebuild the daemon if you record per-entry `cache` signals — you were losing them.**
+
+The archive trims signal rows per tag when a session closes. `cache` was capped at 20, set when a
+cache signal meant one whole-cache snapshot and 20 rows bought 20 points in time. Since v18 this
+document tells you to emit a row per entry write, removal and scope invalidation instead — against
+which 20 rows does not reliably span 20 distinct *keys*, so past the cap the cache tab stops losing
+history and starts losing whole keys. It bound routinely rather than at an extreme.
+
+**The default is now 500**, matching `state`. Nothing you emit changes, no call site moves, and the
+library is untouched — this is daemon-side only, so a new daemon is the whole upgrade. Sessions
+already trimmed on disk cannot be recovered; re-record one if you were relying on it.
+
+The caps are also **configurable now**, which they were advertised as being and silently were not:
+a `signalCaps` block in `~/.inspector/config.json` parsed, was discarded, and said nothing. It is
+honoured, and `DAEMON.md` §6 documents it:
+
+```json
+{ "signalCaps": { "cache": 2000, "screen": 5000, "state": null } }
+```
+
+Overrides merge over the defaults, so naming one tag does not uncap the others; `null` uncaps a
+tag, `0` means "do not archive this tag at all", and a negative number is reported and ignored.
+Per-tag caps are a runaway guard for one chatty session — `maxSessions` and `maxTotalMb` are what
+bound the disk.
+
+### v20 — 2026-09-10
 
 **Released as 0.4.0. Rebuild the daemon; the library needs nothing.**
 

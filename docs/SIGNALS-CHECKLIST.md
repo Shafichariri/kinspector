@@ -138,8 +138,11 @@ Recorded here because `SIGNALS.md` left them open:
   `session_summary` still first: it is the cheaper orienting call, and it now reports
   `currentScreen` and signal counts, which is often enough to decide whether the timeline is
   worth reading at all.
-- **Per-tag retention defaults.** `cache` 20, `state` 500, everything else uncapped. Still a
-  guess — see below.
+- **Per-tag retention defaults.** `cache` and `state` 500, everything else uncapped, and
+  overridable per tag from `config.json`. `cache` was 20 while a cache signal meant one whole-cache
+  snapshot; the per-entry recipe in `INTEGRATION.md` v18 made 20 bind routinely — below the number
+  of distinct *keys*, not just the depth of their history — so it now matches `state`. Per-tag
+  caps are a runaway guard for one chatty session; `maxSessions` and `maxTotalMb` bound the disk.
 
 ## Known guesses
 
@@ -147,7 +150,11 @@ Not defects, but do not let them harden into recommendations unexamined:
 
 - The 150 ms conflation window.
 - The 2 MB signal ring budget.
-- The per-tag retention caps (`cache` 20, `state` 500, everything else uncapped).
 
 Revisit both against one real session before `INTEGRATION.md` presents them as defaults worth
 keeping.
+
+The per-tag retention caps have left this list: `cache` 20 was measured against real sessions and
+found to bind routinely, and the caps are configurable now rather than only being a constant. The
+remaining judgement in them is where "chatty enough to be a runaway" sits, which only an archive
+that actually fills will settle.
