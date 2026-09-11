@@ -765,6 +765,83 @@ window.navigator.clipboard = { writeText: async () => {} };
     return missing.length ? `NO - ${missing.join('; ')}` : 'yes';
   }
 
+  /**
+   * The transaction detail: one face at a time, response first.
+   *
+   * The assertions that matter are ordering ones. That the response body is the *first* thing in
+   * the default tab is the entire change — it used to be the last of five sections, behind every
+   * header on both sides of the call. And that redaction and the attempt chain stay *outside* the
+   * tabs: both are corrections to what the rest of the pane appears to say, and a correction you
+   * have to go and find is not one.
+   */
+  async function probeDetailTabs() {
+    const result = { tabs: [], defaultTab: 'n/a', firstSection: 'n/a', onePanel: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    const rows = [...doc.querySelectorAll('#list .row')];
+    let withChain = null;
+    for (const row of rows) {
+      await click(row);
+      await new Promise((r) => setTimeout(r, 260));
+      if (doc.querySelectorAll('#detail .chain-row').length) { withChain = row; break; }
+    }
+    if (withChain) {
+      const kids = [...doc.getElementById('detail').children];
+      const tabsAt = kids.findIndex((k) => k.classList.contains('dtabs'));
+      const chainAt = kids.findIndex((k) => k.classList.contains('chain-row'));
+      result.chainPinned = chainAt !== -1 && chainAt < tabsAt
+        ? 'above the tabs'
+        : 'NO - an attempt chain is tabbed away';
+    } else {
+      result.chainPinned = 'n/a (no chained call in this session)';
+    }
+
+    const row = rows.find(Boolean);
+    if (!row) return result;
+    await click(row);
+    await new Promise((r) => setTimeout(r, 500));
+
+    const detail = doc.getElementById('detail');
+    result.tabs = [...detail.querySelectorAll('.dtab')].map((t) => t.dataset.dtab);
+    result.defaultTab = detail.querySelector('.dtab.active')?.dataset.dtab ?? 'none';
+    const open = detail.querySelector('.dtab-panel:not([hidden])');
+    result.firstSection = open?.querySelector('.section-title')?.textContent ?? 'none';
+    result.bodyBeforeHeaders = (() => {
+      if (!open) return 'n/a';
+      const kids = [...open.children];
+      const body = kids.findIndex((k) => k.tagName === 'PRE' || k.classList.contains('muted'));
+      const headers = kids.findIndex((k) => k.classList.contains('headers'));
+      return body !== -1 && headers !== -1 && body < headers
+        ? 'yes'
+        : `NO - body at ${body}, headers at ${headers}`;
+    })();
+    result.onePanel = detail.querySelectorAll('.dtab-panel:not([hidden])').length === 1
+      ? 'yes'
+      : `NO - ${detail.querySelectorAll('.dtab-panel:not([hidden])').length} showing`;
+
+    const req = [...detail.querySelectorAll('.dtab')].find((t) => t.dataset.dtab === 'req');
+    if (req) {
+      await click(req);
+      await new Promise((r) => setTimeout(r, 200));
+      result.switches = detail.querySelector('.dtab.active')?.dataset.dtab === 'req'
+        ? 'yes'
+        : 'NO';
+      // Comparing one field down a list means picking the same tab on every row otherwise.
+      const other = rows[1] || rows[0];
+      await click(other);
+      await new Promise((r) => setTimeout(r, 400));
+      result.remembersAcrossRows = doc.querySelector('#detail .dtab.active')?.dataset.dtab === 'req'
+        ? 'yes'
+        : 'NO - reset to response';
+    }
+    return result;
+  }
+
+  const detailTabProbe = await probeDetailTabs();
   const drawerProbe = await probeDrawer();
   const toolbarProbe = await probeToolbar();
   const nowProbe = await probeNowStrip();
@@ -847,7 +924,10 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('session label      :', doc.getElementById('session-app').textContent);
   console.error('markers listed     :', doc.querySelectorAll('#markers li').length);
   console.error('detail visible     :', !doc.getElementById('detail').hidden);
-  console.error('detail sections    :', doc.querySelectorAll('#detail .section-title').length);
+  console.error(
+    'detail sections    :', doc.querySelectorAll('#detail .section-title').length,
+    '(pinned ones plus the open tab, not all five faces)',
+  );
   console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
   console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
   const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
@@ -918,6 +998,12 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
   console.error('now says collapsed :', nowProbe.collapsedSummary);
   console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
+  console.error('detail default tab :', detailTabProbe.defaultTab, '- opens on:', detailTabProbe.firstSection);
+  console.error('body before headers:', detailTabProbe.bodyBeforeHeaders ?? 'n/a', '(the reason you opened the row)');
+  console.error('one panel at a time:', detailTabProbe.onePanel);
+  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a', '- remembered:', detailTabProbe.remembersAcrossRows ?? 'n/a');
+  console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
   console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
   console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
