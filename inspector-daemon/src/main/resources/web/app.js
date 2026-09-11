@@ -56,6 +56,9 @@
     browserFacets: {},
     browserKey: null,
     browserObservation: null,
+    // Collapsed timeline runs the user has opened, by run key. Held in state rather than in the
+    // DOM so an expanded run survives the re-render that every live signal triggers.
+    expandedRuns: new Set(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -259,11 +262,19 @@
   /** Every view this session can offer, in tab order. */
   function availableViews() {
     const views = [];
+    // Traffic first, and it is where a session opens. This is a network debugger: in a real
+    // session the merged timeline ran 126 rows of which 13 were calls, so landing there puts
+    // what you came for at one row in ten. The merge is a correlation tool you reach for once
+    // you know which call you care about, which makes it the second tab, not the first.
+    views.push({ id: 'network', label: 'traffic', title: 'HTTP calls', count: state.transactions.length });
     // Merging is only worth a tab when there is something to merge with the traffic.
     if (state.signals.length) {
-      views.push({ id: 'all', label: 'all', title: 'Traffic, signals and markers on one timeline' });
+      views.push({
+        id: 'all',
+        label: 'timeline',
+        title: 'Traffic, signals and markers on one timeline',
+      });
     }
-    views.push({ id: 'network', label: 'network', title: 'HTTP calls', count: state.transactions.length });
     for (const tag of tagsInSession()) {
       views.push({
         id: tag,
@@ -329,8 +340,6 @@
     // session and the current view falls back rather than pointing at nothing.
     const ids = availableViews().map((view) => view.id);
     if (!ids.includes(state.view)) state.view = 'network';
-    // The merge is the value, so a session that has something to merge opens on it.
-    if (!state.viewChosenForSession && ids.includes('all')) state.view = 'all';
     state.viewChosenForSession = true;
 
     renderTabs();
@@ -1323,6 +1332,43 @@
     return ends;
   }
 
+  /**
+   * How many adjacent identical observations it takes before they are worth collapsing.
+   *
+   * Two is not clutter and hiding it behind a twisty costs more than it saves. Three is where a
+   * run starts pushing other lanes off the screen.
+   */
+  const RUN_THRESHOLD = 3;
+
+  /** What makes two adjacent rows "the same thing happening again". Transactions never group. */
+  const runKeyOf = (entry) =>
+    entry.kind === 'signal' ? `${entry.signal.tag}\u0000${entry.signal.name}` : null;
+
+  /**
+   * Groups *consecutive* identical observations.
+   *
+   * A state holder that emits on every keystroke produces dozens of adjacent rows differing only
+   * in a payload you cannot see from the row — one real session had 48 in a row — and they push
+   * the traffic the timeline exists to correlate clean off the screen.
+   *
+   * Only adjacent rows group. A run interrupted by a call or a screen change is information: it
+   * says the state settled, something else happened, and it moved again. Collapsing across that
+   * gap would erase the very ordering the merged view is for.
+   */
+  function timelineRuns(entries) {
+    const runs = [];
+    for (const entry of entries) {
+      const key = runKeyOf(entry);
+      const open = runs[runs.length - 1];
+      if (key !== null && open && open.key === key) open.entries.push(entry);
+      else runs.push({ key, entries: [entry] });
+    }
+    return runs;
+  }
+
+  /** Stable across re-renders: signal ids are, and the first of a run does not move. */
+  const runIdOf = (run) => `${run.key}\u0000${run.entries[0].signal.id}`;
+
   function renderTimeline() {
     if (state.view !== 'all') return;
     const root = $('timeline');
@@ -1346,14 +1392,66 @@
     const first = monos.length ? Math.min(...monos) : 0;
     const last = monos.length ? Math.max(...monos) : 0;
     const span = Math.max(1, last - first);
-    for (const entry of entries) {
-      root.appendChild(timelineRow(entry, ends, last, span));
+    for (const run of timelineRuns(entries)) {
+      const collapsible = run.entries.length >= RUN_THRESHOLD;
+      if (collapsible && !state.expandedRuns.has(runIdOf(run))) {
+        root.appendChild(runRow(run));
+        continue;
+      }
+      if (collapsible) root.appendChild(runRow(run, { expanded: true }));
+      for (const entry of run.entries) root.appendChild(timelineRow(entry, ends, last, span));
     }
 
     if (state.liveTail) {
       const pane = root.parentElement;
       pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
     }
+  }
+
+  /**
+   * One row standing in for a run of identical observations, or the header above an expanded one.
+   *
+   * It reports the count and the wall of time the run covers, which is the part a collapsed run
+   * must not lose: "48 times" and "48 times over 23 seconds" mean different things about the app.
+   */
+  function runRow(run, { expanded = false } = {}) {
+    const first = run.entries[0].signal;
+    const lane = laneFor(first.tag);
+    const node = el('div', `tl-row tl-run lane-${lane}${expanded ? ' tl-run-open' : ''}`);
+    node.dataset.kind = 'run';
+    node.dataset.lane = lane;
+    node.dataset.tag = first.tag;
+    node.dataset.runId = runIdOf(run);
+    node.tabIndex = 0;
+
+    node.appendChild(el('span', 'tl-twisty', expanded ? '\u25be' : '\u25b8'));
+    node.appendChild(el('span', 'tl-tag', first.tag));
+    node.appendChild(el('span', 'tl-name', first.name));
+    node.appendChild(el('span', 'tl-run-count mono', `\u00d7${run.entries.length}`));
+
+    const monos = run.entries.map((entry) => entry.mono);
+    const from = Math.min(...monos);
+    const to = Math.max(...monos);
+    const held = el('span', 'tl-mono muted mono', from === to ? `${from}ms` : `${from}\u2013${to}ms`);
+    held.title = expanded
+      ? 'collapse these observations'
+      : `${run.entries.length} observations over ${to - from} ms — click to expand`;
+    node.appendChild(held);
+
+    const toggle = () => {
+      const id = runIdOf(run);
+      if (state.expandedRuns.has(id)) state.expandedRuns.delete(id);
+      else state.expandedRuns.add(id);
+      renderTimeline();
+    };
+    node.addEventListener('click', toggle);
+    node.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+    return node;
   }
 
   function timelineRow(entry, ends, lastMono, sessionSpan) {
