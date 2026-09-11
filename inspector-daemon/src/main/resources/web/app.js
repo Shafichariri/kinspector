@@ -348,6 +348,7 @@
     renderTabs();
     renderCurrent();
     applyView();
+    if ($('detail').hidden) renderSessionGlance();
   }
 
   /**
@@ -882,6 +883,8 @@
     // The drawer covers the list it was opened from. Carrying it across a tab switch would leave
     // it sitting over a list that never produced it.
     closeDrawer();
+    // Nothing selected means the pane is free to say something useful about the session instead.
+    if (!browsing && $('detail').hidden) renderSessionGlance();
     // `Now` is the app's current state, which is only ever read beside the merged timeline.
     $('now-strip').hidden = !all || state.current.length === 0;
 
@@ -1254,18 +1257,146 @@
     const selected = shown.find((g) => g.key === state.browserKey)
       || shown.find((g) => g.key === state.browserKey)
       || null;
-    renderBrowserDetail(selected || (state.browserKey ? groups.find((g) => g.key === state.browserKey) : null));
+    renderBrowserDetail(
+      selected || (state.browserKey ? groups.find((g) => g.key === state.browserKey) : null),
+      groups,
+      tag,
+    );
   }
 
   // --- detail ---------------------------------------------------------------
 
-  function renderBrowserDetail(group) {
-    const pane = $('browser-detail');
+  /**
+   * The empty state, doing the orienting.
+   *
+   * "select a transaction" occupied more than half the window and told you something you could
+   * already see. The session it is sitting in front of has an answer to "what happened here",
+   * and the page already holds every number needed to give it — so nothing new is fetched and
+   * this works identically on an archive recorded months ago.
+   *
+   * Every line is a way in, not a readout: a slow call selects it, an error filters to the
+   * errors, a tag opens that tag's tab. An empty state that can only be read is a poster.
+   */
+  function glanceRow(label, value, onClick) {
+    const row = el('div', `glance-row${onClick ? ' glance-click' : ''}`);
+    row.appendChild(el('span', 'glance-label muted', label));
+    row.appendChild(el('span', 'glance-value', value));
+    if (onClick) {
+      row.tabIndex = 0;
+      row.addEventListener('click', onClick);
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(); }
+      });
+    }
+    return row;
+  }
+
+  function renderSessionGlance() {
+    const pane = $('detail-empty');
     pane.innerHTML = '';
-    if (!group) {
+    const txns = state.allTransactions.length ? state.allTransactions : state.transactions;
+    if (!txns.length && !state.signals.length) {
+      pane.className = 'empty muted';
+      pane.textContent = 'select a transaction';
+      return;
+    }
+    pane.className = 'glance';
+
+    const failed = txns.filter((t) => t.error || (t.status ?? 0) >= 400);
+    pane.appendChild(el('div', 'glance-title', 'This session'));
+    pane.appendChild(glanceRow('calls', String(txns.length)));
+    if (failed.length) {
+      pane.appendChild(glanceRow(
+        'failed',
+        `${failed.length} — show them`,
+        () => { $('filter').value = 'status>=400 | has:error'; applyFilter(); },
+      ));
+    }
+
+    // Hosts, because "which backend is this even talking to" is the first question on an app you
+    // did not write.
+    const hosts = new Map();
+    for (const txn of txns) hosts.set(txn.host, (hosts.get(txn.host) || 0) + 1);
+    const topHosts = [...hosts].sort((a, b) => b[1] - a[1]).slice(0, 3);
+    for (const [host, n] of topHosts) {
+      pane.appendChild(glanceRow('host', `${host} · ${n}`, () => {
+        $('filter').value = `host:${host}`;
+        applyFilter();
+      }));
+    }
+
+    const slowest = [...txns].filter((t) => t.ms != null).sort((a, b) => b.ms - a.ms).slice(0, 3);
+    if (slowest.length) {
+      pane.appendChild(el('div', 'glance-title', 'Slowest'));
+      for (const txn of slowest) {
+        pane.appendChild(glanceRow(fmtMs(txn.ms), `${txn.method} ${txn.path}`, () => select(txn.id)));
+      }
+    }
+
+    if (state.signals.length) {
+      pane.appendChild(el('div', 'glance-title', 'Recorded alongside'));
+      const byTag = new Map();
+      for (const signal of state.signals) {
+        const tag = tagOf(signal);
+        byTag.set(tag, (byTag.get(tag) || 0) + 1);
+      }
+      for (const [tag, n] of [...byTag].sort((a, b) => b[1] - a[1])) {
+        pane.appendChild(glanceRow(tag, `${n} — open`, () => selectView(tag)));
+      }
+    }
+
+    const screen = state.current.find((signal) => tagOf(signal) === 'screen');
+    if (screen) pane.appendChild(glanceRow('on screen', screen.name));
+  }
+
+  /** The same idea, for a tag browser: what is in here, and what changed most recently. */
+  function renderTagGlance(groups, tag) {
+    const pane = $('browser-detail');
+    pane.className = 'browser-detail glance';
+    pane.innerHTML = '';
+    if (!groups.length) {
+      pane.className = 'browser-detail';
       pane.appendChild(el('div', 'empty muted', 'select a key'));
       return;
     }
+
+    const observations = groups.reduce((n, group) => n + group.rows.length, 0);
+    pane.appendChild(el('div', 'glance-title', `${tag} in this session`));
+    pane.appendChild(glanceRow('keys', String(groups.length)));
+    pane.appendChild(glanceRow('observations', String(observations)));
+
+    // Newest first regardless of the sort toggle: "what changed last" does not reverse.
+    const byRecency = [...groups].sort((a, b) => b.latest.mono - a.latest.mono);
+    pane.appendChild(el('div', 'glance-title', 'Changed most recently'));
+    for (const group of byRecency.slice(0, 5)) {
+      const row = glanceRow(
+        readableKey(group.key),
+        `${group.rows.length}\u00d7`,
+        () => { state.browserKey = group.key; state.browserObservation = null; renderBrowser(); },
+      );
+      row.appendChild(ageNode(group.latest.ts, 'glance-age muted mono'));
+      pane.appendChild(row);
+    }
+
+    const busiest = [...groups].sort((a, b) => b.rows.length - a.rows.length)[0];
+    if (busiest && busiest.rows.length > 1) {
+      pane.appendChild(el('div', 'glance-title', 'Changed most often'));
+      pane.appendChild(glanceRow(
+        readableKey(busiest.key),
+        `${busiest.rows.length}\u00d7`,
+        () => { state.browserKey = busiest.key; state.browserObservation = null; renderBrowser(); },
+      ));
+    }
+  }
+
+  function renderBrowserDetail(group, groups, tag) {
+    const pane = $('browser-detail');
+    pane.innerHTML = '';
+    if (!group) {
+      renderTagGlance(groups || [], tag || state.view);
+      return;
+    }
+    pane.className = 'browser-detail';
 
     const rows = state.newestFirst ? [...group.rows].reverse() : group.rows;
     const chosen = group.rows.find((r) => r.signalId === state.browserObservation) || group.latest;
@@ -2354,6 +2485,7 @@
         state.selectedId = null;
         $('detail').hidden = true;
         $('detail-empty').hidden = false;
+        renderSessionGlance();
         closeDrawer();
         for (const row of document.querySelectorAll('.row')) row.classList.remove('selected');
         break;

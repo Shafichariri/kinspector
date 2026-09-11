@@ -824,6 +824,43 @@ pre.body {
 .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
 .tab-count { font-size: 10px; font-variant-numeric: tabular-nums; }
 
+/* --- the glance (what an empty pane says) -------------------------------- */
+
+/* Deliberately not centred like `.empty`: this is content now, and centred content that grows
+   and shrinks as a session records is hard to read and harder to click. */
+.glance { padding: 14px 16px; font-size: 12px; overflow-y: auto; }
+
+.glance-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 14px 0 6px;
+}
+.glance-title:first-child { margin-top: 0; }
+
+.glance-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+.glance-label {
+  flex: 0 0 auto;
+  min-width: 86px;
+  font-size: 11px;
+}
+.glance-value { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glance-age { flex: 0 0 auto; font-size: 11px; }
+
+/* Only the rows that go somewhere look like they do. */
+.glance-click { cursor: pointer; }
+.glance-click:hover { background: var(--bg-hover); }
+.glance-click:hover .glance-value { color: var(--accent); }
+.glance-click:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+
 /* --- detail tabs --------------------------------------------------------- */
 
 /* Deliberately quieter than the view tabs above: these switch a face of one row, not the whole
