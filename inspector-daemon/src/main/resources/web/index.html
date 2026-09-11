@@ -161,9 +161,18 @@
     </section>
 
     <section id="detail-pane">
+      <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
+      <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet"
+              title="Close (Esc)">&#10005;</button>
       <div id="detail-empty" class="empty muted">select a transaction</div>
       <div id="detail" hidden></div>
     </section>
+
+    <!--
+      Below the breakpoint the detail pane stops being a column and slides over the list, so the
+      list keeps the full width it needs. Out of flow, so it adds no grid track.
+    -->
+    <div id="drawer-scrim" class="drawer-scrim" hidden></div>
   </main>
 
   <dialog id="settings" class="settings">

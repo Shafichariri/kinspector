@@ -691,6 +691,81 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * The narrow-width drawer.
+   *
+   * Split in two on purpose. Whether it *opens and closes* is behaviour and is driven here;
+   * whether it is a drawer *at all* is a media query, and jsdom has no layout, so that half is
+   * read out of the stylesheet — a computed-style check would pass with the whole media block
+   * deleted, the same trap `auditHiddenPanes` and the long-token guard already avoid. The
+   * geometry itself was measured in a browser and is recorded in the commit.
+   */
+  async function probeDrawer() {
+    const result = { opensOnSelect: 'n/a', scrim: 'n/a', closeButton: 'n/a', escape: 'n/a', tabSwitch: 'n/a' };
+    const panes = doc.getElementById('panes');
+    const isOpen = () => panes.classList.contains('drawer-open');
+
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    const row = doc.querySelector('#list .row');
+    if (!row) return result;
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 400));
+    result.opensOnSelect = isOpen() ? 'yes' : 'NO - selecting a row left it shut';
+    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'shown';
+
+    await click(doc.getElementById('drawer-close'));
+    await new Promise((r) => setTimeout(r, 200));
+    result.closeButton = isOpen() ? 'NO' : 'closes';
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    await click(doc.getElementById('drawer-scrim'));
+    await new Promise((r) => setTimeout(r, 200));
+    result.scrimCloses = isOpen() ? 'NO' : 'closes';
+
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 200));
+    result.escape = isOpen() ? 'NO' : 'closes';
+
+    // A drawer covers the list it came from; carrying it across a tab switch would leave it
+    // sitting over a list that never produced it.
+    await click(row);
+    await new Promise((r) => setTimeout(r, 300));
+    const other = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view !== 'network');
+    if (other) {
+      await click(other);
+      await new Promise((r) => setTimeout(r, 700));
+      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'closes';
+    }
+    return result;
+  }
+
+  /** Is the detail pane a drawer at all below the breakpoint? Read from the stylesheet. */
+  function auditDrawerCss(cssText) {
+    const block = cssText.match(/@media \(max-width: \d+px\) \{([\s\S]*?)\n\}/);
+    if (!block) return 'NO - no narrow-width media block';
+    const body = block[1];
+    // Anchored at the end of the declaration: `1fr` alone also prefix-matches `1fr 1fr`, which
+    // is the exact two-column layout this is supposed to catch.
+    const oneColumn = /#panes[^{]*\{[^}]*grid-template-columns:\s*1fr\s*[;}]/.test(body);
+    const floats = /#detail-pane\s*\{[^}]*position:\s*absolute/.test(body);
+    const slides = /drawer-open[^{]*#detail-pane\s*\{[^}]*translateX\(0\)/.test(body);
+    const missing = [
+      !oneColumn && 'the list does not take the full width',
+      !floats && 'the detail pane is still in flow',
+      !slides && 'nothing brings the drawer on screen',
+    ].filter(Boolean);
+    return missing.length ? `NO - ${missing.join('; ')}` : 'yes';
+  }
+
+  const drawerProbe = await probeDrawer();
   const toolbarProbe = await probeToolbar();
   const nowProbe = await probeNowStrip();
   const tabProbe = probeTabs();
@@ -714,6 +789,7 @@ window.navigator.clipboard = { writeText: async () => {} };
     // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
     const panes = [
       '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
+      '.drawer-scrim',
     ];
     const setsDisplay = new Set();
     const guarded = new Set();
@@ -842,6 +918,10 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
   console.error('now says collapsed :', nowProbe.collapsedSummary);
   console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
+  console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
+  console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
+  console.error('drawer on tab swap :', drawerProbe.tabSwitch);
   console.error('tab labels         :', tabProbe.labels);
   console.error('long tokens wrap   :', auditLongTokenWrap(css), '(a bearer token must not widen the pane)');
 
