@@ -824,6 +824,37 @@ pre.body {
 .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
 .tab-count { font-size: 10px; font-variant-numeric: tabular-nums; }
 
+/* --- detail tabs --------------------------------------------------------- */
+
+/* Deliberately quieter than the view tabs above: these switch a face of one row, not the whole
+   screen, and two tab bars competing for the same weight would make the page read as two apps. */
+.dtabs {
+  display: flex;
+  gap: 2px;
+  margin: 14px 0 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.dtab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 11px;
+  padding: 5px 10px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dtab:hover { color: var(--fg); background: var(--bg-hover); }
+.dtab.active { color: var(--fg); border-bottom-color: var(--accent); }
+.dtab-hint { font-size: 10px; font-variant-numeric: tabular-nums; }
+
+/* The panel's own first section title would otherwise sit hard against the tab bar. */
+.dtab-panel > .section-title:first-child { margin-top: 12px; }
+
 /* --- tag browser --------------------------------------------------------- */
 
 .browser { display: flex; flex-direction: column; height: 100%; min-height: 0; }

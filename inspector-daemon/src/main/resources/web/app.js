@@ -56,6 +56,9 @@
     browserFacets: {},
     browserKey: null,
     browserObservation: null,
+    // Which face of the transaction detail is showing. Remembered across selections: comparing
+    // request bodies down a list means picking the same tab on every row otherwise.
+    detailTab: 'res',
     // Collapsed timeline runs the user has opened, by run key. Held in state rather than in the
     // DOM so an expanded run survives the re-render that every live signal triggers.
     expandedRuns: new Set(),
@@ -669,21 +672,13 @@
     replayBtn.onclick = () => runReplay(txn, pane, replayBtn);
     head.appendChild(replayBtn);
 
-    pane.appendChild(el('div', 'section-title', 'Overview'));
-    const kv = el('dl', 'kv');
-    const put = (k, v) => { kv.appendChild(el('dt', null, k)); kv.appendChild(el('dd', null, v)); };
-    put('URL', urlOf(txn));
-    put('Status', txn.status ?? 'transport failure');
-    if (txn.error) put('Error', txn.error);
-    put('Duration', fmtMs(txn.ms));
-    put('Request size', fmtBytes(txn.reqBytes));
-    put('Response size', fmtBytes(txn.resBytes));
-    put('Started', txn.ts);
-    pane.appendChild(kv);
-
+    // Pinned above the tabs, both of them, because neither is something to go looking for.
+    //
+    // Redaction says credentials were *removed*, and a reader who does not see it concludes none
+    // were sent. An attempt chain means this row is one of several for the same call — read it as
+    // the whole story and you are reading a retry as the only try. Tabbing away either of those
+    // would hide a correction to what the rest of the pane appears to say.
     if (txn.redacted && txn.redacted.length) {
-      // Say it was removed, not that it was absent — otherwise a reader concludes no
-      // credentials were sent.
       pane.appendChild(el('div', 'section-title', 'Redacted at capture'));
       pane.appendChild(el('div', 'banner redacted', txn.redacted.join(', ')));
     }
@@ -702,8 +697,63 @@
       }
     }
 
-    appendSide(pane, 'Request', txn, 'req', reqBody);
-    appendSide(pane, 'Response', txn, 'res', resBody);
+    /*
+      One face at a time, response first.
+
+      This was a single scroll: overview, request headers, request body, response headers,
+      response body. The response body is what you opened the row for and it was last, behind
+      roughly forty lines of headers — and headers are exactly the thing that is long, unreadable
+      and rarely what you want. Three tabs, and the one you came for is already showing.
+    */
+    const panels = {
+      res: sidePanel(txn, 'res', resBody),
+      req: sidePanel(txn, 'req', reqBody),
+      overview: overviewPanel(txn),
+    };
+
+    const bar = el('div', 'dtabs');
+    const faces = [
+      ['res', 'response', fmtBytes(txn.resBytes)],
+      ['req', 'request', txn.reqBytes ? fmtBytes(txn.reqBytes) : null],
+      ['overview', 'overview', null],
+    ];
+    if (!panels[state.detailTab]) state.detailTab = 'res';
+
+    const paint = () => {
+      for (const button of bar.querySelectorAll('.dtab')) {
+        button.classList.toggle('active', button.dataset.dtab === state.detailTab);
+      }
+      for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== state.detailTab;
+    };
+
+    for (const [name, label, hint] of faces) {
+      const button = el('button', 'dtab');
+      button.dataset.dtab = name;
+      button.appendChild(el('span', null, label));
+      // The size on the tab answers "is there even a body in there" without opening it.
+      if (hint) button.appendChild(el('span', 'dtab-hint muted mono', hint));
+      button.addEventListener('click', () => { state.detailTab = name; paint(); });
+      bar.appendChild(button);
+    }
+    pane.appendChild(bar);
+    for (const panel of Object.values(panels)) pane.appendChild(panel);
+    paint();
+  }
+
+  function overviewPanel(txn) {
+    const panel = el('div', 'dtab-panel');
+    panel.dataset.dtab = 'overview';
+    const kv = el('dl', 'kv');
+    const put = (k, v) => { kv.appendChild(el('dt', null, k)); kv.appendChild(el('dd', null, v)); };
+    put('URL', urlOf(txn));
+    put('Status', txn.status ?? 'transport failure');
+    if (txn.error) put('Error', txn.error);
+    put('Duration', fmtMs(txn.ms));
+    put('Request size', fmtBytes(txn.reqBytes));
+    put('Response size', fmtBytes(txn.resBytes));
+    put('Started', txn.ts);
+    panel.appendChild(kv);
+    return panel;
   }
 
   /**
@@ -740,13 +790,38 @@
     return `${size} captured, but ${ref} could not be read`;
   }
 
-  function appendSide(pane, title, txn, side, body) {
+  /**
+   * One side of the call: body first, then its headers.
+   *
+   * Body before headers is the whole point of the change. Headers are long, mostly boilerplate,
+   * and the same on every call; the body is the one part that differs and the reason the row was
+   * opened. They are still one scroll apart — just the other way round.
+   */
+  function sidePanel(txn, side, body) {
+    const title = side === 'req' ? 'Request' : 'Response';
     const headers = side === 'req' ? txn.reqHeaders : txn.resHeaders;
     const truncated = side === 'req' ? txn.reqBodyTruncated : txn.resBodyTruncated;
     const contentType = side === 'req' ? txn.reqContentType : txn.resContentType;
     const totalBytes = side === 'req' ? txn.reqBytes : txn.resBytes;
 
-    pane.appendChild(el('div', 'section-title', `${title} headers`));
+    const panel = el('div', 'dtab-panel');
+    panel.dataset.dtab = side;
+
+    panel.appendChild(el('div', 'section-title', `${title} body`));
+    const absent = bodyAbsenceReason(txn, side, body);
+    if (absent !== null) {
+      panel.appendChild(el('div', 'muted', absent));
+    } else {
+      if (truncated) {
+        panel.appendChild(
+          el('div', 'banner', `truncated at ${fmtBytes(body.length)} of ${fmtBytes(totalBytes)}`),
+        );
+      }
+      const isJson = (contentType || '').includes('json') || /^\s*[{[]/.test(body);
+      panel.appendChild(el('pre', 'body', isJson ? prettyJson(body) : body));
+    }
+
+    panel.appendChild(el('div', 'section-title', `${title} headers`));
     const box = el('div', 'headers');
     const entries = Object.entries(headers || {});
     if (!entries.length) {
@@ -759,19 +834,8 @@
         box.appendChild(line);
       }
     }
-    pane.appendChild(box);
-
-    pane.appendChild(el('div', 'section-title', `${title} body`));
-    const absent = bodyAbsenceReason(txn, side, body);
-    if (absent !== null) {
-      pane.appendChild(el('div', 'muted', absent));
-      return;
-    }
-    if (truncated) {
-      pane.appendChild(el('div', 'banner', `truncated at ${fmtBytes(body.length)} of ${fmtBytes(totalBytes)}`));
-    }
-    const isJson = (contentType || '').includes('json') || /^\s*[{[]/.test(body);
-    pane.appendChild(el('pre', 'body', isJson ? prettyJson(body) : body));
+    panel.appendChild(box);
+    return panel;
   }
 
   async function fetchBody(txn, side) {
