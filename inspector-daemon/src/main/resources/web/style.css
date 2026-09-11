@@ -328,7 +328,17 @@ kbd {
 .kv dt { color: var(--fg-muted); }
 .kv dd { margin: 0; font-family: var(--mono); word-break: break-all; }
 
-.headers { font-family: var(--mono); font-size: 11px; line-height: 1.6; }
+.headers {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  min-width: 0;
+  /* A bearer token is one unbroken 7000px "word". Without this it is not clipped-but-scrollable
+     -- `overflow-x` here is visible -- it is painted outside the pane and gives the *page* a
+     horizontal scrollbar, so reading it slides the whole three-column layout sideways. `anywhere`
+     rather than `break-all` so ordinary header names still break at their hyphens. */
+  overflow-wrap: anywhere;
+}
 .headers .hname { color: var(--fg-muted); }
 
 pre.body {
@@ -580,6 +590,40 @@ pre.body {
 .tl-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-mono { flex: 0 0 auto; font-size: 11px; }
 .tl-bytes { flex: 0 0 auto; font-size: 11px; }
+
+/* A run of identical adjacent observations, standing in for all of them. It borrows `.tl-signal`
+   geometry but is deliberately quieter: it is scaffolding around the timeline, not an event on
+   it, and a row that shouted would trade one kind of noise for another. */
+.tl-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  line-height: 1.6;
+  opacity: 0.72;
+}
+.tl-run:hover { background: rgba(255, 255, 255, 0.04); opacity: 1; }
+.tl-run:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+/* Open: the header of a group whose members are drawn below it. */
+.tl-run-open { opacity: 1; }
+
+.tl-twisty {
+  flex: 0 0 auto;
+  width: 8px;
+  font-size: 9px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+.tl-run-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+}
 
 /* Provenance is never left to be inferred: a pushed snapshot reported as live state is the
    failure `trigger` exists to prevent. */

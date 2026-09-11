@@ -312,6 +312,44 @@ window.navigator.clipboard = { writeText: async () => {} };
       result.pushedWarned = pushed ? Boolean(note) : 'n/a (row was pulled)';
     }
 
+    // Runs of identical adjacent observations collapse to one row.
+    //
+    // The check that matters is that collapsing is *lossless*: expanding a run must put back
+    // exactly the rows it stood for. A collapse that quietly dropped observations would look
+    // like a tidier timeline and be a lie about what the app recorded.
+    await click(doc.querySelector('#tabs .tab[data-view=\"all\"]'));
+    await new Promise((r) => setTimeout(r, 400));
+    const timeline = doc.getElementById('timeline');
+    const runRows = [...timeline.children].filter((n) => n.dataset.kind === 'run');
+    result.runsCollapsed = runRows.length;
+    if (runRows.length) {
+      const biggest = runRows
+        .map((n) => ({ node: n, n: Number((n.querySelector('.tl-run-count')?.textContent || '').slice(1)) }))
+        .sort((a, b) => b.n - a.n)[0];
+      const before = timeline.children.length;
+      await click(biggest.node);
+      await new Promise((r) => setTimeout(r, 300));
+      const expanded = timeline.children.length;
+      // Collapsed, a run is one row. Expanded, it is that row kept as a header plus all n
+      // members — so the delta is exactly n, and anything less means observations were dropped.
+      result.runExpandsLossless = expanded - before === biggest.n
+        ? `yes (x${biggest.n} put back ${expanded - before} rows)`
+        : `NO - x${biggest.n} put back ${expanded - before}`;
+      const reopened = [...timeline.children].find(
+        (n) => n.dataset.kind === 'run' && n.dataset.runId === biggest.node.dataset.runId,
+      );
+      await click(reopened);
+      await new Promise((r) => setTimeout(r, 300));
+      result.runCollapsesBack = timeline.children.length === before
+        ? 'yes'
+        : `NO - ${timeline.children.length} rows, expected ${before}`;
+      result.biggestRun = biggest.n;
+    } else {
+      result.runExpandsLossless = 'n/a (no run reached the threshold)';
+      result.runCollapsesBack = 'n/a';
+      result.biggestRun = 0;
+    }
+
     return result;
   }
 
@@ -344,7 +382,33 @@ window.navigator.clipboard = { writeText: async () => {} };
       unknownTagsTabbed: ids.filter((id) => !knownIds.includes(id)),
       activeCount: tabs.filter((t) => t.classList.contains('active')).length,
       hasNetwork: ids.includes('network'),
+      // Traffic leads. This is a network debugger, and in a real session the merged timeline ran
+      // 126 rows of which 13 were calls — opening there buries what you came for.
+      trafficFirst: ids[0] === 'network'
+        ? 'yes'
+        : `NO - first tab is '${ids[0]}'`,
+      labels: tabs.map((t) => t.querySelector('.tab-label')?.textContent).join(', '),
     };
+  }
+
+  /**
+   * A long unbroken token must not be able to widen the detail pane.
+   *
+   * Checked against the stylesheet text, not `getComputedStyle`: jsdom has no layout engine, so
+   * it reports neither the 7139px line box this guards against nor whether the rule prevented it.
+   * A computed-style version of this check passes just as happily with the rule deleted — the
+   * same reason `auditHiddenPanes` reads the CSS source. The real measurement belongs in a
+   * browser, and is recorded in the commit that added the rule.
+   */
+  function auditLongTokenWrap(cssText) {
+    const block = cssText.match(/\.headers\s*\{([^}]*)\}/);
+    if (!block) return 'NO - no .headers rule at all';
+    const wrap = block[1].match(/overflow-wrap\s*:\s*([a-z-]+)/);
+    const breaks = block[1].match(/word-break\s*:\s*([a-z-]+)/);
+    const value = wrap?.[1] || breaks?.[1];
+    return value && ['anywhere', 'break-all', 'break-word'].includes(value)
+      ? `yes (${value})`
+      : 'NO - a bearer token will paint outside the pane and scroll the page';
   }
 
   /**
@@ -672,7 +736,7 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('limit summary      :', limitProbe.summary);
   console.error('--- signals ---');
   console.error('all tab present    :', signalProbe.switchShown);
-  console.error('opened on view     :', signalProbe.defaultView, "('all' when the session has signals)");
+  console.error('opened on view     :', signalProbe.defaultView, "('network' — traffic leads)");
   console.error('timeline entries   :', signalProbe.entries);
   console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
   console.error('unknown tag renders:', signalProbe.unknownTagRendered);
@@ -684,6 +748,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
   console.error('pushed row warned  :', signalProbe.pushedWarned, '(a snapshot is not live state)');
+  console.error('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun})`);
+  console.error('run expands whole  :', signalProbe.runExpandsLossless, '(collapsing must lose nothing)');
+  console.error('run collapses back :', signalProbe.runCollapsesBack);
   console.error('--- peers ---');
   console.error('peers listed       :', peerRows.length);
   console.error('peer roles         :', peerRoles.join(', ') || 'none');
@@ -698,6 +765,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
   console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
+  console.error('traffic tab first  :', tabProbe.trafficFirst);
+  console.error('tab labels         :', tabProbe.labels);
+  console.error('long tokens wrap   :', auditLongTokenWrap(css), '(a bearer token must not widen the pane)');
 
   for (const probe of [browserProbe, stateProbe]) {
     console.error(`--- ${probe.tag} browser ---`);
