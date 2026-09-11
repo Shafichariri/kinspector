@@ -841,6 +841,65 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * An empty pane that orients you instead of naming itself.
+   *
+   * The assertion with teeth is that the rows are *ways in*, not a readout — clicking the slowest
+   * call has to select it. A summary you can only look at would have replaced three words with a
+   * paragraph and still spent half the window saying nothing you can act on.
+   */
+  async function probeGlance() {
+    const result = { session: 'n/a', clickable: 0, slowestSelects: 'n/a', tag: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    // Esc drops any selection probeDetailTabs left behind, which is what puts the pane back.
+    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    const pane = doc.getElementById('detail-empty');
+    const rows = [...pane.querySelectorAll('.glance-row')];
+    result.session = rows.length
+      ? `${rows.length} rows`
+      : `NO - still reads "${pane.textContent.trim()}"`;
+    result.clickable = pane.querySelectorAll('.glance-click').length;
+
+    // Read the value span, not textContent: the spans concatenate without a separator, so a
+    // slowest row reads "2.0sGET /path" and a `\bGET` never matches.
+    const slow = [...pane.querySelectorAll('.glance-click')].find((r) =>
+      /^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS) /.test(
+        r.querySelector('.glance-value')?.textContent || '',
+      ));
+    if (slow) {
+      await click(slow);
+      await new Promise((r) => setTimeout(r, 600));
+      result.slowestSelects = doc.getElementById('detail').hidden
+        ? 'NO - clicking a slow call did nothing'
+        : 'selects it';
+      doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      result.escRestores = doc.querySelectorAll('#detail-empty .glance-row').length
+        ? 'yes'
+        : 'NO';
+    }
+
+    const browser = [...doc.querySelectorAll('#tabs .tab')]
+      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    if (browser) {
+      await click(browser);
+      await new Promise((r) => setTimeout(r, 900));
+      const detail = doc.getElementById('browser-detail');
+      const tagRows = detail.querySelectorAll('.glance-row').length;
+      result.tag = tagRows
+        ? `${tagRows} rows on '${browser.dataset.view}'`
+        : `NO - still reads "${detail.textContent.trim()}"`;
+    }
+    return result;
+  }
+
+  const glanceProbe = await probeGlance();
   const detailTabProbe = await probeDetailTabs();
   const drawerProbe = await probeDrawer();
   const toolbarProbe = await probeToolbar();
@@ -998,6 +1057,9 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
   console.error('now says collapsed :', nowProbe.collapsedSummary);
   console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
+  console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
+  console.error('empty pane (tag)   :', glanceProbe.tag);
   console.error('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
   console.error('detail default tab :', detailTabProbe.defaultTab, '- opens on:', detailTabProbe.firstSection);
   console.error('body before headers:', detailTabProbe.bodyBeforeHeaders ?? 'n/a', '(the reason you opened the row)');
