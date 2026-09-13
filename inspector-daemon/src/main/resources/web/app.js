@@ -509,6 +509,229 @@
     }
   }
 
+  // --- handing a finding to an agent --------------------------------------
+
+  /*
+   * You spot something here; the agent that can act on it is in your editor. Today the handover
+   * is a sentence — "the failing POST to /oauth/token around 15:13" — and the agent has to go
+   * find what you were already looking at, which it may or may not land on.
+   *
+   * These build a paste. Not a screenshot and not a raw dump: an unambiguous identifier, enough
+   * context to answer the obvious question without a round trip, and the exact MCP calls that
+   * fetch the rest. An agent with the inspector server registered can go deeper; one without it
+   * still has the facts.
+   */
+
+  const BUNDLE_BODY_CAP = 4000;
+  const BUNDLE_NEAR_MS = 10_000;
+  /**
+   * Per-header cap.
+   *
+   * Wide enough for every ordinary header and narrow enough to clip a bearer token, which on a
+   * real call ran 1300 characters — a quarter of the paste spent on a value no agent reads, and
+   * a live credential dropped into a chat log on the way. The length is still reported, so
+   * "was a token sent, and did it change between these two calls" stays answerable.
+   */
+  const BUNDLE_HEADER_CAP = 120;
+
+  /** `mono` is the device's clock. Offsets from a chosen origin are the only readable form. */
+  const relMs = (mono, origin) => {
+    const delta = mono - origin;
+    const sign = delta < 0 ? '-' : '+';
+    return `${sign}${fmtMs(Math.abs(delta))}`;
+  };
+
+  const clip = (text, cap) =>
+    text.length <= cap ? text : `${text.slice(0, cap)}\n… truncated at ${cap} of ${text.length} chars`;
+
+  const clipHeader = (value) =>
+    value.length <= BUNDLE_HEADER_CAP
+      ? value
+      : `${value.slice(0, BUNDLE_HEADER_CAP)}… [${value.length} chars]`;
+
+  /** The screen that was showing when something happened, and how long it had been showing. */
+  function screenAt(mono) {
+    const arrivals = state.signals
+      .filter((s) => tagOf(s) === 'screen' && s.mono <= mono)
+      .sort((a, b) => b.mono - a.mono);
+    return arrivals[0] || null;
+  }
+
+  function bundleHeader() {
+    const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
+    const lines = [`# Inspector session ${state.sessionId}`];
+    if (meta) lines.push(`${meta.appId} · ${meta.device} · ${meta.buildType || 'debug'}`);
+    return lines;
+  }
+
+  function nearbyLines(mono) {
+    const near = [
+      ...state.signals.map((s) => ({ mono: s.mono, text: `${s.tag} ${s.name}` })),
+      ...state.markers.map((m) => ({ mono: m.mono, text: `marker "${m.label}"` })),
+      ...state.allTransactions
+        .filter((t) => t.mono !== mono)
+        .map((t) => ({ mono: t.mono, text: `${t.method} ${t.path} → ${t.status ?? 'ERR'} ${fmtMs(t.ms)}` })),
+    ]
+      .filter((e) => Math.abs(e.mono - mono) <= BUNDLE_NEAR_MS)
+      .sort((a, b) => a.mono - b.mono);
+    // Bounded: a busy ten seconds can hold hundreds of state observations, and a paste nobody
+    // reads to the end is worse than a shorter one that is all signal.
+    const capped = near.length > 30
+      ? [...near.slice(0, 15), { elided: near.length - 30 }, ...near.slice(-15)]
+      : near;
+    // The elision carries no offset. Giving it one — even the anchor's own — reads as an event
+    // that happened at that instant, which is the one thing it is not.
+    return capped.map((e) =>
+      e.elided ? `${' '.repeat(10)}… ${e.elided} more` : `${relMs(e.mono, mono).padStart(8)}  ${e.text}`);
+  }
+
+  /** Everything an agent needs about one call, and where to get what is not here. */
+  async function transactionBundle(txn) {
+    const [reqBody, resBody] = await Promise.all([fetchBody(txn, 'req'), fetchBody(txn, 'res')]);
+    const screen = screenAt(txn.mono);
+    const lines = [
+      ...bundleHeader(),
+      '',
+      '## The call',
+      `id ${txn.id}`,
+      `${txn.method} ${urlOf(txn)}`,
+      `${txn.status ?? 'transport failure'} · ${fmtMs(txn.ms)} · req ${fmtBytes(txn.reqBytes)} · res ${fmtBytes(txn.resBytes)}`,
+      `started ${txn.ts}`,
+    ];
+    if (txn.error) lines.push(`error ${txn.error}`);
+    if (txn.attempt > 1) lines.push(`attempt ${txn.attempt} of this call`);
+    if (txn.redacted && txn.redacted.length) {
+      // Say it was removed, not that it was absent, or the agent concludes none was sent.
+      lines.push(`redacted at capture: ${txn.redacted.join(', ')}`);
+    }
+    if (screen) {
+      lines.push(`screen at the time: ${screen.name} (arrived ${fmtMs(txn.mono - screen.mono)} earlier)`);
+    }
+
+    for (const [title, side, body] of [['Request', 'req', reqBody], ['Response', 'res', resBody]]) {
+      const headers = Object.entries(side === 'req' ? txn.reqHeaders || {} : txn.resHeaders || {});
+      lines.push('', `### ${title} headers`);
+      lines.push(
+        headers.length
+          ? headers.map(([k, v]) => `${k}: ${clipHeader(v.join(', '))}`).join('\n')
+          : 'none',
+      );
+      lines.push('', `### ${title} body`);
+      const absent = bodyAbsenceReason(txn, side, body);
+      lines.push(absent !== null ? absent : clip(body, BUNDLE_BODY_CAP));
+    }
+
+    lines.push('', `## Around it (±${fmtMs(BUNDLE_NEAR_MS)})`, ...nearbyLines(txn.mono));
+    lines.push(
+      '',
+      '## Read more (MCP server "inspector")',
+      'Long header values above are clipped; get_transaction returns them whole.',
+      `get_transaction(session: "${state.sessionId}", id: "${txn.id}")`,
+      `get_body(session: "${state.sessionId}", id: "${txn.id}", side: "res")`,
+      `timeline(session: "${state.sessionId}", limit: 60)`,
+    );
+    return lines.join('\n');
+  }
+
+  /**
+   * The session as a whole — or, when the axis has narrowed it, the stretch on screen.
+   *
+   * Honouring the brush is the point. Handing over the whole session when you have spent a minute
+   * narrowing to the ten seconds that matter throws away the work you just did.
+   */
+  function sessionBundle() {
+    const txns = visibleTransactions();
+    const failed = txns.filter((t) => t.error || (t.status ?? 0) >= 400);
+    const lines = [...bundleHeader()];
+
+    if (state.timeRange) {
+      lines.push(`narrowed to a ${fmtMs(state.timeRange.to - state.timeRange.from)} stretch of it`);
+    }
+    // Unlike the panel this button sits in, the bundle is "what I am looking at" and so keeps the
+    // text filter too. Stated rather than silent: counts below are of the filtered set.
+    if (state.filter) lines.push(`filter applied: ${state.filter}`);
+    lines.push('', `${txns.length} calls, ${failed.length} failed`);
+
+    const hosts = new Map();
+    for (const txn of txns) hosts.set(txn.host, (hosts.get(txn.host) || 0) + 1);
+    for (const [host, n] of [...hosts].sort((a, b) => b[1] - a[1])) lines.push(`host ${host} · ${n}`);
+
+    if (failed.length) {
+      lines.push('', '## Failed');
+      for (const txn of failed.slice(0, 20)) {
+        lines.push(`${txn.id}  ${txn.method} ${txn.path} → ${txn.status ?? 'ERR'} ${txn.error || ''}`.trimEnd());
+      }
+    }
+
+    const slowest = [...txns].filter((t) => t.ms != null).sort((a, b) => b.ms - a.ms).slice(0, 5);
+    if (slowest.length) {
+      lines.push('', '## Slowest');
+      for (const txn of slowest) lines.push(`${fmtMs(txn.ms).padStart(7)}  ${txn.id}  ${txn.method} ${txn.path}`);
+    }
+
+    const groups = waterfallGroups();
+    if (groups.length) {
+      lines.push('', '## By screen');
+      for (const group of groups) {
+        lines.push(
+          `${group.segment.name || 'before the first screen'} — ${group.rows.length} calls, ` +
+          `${fmtMs(group.wall)}, ${fmtBytes(group.bytes)}${group.failed ? `, ${group.failed} failed` : ''}`,
+        );
+      }
+    }
+
+    const current = state.current.filter((s) => tagOf(s) !== 'state').slice(0, 12);
+    if (current.length) {
+      lines.push('', '## What the app holds now');
+      for (const signal of current) {
+        lines.push(`${signal.tag} ${signal.name} · ${signal.trigger === 'request' ? 'pulled' : 'pushed'} ${fmtAge(ageOf(signal.ts))}`);
+      }
+    }
+
+    lines.push(
+      '',
+      '## Read more (MCP server "inspector")',
+      `session_summary(session: "${state.sessionId}")`,
+      `list_transactions(session: "${state.sessionId}", filter: "has:error")`,
+      `timeline(session: "${state.sessionId}", limit: 60)`,
+    );
+    return lines.join('\n');
+  }
+
+  /**
+   * Copy, and say so on the button itself.
+   *
+   * `navigator.clipboard` is unavailable on a page served over plain http from anything but
+   * localhost, and it rejects rather than throwing — a silent failure that looks exactly like a
+   * successful copy. The button reports it.
+   */
+  function copyBundle(button, build, label) {
+    button.disabled = true;
+    Promise.resolve()
+      .then(build)
+      .then((text) => navigator.clipboard.writeText(text).then(() => text))
+      .then((text) => {
+        button.textContent = `copied ${fmtBytes(text.length)}`;
+      })
+      .catch(() => {
+        button.textContent = 'copy failed';
+        button.title = 'The clipboard is unavailable here. Open the UI on 127.0.0.1 rather than a LAN address.';
+      })
+      .finally(() => {
+        setTimeout(() => { button.textContent = label; button.disabled = false; }, 1600);
+      });
+  }
+
+  function bundleButton(label, build, title) {
+    const button = el('button', 'btn btn-sm', label);
+    button.title = title;
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      copyBundle(button, build, label);
+    });
+    return button;
+  }
+
   // --- the waterfall ------------------------------------------------------
 
   /**
@@ -1096,6 +1319,12 @@
     replayBtn.title = 'Re-send this request. Per-request headers are regenerated by the running app.';
     replayBtn.onclick = () => runReplay(txn, pane, replayBtn);
     head.appendChild(replayBtn);
+
+    head.appendChild(bundleButton(
+      'for AI',
+      () => transactionBundle(txn),
+      'Copy this call, what surrounded it, and the MCP calls that fetch the rest — to paste to an agent',
+    ));
 
     // Pinned above the tabs, both of them, because neither is something to go looking for.
     //
@@ -1725,7 +1954,16 @@
   function renderSessionGlance() {
     const pane = $('detail-empty');
     pane.innerHTML = '';
-    const txns = state.allTransactions.length ? state.allTransactions : state.transactions;
+    /*
+     * One rule: this panel ignores the text filter and honours the axis.
+     *
+     * The filter is a query, and the list and the header count already report it. The axis is a
+     * change of *scope* — which part of the session you are looking at — and a panel headed
+     * "this stretch" that counts the whole session is the kind of half-true number that makes a
+     * reader stop trusting the rest of the page.
+     */
+    const txns = (state.allTransactions.length ? state.allTransactions : state.transactions)
+      .filter((txn) => inRange(txn.mono));
     if (!txns.length && !state.signals.length) {
       pane.className = 'empty muted';
       pane.textContent = 'select a transaction';
@@ -1734,7 +1972,15 @@
     pane.className = 'glance';
 
     const failed = txns.filter((t) => t.error || (t.status ?? 0) >= 400);
-    pane.appendChild(el('div', 'glance-title', 'This session'));
+
+    const title = el('div', 'glance-title glance-title-row');
+    title.appendChild(el('span', null, state.timeRange ? 'This stretch' : 'This session'));
+    title.appendChild(bundleButton(
+      'for AI',
+      () => sessionBundle(),
+      'Copy a digest of what is on screen — narrowing on the axis narrows this too',
+    ));
+    pane.appendChild(title);
     pane.appendChild(glanceRow('calls', String(txns.length)));
     if (failed.length) {
       pane.appendChild(glanceRow(

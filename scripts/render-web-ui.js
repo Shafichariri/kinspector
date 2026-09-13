@@ -59,7 +59,10 @@ window.WebSocket = class {
   constructor() { setTimeout(() => this.onopen && this.onopen(), 0); }
   close() {}
 };
-window.navigator.clipboard = { writeText: async () => {} };
+// Captured rather than discarded: the "for AI" buttons put their whole payload here, and what
+// they put there is the feature.
+let lastCopied = null;
+window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; } };
 
 (async () => {
   window.eval(js);
@@ -1021,6 +1024,87 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * Handing a finding to an agent.
+   *
+   * The bundle is a paste, so what matters is its content: that it names the session and the call
+   * unambiguously, that it carries the calls that fetch the rest, and that it stays small enough
+   * to be worth pasting. A bearer token ran 1300 characters on a real call — a quarter of the
+   * payload spent on a value no agent reads — so the header cap is checked rather than trusted.
+   *
+   * The axis interplay (narrowing the brush narrows the bundle) needs layout and is verified in a
+   * browser; the numbers are in the commit.
+   */
+  async function probeBundles() {
+    const result = { txnButton: 'n/a', sessionButton: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+
+    const session = doc.getElementById('session-picker').value;
+    const row = doc.querySelector('#list .row');
+    if (row) {
+      await click(row);
+      await new Promise((r) => setTimeout(r, 700));
+      const button = [...doc.querySelectorAll('#detail .detail-head button')]
+        .find((b) => b.textContent === 'for AI');
+      if (!button) {
+        result.txnButton = 'NO - no "for AI" button on a transaction';
+      } else {
+        lastCopied = null;
+        await click(button);
+        await new Promise((r) => setTimeout(r, 700));
+        const text = lastCopied || '';
+        const id = row.dataset.id;
+        const missing = [
+          !text.includes(session) && 'the session id',
+          id && !text.includes(id) && 'the transaction id',
+          !text.includes('get_transaction(') && 'the MCP call to read more',
+          !/## Around it/.test(text) && 'what surrounded it',
+        ].filter(Boolean);
+        result.txnButton = missing.length
+          ? `NO - missing ${missing.join(', ')}`
+          : `${text.length} chars, names the session and the call`;
+
+        // Header lines only. A minified JSON body is legitimately one very long line and has its
+        // own, larger cap — measuring "the longest line in the paste" conflates the two and fails
+        // on a body that was behaving exactly as intended.
+        const headerLines = [];
+        let inHeaders = false;
+        for (const line of text.split('\n')) {
+          if (line.startsWith('### ')) inHeaders = /headers$/.test(line);
+          else if (line.startsWith('## ')) inHeaders = false;
+          else if (inHeaders && line) headerLines.push(line);
+        }
+        const longest = headerLines.length ? Math.max(...headerLines.map((l) => l.length)) : 0;
+        result.headersCapped = longest <= 260
+          ? `yes (${headerLines.length} header lines, longest ${longest})`
+          : `NO - a ${longest}-char header survived the cap`;
+      }
+    }
+
+    // Escape drops the selection, which is what puts the session glance back on screen.
+    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    const sessionButton = [...doc.querySelectorAll('#detail-empty button')]
+      .find((b) => b.textContent === 'for AI');
+    if (!sessionButton) {
+      result.sessionButton = 'NO - no "for AI" button on the session panel';
+    } else {
+      lastCopied = null;
+      await click(sessionButton);
+      await new Promise((r) => setTimeout(r, 700));
+      const text = lastCopied || '';
+      result.sessionButton = text.includes('session_summary(') && text.includes(session)
+        ? `${text.length} chars, names the session and the MCP entry point`
+        : `NO - ${text ? 'missing the session or its MCP call' : 'nothing was copied'}`;
+    }
+    return result;
+  }
+
+  const bundleProbe = await probeBundles();
   const axisProbe = await probeAxis();
   const waterfallProbe = await probeWaterfall();
   const glanceProbe = await probeGlance();
@@ -1181,6 +1265,10 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
   console.error('now says collapsed :', nowProbe.collapsedSummary);
   console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('--- handing to an agent ---');
+  console.error('call bundle        :', bundleProbe.txnButton);
+  console.error('header values cap  :', bundleProbe.headersCapped ?? 'n/a', '(a bearer token must not fill the paste)');
+  console.error('session bundle     :', bundleProbe.sessionButton);
   console.error('--- axis & waterfall ---');
   console.error('axis on traffic    :', axisProbe.shown, `(${axisProbe.bars} buckets, ${axisProbe.screens} screen bands)`);
   console.error('shape is whole sess:', axisProbe.shapeIsWholeSession);
