@@ -155,6 +155,18 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * Views this build ships, as opposed to tabs built from whatever tags the app recorded.
+   *
+   * Named once because three probes used to spell it as "the first tab that is not network or
+   * all", which silently meant "a tag browser" until `waterfall` arrived and became the first
+   * such tab — at which point all three started asserting tag-browser behaviour against a view
+   * that is not one.
+   */
+  const BUILT_IN_VIEWS = ['network', 'all', 'waterfall'];
+  const firstTagBrowserTab = () =>
+    [...doc.querySelectorAll('#tabs .tab')].find((t) => !BUILT_IN_VIEWS.includes(t.dataset.view));
+
   const chipProbe = await probeEndpointChip();
 
   /**
@@ -375,7 +387,7 @@ window.navigator.clipboard = { writeText: async () => {} };
   function probeTabs() {
     const tabs = [...doc.querySelectorAll('#tabs .tab')];
     const ids = tabs.map((t) => t.dataset.view);
-    const knownIds = ['all', 'network', 'cache', 'screen', 'state'];
+    const knownIds = [...BUILT_IN_VIEWS, 'cache', 'screen', 'state'];
     return {
       count: tabs.length,
       ids,
@@ -647,8 +659,7 @@ window.navigator.clipboard = { writeText: async () => {} };
       result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'shown';
     }
 
-    const browser = [...doc.querySelectorAll('#tabs .tab')]
-      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    const browser = firstTagBrowserTab();
     if (browser) {
       await click(browser);
       await new Promise((r) => setTimeout(r, 700));
@@ -885,8 +896,7 @@ window.navigator.clipboard = { writeText: async () => {} };
         : 'NO';
     }
 
-    const browser = [...doc.querySelectorAll('#tabs .tab')]
-      .find((t) => !['network', 'all'].includes(t.dataset.view));
+    const browser = firstTagBrowserTab();
     if (browser) {
       await click(browser);
       await new Promise((r) => setTimeout(r, 900));
@@ -899,6 +909,120 @@ window.navigator.clipboard = { writeText: async () => {} };
     return result;
   }
 
+  /**
+   * The time axis: a map of the session, drawn above the list that reads it.
+   *
+   * The assertion with teeth is that the shape comes from the *whole* session while the
+   * highlight comes from the filtered set. A map redrawn from whatever survived the filter
+   * cannot answer "where am I in this session", which is the only reason to draw one.
+   *
+   * The brush itself is not driven here: jsdom has no layout, so `getBoundingClientRect` returns
+   * zeros and a pointer position cannot be turned into a time. Dragging was measured in a real
+   * browser and the numbers are in the commit; what is checked here is that narrowing actually
+   * narrows, via the control that does it without a pointer.
+   */
+  async function probeAxis() {
+    const result = { shown: 'n/a', bars: 0, hits: 0, screens: 0, shapeIsWholeSession: 'n/a' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) {
+      await click(network);
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    const axis = doc.getElementById('axis');
+    result.shown = axis.hidden ? 'NO - hidden on traffic' : 'shown';
+    if (axis.hidden) return result;
+
+    result.bars = axis.querySelectorAll('.axis-bar-all').length;
+    result.hits = axis.querySelectorAll('.axis-bar-hit').length;
+    result.screens = axis.querySelectorAll('.axis-screen').length;
+
+    // Filter hard, then check the dim shape held its ground while the highlight shrank.
+    const filter = doc.getElementById('filter');
+    const before = { bars: result.bars, hits: result.hits };
+    filter.value = 'status>=400';
+    filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 900));
+    const after = {
+      bars: axis.querySelectorAll('.axis-bar-all').length,
+      hits: axis.querySelectorAll('.axis-bar-hit').length,
+    };
+    result.shapeIsWholeSession = after.bars === before.bars
+      ? `yes (${after.bars} bars held, hits ${before.hits} -> ${after.hits})`
+      : `NO - the shape shrank with the filter, ${before.bars} -> ${after.bars}`;
+
+    filter.value = '';
+    filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 900));
+    return result;
+  }
+
+  /**
+   * The waterfall: calls grouped by the screen that was showing when each one started.
+   *
+   * The invariant that matters is conservation — every call lands in exactly one group. A join
+   * across two independently recorded streams is exactly where rows get dropped or counted
+   * twice, and either failure looks like a plausible chart.
+   */
+  async function probeWaterfall() {
+    const tab = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'waterfall');
+    const result = { tabShown: Boolean(tab), groups: 0, rows: 0 };
+    if (!tab) return result;
+
+    await click(tab);
+    await new Promise((r) => setTimeout(r, 800));
+    result.groups = doc.querySelectorAll('.wf-group').length;
+    result.rows = doc.querySelectorAll('.wf-row').length;
+    result.names = [...doc.querySelectorAll('.wf-name')].map((n) => n.textContent);
+
+    const listed = [...doc.querySelectorAll('.wf-row')].map((r) => r.dataset.id);
+    const unique = new Set(listed);
+    const inList = doc.querySelectorAll('#list .row').length;
+    result.everyCallOnce = listed.length === unique.size
+      ? `yes (${unique.size} of ${inList} calls, each once)`
+      : `NO - ${listed.length} rows for ${unique.size} calls`;
+    result.noneLost = unique.size === inList
+      ? 'yes'
+      : `NO - ${inList} calls in the list, ${unique.size} in the waterfall`;
+
+    // Conservation only has teeth where the awkward case exists. A call that starts after the
+    // last screen signal is caught by its own branch, and deleting that branch passes this probe
+    // unnoticed on a session that happens to end on a signal — so report whether this session
+    // exercised it, rather than letting a trivial pass read as a proof.
+    const id = encodeURIComponent(doc.getElementById('session-picker').value);
+    const [txns, signals] = await Promise.all([
+      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
+      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+    ]);
+    const screens = (Array.isArray(signals) ? signals : []).filter((s) => s.tag === 'screen');
+    if (!screens.length) {
+      result.trailingCalls = 'n/a (no screen signals)';
+    } else {
+      const lastScreen = Math.max(...screens.map((s) => s.mono));
+      const trailing = (txns.items || []).filter((x) => x.mono >= lastScreen).length;
+      result.trailingCalls = trailing
+        ? `${trailing} after the last screen — the branch that catches them ran`
+        : 'none in this session, so that branch was not exercised here';
+    }
+
+    // Every bar has to be visible. A zero-width bar reads as a row that failed to draw.
+    const widths = [...doc.querySelectorAll('.wf-bar')].map((b) => parseFloat(b.style.width));
+    result.barsVisible = widths.every((w) => w > 0)
+      ? 'yes'
+      : `NO - ${widths.filter((w) => !(w > 0)).length} bars have no width`;
+
+    const row = doc.querySelector('.wf-row');
+    if (row) {
+      await click(row);
+      await new Promise((r) => setTimeout(r, 600));
+      result.rowSelects = doc.getElementById('detail').hidden
+        ? 'NO - clicking a bar did nothing'
+        : 'selects the call';
+    }
+    return result;
+  }
+
+  const axisProbe = await probeAxis();
+  const waterfallProbe = await probeWaterfall();
   const glanceProbe = await probeGlance();
   const detailTabProbe = await probeDetailTabs();
   const drawerProbe = await probeDrawer();
@@ -925,7 +1049,7 @@ window.navigator.clipboard = { writeText: async () => {} };
     // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
     const panes = [
       '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
-      '.drawer-scrim',
+      '.drawer-scrim', '.axis', '.waterfall',
     ];
     const setsDisplay = new Set();
     const guarded = new Set();
@@ -1057,6 +1181,16 @@ window.navigator.clipboard = { writeText: async () => {} };
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
   console.error('now says collapsed :', nowProbe.collapsedSummary);
   console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('--- axis & waterfall ---');
+  console.error('axis on traffic    :', axisProbe.shown, `(${axisProbe.bars} buckets, ${axisProbe.screens} screen bands)`);
+  console.error('shape is whole sess:', axisProbe.shapeIsWholeSession);
+  console.error('waterfall tab      :', waterfallProbe.tabShown, `- ${waterfallProbe.groups} screens, ${waterfallProbe.rows} calls`);
+  console.error('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none');
+  console.error('every call once    :', waterfallProbe.everyCallOnce ?? 'n/a');
+  console.error('no call lost       :', waterfallProbe.noneLost ?? 'n/a');
+  console.error('trailing calls     :', waterfallProbe.trailingCalls ?? 'n/a');
+  console.error('every bar visible  :', waterfallProbe.barsVisible ?? 'n/a');
+  console.error('bar selects call   :', waterfallProbe.rowSelects ?? 'n/a');
   console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
   console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
   console.error('empty pane (tag)   :', glanceProbe.tag);

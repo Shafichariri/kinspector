@@ -56,12 +56,18 @@
     browserFacets: {},
     browserKey: null,
     browserObservation: null,
+    // How many rows the daemon's text filter matched, before the axis narrows it further.
+    matchTotal: null,
     // Which face of the transaction detail is showing. Remembered across selections: comparing
     // request bodies down a list means picking the same tab on every row otherwise.
     detailTab: 'res',
     // Collapsed timeline runs the user has opened, by run key. Held in state rather than in the
     // DOM so an expanded run survives the re-render that every live signal triggers.
     expandedRuns: new Set(),
+    // A stretch of the session selected on the axis, in device `mono` ms, or null for all of it.
+    // Client-side on purpose: the text filter round-trips to the daemon, and a brush you drag
+    // across a chart cannot wait for a fetch per pixel.
+    timeRange: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -210,6 +216,22 @@
     showSessionLabel();
   }
 
+  /**
+   * The header count, over whatever is actually on screen.
+   *
+   * The daemon reports how many rows the *text filter* matched, which was the whole story until
+   * the axis could narrow things further. Counting only that would leave the header reading
+   * `17/17` above a list of five — a number that is true of a query nobody can see.
+   */
+  function renderCounts() {
+    const total = state.matchTotal;
+    if (total === null || total === undefined) {
+      $('counts').textContent = '';
+      return;
+    }
+    $('counts').textContent = `${visibleTransactions().length}/${total}`;
+  }
+
   /** Which app and device the rows belong to. Also runs on switch, or it would name the old one. */
   function showSessionLabel() {
     const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
@@ -222,14 +244,15 @@
     try {
       const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
       state.transactions = page.items;
-      $('counts').textContent = `${page.matched}/${page.total}`;
+      state.matchTotal = page.total;
       showFilterError(null);
     } catch (e) {
       // Parser messages are written to be shown verbatim, so show them verbatim.
       showFilterError(e.message);
       state.transactions = [];
-      $('counts').textContent = '';
+      state.matchTotal = null;
     }
+    renderCounts();
     state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
     await syncAllTransactions();
     await loadSignals();
@@ -276,6 +299,15 @@
         id: 'all',
         label: 'timeline',
         title: 'Traffic, signals and markers on one timeline',
+      });
+    }
+    // Grouping by screen needs both halves. With traffic but no screen signals it would be one
+    // unnamed block, which the traffic tab already draws better.
+    if (state.transactions.length && state.signals.some((s) => tagOf(s) === 'screen')) {
+      views.push({
+        id: 'waterfall',
+        label: 'waterfall',
+        title: 'Calls grouped by the screen that was showing when they started',
       });
     }
     for (const tag of tagsInSession()) {
@@ -407,18 +439,27 @@
     }
   }
 
+  /** Inside the brushed stretch of the session, if one is selected. */
+  const inRange = (mono) =>
+    !state.timeRange || (mono >= state.timeRange.from && mono <= state.timeRange.to);
+
+  const visibleTransactions = () => state.transactions.filter((txn) => inRange(txn.mono));
+
   /**
    * Transactions in display order — the single source of truth for both rendering and j/k
    * navigation, so "next row" always means the row visually below the current one.
    */
   const orderedRows = () => {
-    const rows = [...state.transactions].sort((a, b) => a.mono - b.mono);
+    const rows = visibleTransactions().sort((a, b) => a.mono - b.mono);
     return state.newestFirst ? rows.reverse() : rows;
   };
 
   function renderList() {
     const list = $('list');
     list.innerHTML = '';
+    // The map follows the data. Suspended during a brush, where `setTimeRange` has already drawn
+    // it and redrawing per pointermove is the one place this is hot.
+    if (!axisPaintSuspended) renderAxis();
 
     // Over *all* transactions, not the filtered view: a duplicate whose twin is filtered out is
     // still a duplicate, and making the highlight depend on the current filter would hide exactly
@@ -428,15 +469,20 @@
 
     const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
+    // Two things can empty this list and they have different fixes. Saying which one did it is
+    // the difference between "widen the selection" and "the app sent nothing".
+    $('list-empty').textContent = state.timeRange && state.transactions.length
+      ? 'no calls in the selected stretch'
+      : 'no transactions';
 
     // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the
     // only arrangement that makes causal sense, then reverse the whole thing. Reversing after
     // interleaving keeps each divider attached to the same rows: read downward in newest-first
     // and a divider below a row still means that row happened after the marker.
-    const markers = [...state.markers].sort((a, b) => a.mono - b.mono);
+    const markers = [...state.markers].filter((m) => inRange(m.mono)).sort((a, b) => a.mono - b.mono);
     const sequence = [];
     let markerIndex = 0;
-    for (const txn of [...state.transactions].sort((a, b) => a.mono - b.mono)) {
+    for (const txn of visibleTransactions().sort((a, b) => a.mono - b.mono)) {
       while (markerIndex < markers.length && markers[markerIndex].mono <= txn.mono) {
         sequence.push({ marker: markers[markerIndex] });
         markerIndex++;
@@ -461,6 +507,384 @@
       const pane = list.parentElement;
       pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
     }
+  }
+
+  // --- the waterfall ------------------------------------------------------
+
+  /**
+   * Calls grouped by the screen that was showing when each one started.
+   *
+   * The join is the point: screens and traffic are recorded by different mechanisms that share
+   * only a clock, and nothing until now put them together. "This screen costs six calls and two
+   * seconds" is not in either stream alone.
+   *
+   * Attribution is by *start*, not overlap. A call that outlives the screen that began it still
+   * belongs to that screen — it was that navigation that asked for it, and moving it to whatever
+   * came next would blame the wrong screen for the wait.
+   */
+  function waterfallGroups() {
+    const win = sessionWindow();
+    if (!win) return [];
+    const rows = visibleTransactions().sort((a, b) => a.mono - b.mono);
+    if (!rows.length) return [];
+
+    const segments = screenSegments(win);
+    const groups = [];
+    const openGroup = (segment) => {
+      const group = { segment, rows: [] };
+      groups.push(group);
+      return group;
+    };
+
+    if (!segments.length) {
+      // No screen signals recorded: still worth drawing, just as one unnamed stretch.
+      const group = openGroup({ name: null, from: win.from, to: win.to, colour: 'var(--divider)' });
+      group.rows = rows;
+    } else {
+      for (const segment of segments) {
+        const inSegment = rows.filter((txn) => txn.mono >= segment.from && txn.mono < segment.to);
+        if (inSegment.length) openGroup(segment).rows = inSegment;
+      }
+      const lastSegment = segments[segments.length - 1];
+      const after = rows.filter((txn) => txn.mono >= lastSegment.to);
+      if (after.length) openGroup(lastSegment).rows.push(...after);
+    }
+
+    for (const group of groups) {
+      const starts = group.rows.map((t) => t.mono);
+      const ends = group.rows.map((t) => t.mono + (t.ms ?? 0));
+      group.from = Math.min(...starts);
+      group.to = Math.max(...ends);
+      group.span = Math.max(1, group.to - group.from);
+      group.bytes = group.rows.reduce((n, t) => n + (t.resBytes || 0), 0);
+      group.failed = group.rows.filter((t) => t.error || (t.status ?? 0) >= 400).length;
+      // Wall time is not the sum of the durations: calls overlap, and reporting the sum would
+      // claim a screen took far longer than the user waited.
+      group.wall = group.to - group.from;
+    }
+    return groups;
+  }
+
+  function renderWaterfall() {
+    if (state.view !== 'waterfall') return;
+    const root = $('waterfall');
+    root.innerHTML = '';
+    const groups = waterfallGroups();
+    $('waterfall-empty').hidden = groups.length > 0;
+    if (!groups.length) return;
+
+    for (const group of groups) {
+      const block = el('div', 'wf-group');
+
+      const head = el('div', 'wf-head');
+      const swatch = el('span', 'wf-swatch');
+      swatch.style.background = group.segment.colour;
+      head.appendChild(swatch);
+      head.appendChild(el('span', 'wf-name', group.segment.name || 'before the first screen'));
+      const stats = el('span', 'wf-stats muted mono');
+      stats.textContent = `${group.rows.length} calls · ${fmtMs(group.wall)} · ${fmtBytes(group.bytes)}`;
+      head.appendChild(stats);
+      if (group.failed) head.appendChild(el('span', 'wf-failed', `${group.failed} failed`));
+      block.appendChild(head);
+
+      // Each group gets its own scale. A shared one would squeeze a 200 ms screen into a sliver
+      // next to a 30 s one, and the question here is "what did *this* screen do", not "which
+      // screen was longest" — the stats line answers that.
+      for (const txn of group.rows) {
+        const row = el('div', `wf-row${txn.id === state.selectedId ? ' selected' : ''}`);
+        row.dataset.id = txn.id;
+        row.tabIndex = 0;
+
+        row.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
+        const path = el('span', 'wf-path');
+        // See `.wf-path`: isolated so the RTL box trims the prefix without reordering the path.
+        const isolated = el('bdi', null, txn.path);
+        isolated.dir = 'ltr';
+        path.appendChild(isolated);
+        path.title = txn.path;
+        row.appendChild(path);
+
+        const track = el('span', 'wf-track');
+        const left = ((txn.mono - group.from) / group.span) * 100;
+        const width = ((txn.ms ?? 0) / group.span) * 100;
+        const bar = el('span', `wf-bar s${statusClass(txn.status)}`);
+        bar.style.left = `${left}%`;
+        // Never zero-width: an instant call is still a call, and one that vanishes reads as a
+        // row that failed to draw.
+        bar.style.width = `${Math.max(0.8, width)}%`;
+        bar.title = `${fmtMs(txn.ms)} · started ${txn.mono - group.from}ms into this screen`;
+        track.appendChild(bar);
+        row.appendChild(track);
+
+        row.appendChild(el('span', 'wf-ms muted mono', fmtMs(txn.ms)));
+        row.addEventListener('click', () => select(txn.id));
+        row.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(txn.id); }
+        });
+        block.appendChild(row);
+      }
+      root.appendChild(block);
+    }
+  }
+
+  // --- the time axis ------------------------------------------------------
+
+  const AXIS_BUCKETS = 200;
+  const AXIS_W = 1000;          // viewBox units; the element itself stretches to its container
+  const AXIS_BARS_H = 30;
+  const AXIS_BAND_H = 7;
+  const AXIS_H = AXIS_BARS_H + AXIS_BAND_H;
+
+  const svgEl = (tag, attrs = {}) => {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+    return node;
+  };
+
+  /**
+   * One colour per screen, assigned by first appearance rather than hashed.
+   *
+   * A hash gives a screen the same colour forever, which sounds better than it is: two screens
+   * whose names hash adjacent become indistinguishable, and you cannot fix it. Ordering means the
+   * first few screens of a session are always maximally far apart, which is what you are actually
+   * looking at.
+   */
+  const SCREEN_COLOURS = [
+    '#6aa9ff', '#c08cff', '#59c98a', '#ffb454', '#ff7b8a', '#4fd1c5', '#f6c945', '#9aa7ff',
+  ];
+
+  /** The wall-clock span of the session, and the `mono` window it maps onto. */
+  function sessionWindow() {
+    const monos = [
+      ...state.allTransactions.map((t) => t.mono),
+      ...state.signals.map((s) => s.mono),
+      ...state.markers.map((m) => m.mono),
+    ];
+    if (!monos.length) return null;
+    const from = Math.min(...monos);
+    const to = Math.max(...monos);
+    return { from, to, span: Math.max(1, to - from) };
+  }
+
+  /**
+   * Which screen was on at each moment, as segments.
+   *
+   * A screen signal is a point observation — "we arrived here" — so the screen it names is the
+   * one showing from that moment until the next such signal. Calls before the first one are not
+   * attributed to a guess: the app was somewhere, and this build does not know where.
+   */
+  function screenSegments(win) {
+    if (!win) return [];
+    const arrivals = state.signals
+      .filter((s) => tagOf(s) === 'screen')
+      .sort((a, b) => a.mono - b.mono);
+    if (!arrivals.length) return [];
+
+    const colours = new Map();
+    const colourFor = (name) => {
+      if (!colours.has(name)) colours.set(name, SCREEN_COLOURS[colours.size % SCREEN_COLOURS.length]);
+      return colours.get(name);
+    };
+
+    const segments = [];
+    if (arrivals[0].mono > win.from) {
+      segments.push({ name: null, from: win.from, to: arrivals[0].mono, colour: 'var(--divider)' });
+    }
+    for (let i = 0; i < arrivals.length; i++) {
+      const next = arrivals[i + 1];
+      const from = arrivals[i].mono;
+      const to = next ? next.mono : win.to;
+      // Re-arriving at the screen you are already on is a re-render, not a new segment.
+      const open = segments[segments.length - 1];
+      if (open && open.name === arrivals[i].name) open.to = to;
+      else segments.push({ name: arrivals[i].name, from, to, colour: colourFor(arrivals[i].name) });
+    }
+    return segments.filter((s) => s.to > s.from);
+  }
+
+  function renderAxis() {
+    const host = $('axis');
+    const win = sessionWindow();
+    // Every view built from transactions on a clock, which the waterfall is: brushing already
+    // narrows it, so hiding the control that does the brushing would be the odd choice.
+    const onTimeView = ['all', 'network', 'waterfall'].includes(state.view);
+    host.hidden = !onTimeView || !win || state.allTransactions.length + state.signals.length < 2;
+    if (host.hidden) return;
+
+    const svg = $('axis-svg');
+    svg.setAttribute('viewBox', `0 0 ${AXIS_W} ${AXIS_H}`);
+    svg.innerHTML = '';
+    const x = (mono) => ((mono - win.from) / win.span) * AXIS_W;
+
+    // The shape is drawn from the *whole* session, never the filtered set. A map that redraws
+    // itself every time you filter cannot answer "where am I", which is what it is for.
+    const buckets = new Array(AXIS_BUCKETS).fill(null).map(() => ({ all: 0, hit: 0, bad: 0 }));
+    const slot = (mono) =>
+      Math.min(AXIS_BUCKETS - 1, Math.floor(((mono - win.from) / win.span) * AXIS_BUCKETS));
+    const matching = new Set(state.transactions.map((t) => t.id));
+    for (const txn of state.allTransactions) {
+      const b = buckets[slot(txn.mono)];
+      b.all++;
+      if (matching.has(txn.id)) b.hit++;
+      if (txn.error || (txn.status ?? 0) >= 400) b.bad++;
+    }
+    const tallest = Math.max(1, ...buckets.map((b) => b.all));
+    const bw = AXIS_W / AXIS_BUCKETS;
+
+    for (let i = 0; i < AXIS_BUCKETS; i++) {
+      const b = buckets[i];
+      if (!b.all) continue;
+      const h = Math.max(1.5, (b.all / tallest) * AXIS_BARS_H);
+      const bx = i * bw;
+      // Three layers, because they answer three different questions: how busy, how much of it
+      // your filter kept, and how much of it failed.
+      svg.appendChild(svgEl('rect', {
+        x: bx, y: AXIS_BARS_H - h, width: Math.max(1, bw - 0.4), height: h, class: 'axis-bar-all',
+      }));
+      if (b.hit) {
+        const hh = Math.max(1.5, (b.hit / tallest) * AXIS_BARS_H);
+        svg.appendChild(svgEl('rect', {
+          x: bx, y: AXIS_BARS_H - hh, width: Math.max(1, bw - 0.4), height: hh, class: 'axis-bar-hit',
+        }));
+      }
+      if (b.bad) {
+        const bh = Math.max(1.5, (b.bad / tallest) * AXIS_BARS_H);
+        svg.appendChild(svgEl('rect', {
+          x: bx, y: AXIS_BARS_H - bh, width: Math.max(1, bw - 0.4), height: bh, class: 'axis-bar-bad',
+        }));
+      }
+    }
+
+    // The screen band ties the two halves of this release together: the bars say when the app was
+    // busy, the band says where it was while it was.
+    for (const seg of screenSegments(win)) {
+      const rect = svgEl('rect', {
+        x: x(seg.from), y: AXIS_BARS_H + 1, width: Math.max(1, x(seg.to) - x(seg.from)),
+        height: AXIS_BAND_H - 1, fill: seg.colour, class: 'axis-screen',
+      });
+      rect.appendChild(svgEl('title')).textContent = seg.name
+        ? `${seg.name} — ${fmtMs(seg.to - seg.from)}`
+        : 'before the first screen signal';
+      svg.appendChild(rect);
+    }
+
+    for (const marker of state.markers) {
+      const mx = x(marker.mono);
+      svg.appendChild(svgEl('line', { x1: mx, y1: 0, x2: mx, y2: AXIS_BARS_H, class: 'axis-marker' }));
+      const flag = svgEl('rect', { x: mx - 2, y: 0, width: 4, height: 4, class: 'axis-marker-flag' });
+      flag.appendChild(svgEl('title')).textContent = marker.label;
+      svg.appendChild(flag);
+    }
+
+    if (state.timeRange) {
+      const from = x(state.timeRange.from);
+      const to = x(state.timeRange.to);
+      // Dim what is excluded rather than tint what is kept: the selection should read as the
+      // normal view with the rest pushed back, not as a highlight over an unchanged chart.
+      svg.appendChild(svgEl('rect', { x: 0, y: 0, width: Math.max(0, from), height: AXIS_H, class: 'axis-mask' }));
+      svg.appendChild(svgEl('rect', { x: to, y: 0, width: Math.max(0, AXIS_W - to), height: AXIS_H, class: 'axis-mask' }));
+      svg.appendChild(svgEl('line', { x1: from, y1: 0, x2: from, y2: AXIS_H, class: 'axis-edge' }));
+      svg.appendChild(svgEl('line', { x1: to, y1: 0, x2: to, y2: AXIS_H, class: 'axis-edge' }));
+    }
+
+    renderAxisFoot(win);
+  }
+
+  function renderAxisFoot(win) {
+    const clock = (mono) => {
+      // `mono` is the device's monotonic clock and means nothing by itself. Anchor it to the
+      // wall-clock time of the nearest row that carries both, which every row does.
+      const anchor = state.allTransactions[0] || state.signals[0];
+      if (!anchor) return '';
+      const at = Date.parse(anchor.ts);
+      if (!Number.isFinite(at)) return '';
+      return new Date(at + (mono - anchor.mono)).toLocaleTimeString();
+    };
+    $('axis-from').textContent = clock(win.from);
+    $('axis-to').textContent = clock(win.to);
+
+    const hint = $('axis-hint');
+    hint.innerHTML = '';
+    if (!state.timeRange) {
+      hint.className = 'axis-hint muted';
+      hint.textContent = `${state.allTransactions.length} calls over ${fmtMs(win.span)} — drag to narrow`;
+      return;
+    }
+    hint.className = 'axis-hint';
+    const kept = visibleTransactions().length;
+    const label = el('span', null, `${clock(state.timeRange.from)} – ${clock(state.timeRange.to)} · ${kept} calls`);
+    const clear = el('button', 'btn btn-sm btn-quiet', 'show all');
+    clear.addEventListener('click', () => setTimeRange(null));
+    hint.appendChild(label);
+    hint.appendChild(clear);
+  }
+
+  let axisPaintSuspended = false;
+
+  function setTimeRange(range) {
+    state.timeRange = range;
+    renderAxis();
+    renderCounts();
+    axisPaintSuspended = true;
+    try {
+      renderList();
+      renderTimeline();
+      renderWaterfall();
+    } finally {
+      axisPaintSuspended = false;
+    }
+    if ($('detail').hidden) renderSessionGlance();
+  }
+
+  /**
+   * Drag a stretch, click to clear.
+   *
+   * Wired once against the container rather than per render: the SVG is rebuilt on every live
+   * signal, and listeners attached to its children would be replaced mid-drag.
+   */
+  function wireAxis() {
+    const host = $('axis');
+    const svg = $('axis-svg');
+    let anchor = null;
+
+    const monoAt = (event) => {
+      const win = sessionWindow();
+      if (!win) return null;
+      const box = svg.getBoundingClientRect();
+      // A zero-width box means the element is not laid out — in a headless render, or before
+      // first paint. Dividing by it yields NaN, and a NaN range silently filters everything out.
+      if (!box.width) return null;
+      const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+      return win.from + ratio * win.span;
+    };
+
+    host.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button')) return;
+      anchor = monoAt(event);
+      if (anchor === null) return;
+      // Capture keeps the drag alive when the pointer leaves the strip, which it will — the strip
+      // is 37px tall. Not fatal if unavailable, so not worth failing the drag over.
+      try { host.setPointerCapture(event.pointerId); } catch { /* no capture, drag still works */ }
+    });
+
+    host.addEventListener('pointermove', (event) => {
+      if (anchor === null) return;
+      const now = monoAt(event);
+      if (now === null) return;
+      setTimeRange({ from: Math.min(anchor, now), to: Math.max(anchor, now) });
+    });
+
+    const finish = (event) => {
+      if (anchor === null) return;
+      const now = monoAt(event);
+      const win = sessionWindow();
+      // A click is a drag of nothing. Treat anything under 1% of the session as "show me all of
+      // it again" rather than selecting a sliver nobody could have aimed at.
+      if (win && now !== null && Math.abs(now - anchor) < win.span * 0.01) setTimeRange(null);
+      anchor = null;
+    };
+    host.addEventListener('pointerup', finish);
+    host.addEventListener('pointercancel', finish);
   }
 
   function setSortOrder(newestFirst) {
@@ -860,12 +1284,15 @@
   function applyView() {
     const all = state.view === 'all';
     const network = state.view === 'network';
-    const browsing = !all && !network;
+    const waterfall = state.view === 'waterfall';
+    const browsing = !all && !network && !waterfall;
 
     $('list').hidden = !network;
     $('list-empty').hidden = !network || state.transactions.length > 0;
     $('timeline').hidden = !all;
     $('timeline-empty').hidden = true;
+    $('waterfall').hidden = !waterfall;
+    $('waterfall-empty').hidden = true;
     $('browser').hidden = !browsing;
     for (const tab of $('tabs').querySelectorAll('.tab')) {
       tab.classList.toggle('active', tab.dataset.view === state.view);
@@ -878,6 +1305,8 @@
     // The toolbar filters transactions, which is what both of these views are built from. The tag
     // browser filters payload keys instead and carries its own toolbar for it, so showing this one
     // there would put two filter boxes on screen that mean different things.
+    // The waterfall is built from transactions, so the call filter applies to it as much as to
+    // the list. Only the tag browsers, which filter payload keys, get their own toolbar instead.
     $('toolbar').hidden = browsing;
     if (browsing) closePops();
     // The drawer covers the list it was opened from. Carrying it across a tab switch would leave
@@ -885,10 +1314,12 @@
     closeDrawer();
     // Nothing selected means the pane is free to say something useful about the session instead.
     if (!browsing && $('detail').hidden) renderSessionGlance();
+    renderAxis();
     // `Now` is the app's current state, which is only ever read beside the merged timeline.
     $('now-strip').hidden = !all || state.current.length === 0;
 
     if (all) renderTimeline();
+    if (waterfall) renderWaterfall();
     if (browsing) renderBrowser();
   }
 
@@ -1644,7 +2075,7 @@
       ...state.transactions.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
       ...state.signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
       ...state.markers.map((marker) => ({ kind: 'marker', mono: marker.mono, marker })),
-    ].sort((a, b) => a.mono - b.mono);
+    ].filter((entry) => inRange(entry.mono)).sort((a, b) => a.mono - b.mono);
 
     if (state.newestFirst) entries.reverse();
 
@@ -1898,7 +2329,7 @@
 
   function select(id) {
     state.selectedId = id;
-    for (const row of document.querySelectorAll('.row')) {
+    for (const row of document.querySelectorAll('.row, .wf-row')) {
       row.classList.toggle('selected', row.dataset.id === id);
     }
     const txn = state.transactions.find((t) => t.id === id);
@@ -2501,6 +2932,7 @@
   $('session-picker').addEventListener('change', (e) => {
     state.sessionId = e.target.value;
     state.selectedId = null;
+    state.timeRange = null;
     showSessionLabel();
     loadTransactions();
   });
@@ -2541,6 +2973,7 @@
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
     wirePops();
+    wireAxis();
     $('drawer-close').addEventListener('click', closeDrawer);
     // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
     $('drawer-scrim').addEventListener('click', closeDrawer);
