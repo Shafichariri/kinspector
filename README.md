@@ -29,7 +29,7 @@ CI — see [Production safety](#production-safety).
 | **4a** | OkHttp capture, for SDKs that own their transport (Auth0, Retrofit, Coil) | ✅ |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**405 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+**416 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
 Compose Multiplatform app, on an Android emulator and the iOS simulator.
 
 Honest gaps: the overlay has been run on one Android device, the iOS simulator and desktop, never on
@@ -108,9 +108,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.5.1")
-implementation("dev.inspector:inspector-ui:0.5.1")
-implementation("dev.inspector:inspector-stream:0.5.1")
+implementation("dev.inspector:inspector-core:0.6.0")
+implementation("dev.inspector:inspector-ui:0.6.0")
+implementation("dev.inspector:inspector-stream:0.6.0")
 ```
 
 Three lines of code:

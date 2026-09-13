@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v22 — 2026-09-11.**
+**Document version: v24 — 2026-09-12.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.5.1")
-implementation("dev.inspector:inspector-ui:0.5.1")
+implementation("dev.inspector:inspector-core:0.6.0")
+implementation("dev.inspector:inspector-ui:0.6.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.5.1")
-            implementation("dev.inspector:inspector-ui:0.5.1")
+            implementation("dev.inspector:inspector-core:0.6.0")
+            implementation("dev.inspector:inspector-ui:0.6.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.5.1")
-                implementation("dev.inspector:inspector-noop-ui:0.5.1")
+                implementation("dev.inspector:inspector-noop:0.6.0")
+                implementation("dev.inspector:inspector-noop-ui:0.6.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.5.1")
-                implementation("dev.inspector:inspector-ui:0.5.1")
+                implementation("dev.inspector:inspector-core:0.6.0")
+                implementation("dev.inspector:inspector-ui:0.6.0")
             }
         }
     }
@@ -361,13 +361,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.5.1")
-    implementation("dev.inspector:inspector-noop-ui:0.5.1")
-    implementation("dev.inspector:inspector-noop-stream:0.5.1")
+    implementation("dev.inspector:inspector-noop:0.6.0")
+    implementation("dev.inspector:inspector-noop-ui:0.6.0")
+    implementation("dev.inspector:inspector-noop-stream:0.6.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.5.1")
-    implementation("dev.inspector:inspector-ui:0.5.1")
-    implementation("dev.inspector:inspector-stream:0.5.1")
+    implementation("dev.inspector:inspector-core:0.6.0")
+    implementation("dev.inspector:inspector-ui:0.6.0")
+    implementation("dev.inspector:inspector-stream:0.6.0")
 }
 ```
 
@@ -666,6 +666,13 @@ the app integration above**.
 
 Tools for traffic: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
 `get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`.
+
+`explain(id)` is the one to reach for when the question is **why** rather than **what**. It joins,
+in one call, what the others make you assemble by hand: the screen the app was on when the call
+started and how long it had been there, every attempt of a retried call, how often the same
+endpoint was hit, the signals either side of it — and the calls that were *in flight at the same
+moment*, which no other tool can tell you, because a call is an interval and everything else
+treats it as the instant it began. Headers are not inlined; `get_transaction` still has those.
 
 Tools for app state, if you record signals (§12): `timeline(filter, since, until, limit)` merges
 traffic, signals and markers on the device clock; `current(tag)` gives the latest observation per
@@ -1130,7 +1137,82 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v22 — 2026-09-11 (this document)
+### v24 — 2026-09-12 (this document)
+
+**Released as 0.6.0. Rebuild the daemon — the web UI is substantially different.**
+
+The library modules are still **byte-for-byte unchanged from 0.3.0**; `git diff v0.3.0..v0.6.0`
+over the seven of them and `api/` is empty. Coordinates below read `0.6.0` if you like them to
+match, but the whole of this release is on the daemon side.
+
+Two releases' worth of web UI landed here, and none of it had a changelog entry of its own. What
+you will notice, roughly in the order you will notice it:
+
+- **Traffic is the tab a session opens on.** The merged view is still there, renamed **timeline**.
+  It held 126 rows to 13 calls on a real session, which is the wrong place to start a network
+  debugger.
+- **A time axis above the list.** Activity across the session, a band showing which screen was on,
+  marker flags. Drag across it to narrow every view below to that stretch; click to clear.
+- **A waterfall tab** — calls grouped by the screen that was showing when each one started, with
+  what that screen cost in calls, wall time and bytes. This is the only place traffic and screen
+  signals are put together.
+- **Runs of identical observations collapse.** One state holder emitted 48 adjacent rows differing
+  only in a payload you cannot see from the row.
+- **Long header values wrap.** A bearer token used to lay out as one unbroken 7000px line, push
+  itself outside the detail pane, and give the page a horizontal scrollbar — so reading a header
+  slid the whole layout sideways. It hit every authenticated request.
+- **Controls belong to the view.** The filter box and endpoint chips are a toolbar above the list
+  now, and absent on the tag browsers, where they never applied. `Now` is a one-line strip.
+- **The detail pane has tabs, response body first.** It used to be the last of five sections,
+  behind every header on both sides of the call.
+- **Below 1200px the detail slides over the list** instead of squeezing it.
+- **Empty panes summarise** the session or the tag, and every line in them is a way in.
+- **Two "for AI" buttons** copy a paste for an agent: one call with its context, or the session —
+  or the stretch, if you have narrowed it on the axis. Both carry the MCP calls that fetch more.
+
+And `explain`, from v23 below.
+
+Nothing in your app or its build changes.
+
+### v23 — 2026-09-11
+
+**Nothing to do. One new MCP tool, if you point an agent at your sessions.**
+
+`explain(session, id)` answers "why did this call go wrong" in one call. Everything in it was
+derivable before, and that was the problem: it took `get_transaction`, two windowed `timeline`
+calls, a scan for the shared `callId`, and interval arithmetic nothing exposed at all.
+
+```
+explain(session: "latest", id: "56f60e95")
+```
+
+```jsonc
+{
+  "call":   { "id": "56f60e95", "method": "GET", "url": "…/variables", "status": 200, "ms": 359 },
+  "screen": { "name": "KycReview", "arrivedMsBefore": 38 },   // the call fired 38ms after arriving
+  "concurrent": [ … ],                                        // what was in flight alongside it
+  "repeats": { "total": 2, "monos": [18, 73433] },
+  "attempts": [ … ],                                          // every try, when it was retried
+  "before": [ … ], "after": [ … ],                            // the signals either side
+  "notes": [ "1 other call(s) were in flight while this one ran" ]
+}
+```
+
+Three things worth knowing about the shape:
+
+- **`concurrent` is the part nothing else could give you.** A call is an interval; every other
+  tool treats it as the instant it started. This is what separates "slow" from "queued behind
+  four others".
+- **Headers are not inlined.** They were 3 KB of an 11 KB answer on a real call, and
+  `get_transaction` already returns them. A note in the reply says so.
+- **Empty fields are still present.** An empty `concurrent` means "nothing ran alongside this",
+  which is a finding — an agent that saw no key at all could not tell that from a daemon that
+  does not report overlap.
+
+This is daemon-side. Rebuild the daemon; nothing in your app or its build changes, and the
+library is untouched.
+
+### v22 — 2026-09-11
 
 **Nothing to do. Worth knowing the day an archived session is missing.**
 

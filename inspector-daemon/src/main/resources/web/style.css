@@ -972,6 +972,8 @@ pre.body {
   margin: 14px 0 6px;
 }
 .glance-title:first-child { margin-top: 0; }
+/* The section heading that also carries an action. */
+.glance-title-row { display: flex; align-items: center; gap: 10px; }
 
 .glance-row {
   display: flex;
