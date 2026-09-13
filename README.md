@@ -108,9 +108,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.5.1")
-implementation("dev.inspector:inspector-ui:0.5.1")
-implementation("dev.inspector:inspector-stream:0.5.1")
+implementation("dev.inspector:inspector-core:0.6.0")
+implementation("dev.inspector:inspector-ui:0.6.0")
+implementation("dev.inspector:inspector-stream:0.6.0")
 ```
 
 Three lines of code:
