@@ -118,6 +118,22 @@
     <ul id="current" class="current" hidden></ul>
   </div>
 
+  <!--
+    A map of the session, above the list that reads it.
+
+    The list answers "what happened"; it is very bad at "when, and how much of it at once". Bursts,
+    idle stretches, the moment everything went red — all of that is shape, and shape is the one
+    thing a scrolling list cannot show. Drag across it to narrow both panes to that stretch.
+  -->
+  <div id="axis" class="axis" hidden>
+    <svg id="axis-svg" class="axis-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
+    <div class="axis-foot">
+      <span id="axis-from" class="axis-time muted mono"></span>
+      <span id="axis-hint" class="axis-hint muted">drag to narrow</span>
+      <span id="axis-to" class="axis-time muted mono"></span>
+    </div>
+  </div>
+
   <main id="panes">
     <section id="list-pane">
       <div id="list" role="listbox" aria-label="Transactions"></div>
@@ -133,6 +149,16 @@
         answers "what is cached and is it fresh", the panel answers "what is in this one, and
         what happened to it" — which is the same shape any tag wants, so every tag gets it.
       -->
+      <!--
+        Calls grouped by the screen that was on when they started, drawn on a shared clock.
+
+        A list answers "what was called"; it cannot answer "what did opening this screen cost".
+        The same rows, laid out by start time and width by duration, turn a scroll into a shape:
+        the serial chain, the burst, the one call everything waited on.
+      -->
+      <div id="waterfall" class="waterfall" hidden></div>
+      <div id="waterfall-empty" class="empty muted" hidden>no calls to lay out</div>
+
       <div id="browser" class="browser" hidden>
         <div class="browser-toolbar">
           <input id="browser-filter" type="search" spellcheck="false" autocomplete="off"
