@@ -1398,4 +1398,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   doc.body.insertBefore(banner, doc.body.firstChild);
 
   console.log('<!doctype html>\n' + doc.documentElement.outerHTML);
+
+  // The snapshot is written, but jsdom is still running a window: `pretendToBeVisual` drives a
+  // requestAnimationFrame loop and app.js sets a 1s interval to repaint ages. Two live timer
+  // handles, neither of which belongs to a page that has already been serialised — and enough to
+  // keep node from exiting, so every caller had to notice the report had stopped and kill the
+  // process. Closing the window clears them.
+  //
+  // Deliberately not wrapped in a finally: an unhandled rejection terminates node with exit 1
+  // whatever timers are pending, so a crash already ends the process. Catching to close here
+  // would only risk turning that failure into a clean exit.
+  window.close();
 })();
