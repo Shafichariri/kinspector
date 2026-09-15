@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v24 — 2026-09-12.**
+**Document version: v25 — 2026-09-15.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1137,7 +1137,44 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v24 — 2026-09-12 (this document)
+### v25 — 2026-09-15 (this document)
+
+**Rebuild, and bump your coordinates. The in-app overlay's list looks different.**
+
+This is the **first library change since 0.3.0** — every release in between was daemon-only, so a
+consumer pinned to older coordinates has been getting nothing new. That ends here: the list lives
+in `:inspector-ui`, so this one arrives through the dependency, not through the daemon.
+
+Nothing in your code or your build changes beyond the version.
+
+**The path had about 22 characters and used to lose the rest.** On a 360dp phone the row spent
+roughly half its width on the status dot, the method badge and the timings before the path got
+any, then clipped what was left from the end — so `/v3/some-service/client-dashboard` and
+`/v3/some-service/client-settings` both rendered as `/v3/some-service/client-` and the two rows
+were indistinguishable.
+
+Three changes, together:
+
+- **The path has a line of its own.** The method, flags, size and status sit on the first line;
+  the second carries the duration and then the path, with about 37 characters instead of 22. The
+  row is no taller than before — it was already two lines, and the second one held the host.
+- **The shared prefix is lifted into a bar above the list.** One app's traffic is mostly one host
+  under one API version, and every row was restating it. The bar says
+  `api.example.com/v3/some-service/` once, rows show what differs, and it names how many of the
+  session it covers. It engages only when a session actually has one — four rows or more, on the
+  busiest host, and never taking the last segment of any path. Rows outside it keep their full
+  path and say which host they came from.
+- **Truncation is from the front.** When a path still will not fit, the tail survives, because
+  the tail is what identifies the endpoint.
+
+Three smaller ones that came with it: a **3dp stripe** down the edge of any row that failed, so a
+bad row is findable without reading; **durations past a second** take the warning colour; and the
+space that opens up on the first line carries **`repeated`, `attempt 2`, an unexpected host or a
+transport error**, which were previously crowded onto a line with the host.
+
+The web UI is unchanged — this is the in-app overlay only.
+
+### v24 — 2026-09-12
 
 **Released as 0.6.0. Rebuild the daemon — the web UI is substantially different.**
 

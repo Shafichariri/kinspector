@@ -1,6 +1,7 @@
 package dev.inspector.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,9 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,10 +27,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
@@ -149,12 +156,21 @@ internal fun InspectorList(
         } else {
             // Computed over *all* transactions, not the filtered view: a duplicate whose twin is
             // filtered out is still a duplicate, and hiding that would make the highlight depend
-            // on what you happened to be searching for.
+            // on what you happened to be searching for. The scope shares the rule — see [pathScope].
             val duplicates = remember(transactions) { duplicateIds(transactions) }
+            val scope = remember(transactions) { pathScope(transactions) }
+
+            // Shown only while something on screen is actually under it. A filter that leaves only
+            // the odd rows out would otherwise leave a bar describing nothing visible.
+            val activeScope = scope?.takeIf { s -> visible.any(s::covers) }
+            if (activeScope != null) {
+                ScopeBar(activeScope, transactions.size)
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+            }
 
             LazyColumn(Modifier.fillMaxSize()) {
                 items(visible, key = { it.id }) { txn ->
-                    TransactionRow(txn, isDuplicate = txn.id in duplicates) { onSelect(txn) }
+                    TransactionRow(txn, activeScope, isDuplicate = txn.id in duplicates) { onSelect(txn) }
                     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
                 }
             }
@@ -162,65 +178,162 @@ internal fun InspectorList(
     }
 }
 
+/**
+ * The shared prefix, lifted above the list it describes.
+ *
+ * Deliberately not scrolled away with the rows: it is a standing claim about what every path
+ * beneath it is missing, and a row read after the bar had scrolled off would be read wrong.
+ */
+@Composable
+private fun ScopeBar(scope: PathScope, total: Int) {
+    val colors = LocalInspectorColors.current
+    Row(
+        Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            scope.label,
+            color = colors.onSurface,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+            // The front of a host is what identifies it, so this truncates the opposite way round
+            // from the rows below.
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .padding(end = 8.dp)
+                .clip(RoundedCornerShape(PILL_RADIUS))
+                .background(colors.accent.copy(alpha = SCOPE_FILL_ALPHA))
+                .border(1.dp, colors.accent.copy(alpha = SCOPE_BORDER_ALPHA), RoundedCornerShape(PILL_RADIUS))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+        Text(
+            "${scope.covered} of $total",
+            color = colors.onSurfaceMuted,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+}
+
+/**
+ * One call over two lines: what happened, then what was called.
+ *
+ * The path is the only part that tells one row from another, and it used to share a line with the
+ * method badge, the status and the timings — about 22 characters on a 360dp phone, which clips
+ * mid-segment and leaves two different endpoints reading alike. Here it has a line of its own and
+ * shares it only with the duration, which is nearer 37.
+ *
+ * Metadata first, path second, which is the less obvious half. The method and status stay in a
+ * fixed column you can run an eye down; the line underneath is what you stop for.
+ */
 @Composable
 private fun TransactionRow(
     txn: NetworkTransaction,
+    scope: PathScope?,
     isDuplicate: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = LocalInspectorColors.current
-    Row(
+    val statusColor = colors.forStatus(txn.status)
+    val failed = txn.status == null || (txn.status ?: 0) >= 400
+    val slow = (txn.ms ?: 0L) >= SLOW_MS
+
+    Column(
         Modifier.fillMaxWidth()
             .clickable(onClick = onClick)
             // Background before padding, so the tint fills the row rather than insetting with it.
             .background(if (isDuplicate) colors.duplicate.copy(alpha = DUPLICATE_TINT_ALPHA) else Color.Transparent)
+            // A failure is findable by shape before it is read. Drawn rather than laid out, so it
+            // costs the row no width and cannot pull the columns out of line.
+            .drawBehind {
+                if (failed) drawRect(statusColor, size = Size(STRIPE_WIDTH.toPx(), size.height))
+            }
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(colors.forStatus(txn.status)))
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
 
-        MethodBadge(txn.method, minWidth = 52.dp)
+            MethodBadge(txn.method, minWidth = 52.dp)
 
-        Column(Modifier.weight(1f)) {
+            // Everything unusual about this row, in the space the fixed columns leave over. Empty
+            // on an ordinary call, which is most of them — so anything here is worth the glance.
             Text(
-                txn.path,
-                color = colors.onSurface,
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 1,
-            )
-            Text(
-                buildString {
-                    append(txn.host)
-                    if (txn.attempt > 1) append("  ·  attempt ${txn.attempt}")
-                    // Said in words as well as colour: a tint alone is invisible to anyone who
-                    // cannot distinguish it, and unexplained to everyone else.
-                    if (isDuplicate) append("  ·  repeated")
-                    txn.error?.let { append("  ·  ").append(it) }
-                },
+                rowFlags(txn, scope, isDuplicate),
                 color = colors.onSurfaceMuted,
                 fontSize = 11.sp,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
-        }
 
-        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                formatBytes(maxOf(txn.reqBytes, txn.resBytes)),
+                color = colors.onSurfaceMuted,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+            )
             Text(
                 statusLabel(txn),
-                color = colors.forStatus(txn.status),
+                color = statusColor,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 fontFamily = FontFamily.Monospace,
             )
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "${formatDuration(txn.ms)}  ${formatBytes(maxOf(txn.reqBytes, txn.resBytes))}",
-                color = colors.onSurfaceMuted,
+                formatDuration(txn.ms),
+                // The one number on the row with a natural bad state, so the list diagnoses as it
+                // scrolls instead of only once a row is opened.
+                color = if (slow) colors.clientError else colors.onSurfaceMuted,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                // Fixed width, so every path below starts at the same x. Durations run 3 to 6
+                // characters, and a ragged left edge costs more in scanning than the column costs
+                // in space.
+                modifier = Modifier.width(DURATION_COLUMN).alignByBaseline(),
+            )
+            Text(
+                if (scope?.covers(txn) == true) scope.strip(txn.path) else txn.path,
+                color = colors.onSurface,
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                // The tail identifies the endpoint; the front is boilerplate the scope bar has
+                // usually already said. Clipping the end leaves two rows reading alike.
+                overflow = TextOverflow.StartEllipsis,
+                modifier = Modifier.weight(1f).alignByBaseline(),
             )
         }
     }
+}
+
+/**
+ * What is unusual about this row, said in words.
+ *
+ * The host appears only when it is not the one the scope bar claims: repeating it on every row is
+ * noise when it never changes, and load-bearing on the one row where it does.
+ */
+private fun rowFlags(txn: NetworkTransaction, scope: PathScope?, isDuplicate: Boolean): String {
+    val parts = mutableListOf<String>()
+    if (txn.attempt > 1) parts += "attempt ${txn.attempt}"
+    // Said in words as well as colour: a tint alone is invisible to anyone who cannot distinguish
+    // it, and unexplained to everyone else.
+    if (isDuplicate) parts += "repeated"
+    if (scope == null || txn.host != scope.host) parts += txn.host
+    txn.error?.let { parts += it }
+    return parts.joinToString("  ·  ")
 }
 
 /**
@@ -245,3 +358,21 @@ internal fun ToolbarButton(label: String, onClick: () -> Unit, prominent: Boolea
 
 /** Low enough to read as a tint rather than as a status colour. */
 private const val DUPLICATE_TINT_ALPHA = 0.14f
+
+/** Wide enough to catch the eye down the margin, narrow enough not to read as a second column. */
+private val STRIPE_WIDTH = 3.dp
+
+/**
+ * Where a duration stops being unremarkable.
+ *
+ * A round second rather than a measured threshold: the point is to make the slow rows findable
+ * while scrolling, and anything in this range separates "fine" from "worth a look" well enough.
+ */
+private const val SLOW_MS = 1_000L
+
+/** Fits `1234ms` at 11sp monospace, which is the widest [formatDuration] produces. */
+private val DURATION_COLUMN = 42.dp
+
+private val PILL_RADIUS = 999.dp
+private const val SCOPE_FILL_ALPHA = 0.13f
+private const val SCOPE_BORDER_ALPHA = 0.26f
