@@ -913,11 +913,45 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   }
 
   /**
+   * How many calls the session holds right now, asked of the daemon rather than of the page.
+   *
+   * The axis is drawn from `allTransactions`, so "did the input move under me" is a question
+   * about the session, not about the DOM. Taking it from the same endpoint the page uses keeps
+   * the answer honest when the app is still recording into the session on screen.
+   */
+  const sessionCallCount = async () => {
+    const id = doc.getElementById('session-picker').value;
+    const q = new URLSearchParams({ filter: '', limit: '2000' });
+    try {
+      const page = await window.fetch(
+        `/api/sessions/${encodeURIComponent(id)}/transactions?${q}`
+      ).then((r) => r.json());
+      return page.items.length;
+    } catch {
+      return null; // unknown, which the caller reports rather than guesses about
+    }
+  };
+
+  /**
    * The time axis: a map of the session, drawn above the list that reads it.
    *
    * The assertion with teeth is that the shape comes from the *whole* session while the
    * highlight comes from the filtered set. A map redrawn from whatever survived the filter
    * cannot answer "where am I in this session", which is the only reason to draw one.
+   *
+   * That is checked by *layer*, not by bar count. Counting was the obvious way to write it and
+   * it false-alarmed on the first live session it met: the app was still recording, the
+   * filter-triggered refetch picked up calls that arrived mid-probe, the session window
+   * stretched to hold them, and a bucket count went 12 -> 13 with nothing wrong. Bucket
+   * positions are a function of the window, so *no* geometric number survives a session that is
+   * still growing.
+   *
+   * What does survive is the relationship between the two layers. Filter to something that
+   * removes nearly every call: the dim layer must still be wider than the highlight. Redrawn
+   * from the filter, both layers come from one set and the dim one collapses onto the highlight
+   * — which is true whether or not the session grew a moment ago. The exact count is still
+   * compared, but only after asking the daemon whether the session held still, and a session
+   * that moved is reported as having moved instead of failing.
    *
    * The brush itself is not driven here: jsdom has no layout, so `getBoundingClientRect` returns
    * zeros and a pointer position cannot be turned into a time. Dragging was measured in a real
@@ -925,11 +959,14 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
    * narrows, via the control that does it without a pointer.
    */
   async function probeAxis() {
-    const result = { shown: 'n/a', bars: 0, hits: 0, screens: 0, shapeIsWholeSession: 'n/a' };
+    const result = {
+      shown: 'n/a', bars: 0, hits: 0, screens: 0,
+      shapeIsWholeSession: 'n/a', sessionMoved: 'n/a',
+    };
     const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
     if (network) {
       await click(network);
-      await new Promise((r) => setTimeout(r, 400));
+      await settle();
     }
     const axis = doc.getElementById('axis');
     result.shown = axis.hidden ? 'NO - hidden on traffic' : 'shown';
@@ -942,20 +979,48 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     // Filter hard, then check the dim shape held its ground while the highlight shrank.
     const filter = doc.getElementById('filter');
     const before = { bars: result.bars, hits: result.hits };
+    const callsBefore = await sessionCallCount();
+
     filter.value = 'status>=400';
     filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 900));
+    await settle();
     const after = {
       bars: axis.querySelectorAll('.axis-bar-all').length,
       hits: axis.querySelectorAll('.axis-bar-hit').length,
     };
-    result.shapeIsWholeSession = after.bars === before.bars
-      ? `yes (${after.bars} bars held, hits ${before.hits} -> ${after.hits})`
-      : `NO - the shape shrank with the filter, ${before.bars} -> ${after.bars}`;
+    const callsAfter = await sessionCallCount();
+
+    const grew = callsBefore !== null && callsAfter !== null ? callsAfter - callsBefore : null;
+    result.sessionMoved = grew === null
+      ? 'unknown - the daemon did not answer; counts below are not compared'
+      : grew > 0
+        ? `grew by ${grew} under the probe (${callsBefore} -> ${callsAfter} calls) - still recording`
+        : `held still (${callsBefore} calls)`;
+
+    // A filter that removed nothing tells the two layers apart from neither, so say so rather
+    // than passing on it: a session of nothing but errors would otherwise read as proof.
+    const narrowed = after.hits < before.hits;
+    if (!before.bars) {
+      result.shapeIsWholeSession = 'n/a - the session drew no bars to test';
+    } else if (!narrowed) {
+      result.shapeIsWholeSession =
+        `n/a - 'status>=400' removed nothing (${before.hits} hits), so the layers are indistinguishable`;
+    } else if (after.bars <= after.hits) {
+      result.shapeIsWholeSession =
+        `NO - the shape was redrawn from the filter (${after.bars} bars to ${after.hits} hits)`;
+    } else if (grew === 0 && after.bars !== before.bars) {
+      result.shapeIsWholeSession =
+        `NO - the shape changed with the filter, ${before.bars} -> ${after.bars}, ` +
+        'and the session held still';
+    } else {
+      result.shapeIsWholeSession = grew
+        ? `yes (${after.bars} bars over ${after.hits} hits; the session grew, so counts are not compared)`
+        : `yes (${after.bars} bars held, hits ${before.hits} -> ${after.hits})`;
+    }
 
     filter.value = '';
     filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 900));
+    await settle();
     return result;
   }
 
@@ -1271,6 +1336,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('session bundle     :', bundleProbe.sessionButton);
   console.error('--- axis & waterfall ---');
   console.error('axis on traffic    :', axisProbe.shown, `(${axisProbe.bars} buckets, ${axisProbe.screens} screen bands)`);
+  console.error('session under probe:', axisProbe.sessionMoved);
   console.error('shape is whole sess:', axisProbe.shapeIsWholeSession);
   console.error('waterfall tab      :', waterfallProbe.tabShown, `- ${waterfallProbe.groups} screens, ${waterfallProbe.rows} calls`);
   console.error('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none');
