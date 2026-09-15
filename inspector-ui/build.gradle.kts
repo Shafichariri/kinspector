@@ -29,6 +29,14 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
         }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+        jvmTest.dependencies {
+            // Test-only, and never published: ImageComposeScene needs skiko's native runtime to
+            // render the list off-screen. `compose.ui` alone brings the API but not the binary.
+            implementation(compose.desktop.currentOs)
+        }
         androidMain.dependencies {
             // Only for InspectorBackHandler. Every Compose Android app already has this — it is
             // what provides ComponentActivity.setContent.
