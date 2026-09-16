@@ -273,6 +273,7 @@ Targeted tasks:
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
+./gradlew :inspector-ui:jvmTest                   # overlay: prefix rules + a real render
 ./gradlew build -Pinspector=off                   # the release swap
 ```
 

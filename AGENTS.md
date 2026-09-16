@@ -132,6 +132,9 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   the app, and nothing but cURL could be copied. All four are fixed; **the fixes themselves have
   only been compiled and exercised on desktop**, where insets are zero and there is no back
   gesture, so the parts that matter most are still unverified on a device.
+  The list layout that followed was checked the same way with one addition — `ListRenderTest`
+  renders it off-screen at 360dp, which catches what a desktop window cannot, because a desktop
+  window is never 360dp wide. It is still not a device.
 - There is still no Android app module and no Xcode project. UI code compiles for all targets.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
@@ -519,6 +522,13 @@ fails at class-init with "should be void" if the block's last expression returns
 `assertNotNull` returns its argument. `:inspector-daemon` runs **JUnit 5**
 (`useJUnitPlatform()`), where a value-returning `@BeforeEach` is rejected instead.
 
+**`:inspector-ui`'s render test is JVM-only, and needs a dependency that must never ship.**
+`ListRenderTest` draws the real list through `ImageComposeScene`, which needs skiko's native
+runtime — `compose.ui` carries the API but not the binary. It is declared as
+`jvmTest.dependencies { implementation(compose.desktop.currentOs) }`, test-only and never
+published. Do not promote it to a main source set to "fix" a missing class, and do not add it to
+`commonTest`: the iOS and Android test compilations have no use for it.
+
 **MCP tool failures are results, not JSON-RPC errors.** An agent can read `isError: true` with a
 message and correct itself; a transport-level error just ends its turn. Reserve JSON-RPC errors
 for protocol problems like an unknown method.
@@ -602,6 +612,8 @@ INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against 
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
+./gradlew :inspector-ui:jvmTest                   # overlay: prefix rules + a real render
+open inspector-ui/build/screenshots/list-dark.png # ... what that render produced
 ./gradlew build -Pinspector=off                   # release swap
 ./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
 ./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
@@ -725,5 +737,8 @@ else a scan turns up.
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
+| `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
+| `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
+| `inspector-ui/src/jvmTest/.../ListRenderTest.kt` | The mobile equivalent of `render-web-ui.js`: renders the real list at 360dp and writes a PNG to `inspector-ui/build/screenshots/`. Run it after touching the list, then *look at the output* — it is there to be read, not just to pass. |
 | `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |
