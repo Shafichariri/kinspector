@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v26 — 2026-09-16.**
+**Document version: v27 — 2026-09-16.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.6.0")
-implementation("dev.inspector:inspector-ui:0.6.0")
+implementation("dev.inspector:inspector-core:0.7.0")
+implementation("dev.inspector:inspector-ui:0.7.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.6.0")
-            implementation("dev.inspector:inspector-ui:0.6.0")
+            implementation("dev.inspector:inspector-core:0.7.0")
+            implementation("dev.inspector:inspector-ui:0.7.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.6.0")
-                implementation("dev.inspector:inspector-noop-ui:0.6.0")
+                implementation("dev.inspector:inspector-noop:0.7.0")
+                implementation("dev.inspector:inspector-noop-ui:0.7.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.6.0")
-                implementation("dev.inspector:inspector-ui:0.6.0")
+                implementation("dev.inspector:inspector-core:0.7.0")
+                implementation("dev.inspector:inspector-ui:0.7.0")
             }
         }
     }
@@ -376,13 +376,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.6.0")
-    implementation("dev.inspector:inspector-noop-ui:0.6.0")
-    implementation("dev.inspector:inspector-noop-stream:0.6.0")
+    implementation("dev.inspector:inspector-noop:0.7.0")
+    implementation("dev.inspector:inspector-noop-ui:0.7.0")
+    implementation("dev.inspector:inspector-noop-stream:0.7.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.6.0")
-    implementation("dev.inspector:inspector-ui:0.6.0")
-    implementation("dev.inspector:inspector-stream:0.6.0")
+    implementation("dev.inspector:inspector-core:0.7.0")
+    implementation("dev.inspector:inspector-ui:0.7.0")
+    implementation("dev.inspector:inspector-stream:0.7.0")
 }
 ```
 
@@ -1152,7 +1152,27 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v26 — 2026-09-16 (this document)
+### v27 — 2026-09-16 (this document)
+
+**Released as 0.7.0. Bump your coordinates — a rebuild alone will not get you this one.**
+
+**The first release since 0.3.0 where the library itself changed.** 0.4.0, 0.5.0, 0.5.1 and 0.6.0
+were all daemon-only, and each said so: the coordinates were worth updating for tidiness and
+nothing more. That is no longer true. The list lives in `:inspector-ui`, so this arrives through
+the dependency — a consumer who rebuilds the daemon and leaves the coordinates at `0.6.0` gets
+none of it.
+
+Every snippet in this document now reads `0.7.0`. What is in it:
+
+- **The overlay's list row, rebuilt** — the path has a line of its own, the shared prefix moves
+  into a bar above the list, and truncation happens at the front. **v25 below** has the detail
+  and the reasoning.
+- **Corrections to this document** — see **v26 below**. No code.
+
+The daemon and the web UI are unchanged since 0.6.0. Two fixes landed in `scripts/render-web-ui.js`,
+which is repo tooling and ships to nobody.
+
+### v26 — 2026-09-16
 
 **Nothing to do. Two corrections to this document; no code changed.**
 
@@ -1169,7 +1189,8 @@ has never run on an iPhone.
 
 ### v25 — 2026-09-15
 
-**Rebuild, and bump your coordinates. The in-app overlay's list looks different.**
+**Released as 0.7.0. Rebuild, and bump your coordinates to `0.7.0`. The in-app overlay's list
+looks different.**
 
 This is the **first library change since 0.3.0** — every release in between was daemon-only, so a
 consumer pinned to older coordinates has been getting nothing new. That ends here: the list lives
@@ -1209,8 +1230,8 @@ The web UI is unchanged — this is the in-app overlay only.
 **Released as 0.6.0. Rebuild the daemon — the web UI is substantially different.**
 
 The library modules are still **byte-for-byte unchanged from 0.3.0**; `git diff v0.3.0..v0.6.0`
-over the seven of them and `api/` is empty. Coordinates below read `0.6.0` if you like them to
-match, but the whole of this release is on the daemon side.
+over the seven of them and `api/` is empty. The coordinates for that release were `0.6.0`, worth
+updating only if you liked them to match — the whole of it was on the daemon side.
 
 Two releases' worth of web UI landed here, and none of it had a changelog entry of its own. What
 you will notice, roughly in the order you will notice it:
