@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v25 — 2026-09-15.**
+**Document version: v26 — 2026-09-16.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -331,6 +331,21 @@ Run your app, trigger a network call, and look for a small pill near the left ed
 - **Drag** it → moves, snapping to the nearest edge
 - **Long-press** it → collapses to a dot; tap the dot to restore
 - In the list, tap a row → Overview / Request / Response tabs
+
+Each row is two lines. The first carries the method, anything unusual about the call, the size and
+the status; the second carries the duration and then the path. A few things you may wonder about:
+
+- **A bar above the list reading something like `api.example.com/v3/some-service/` with `8 of 9`.**
+  Most apps talk to one host under one API version, so that front is the same on every row and the
+  rows below show only the part that differs. It appears only when a session has such a prefix, and
+  rows outside it keep their full path and name their own host.
+- **A coloured stripe down the left edge** of any call that failed.
+- **An amber duration** on anything that took longer than a second.
+- **Words like `repeated` or `attempt 2`** on the first line — a request sent twice by separate
+  calls, or a retry.
+
+If a path is still too long to fit, it is truncated from the **front**: the tail is what identifies
+an endpoint, so that is the part kept.
 - **Getting back to your app:** system back, or `✕ close`. Back unwinds one screen at a time and
   only while the inspector is open, so your app's own back behaviour is untouched.
 - **Copying:** `cURL` in the detail toolbar, plus a `copy` next to the URL, the error, the header
@@ -1106,9 +1121,9 @@ Overrides merge over the defaults, `null` uncaps a tag, and `DAEMON.md` §6 has 
 ## 13. What to report back
 
 1. **Your Ktor engine per target** — settles the redirect-chain question.
-2. **Whether the overlay looks right on real hardware.** It has been exercised on desktop, an
-   Android emulator and an iOS simulator — never on a physical device, which is where insets and
-   the system back gesture actually differ.
+2. **Whether the overlay looks right on real hardware.** It has been run on one Android phone,
+   plus desktop, an Android emulator and an iOS simulator — never on an iPhone, which is where
+   insets and the system back gesture are most likely to differ from what was tested.
 3. Anything that felt slow, any body that came back wrong, any call that didn't appear.
 4. **If you wire up the Auth0 adapter** — whether it worked, and whether your tenant uses DPoP.
 
@@ -1137,7 +1152,22 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v25 — 2026-09-15 (this document)
+### v26 — 2026-09-16 (this document)
+
+**Nothing to do. Two corrections to this document; no code changed.**
+
+**§5 Verify now describes the list you are looking at.** It walked through the pill, the tabs and
+the filter bar, and said nothing about the row itself — so the bar above the list, the partial
+paths beneath it, the edge stripe and the flag words were explained only in v25 below, which is
+addressed to people upgrading. Someone integrating for the first time had no way to find out what
+they were seeing.
+
+**§13 no longer says the overlay has never run on a physical device.** It has, on one Android
+phone — which `README.md` and the v7 entry below have both said since. v14 claimed this sentence
+was corrected at the time and it was not. What is still true, and now what §13 says, is that it
+has never run on an iPhone.
+
+### v25 — 2026-09-15
 
 **Rebuild, and bump your coordinates. The in-app overlay's list looks different.**
 
