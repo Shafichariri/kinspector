@@ -108,9 +108,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.6.0")
-implementation("dev.inspector:inspector-ui:0.6.0")
-implementation("dev.inspector:inspector-stream:0.6.0")
+implementation("dev.inspector:inspector-core:0.7.0")
+implementation("dev.inspector:inspector-ui:0.7.0")
+implementation("dev.inspector:inspector-stream:0.7.0")
 ```
 
 Three lines of code:
@@ -273,6 +273,7 @@ Targeted tasks:
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
+./gradlew :inspector-ui:jvmTest                   # overlay: prefix rules + a real render
 ./gradlew build -Pinspector=off                   # the release swap
 ```
 
