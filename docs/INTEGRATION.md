@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v29 — 2026-09-17.**
+**Document version: v30 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -615,6 +615,17 @@ Drop a labelled point into the timeline to correlate UI actions with traffic:
 Inspector.mark("tapped checkout")
 ```
 
+A marker is visible on **both** surfaces. In the overlay it draws as a labelled rule across the
+list, between the calls before it and the calls after, and every distinct label also appears as a
+chip under the filter field — tapping one applies `since:marker("…")`, tapping it again clears.
+The `mark` button in the overlay toolbar drops one too, so a marker made on a phone is visible on
+that phone without a daemon.
+
+Labels are yours to choose and nothing parses them, with one caveat worth knowing: the filter
+grammar quotes labels and has no escape inside the quotes, so a label containing an **odd** number
+of `"` characters cannot be written as a filter term. Such a marker still draws its rule; it just
+gets no chip. Any label without quotes — which is all of them in practice — is fine.
+
 ---
 
 ## 8. Performance
@@ -1184,7 +1195,21 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v29 — 2026-09-17 (this document)
+### v30 — 2026-09-17 (this document)
+
+**Nothing to do. Markers you already create now show up in the overlay.**
+
+`Inspector.mark("…")` has always reached the in-app inspector — it is what `since:marker(…)`
+filters on there — but nothing drew it, so a marker was invisible on the surface that made it and
+there was no way to discover which labels existed to type. Now: a labelled rule across the list
+where the marker falls, and a chip per distinct label under the filter field that applies and
+clears `since:marker("…")` on tap. §7 → Markers describes it.
+
+Arrives with the library, not the daemon — the list lives in `:inspector-ui`, so a consumer who
+rebuilds the daemon and leaves the coordinates alone gets none of it. Same release as v29's
+`adb reverse` support.
+
+### v29 — 2026-09-17
 
 **If you test on a physical Android phone, you now can. Two things to do, both in §6f.**
 
