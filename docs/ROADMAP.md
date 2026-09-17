@@ -122,34 +122,44 @@ in web UI" and "request rewriting/replay" as v1 non-goals, and **both were built
 are not permanent positions, they are positions nobody has revisited on the record.
 
 The code was written in anticipation. `StreamSink` already takes `host` as a constructor
-parameter, and both platforms already record device-versus-emulator honestly, with this comment:
+parameter, and both platforms recorded device-versus-emulator on the grounds that "recording the
+truth means the archive is still accurate the day physical devices are added" — which turned out
+to be the right instinct and the wrong implementation, since the detection under that comment was
+answering "physical device" for every emulator. Both of the first two items below are now done;
+the comment is gone with them.
 
-> v1 only supports emulators, but recording the truth means the archive is still accurate the day
-> physical devices are added.
+### ~~First: the detection is wrong~~ — done, 2026-09-17
 
-### First: the detection is wrong
+The check matched `"generic"` in the fingerprint and `"Emulator"` or `"Android SDK built for"` in
+the model, and a current AVD reports none of them, so every emulator session was archived as
+`android-device`. It now reads the board and not the branding: `Build.HARDWARE`
+(`goldfish`/`ranchu`) first, then `BOARD`, `DEVICE`, `PRODUCT`, and the model strings last.
 
-Before anything else, because it is the field that would tell you whether device support works.
+`ro.kernel.qemu` was the suggestion here and it is still set on every AVD, but there is no public
+accessor — `android.os.SystemProperties` is not in `android-36` — and `Build.HARDWARE` is its
+public mirror, so nothing is gained by the hidden-API path.
 
-An archive of real sessions contains **18 recorded as `android-device` from a device named
-`Google sdk_gphone64_arm64`** — the standard emulator AVD, labelled as hardware. The check looks
-for `"generic"` in the fingerprint and `"Emulator"` or `"Android SDK built for"` in the model
-(`Platform.android.kt`), and a current emulator image reports none of them.
+The iOS side went further than "check it". `IS_IOS_SIMULATOR` is now `expect`/`actual` across
+`iosArm64Main` and `iosSimulatorArm64Main`, so the answer is fixed at link time rather than
+inferred from `SIMULATOR_DEVICE_NAME` being absent. That is what closes the gap this entry
+described: a compile-time fact cannot be wrong on hardware nobody has tested on.
 
-Fix the detection, and prefer something sturdier than a string match on a product name —
-`ro.kernel.qemu` and the `goldfish`/`ranchu` device names outlast marketing strings. Then check
-the iOS side too: it keys off `SIMULATOR_DEVICE_NAME`, which is sound, but has never been
-confirmed against a physical iPhone because nobody has run it on one.
+**Sessions already in the archive keep the wrong label.** Nothing rewrites them, so a session
+folder older than this says `android-device` whatever it was.
 
-### Android over USB — nearly free, and no security decision
+### ~~Android over USB~~ — done, 2026-09-17
 
-`adb reverse tcp:8099 tcp:8099` makes the phone's own loopback reach the host machine. The app
-then connects to `127.0.0.1` instead of the `10.0.2.2` emulator alias, and **the daemon's loopback
-bind is untouched.**
+`defaultDaemonHost()` returns `10.0.2.2` on an emulator and `127.0.0.1` on hardware, and
+`connectionHelp(host, port)` replaced the single troubleshooting constant so the message names the
+address that was actually tried. Recipe in `DAEMON.md` §2 and `INTEGRATION.md` §6f.
 
-What this needs: the host default to stop being a hard-coded emulator alias, a documented recipe,
-and a clear failure message when nothing is listening — "is `adb reverse` set up?" rather than a
-silent disconnected sink.
+Verified on a booted emulator, which speaks the same adb protocol as hardware: `127.0.0.1:8099`
+from inside the device was refused before the forward, answered `HTTP/1.1 200 OK` from the real
+daemon after it, and was refused again once it was removed — with `10.0.2.2` still answering
+throughout and the daemon still bound to `127.0.0.1` alone.
+
+**Not verified on a phone**, because there is still no Android app module to install — see below.
+The tunnel is proven; the app running inside it is not.
 
 ### iOS hardware — the one that needs a decision
 

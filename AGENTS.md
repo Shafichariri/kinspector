@@ -119,6 +119,12 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   and empty.
 - **The MCP server answers the acceptance question in three calls**, verified both as a unit test
   and by piping JSON-RPC frames into the built binary against the real recorded session.
+- **`adb reverse` reaches the daemon from inside a device.** Against a live daemon on a booted
+  emulator, which speaks the same adb protocol as hardware: `127.0.0.1:8099` from inside the
+  device was refused before `adb reverse tcp:8099 tcp:8099`, answered `HTTP/1.1 200 OK` with the
+  daemon's own body after it, and was refused again once the forward was removed. `10.0.2.2`
+  answered throughout, and `lsof` showed the daemon still bound to `127.0.0.1` alone — so the
+  loopback boundary is genuinely untouched rather than assumed to be.
 
 ### Not verified
 
@@ -136,6 +142,8 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   renders it off-screen at 360dp, which catches what a desktop window cannot, because a desktop
   window is never 360dp wide. It is still not a device.
 - There is still no Android app module and no Xcode project. UI code compiles for all targets.
+  This is what stops `adb reverse` being proven on a phone rather than an emulator: the tunnel is
+  verified, the app running inside it is not.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
   localhost by policy in this environment, so only a static snapshot has ever been produced.
