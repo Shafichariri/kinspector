@@ -67,13 +67,22 @@ hour of work, not in the order they were thought of.
 - ~~**Repeat count and span.**~~ **Done, 2026-09-17.** `2× / 1.9s`, from `duplicatesById` in
   `:inspector-model`. The count is `callCount` and not `ids.size`, because a group that swept up a
   retry has more rows than calls and the question is how many times the app *asked*.
-- **Sort order toggle**, oldest/newest first. The mobile list is fixed.
-- **Freeze the list.** Mobile is always live by construction, which sounds better than it is:
-  there is no way to hold still and read while traffic keeps arriving.
-- **Quick-filter chips** — errors / 5xx / slow / retries. The grammar is identical on both sides
-  already (both parse with `:inspector-model`'s `FilterParser`), so these are one-tap presets over
-  machinery that exists.
-- **Endpoint chips.** Same reasoning.
+- ~~**Sort order toggle**~~, ~~**freeze the list**~~, ~~**quick-filter chips**~~ and
+  ~~**endpoint chips**~~. **All done, 2026-09-17**, and together, because they turned out to be
+  one problem rather than four: a phone is 360dp wide and about 720 tall, the header, the filter
+  field and the scope bar already spend four lines before any traffic, and a row each would have
+  spent four more. They share **one horizontally scrollable strip** — the two view toggles lead
+  and never move, then markers when there are any, then the four presets, then endpoints. Vertical
+  space is the scarce one; horizontal is not.
+
+  Freezing holds a *snapshot* of the rows and markers, not a flag. Capture keeps running and the
+  ring keeps evicting, so a freeze that merely stopped redrawing would still lose rows out from
+  under the reader — which is the thing they froze the list to prevent.
+
+  `endpointShortcuts` and `endpointFilterTerm` went into `:inspector-model` beside `timeline`, so
+  the count-not-recency ordering and the anchored-glob term are one rule rather than two. And
+  `:inspector-ui` gained its first interaction tests: `compose.uiTest` in `jvmTest` only, because
+  a toggle's behaviour is a transition and a render test can only photograph one state.
 
 ### The substantial piece: signals in the overlay
 
