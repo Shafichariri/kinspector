@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**550 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**597 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -456,6 +456,34 @@ one rule that holds for all five beats five exceptions. The web tokens are there
 components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from the same token;
 `color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
 older engine drops the whole `background` declaration and the badge with it.
+
+**The overlay's controls are one scrollable strip, not a row each.** A phone is 360dp by about
+720; the header, the filter field and the scope bar already spend four lines before any traffic
+appears. The order toggle, the freeze control, the quick filters, the marker chips and the endpoint
+chips each getting a row would have spent four more. One horizontally scrollable strip trades
+horizontal space, which is not scarce, for vertical space, which is. Order is deliberate: the two
+view toggles lead because they never move and never grow, then markers when there are any — a
+marker exists only because somebody dropped one, so it has earned the forward position — then the
+four presets, then endpoints. The toggles are muted and the filter chips are accent-tinted, because
+one changes how the list is *arranged* and the other changes what it *contains*, and a strip that
+made them look alike would invite tapping `newest first` expecting fewer rows.
+
+**Freezing holds a snapshot, not a flag.** Capture keeps running while the list is held and the
+ring keeps evicting, so a freeze that only stopped redrawing would let the reader's rows be
+replaced underneath them — exactly what they froze the list to prevent. Everything downstream
+reads the frozen rows and markers, including the header count, the scope bar and the context: a
+list frozen in some places and live in others is frozen in the one way nobody wants. Rows held past
+their eviction can no longer fetch a body, which is honest and visible rather than silent.
+
+**`:inspector-ui` has interaction tests, and `compose.uiTest` is jvmTest-only.** A toggle's whole
+behaviour is the transition between two states: `ListRenderTest` photographs one and can never
+show the step, and the state lives inside the composable where no unit test reaches it.
+`ListControlsTest` taps the chips instead. Two rules learned writing it. Select a chip by
+`hasText(…) and hasClickAction()`, never by text alone — a marker named `checkout` is on screen
+twice by design, as a chip and as the rule across the list, and matching on text finds both. And
+assert the *rows move*, not that the label flipped: a toggle wired to nothing would pass an
+assertion about its own text.
+Like `compose.desktop.currentOs`, this dependency must never reach a main source set.
 
 **The overlay's wall clock converts to local time through an `expect`/`actual` offset, not a
 datetime library.** `ts` is ISO-8601 UTC and the entire point of the column is lining a row up

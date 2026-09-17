@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v31 — 2026-09-17.**
+**Document version: v32 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1195,7 +1195,24 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v31 — 2026-09-17 (this document)
+### v32 — 2026-09-17 (this document)
+
+**Nothing to do. The overlay list can be steered now.**
+
+A scrollable strip above the list, holding — in order — the reading-order toggle, a freeze
+control, your markers, four filter presets (`errors`, `5xx`, `slow`, `retries`) and a chip per
+busiest endpoint. Every chip writes the same grammar into the filter field that you could type
+yourself, so tapping one shows you what it did; tapping it again clears it.
+
+**Freeze is the one worth knowing about.** The overlay is live by construction, which sounds
+better than it is — there was no way to hold still and read while traffic kept arriving. Freezing
+holds the rows you are looking at; capture carries on behind it, and thawing catches up. A row
+held long enough to be evicted from the ring can no longer show its body, which the detail screen
+says rather than guesses at.
+
+Arrives with the library, like v30 and v31.
+
+### v31 — 2026-09-17
 
 **Nothing to do. The overlay row says more.**
 

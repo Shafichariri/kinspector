@@ -46,8 +46,11 @@ import dev.inspector.model.FilterParser
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.DuplicateGroup
+import dev.inspector.model.EndpointShortcut
 import dev.inspector.model.TimelineEntry
 import dev.inspector.model.duplicatesById
+import dev.inspector.model.endpointFilterTerm
+import dev.inspector.model.endpointShortcuts
 import dev.inspector.model.markerLabels
 import dev.inspector.model.timeline
 // Extension: `matches` on the interface takes a Row; this is the transaction overload.
@@ -71,14 +74,25 @@ internal fun InspectorList(
 ) {
     val colors = LocalInspectorColors.current
     var filterText by remember { mutableStateOf("") }
+    var newestFirst by remember { mutableStateOf(false) }
+
+    // Non-null while the list is held still. Holding the snapshot rather than a boolean is what
+    // makes freezing mean anything: capture keeps running and the ring keeps evicting, so a flag
+    // that merely stopped redrawing would still lose rows out from under the reader.
+    var frozen by remember { mutableStateOf<Frozen?>(null) }
+
+    // Everything below reads these, never the parameters. A frozen list that filtered against live
+    // markers, or counted live rows in its header, would be frozen in the one way nobody wants.
+    val rows = frozen?.transactions ?: transactions
+    val marks = frozen?.markers ?: markers
 
     val parsed = remember(filterText) { FilterParser.parse(filterText) }
     val filter = parsed.getOrNull() ?: Filter.MatchAll
     val parseError = parsed.exceptionOrNull()?.message
 
-    val context = remember(markers) { FilterContext(markers) }
-    val visible = remember(transactions, filter, context) {
-        transactions.filter { filter.matches(it, context) }
+    val context = remember(marks) { FilterContext(marks) }
+    val visible = remember(rows, filter, context) {
+        rows.filter { filter.matches(it, context) }
     }
 
     Column(modifier.inspectorScreen(colors.surface)) {
@@ -94,7 +108,7 @@ internal fun InspectorList(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "${visible.size}/${transactions.size}",
+                "${visible.size}/${rows.size}",
                 color = colors.onSurfaceMuted,
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
@@ -148,20 +162,27 @@ internal fun InspectorList(
                 )
             }
 
-            // Only when there are markers, and only labels the grammar can actually express — a
-            // chip that sets a filter the parser rejects is worse than no chip. The divider for
-            // such a marker is still drawn; it is the chip that cannot work. Asked of the parser
-            // rather than guessed at, so this follows the grammar if the grammar moves.
-            val labels = remember(markers) {
-                markerLabels(markers).filter { FilterParser.parse(markerFilterTerm(it)).isSuccess }
+            // Only labels the grammar can actually express — a chip that sets a filter the parser
+            // rejects is worse than no chip. The divider for such a marker is still drawn; it is
+            // the chip that cannot work. Asked of the parser rather than guessed at, so this
+            // follows the grammar if the grammar moves.
+            val labels = remember(marks) {
+                markerLabels(marks).filter { FilterParser.parse(markerFilterTerm(it)).isSuccess }
             }
-            if (labels.isNotEmpty()) {
-                MarkerChips(
-                    labels = labels,
-                    filterText = filterText,
-                    onFilter = { filterText = it },
-                )
-            }
+            val endpoints = remember(rows) { endpointShortcuts(rows, ENDPOINT_CHIP_LIMIT) }
+
+            ControlStrip(
+                newestFirst = newestFirst,
+                onOrder = { newestFirst = it },
+                frozen = frozen != null,
+                onFreeze = { hold ->
+                    frozen = if (hold) Frozen(transactions, markers) else null
+                },
+                filterText = filterText,
+                onFilter = { filterText = it },
+                markerLabels = labels,
+                endpoints = endpoints,
+            )
         }
 
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
@@ -169,12 +190,12 @@ internal fun InspectorList(
         // Markers are not filtered with the rows. The filter grammar describes traffic, and a
         // divider still says where in the session you are looking — which is most of its job when
         // a filter has thinned the rows around it. The web UI does the same.
-        val entries = remember(visible, markers) { timeline(visible, markers) }
+        val entries = remember(visible, marks, newestFirst) { timeline(visible, marks, newestFirst) }
 
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (transactions.isEmpty()) "no traffic captured yet" else "no rows match this filter",
+                    if (rows.isEmpty()) "no traffic captured yet" else "no rows match this filter",
                     color = colors.onSurfaceMuted,
                     fontSize = 13.sp,
                 )
@@ -183,14 +204,14 @@ internal fun InspectorList(
             // Computed over *all* transactions, not the filtered view: a duplicate whose twin is
             // filtered out is still a duplicate, and hiding that would make the highlight depend
             // on what you happened to be searching for. The scope shares the rule — see [pathScope].
-            val duplicates = remember(transactions) { duplicatesById(transactions) }
-            val scope = remember(transactions) { pathScope(transactions) }
+            val duplicates = remember(rows) { duplicatesById(rows) }
+            val scope = remember(rows) { pathScope(rows) }
 
             // Shown only while something on screen is actually under it. A filter that leaves only
             // the odd rows out would otherwise leave a bar describing nothing visible.
             val activeScope = scope?.takeIf { s -> visible.any(s::covers) }
             if (activeScope != null) {
-                ScopeBar(activeScope, transactions.size)
+                ScopeBar(activeScope, rows.size)
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
             }
 
@@ -257,57 +278,192 @@ private fun MarkerDivider(marker: Marker) {
     }
 }
 
+/** The rows and markers a frozen list holds, so capture can carry on without moving them. */
+private data class Frozen(
+    val transactions: List<NetworkTransaction>,
+    val markers: List<Marker>,
+)
+
 /**
- * The marker labels, as taps that filter.
+ * One scrollable strip above the list, holding everything that is not the filter field itself.
  *
- * This is the half of the feature that makes `since:marker(…)` usable at all. The grammar has
- * always supported it, but the labels live in the app's own code — so without this, using the
- * filter meant knowing what somebody passed to `Inspector.mark` and typing it exactly, on a phone
- * keyboard, with a typo silently matching nothing (`since:marker` with an unknown label matches
- * no rows, deliberately).
+ * **One strip and not three rows.** The phone is 360dp wide and around 720 tall; the header, the
+ * filter field and the scope bar already spend four lines before any traffic, and giving the order
+ * control, the quick filters, the markers and the endpoints a row each would spend four more. A
+ * horizontally scrollable strip trades vertical space, which is the scarce one, for horizontal
+ * space, which is not.
  *
- * Tapping an active chip clears the filter rather than re-applying it. A chip that can only be
- * turned on is a trap on a surface with no obvious way to select and delete text.
+ * Order is by how often a thumb wants them and by how stable they are. The two view toggles never
+ * move and never grow, so they lead and are always reachable without scrolling. The quick filters
+ * are a fixed four. Markers come before endpoints because a marker is something the reader
+ * deliberately dropped, and endpoints are merely what the session happened to contain.
+ *
+ * The toggles are tinted differently from the filter chips on purpose: one changes what the list
+ * *shows* and the other changes how it is *arranged*, and a strip that made them look alike would
+ * invite tapping `newest` expecting fewer rows.
  */
 @Composable
-private fun MarkerChips(labels: List<String>, filterText: String, onFilter: (String) -> Unit) {
-    val colors = LocalInspectorColors.current
+private fun ControlStrip(
+    newestFirst: Boolean,
+    onOrder: (Boolean) -> Unit,
+    frozen: Boolean,
+    onFreeze: (Boolean) -> Unit,
+    filterText: String,
+    onFilter: (String) -> Unit,
+    markerLabels: List<String>,
+    endpoints: List<EndpointShortcut>,
+) {
     Row(
         Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "since",
-            color = colors.onSurfaceMuted,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(end = 2.dp),
+        // Labelled with the order it is *currently* in, not the one a tap would produce. A phone
+        // has no hover and no tooltip, so a control that names its effect rather than its state
+        // leaves the reader unable to tell which way round the list is.
+        StateChip(
+            label = if (newestFirst) "newest first" else "oldest first",
+            active = newestFirst,
+            onClick = { onOrder(!newestFirst) },
         )
-        for (label in labels) {
-            val term = markerFilterTerm(label)
-            val active = filterText.trim() == term
-            Text(
-                label,
-                color = if (active) colors.surface else colors.accent,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                maxLines = 1,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(PILL_RADIUS))
-                    .background(
-                        if (active) colors.accent else colors.accent.copy(alpha = SCOPE_FILL_ALPHA),
-                    )
-                    .border(
-                        1.dp,
-                        colors.accent.copy(alpha = SCOPE_BORDER_ALPHA),
-                        RoundedCornerShape(PILL_RADIUS),
-                    )
-                    .clickable { onFilter(if (active) "" else term) }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-            )
+        // Mobile is live by construction, which sounds better than it is: there is no way to hold
+        // still and read while traffic keeps arriving and the ring keeps evicting.
+        StateChip(
+            label = if (frozen) "frozen" else "live",
+            active = frozen,
+            onClick = { onFreeze(!frozen) },
+        )
+
+        // Markers first among the filters, and ahead of the quick filters, because a marker only
+        // exists because somebody deliberately dropped one — so when there are any, they are what
+        // the reader came to the strip for. The quick filters and the endpoints are always there
+        // and lose nothing by being a swipe further along. A session with no markers pays nothing.
+        if (markerLabels.isNotEmpty()) {
+            StripDivider()
+            for (label in markerLabels) {
+                FilterChip(
+                    label = label,
+                    term = markerFilterTerm(label),
+                    filterText = filterText,
+                    onFilter = onFilter,
+                )
+            }
+        }
+
+        StripDivider()
+
+        for ((label, term) in QUICK_FILTERS) {
+            FilterChip(label = label, term = term, filterText = filterText, onFilter = onFilter)
+        }
+
+        if (endpoints.isNotEmpty()) {
+            StripDivider()
+            for (endpoint in endpoints) {
+                FilterChip(
+                    label = "${endpoint.segment} ${endpoint.count}",
+                    term = endpointFilterTerm(endpoint.segment),
+                    filterText = filterText,
+                    onFilter = onFilter,
+                )
+            }
         }
     }
 }
+
+/**
+ * Separates groups that do different things, so the strip does not read as one long list.
+ *
+ * Drawn from `onSurfaceMuted` rather than `divider`: `divider` is tuned to separate full-width
+ * rows against a flat background, and a 1dp by 16dp mark of it between two chips disappears.
+ */
+@Composable
+private fun StripDivider() {
+    val colors = LocalInspectorColors.current
+    Box(
+        Modifier.padding(horizontal = 2.dp)
+            .width(1.dp)
+            .height(16.dp)
+            .background(colors.onSurfaceMuted.copy(alpha = STRIP_DIVIDER_ALPHA)),
+    )
+}
+
+/**
+ * A chip that changes how the list is arranged rather than what it contains.
+ *
+ * Muted rather than accent-tinted: the accent chips below it all filter, and two controls that
+ * look alike and do different things is the mistake worth designing out.
+ */
+@Composable
+private fun StateChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val colors = LocalInspectorColors.current
+    Text(
+        label,
+        color = if (active) colors.surface else colors.onSurfaceMuted,
+        fontSize = 11.sp,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(PILL_RADIUS))
+            .background(if (active) colors.onSurfaceMuted else Color.Transparent)
+            .border(1.dp, colors.divider, RoundedCornerShape(PILL_RADIUS))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+/**
+ * A chip that applies one filter term, and clears it when tapped again.
+ *
+ * Tapping an active chip clears rather than re-applying. A chip that can only be turned on is a
+ * trap on a surface with no obvious way to select and delete text.
+ */
+@Composable
+private fun FilterChip(label: String, term: String, filterText: String, onFilter: (String) -> Unit) {
+    val colors = LocalInspectorColors.current
+    val active = filterText.trim() == term
+    Text(
+        label,
+        color = if (active) colors.surface else colors.accent,
+        fontSize = 11.sp,
+        fontFamily = FontFamily.Monospace,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(PILL_RADIUS))
+            .background(if (active) colors.accent else colors.accent.copy(alpha = SCOPE_FILL_ALPHA))
+            .border(1.dp, colors.accent.copy(alpha = SCOPE_BORDER_ALPHA), RoundedCornerShape(PILL_RADIUS))
+            .clickable { onFilter(if (active) "" else term) }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+/**
+ * The four presets, as label to filter term.
+ *
+ * The same grammar the field above takes, so a chip is a shortcut and never a second mechanism —
+ * tap one and the field shows what it did, which is how anybody learns the grammar at all. Four
+ * and not the web's six: `4xx` and `POST` are a tap of typing away, and every chip here is a chip
+ * the markers and endpoints have to be scrolled past.
+ *
+ * `QuickFiltersTest` parses every one of these, so a term cannot rot into a chip that shows an
+ * error message when tapped.
+ */
+internal val QUICK_FILTERS: List<Pair<String, String>> = listOf(
+    "errors" to "has:error",
+    "5xx" to "status>=500",
+    "slow" to "slower:500ms",
+    "retries" to "attempt>1",
+)
+
+/**
+ * How many endpoint chips the strip offers.
+ *
+ * The web defaults to ten and makes it a setting. Here it is fixed and smaller: every extra chip
+ * is one more thing between a thumb and the marker chips, and a phone has no settings pane to put
+ * the knob in.
+ */
+private const val ENDPOINT_CHIP_LIMIT = 6
+
+/** Enough to read as a separator between chips, not enough to read as a chip of its own. */
+private const val STRIP_DIVIDER_ALPHA = 0.45f
 
 /**
  * The filter a marker chip applies.
