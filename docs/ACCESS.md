@@ -34,6 +34,12 @@ The token is free, takes a minute, and is the only thing standing between you an
 
 Neither needs a checkout. Clone only if you are changing Inspector itself.
 
+**Both halves carry the same version**, because one tag publishes both — there is no separate
+daemon version and library version to keep straight. The current one is on the
+[Releases page](https://github.com/Shafichariri/kinspector/releases/latest), and the README shows
+it as a badge. Whether a given release actually *changed* your half is a different question, and
+[`INTEGRATION.md` §14](INTEGRATION.md) answers it per version.
+
 ---
 
 ## 1. Create a token

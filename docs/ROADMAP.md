@@ -51,24 +51,24 @@ Everything below this line is data the overlay already has.
 Each of these is small and self-contained. They are listed in the order that buys the most per
 hour of work, not in the order they were thought of.
 
-- ~~**Render markers.**~~ **Done, 2026-09-17.** Dividers in the list and a chip per distinct
+- ~~**Render markers.**~~ **Done, shipped in 0.8.0.** Dividers in the list and a chip per distinct
   label under the filter field, applying and clearing `since:marker("…")` on tap. The interleave
   rule moved into `:inspector-model` as `timeline(…)`, so the overlay and `app.js` now describe
   the same arrangement in the same words — including the part that is easy to get wrong, which is
   that newest-first is the *reverse* of the ascending sequence and not a descending sort. One
   limit found on the way: the grammar has no escape inside its quotes, so a label with an odd
   number of `"` gets a divider but no chip.
-- ~~**A wall-clock column in the row.**~~ **Done, 2026-09-17.** `HH:MM:SS` in the device's own
+- ~~**A wall-clock column in the row.**~~ **Done, shipped in 0.8.0.** `HH:MM:SS` in the device's own
   zone, on the metadata line before the method, which is the column order the web uses. Seconds
   and no milliseconds: the web has the width for `.mmm` and a phone does not. The zone conversion
   is an `expect`/`actual` for the UTC offset rather than a `kotlinx-datetime` dependency pushed
   onto consumers, and it uses the *current* offset — a session shorter than a DST transition is
   the only case, and it is the only case there is.
-- ~~**Repeat count and span.**~~ **Done, 2026-09-17.** `2× / 1.9s`, from `duplicatesById` in
+- ~~**Repeat count and span.**~~ **Done, shipped in 0.8.0.** `2× / 1.9s`, from `duplicatesById` in
   `:inspector-model`. The count is `callCount` and not `ids.size`, because a group that swept up a
   retry has more rows than calls and the question is how many times the app *asked*.
 - ~~**Sort order toggle**~~, ~~**freeze the list**~~, ~~**quick-filter chips**~~ and
-  ~~**endpoint chips**~~. **All done, 2026-09-17**, and together, because they turned out to be
+  ~~**endpoint chips**~~. **All done, shipped in 0.8.0**, and together, because they turned out to be
   one problem rather than four: a phone is 360dp wide and about 720 tall, the header, the filter
   field and the scope bar already spend four lines before any traffic, and a row each would have
   spent four more. They share **one horizontally scrollable strip** — the two view toggles lead
@@ -88,7 +88,7 @@ hour of work, not in the order they were thought of.
 
 In dependency order, because each stage makes the next one cheap:
 
-1. ~~**Collect `Inspector.signals`** and show a merged timeline~~ — **done, 2026-09-17.** Traffic,
+1. ~~**Collect `Inspector.signals`** and show a merged timeline~~ — **done, shipped in 0.8.0.** Traffic,
    signals and markers on one clock, in the list that was already there rather than behind a tab:
    a phone has no room for a second view of the same session, and the merged reading *is* the
    feature. On by default when the session has any, one tap off.
@@ -159,7 +159,7 @@ to be the right instinct and the wrong implementation, since the detection under
 answering "physical device" for every emulator. Both of the first two items below are now done;
 the comment is gone with them.
 
-### ~~First: the detection is wrong~~ — done, 2026-09-17
+### ~~First: the detection is wrong~~ — done, shipped in 0.8.0
 
 The check matched `"generic"` in the fingerprint and `"Emulator"` or `"Android SDK built for"` in
 the model, and a current AVD reports none of them, so every emulator session was archived as
@@ -178,7 +178,7 @@ described: a compile-time fact cannot be wrong on hardware nobody has tested on.
 **Sessions already in the archive keep the wrong label.** Nothing rewrites them, so a session
 folder older than this says `android-device` whatever it was.
 
-### ~~Android over USB~~ — done, 2026-09-17
+### ~~Android over USB~~ — done, shipped in 0.8.0
 
 `defaultDaemonHost()` returns `10.0.2.2` on an emulator and `127.0.0.1` on hardware, and
 `connectionHelp(host, port)` replaced the single troubleshooting constant so the message names the
