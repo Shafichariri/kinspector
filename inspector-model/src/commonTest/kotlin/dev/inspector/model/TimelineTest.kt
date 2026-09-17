@@ -21,12 +21,25 @@ class TimelineTest {
         ts = "2026-09-17T09:00:00Z", mono = mono, label = label, source = "user",
     )
 
-    /** `a b M:checkout c` reads as ids and marker labels in the order they would be drawn. */
+    private var signalSeq = 0
+
+    private fun signal(tag: String, name: String, mono: Long) = Signal(
+        id = "s${++signalSeq}", ts = "2026-09-17T09:00:00Z", mono = mono, tag = tag, name = name,
+    )
+
+    /** `a M:checkout S:screen/home b` reads in the order the entries would be drawn. */
     private fun shape(entries: List<TimelineEntry>) = entries.joinToString(" ") {
         when (it) {
             is TimelineEntry.Call -> it.txn.id
             is TimelineEntry.Mark -> "M:${it.marker.label}"
+            is TimelineEntry.Observation -> "S:${it.signal.tag}/${it.signal.name}"
         }
+    }
+
+    /** The same, for runs: a run of several reads as `S:state/form×3`. */
+    private fun runShape(runs: List<TimelineRun>) = runs.joinToString(" ") { run ->
+        val head = shape(listOf(run.first))
+        if (run.entries.size == 1) head else "$head×${run.entries.size}"
     }
 
     @Test
@@ -151,4 +164,206 @@ class TimelineTest {
     fun `no markers is no labels`() {
         assertEquals(emptyList(), markerLabels(emptyList()))
     }
+    // --- signals ----------------------------------------------------------------------------
+
+    @Test
+    fun `signals land between the calls they happened between`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 100), txn("b", 300)),
+            markers = emptyList(),
+            signals = listOf(signal("screen", "home", 200)),
+        )
+        assertEquals("a S:screen/home b", shape(entries))
+    }
+
+    @Test
+    fun `traffic signals and markers merge on one clock`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 100), txn("b", 500)),
+            markers = listOf(mark("checkout", 300)),
+            signals = listOf(signal("screen", "cart", 200), signal("state", "form", 400)),
+        )
+        assertEquals("a S:screen/cart M:checkout S:state/form b", shape(entries))
+    }
+
+    @Test
+    fun `no signals is the list unchanged`() {
+        // The defaulted parameter has to leave every existing caller reading identically.
+        val withNone = timeline(listOf(txn("a", 100), txn("b", 300)), listOf(mark("m", 200)))
+        val withEmpty = timeline(listOf(txn("a", 100), txn("b", 300)), listOf(mark("m", 200)), emptyList())
+        assertEquals(shape(withNone), shape(withEmpty))
+        assertEquals("a M:m b", shape(withNone))
+    }
+
+    @Test
+    fun `a signal and a call at the same millisecond keep a stable order`() {
+        // Which came first is unknowable at this resolution. What matters is that two renders of
+        // the same data agree, so the list does not reshuffle under the reader.
+        val once = timeline(listOf(txn("a", 200)), emptyList(), listOf(signal("state", "form", 200)))
+        val again = timeline(listOf(txn("a", 200)), emptyList(), listOf(signal("state", "form", 200)))
+        assertEquals(shape(once), shape(again))
+    }
+
+    @Test
+    fun `signals reverse with everything else`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 100), txn("b", 300)),
+            markers = emptyList(),
+            signals = listOf(signal("screen", "home", 200)),
+            newestFirst = true,
+        )
+        assertEquals("b S:screen/home a", shape(entries))
+    }
+
+    // --- runs -------------------------------------------------------------------------------
+
+    @Test
+    fun `adjacent identical observations collapse into one run`() {
+        val entries = timeline(
+            transactions = emptyList(),
+            markers = emptyList(),
+            signals = listOf(
+                signal("state", "form", 100),
+                signal("state", "form", 110),
+                signal("state", "form", 120),
+            ),
+        )
+        assertEquals("S:state/form×3", runShape(timelineRuns(entries)))
+    }
+
+    /**
+     * The rule that keeps a run from erasing the ordering the merged view exists for.
+     *
+     * A run interrupted by a call says the state settled, something else happened, and it moved
+     * again. Collapsing across that gap would make three separate episodes look like one.
+     */
+    @Test
+    fun `a call in the middle splits a run in two`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 115)),
+            markers = emptyList(),
+            signals = listOf(
+                signal("state", "form", 100),
+                signal("state", "form", 110),
+                signal("state", "form", 120),
+                signal("state", "form", 130),
+            ),
+        )
+        assertEquals("S:state/form×2 a S:state/form×2", runShape(timelineRuns(entries)))
+    }
+
+    @Test
+    fun `a marker also splits a run`() {
+        val entries = timeline(
+            transactions = emptyList(),
+            markers = listOf(mark("tapped", 115)),
+            signals = listOf(signal("state", "form", 100), signal("state", "form", 120)),
+        )
+        assertEquals("S:state/form M:tapped S:state/form", runShape(timelineRuns(entries)))
+    }
+
+    @Test
+    fun `a different name does not join the run`() {
+        val entries = timeline(
+            transactions = emptyList(),
+            markers = emptyList(),
+            signals = listOf(
+                signal("state", "form", 100),
+                signal("state", "other", 110),
+                signal("state", "form", 120),
+            ),
+        )
+        assertEquals("S:state/form S:state/other S:state/form", runShape(timelineRuns(entries)))
+    }
+
+    @Test
+    fun `transactions never group even when identical`() {
+        // Two calls to the same endpoint are two separate facts, and the repetition is exactly
+        // what the list exists to show. `duplicateGroups` says they are related; it does not say
+        // they are one row.
+        val entries = timeline(listOf(txn("a", 100), txn("b", 110)), emptyList())
+        assertEquals("a b", runShape(timelineRuns(entries)))
+    }
+
+    @Test
+    fun `a run reports how long it covers`() {
+        val entries = timeline(
+            transactions = emptyList(),
+            markers = emptyList(),
+            signals = listOf(
+                signal("state", "form", 1_000),
+                signal("state", "form", 3_400),
+            ),
+        )
+        val run = timelineRuns(entries).single()
+        assertEquals(2, run.entries.size)
+        // "48 times" and "48 times over 23 seconds" say different things about the app.
+        assertEquals(2_400, run.spanMs)
+    }
+
+    /**
+     * An expanded run has to stay expanded while the traffic it sits in keeps arriving.
+     *
+     * Both orders, because they fail differently. A run grows at its **newest** end, so ascending
+     * it grows at the tail and the head is stable — but in newest-first the head *is* the new
+     * member, and an id taken from the head would re-key on every observation and collapse the
+     * run under the reader, in precisely the mode someone watching live traffic is in.
+     */
+    @Test
+    fun `a run keeps its id while it grows in either order`() {
+        val first = signal("state", "form", 100)
+        val second = signal("state", "form", 110)
+        for (newest in listOf(false, true)) {
+            val before = timelineRuns(
+                timeline(emptyList(), emptyList(), listOf(first), newestFirst = newest),
+            ).single()
+            val after = timelineRuns(
+                timeline(emptyList(), emptyList(), listOf(first, second), newestFirst = newest),
+            ).single()
+            assertEquals(before.id, after.id, "id moved while growing, newestFirst=$newest")
+        }
+    }
+
+    @Test
+    fun `a run keeps its id when the reading order flips`() {
+        // Otherwise every expanded run collapses the moment someone taps the order toggle.
+        val signals = listOf(signal("state", "form", 100), signal("state", "form", 200))
+        val ascending = timelineRuns(timeline(emptyList(), emptyList(), signals)).single()
+        val descending = timelineRuns(
+            timeline(emptyList(), emptyList(), signals, newestFirst = true),
+        ).single()
+        assertEquals(ascending.id, descending.id)
+    }
+
+    @Test
+    fun `a run reports the same span in either order`() {
+        val signals = listOf(signal("state", "form", 100), signal("state", "form", 900))
+        val ascending = timelineRuns(timeline(emptyList(), emptyList(), signals)).single()
+        val descending = timelineRuns(
+            timeline(emptyList(), emptyList(), signals, newestFirst = true),
+        ).single()
+        assertEquals(800, ascending.spanMs)
+        assertEquals(ascending.spanMs, descending.spanMs)
+    }
+
+    @Test
+    fun `a reversed run draws newest first but still knows which member was earliest`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 300)),
+            markers = emptyList(),
+            signals = listOf(signal("state", "form", 100), signal("state", "form", 200)),
+            newestFirst = true,
+        )
+        val run = timelineRuns(entries).last()
+        assertEquals("a S:state/form×2", runShape(timelineRuns(entries)))
+        // `first` is the drawing head and follows the order; `earliest` does not.
+        assertEquals(200, run.first.mono)
+        assertEquals(100, run.earliest.mono)
+    }
+
+    @Test
+    fun `an empty list has no runs`() {
+        assertEquals(emptyList(), timelineRuns(emptyList()))
+    }
+
 }

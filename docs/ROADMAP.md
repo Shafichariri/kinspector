@@ -58,25 +58,53 @@ hour of work, not in the order they were thought of.
   that newest-first is the *reverse* of the ascending sequence and not a descending sort. One
   limit found on the way: the grammar has no escape inside its quotes, so a label with an odd
   number of `"` gets a divider but no chip.
-- **A wall-clock column in the row.** The web row carries one; the mobile row does not, which
-  makes correlating with anything outside the app harder than it should be.
-- **Repeat count and span.** Mobile says `repeated`; the web says how many times and over how
-  long, which is the part that tells you whether it is a retry storm or a double-fetch.
-- **Sort order toggle**, oldest/newest first. The mobile list is fixed.
-- **Freeze the list.** Mobile is always live by construction, which sounds better than it is:
-  there is no way to hold still and read while traffic keeps arriving.
-- **Quick-filter chips** — errors / 5xx / slow / retries. The grammar is identical on both sides
-  already (both parse with `:inspector-model`'s `FilterParser`), so these are one-tap presets over
-  machinery that exists.
-- **Endpoint chips.** Same reasoning.
+- ~~**A wall-clock column in the row.**~~ **Done, 2026-09-17.** `HH:MM:SS` in the device's own
+  zone, on the metadata line before the method, which is the column order the web uses. Seconds
+  and no milliseconds: the web has the width for `.mmm` and a phone does not. The zone conversion
+  is an `expect`/`actual` for the UTC offset rather than a `kotlinx-datetime` dependency pushed
+  onto consumers, and it uses the *current* offset — a session shorter than a DST transition is
+  the only case, and it is the only case there is.
+- ~~**Repeat count and span.**~~ **Done, 2026-09-17.** `2× / 1.9s`, from `duplicatesById` in
+  `:inspector-model`. The count is `callCount` and not `ids.size`, because a group that swept up a
+  retry has more rows than calls and the question is how many times the app *asked*.
+- ~~**Sort order toggle**~~, ~~**freeze the list**~~, ~~**quick-filter chips**~~ and
+  ~~**endpoint chips**~~. **All done, 2026-09-17**, and together, because they turned out to be
+  one problem rather than four: a phone is 360dp wide and about 720 tall, the header, the filter
+  field and the scope bar already spend four lines before any traffic, and a row each would have
+  spent four more. They share **one horizontally scrollable strip** — the two view toggles lead
+  and never move, then markers when there are any, then the four presets, then endpoints. Vertical
+  space is the scarce one; horizontal is not.
+
+  Freezing holds a *snapshot* of the rows and markers, not a flag. Capture keeps running and the
+  ring keeps evicting, so a freeze that merely stopped redrawing would still lose rows out from
+  under the reader — which is the thing they froze the list to prevent.
+
+  `endpointShortcuts` and `endpointFilterTerm` went into `:inspector-model` beside `timeline`, so
+  the count-not-recency ordering and the anchored-glob term are one rule rather than two. And
+  `:inspector-ui` gained its first interaction tests: `compose.uiTest` in `jvmTest` only, because
+  a toggle's behaviour is a transition and a render test can only photograph one state.
 
 ### The substantial piece: signals in the overlay
 
 In dependency order, because each stage makes the next one cheap:
 
-1. **Collect `Inspector.signals`** and show a merged timeline — traffic, signals and markers on
-   one clock. This is the single biggest gap, and it is the thing the web UI opens on for a
-   session that has signals.
+1. ~~**Collect `Inspector.signals`** and show a merged timeline~~ — **done, 2026-09-17.** Traffic,
+   signals and markers on one clock, in the list that was already there rather than behind a tab:
+   a phone has no room for a second view of the same session, and the merged reading *is* the
+   feature. On by default when the session has any, one tap off.
+
+   `timeline()` grew a `signals` parameter and a third `TimelineEntry` kind, which broke every
+   exhaustive `when` in the repository — the sealed type doing its job. `timelineRuns()` collapses
+   **adjacent** identical observations, which is what keeps a state holder firing on every
+   keystroke from burying the traffic the merged view exists to correlate.
+
+   One thing worth knowing before extending this: a run's members are in *draw* order, so in
+   newest-first the head of a run is the latest, not the earliest. Anything that must mean the same
+   in both orders reads `TimelineRun.earliest` instead — the id does, and has to, or an expanded
+   run re-keys on every observation during live tail.
+
+   Payloads are not drawn. A row cannot show a JSON object usefully at 360dp, and a truncated one
+   would be worse than none; reading them is stage 2.
 2. **Per-tag browsers** — cache, state, screen, and any tag an app invents. Freshness, provenance
    (`pushed` vs `pulled`), faceting, per-key history.
 3. **The "now" strip** — the last observation per `(tag, name)`, with age.

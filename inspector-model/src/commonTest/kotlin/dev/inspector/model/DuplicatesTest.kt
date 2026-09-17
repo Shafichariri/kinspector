@@ -141,4 +141,46 @@ class DuplicatesTest {
         )
         assertEquals(emptyList(), duplicateGroups(txns))
     }
+
+    /**
+     * The map form, which is what a surface showing "how many and over how long" needs.
+     *
+     * The count is [DuplicateGroup.callCount], not `ids.size`. A group that swept up a retry has
+     * more rows than calls, and the reader is asking how many times the app asked — not how many
+     * lines the list drew.
+     */
+    @Test
+    fun `every member of a group maps to that group`() {
+        val byId = duplicatesById(listOf(txn("a", 1000), txn("b", 2900)))
+        assertEquals(setOf("a", "b"), byId.keys)
+        assertEquals(byId["a"], byId["b"])
+        assertEquals(2, byId.getValue("a").callCount)
+        assertEquals(1900, byId.getValue("a").spanMs)
+    }
+
+    @Test
+    fun `a row in no group is absent rather than mapped to an empty one`() {
+        val byId = duplicatesById(listOf(txn("a", 1000), txn("b", 2900), txn("lonely", 9000, path = "/other")))
+        assertTrue("lonely" !in byId)
+    }
+
+    @Test
+    fun `the count is calls and not rows when a retry is in the group`() {
+        val rows = listOf(
+            // Two separate calls for the same thing, and the second one was retried once. Three
+            // rows, but the app asked twice.
+            txn("a", 1000, callId = "call-1", status = 500, resBytes = 20),
+            txn("b", 2000, callId = "call-2", status = 500, resBytes = 20, attempt = 1),
+            txn("c", 2100, callId = "call-2", status = 500, resBytes = 20, attempt = 2),
+        )
+        val byId = duplicatesById(rows)
+        assertEquals(3, byId.getValue("a").ids.size)
+        assertEquals(2, byId.getValue("a").callCount)
+    }
+
+    @Test
+    fun `no duplicates is an empty map`() {
+        assertEquals(emptyMap(), duplicatesById(listOf(txn("a", 1000))))
+    }
+
 }
