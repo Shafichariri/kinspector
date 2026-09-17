@@ -37,6 +37,22 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
 /** The iOS simulator shares the host's network stack, so loopback reaches the daemon directly. */
 actual fun defaultDaemonHost(): String = "127.0.0.1"
 
+/**
+ * There is no `adb reverse` here and no cleartext exemption to forget, so neither belongs in this
+ * message. On a physical iPhone loopback is the phone's own, and nothing is listening on it: that
+ * needs the daemon to bind beyond loopback, which needs authentication first. Saying so is more
+ * use than a remedy that does not exist.
+ */
+internal actual fun connectionHelp(host: String, port: Int): String =
+    if (IS_IOS_SIMULATOR) {
+        "is `inspector serve` running? The simulator shares the host's loopback, so $host:$port " +
+            "is the same address you would open in a browser."
+    } else {
+        "this is a physical device, and it cannot reach $host:$port — that is the phone's own " +
+            "loopback, not the host machine's. Physical iOS devices are not supported yet: the " +
+            "daemon binds loopback only and widening it needs authentication first."
+    }
+
 actual fun defaultStreamClient(): HttpClient = HttpClient(Darwin) {
     install(WebSockets)
 }
