@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**444 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**451 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -495,6 +495,29 @@ Nobody should be told to "open the desktop app".
 fails silently on API 28+ without a debug-only `network_security_config.xml`. This is the most
 common reason an Android app records nothing, and the integration guide claiming "no manifest
 entries, no permissions" was wrong until it was corrected — see `docs/INTEGRATION.md` 6d.
+
+**Emulator detection reads the board, not the marketing strings, and iOS decides at link time.**
+The Android check used to look for `generic` in `Build.FINGERPRINT` and `Emulator` or
+`Android SDK built for` in `Build.MODEL`. A current AVD reports
+`google/sdk_gphone64_arm64/emu64a:14/...` and `sdk_gphone64_arm64` — none of those match — so it
+answered "physical device" for every emulator session, and an archive here holds 18 of them. The
+replacement is ordered sturdiest first: `Build.HARDWARE` (`goldfish`/`ranchu`), then `Build.BOARD`,
+`Build.DEVICE`, `Build.PRODUCT`, and only last the model strings, which are kept but are no longer
+load-bearing. `ro.kernel.qemu` would be the obvious signal and every AVD still sets it, but
+`android.os.SystemProperties` is not in the SDK — verified against `android-36` — and
+`Build.HARDWARE` is its public mirror, so there is nothing to gain from the hidden-API path.
+
+Every emulator profile in `EmulatorDetectionTest` was transcribed from `adb shell getprop` on a
+booted image rather than invented; add a real one when a new image family appears. The
+physical-device profiles are the exception and the test says so — no phone has been attached.
+
+The iOS side no longer asks whether `SIMULATOR_DEVICE_NAME` is in the environment. That was a
+sound tell with an unfalsifiable half: nothing proves its absence means hardware, and nobody has
+ever run this on an iPhone to find out. `IS_IOS_SIMULATOR` is `expect`/`actual` across
+`iosArm64Main` and `iosSimulatorArm64Main` instead, so it is fixed at link time and cannot
+disagree with where the process is running. The env var is still read, for the device *name* only.
+Do not collapse the two actuals into one `iosMain` constant: removing either one must fail that
+target's compile, which is the only thing keeping the fact structural.
 
 **StreamSink reports why it failed.** Connection errors used to be swallowed by `runCatching`,
 leaving "the web UI is empty" undiagnosable from inside the app. Each distinct reason is now

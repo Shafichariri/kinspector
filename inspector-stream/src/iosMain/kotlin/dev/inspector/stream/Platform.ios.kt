@@ -8,14 +8,26 @@ import platform.UIKit.UIDevice
 import io.ktor.client.engine.darwin.Darwin
 import io.ktor.client.plugins.websocket.WebSockets
 
+/**
+ * True on the simulator, false on an iPhone — and known at link time, not guessed at runtime.
+ *
+ * The check this replaces asked whether `SIMULATOR_DEVICE_NAME` was in the environment. That is a
+ * sound tell, but it is a tell: nothing proves its absence means hardware, and nobody has ever run
+ * this on an iPhone to find out. The target does prove it. `iosArm64` and `iosSimulatorArm64` are
+ * separate slices and neither binary will load on the other's host, so the constant cannot
+ * disagree with where the process is.
+ */
+internal expect val IS_IOS_SIMULATOR: Boolean
+
 actual fun defaultClientInfo(appId: String, appVersion: String, buildType: String): ClientInfo {
-    // SIMULATOR_DEVICE_NAME is only present in a simulator's environment.
+    // Still read for the name it gives — "iPhone 17 Pro" beats UIDevice's name, which on a
+    // simulator is the same string and on hardware is whatever the owner called their phone.
     val environment = NSProcessInfo.processInfo.environment
     val simulatorName = environment["SIMULATOR_DEVICE_NAME"] as? String
     return ClientInfo(
         appId = appId,
         appVersion = appVersion,
-        platform = if (simulatorName != null) Platforms.IOS_SIMULATOR else "ios-device",
+        platform = if (IS_IOS_SIMULATOR) Platforms.IOS_SIMULATOR else Platforms.IOS_DEVICE,
         device = simulatorName ?: UIDevice.currentDevice.name,
         osVersion = UIDevice.currentDevice.systemVersion,
         buildType = buildType,
