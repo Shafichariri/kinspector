@@ -19,6 +19,10 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
 
 actual fun defaultDaemonHost(): String = "127.0.0.1"
 
+/** Same machine, so there is exactly one thing it can be. */
+internal actual fun connectionHelp(host: String, port: Int): String =
+    "is `inspector serve` running? Nothing is listening on $host:$port."
+
 actual fun defaultStreamClient(): HttpClient = HttpClient(CIO) {
     install(WebSockets)
 }

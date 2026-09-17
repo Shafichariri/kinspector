@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**451 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**457 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -518,6 +518,33 @@ ever run this on an iPhone to find out. `IS_IOS_SIMULATOR` is `expect`/`actual` 
 disagree with where the process is running. The env var is still read, for the device *name* only.
 Do not collapse the two actuals into one `iosMain` constant: removing either one must fail that
 target's compile, which is the only thing keeping the fact structural.
+
+**A physical Android device connects over `adb reverse`, and that is why the daemon's bind did not
+have to move.** `adb reverse tcp:8099 tcp:8099` forwards the *device's* loopback to the same port
+on the machine running adb, so the app dials `127.0.0.1` from inside the phone and the daemon goes
+on listening on `127.0.0.1` on the host. Nothing is exposed to the network, so the security
+boundary in `Server.kt` is untouched. Verified end to end on a booted emulator, which speaks the
+same adb protocol as hardware: `127.0.0.1:8099` from inside the device was refused before the
+forward, answered `HTTP/1.1 200 OK` from the real daemon after it, and was refused again once the
+forward was removed — while `lsof` still showed the daemon bound to `127.0.0.1` alone and the
+`10.0.2.2` path kept working.
+
+iOS hardware has no equivalent and stays unsupported. Do not reach for a wider bind to solve it:
+that is an authentication decision first and a transport one second, and the archive holds
+unredacted credentials by default.
+
+`defaultDaemonHost()` on Android is therefore `10.0.2.2` on an emulator and `127.0.0.1` on
+hardware. It is the first caller to use the emulator detection for a *decision* rather than a
+label, which is why fixing that detection came first: while it was wrong, every emulator would
+have been sent to `127.0.0.1`.
+
+**The connection-failure message is per-platform, and it names the address it actually tried.**
+`connectionHelp` is `expect`/`actual` rather than one shared constant, because the remedies do not
+travel: `adb reverse` and a cleartext exemption mean nothing on iOS, and on Android the address
+that failed is the only thing separating "you forgot the forward" from "that alias reaches nothing
+on a phone" — two failures that look identical from inside the app. Interpolating the host and
+port is load-bearing, not cosmetic; `DaemonHostTest` fails if either is hardcoded, because advice
+about an address the app never dialled sends someone to edit the wrong file.
 
 **StreamSink reports why it failed.** Connection errors used to be swallowed by `runCatching`,
 leaving "the web UI is empty" undiagnosable from inside the app. Each distinct reason is now

@@ -83,7 +83,8 @@ fun interface ReplaySigner {
  * - Reconnects with exponential backoff and re-sends `resumeSessionId`, so a brief disconnect
  *   continues one session folder instead of fragmenting a debugging run.
  *
- * v1 targets simulators and emulators only, so [host] defaults per platform with no discovery.
+ * [host] defaults per platform with no discovery; see [defaultDaemonHost] for what that means
+ * on a phone as opposed to an emulator.
  */
 class StreamSink(
     private val client: ClientInfo,
@@ -186,7 +187,7 @@ class StreamSink(
                 if (described != reportedError) {
                     reportedError = described
                     println("inspector: cannot reach daemon at $host:$port — $described")
-                    println("inspector: $TROUBLESHOOTING")
+                    println("inspector: ${connectionHelp(host, port)}")
                 }
             } else {
                 _lastError.value = null
@@ -353,9 +354,6 @@ class StreamSink(
     private companion object {
         const val MIN_BACKOFF_MS = 250L
         const val MAX_BACKOFF_MS = 5_000L
-        const val TROUBLESHOOTING =
-            "is `inspector serve` running? On Android the app must also permit cleartext " +
-                "traffic to 10.0.2.2 — see docs/INTEGRATION.md section 6d."
     }
 }
 
@@ -372,11 +370,22 @@ expect fun defaultClientInfo(
 ): ClientInfo
 
 /**
- * Default daemon host per platform. v1 is simulator/emulator only, so these are fixed rather
- * than discovered: the iOS simulator and desktop share the host's loopback, while the Android
- * emulator reaches it through 10.0.2.2.
+ * Default daemon host per platform. Nothing is discovered: every supported route is a fixed
+ * address, and the one that varies is Android, where an emulator reaches the host machine through
+ * `10.0.2.2` and a USB-attached phone reaches it through its own loopback once `adb reverse` is
+ * set up. Desktop and the iOS simulator share the host's loopback outright.
  */
 expect fun defaultDaemonHost(): String
+
+/**
+ * What to try when the daemon cannot be reached, as one line of prose after the exception itself.
+ *
+ * Per-platform because the remedies are: `adb reverse` and a cleartext exemption mean nothing on
+ * iOS, and the address that is wrong tells you which mistake was made. The message is the whole
+ * diagnosis available from inside a device — "the web UI is empty" says nothing on its own — so
+ * it names the address it actually tried rather than the one the author assumed.
+ */
+internal expect fun connectionHelp(host: String, port: Int): String
 
 /**
  * The sink's own client. Must never carry the capture plugin — an inspector observing its own
