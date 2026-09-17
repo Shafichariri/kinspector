@@ -1,5 +1,7 @@
 # Inspector
 
+[![release](https://img.shields.io/github/v/release/Shafichariri/kinspector)](https://github.com/Shafichariri/kinspector/releases/latest)
+
 A network debugger for **Compose Multiplatform** apps that use Ktor — the thing Wormholy is for
 iOS, but cross-platform, archived to disk, and readable by an AI agent.
 
@@ -27,14 +29,34 @@ CI — see [Production safety](#production-safety).
 | **3** | MCP server over the archive | ✅ |
 | **4** | Signals — screens, view-model state and caches on the traffic timeline | ✅ |
 | **4a** | OkHttp capture, for SDKs that own their transport (Auth0, Retrofit, Coil) | ✅ |
+| **4b** | Report the traffic we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**444 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+**650 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
 Compose Multiplatform app, on an Android emulator and the iOS simulator.
 
 Honest gaps: the overlay has been run on one Android device, the iOS simulator and desktop, never on
-iOS hardware; the Auth0 adapter compiles against the real SDK but has not been run against a live
-tenant; and nothing non-Ktor is captured on iOS.
+iOS hardware — and everything added to it since 0.7.0 has only been exercised in an off-screen
+render at 360dp and by driving its controls in tests, never on a phone; the Auth0 adapter compiles
+against the real SDK but has not been run against a live tenant; and nothing non-Ktor is captured
+on iOS.
+
+### One tag, two halves
+
+The badge above is the current version of **everything**. A single tag publishes the daemon zip to
+the Releases page *and* the seven library modules to GitHub Packages, at the same version — there
+is no separate version per surface, and never has been.
+
+What a release does **not** promise is that every surface changed in it. 0.8.0 is library-only: a
+consumer who downloads the new daemon and leaves their Gradle coordinates alone gets none of it,
+and 0.6.0 was the reverse. [`docs/INTEGRATION.md` §14](docs/INTEGRATION.md) says, per version, what
+changed and what you have to do about it — that is the list to read before deciding whether to
+move.
+
+| Half | Current version | How you get it |
+|---|---|---|
+| Daemon — web UI, archive, CLI, MCP | the badge above | a zip from [Releases](https://github.com/Shafichariri/kinspector/releases/latest), no account needed |
+| Library — the seven modules | the same | GitHub Packages, which needs a token ([`docs/ACCESS.md`](docs/ACCESS.md)) |
 
 ---
 
