@@ -1205,7 +1205,7 @@ Two related corrections while here:
 - **§6f used to say physical devices were out of scope.** For Android that is no longer true. For
   iOS it still is, and §6f now says why rather than only that.
 
-### v28 — 2026-09-17 (this document)
+### v28 — 2026-09-17
 
 **Nothing to do. One dead cross-reference, fixed.**
 
