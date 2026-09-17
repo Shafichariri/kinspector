@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v33 — 2026-09-17.**
+**Document version: v34 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.7.0")
-implementation("dev.inspector:inspector-ui:0.7.0")
+implementation("dev.inspector:inspector-core:0.8.0")
+implementation("dev.inspector:inspector-ui:0.8.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.7.0")
-            implementation("dev.inspector:inspector-ui:0.7.0")
+            implementation("dev.inspector:inspector-core:0.8.0")
+            implementation("dev.inspector:inspector-ui:0.8.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.7.0")
-                implementation("dev.inspector:inspector-noop-ui:0.7.0")
+                implementation("dev.inspector:inspector-noop:0.8.0")
+                implementation("dev.inspector:inspector-noop-ui:0.8.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.7.0")
-                implementation("dev.inspector:inspector-ui:0.7.0")
+                implementation("dev.inspector:inspector-core:0.8.0")
+                implementation("dev.inspector:inspector-ui:0.8.0")
             }
         }
     }
@@ -376,13 +376,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.7.0")
-    implementation("dev.inspector:inspector-noop-ui:0.7.0")
-    implementation("dev.inspector:inspector-noop-stream:0.7.0")
+    implementation("dev.inspector:inspector-noop:0.8.0")
+    implementation("dev.inspector:inspector-noop-ui:0.8.0")
+    implementation("dev.inspector:inspector-noop-stream:0.8.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.7.0")
-    implementation("dev.inspector:inspector-ui:0.7.0")
-    implementation("dev.inspector:inspector-stream:0.7.0")
+    implementation("dev.inspector:inspector-core:0.8.0")
+    implementation("dev.inspector:inspector-ui:0.8.0")
+    implementation("dev.inspector:inspector-stream:0.8.0")
 }
 ```
 
@@ -1195,7 +1195,37 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v33 — 2026-09-17 (this document)
+### v34 — 2026-09-17 (this document)
+
+**Released as 0.8.0. Bump your coordinates — a rebuild alone will not get you any of this.**
+
+Every snippet below now reads `0.8.0`. The five entries beneath this one describe what is in it;
+each was written before the release existed and now names it. This entry exists so there is one
+place that says what to do.
+
+**What to do:** change `0.7.0` to `0.8.0` wherever your build declares Inspector — §2 for the
+overlay, §6a if you take the daemon, §3 for the release-swap block. Then, if you test on a
+physical Android phone, read §6f: that path is new and needs `adb reverse` plus one extra line in
+the cleartext config from §6d.
+
+**What is in it**, all of it in the library rather than the daemon:
+
+- **A physical Android phone works over USB** (§6f), and **emulator sessions stop being archived
+  as `android-device`** — the detection matched strings a current AVD stopped reporting years ago.
+  Sessions already in your archive keep the wrong label; nothing rewrites them.
+- **The overlay draws markers** you create, as a rule across the list and a chip per label.
+- **The overlay row carries a wall-clock time**, and a repeated call says how many and over how
+  long rather than just `repeated`.
+- **A control strip above the list** — reading order, freeze, four filter presets, your markers,
+  and a chip per busiest endpoint.
+- **Your signals appear in the overlay**, merged into the traffic on one clock, with runs of
+  identical observations collapsed.
+
+Nothing here changes an API you call. `Inspector.init`, `Inspector.install`, `Inspector.signal`,
+`Inspector.mark` and `StreamSink(...)` are all unchanged, which is why there is no migration
+beyond the coordinates.
+
+### v33 — 2026-09-17
 
 **Nothing to do. Your signals now show up in the overlay, not only in the web UI.**
 
@@ -1215,7 +1245,7 @@ Three things about how it reads:
 - **`screen`, `state`, `cache` and `session` get their own lane colour**; any other tag renders in
   a generic lane rather than being dropped, which is why `tag` is an open string.
 
-Arrives with the library, like v30 through v32.
+**Released as 0.8.0**, with the library — like v30 through v32.
 
 ### v32 — 2026-09-17
 
@@ -1232,7 +1262,7 @@ holds the rows you are looking at; capture carries on behind it, and thawing cat
 held long enough to be evicted from the ring can no longer show its body, which the detail screen
 says rather than guesses at.
 
-Arrives with the library, like v30 and v31.
+**Released as 0.8.0**, with the library — like v30 and v31.
 
 ### v31 — 2026-09-17
 
@@ -1245,7 +1275,7 @@ Arrives with the library, like v30 and v31.
   which is the part that separates one code path fetching twice from a poll or a retry storm. The
   count is calls, not rows: a repeat that swept up a retry still asked twice.
 
-Arrives with the library, like v30.
+**Released as 0.8.0**, with the library — like v30.
 
 ### v30 — 2026-09-17
 
@@ -1257,9 +1287,9 @@ there was no way to discover which labels existed to type. Now: a labelled rule 
 where the marker falls, and a chip per distinct label under the filter field that applies and
 clears `since:marker("…")` on tap. §7 → Markers describes it.
 
-Arrives with the library, not the daemon — the list lives in `:inspector-ui`, so a consumer who
-rebuilds the daemon and leaves the coordinates alone gets none of it. Same release as v29's
-`adb reverse` support.
+**Released as 0.8.0**, with the library and not the daemon — the list lives in `:inspector-ui`,
+so a consumer who rebuilds the daemon and leaves the coordinates alone gets none of it. Same
+release as v29's `adb reverse` support.
 
 ### v29 — 2026-09-17
 
@@ -1270,9 +1300,8 @@ Run `adb reverse tcp:8099 tcp:8099` with the phone on USB, and add `127.0.0.1` a
 `10.0.2.2` on an emulator and `127.0.0.1` on hardware, so the `StreamSink(defaultClientInfo(…))`
 line you already have is correct on both.
 
-This needs the library release that carries it, not just a rebuilt daemon — the host choice is in
-`:inspector-stream`. Until then §6f describes what is coming; the emulator path is unchanged and
-keeps working.
+**Released as 0.8.0.** It needs the library, not just a rebuilt daemon — the host choice is in
+`:inspector-stream` — so bump your coordinates. The emulator path is unchanged either way.
 
 Two related corrections while here:
 
@@ -1299,7 +1328,7 @@ nothing more. That is no longer true. The list lives in `:inspector-ui`, so this
 the dependency — a consumer who rebuilds the daemon and leaves the coordinates at `0.6.0` gets
 none of it.
 
-Every snippet in this document now reads `0.7.0`. What is in it:
+Every snippet in this document read `0.7.0` when this entry was written. What is in it:
 
 - **The overlay's list row, rebuilt** — the path has a line of its own, the shared prefix moves
   into a bar above the list, and truncation happens at the front. **v25 below** has the detail
