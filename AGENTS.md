@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**507 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**550 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -456,6 +456,30 @@ one rule that holds for all five beats five exceptions. The web tokens are there
 components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from the same token;
 `color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
 older engine drops the whole `background` declaration and the badge with it.
+
+**The overlay's wall clock converts to local time through an `expect`/`actual` offset, not a
+datetime library.** `ts` is ISO-8601 UTC and the entire point of the column is lining a row up
+against logcat or a backend log, which are in the reader's zone — a UTC column would be correct
+and useless. `kotlin.time` has no zone support and `kotlinx-datetime` would be a transitive
+dependency on every consumer of `:inspector-ui` to render eight characters, so
+`localUtcOffsetSeconds()` is
+three one-line actuals instead. On iOS it needs `import platform.Foundation.secondsFromGMT`: that
+property comes from the `NSExtendedTimeZone` category, which Kotlin/Native surfaces as a
+package-level extension rather than a member, so it does not resolve without the import.
+
+`formatClock` takes the offset as a defaulted parameter so the conversion is testable at a fixed
+offset rather than at whatever zone the build machine is in. Two things it must keep doing: `mod`
+and not `%`, or an offset west of Greenwich produces a negative hour; and rejecting a 60th second
+rather than allowing it, because the arithmetic wraps `23:59:60` silently to `00:00:00` — a wrong
+time shown confidently instead of `--:--:--` admitting it could not read one. Unix time has no leap
+second, so this only ever means malformed input. `LocalOffsetJvmTest` cross-checks the JVM actual
+against `java.time`, because the common test can only ask whether the number is plausible and a
+stub returning `0` is plausible in London.
+
+**A repeat says `callCount`, never `ids.size`.** A duplicate group that swept up a retry attempt
+holds more rows than calls, and the reader is asking how many times the app asked — not how many
+lines the list drew. `repeatLabel` is `internal` purely so a test can pin that; the two read as
+interchangeable until a retry lands in a group.
 
 **Markers interleave through `timeline()` in `:inspector-model`, and newest-first is a reverse,
 never a descending sort.** Both surfaces draw markers between the rows they introduce, and the only
