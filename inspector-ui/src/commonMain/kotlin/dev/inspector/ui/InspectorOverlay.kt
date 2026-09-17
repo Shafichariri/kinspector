@@ -43,6 +43,9 @@ fun InspectorOverlay(
 
     val transactions by Inspector.transactions.collectAsState()
     val markers by Inspector.markers.collectAsState()
+    // Already in device memory beside the traffic, and unread by this module until now. The
+    // merged timeline was never a missing capability — see `docs/ROADMAP.md`.
+    val signals by Inspector.signals.collectAsState()
     val latest by Inspector.latest.collectAsState()
 
     var screen by remember { mutableStateOf<Screen>(Screen.Hidden) }
@@ -78,6 +81,7 @@ fun InspectorOverlay(
                 Screen.List -> InspectorList(
                     transactions = transactions,
                     markers = markers,
+                    signals = signals,
                     onSelect = { screen = Screen.Detail(it.id) },
                     onClear = { Inspector.clear() },
                     onMark = { Inspector.mark("mark ${++markCounter}") },
