@@ -21,8 +21,53 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
     )
 }
 
-/** The Android emulator reaches the host machine's loopback through this alias. */
-actual fun defaultDaemonHost(): String = "10.0.2.2"
+/**
+ * Where the daemon is, from inside this process.
+ *
+ * `10.0.2.2` is the emulator's alias for the host machine's loopback and resolves to nothing on a
+ * phone. A USB-attached phone gets there through its *own* loopback instead, because
+ * `adb reverse tcp:8099 tcp:8099` forwards the device's `127.0.0.1:8099` to the same port on the
+ * machine running adb. That is the whole of Android hardware support, and it costs the daemon
+ * nothing: it keeps binding loopback only, so the security boundary in `Server.kt` is untouched.
+ *
+ * This is the first thing that reads the emulator detection for a decision rather than for a
+ * label, which is why fixing that detection came first. While it was wrong, every emulator
+ * answered "physical device", and this function would have sent every emulator to `127.0.0.1`.
+ */
+actual fun defaultDaemonHost(): String = daemonHostFor(isAndroidEmulator())
+
+/** Split out from [defaultDaemonHost] so the choice can be tested without an Android runtime. */
+internal fun daemonHostFor(emulator: Boolean): String =
+    if (emulator) EMULATOR_HOST_ALIAS else DEVICE_LOOPBACK
+
+/** The emulator's alias for the host machine's loopback. Fixed by the emulator, not by us. */
+internal const val EMULATOR_HOST_ALIAS = "10.0.2.2"
+
+/** The device's own loopback, which `adb reverse` points at the host machine. */
+internal const val DEVICE_LOOPBACK = "127.0.0.1"
+
+/**
+ * One line of prose after a failed connection, naming the remedy for the address actually tried.
+ *
+ * Both wrong answers are silent in the same way — the socket simply never connects — so the
+ * address is the only thing that distinguishes them, and guessing wrong sends someone to edit a
+ * manifest when what they needed was one adb command.
+ */
+internal actual fun connectionHelp(host: String, port: Int): String = buildString {
+    append("is `inspector serve` running on the host machine? ")
+    when {
+        host == EMULATOR_HOST_ALIAS ->
+            append("$host is the emulator's alias for the host's loopback and reaches nothing ")
+                .append("on a physical device — on hardware, use `adb reverse tcp:$port ")
+                .append("tcp:$port` and connect to $DEVICE_LOOPBACK instead. ")
+        host == DEVICE_LOOPBACK || host == "localhost" ->
+            append("$host is this device's own loopback, which only reaches the host machine ")
+                .append("while `adb reverse tcp:$port tcp:$port` is in place — it does not ")
+                .append("survive a replug or an adb restart, so run it again. ")
+        else -> Unit
+    }
+    append("The app must also permit cleartext traffic to $host — see docs/INTEGRATION.md 6d.")
+}
 
 actual fun defaultStreamClient(): HttpClient = HttpClient(OkHttp) {
     install(WebSockets)
