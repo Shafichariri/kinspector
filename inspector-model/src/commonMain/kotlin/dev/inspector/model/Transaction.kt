@@ -190,12 +190,18 @@ data class SessionMeta(
 )
 
 /**
- * Known [SessionMeta.platform] values. Deliberately a plain string on the wire so that adding
- * physical devices later does not break older daemons.
+ * Known [SessionMeta.platform] values. Deliberately a plain string on the wire so that a value
+ * this list does not yet carry does not break older daemons.
+ *
+ * The two physical-device values were literals at their call sites until the emulator detection
+ * was fixed and they started being produced in earnest. They are here so that the set of strings
+ * a reader of an archive can encounter is written down in exactly one place.
  */
 object Platforms {
     const val IOS_SIMULATOR = "ios-simulator"
+    const val IOS_DEVICE = "ios-device"
     const val ANDROID_EMULATOR = "android-emulator"
+    const val ANDROID_DEVICE = "android-device"
     const val DESKTOP = "desktop"
 }
 
