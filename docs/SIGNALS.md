@@ -653,9 +653,14 @@ Not blocking stage 1, but decide before stage 5:
 - **Does `timeline` displace `session_summary`** as the recommended MCP entry point, or do they sit
   side by side with `session_summary` still first?
 
-## Not verified, and will not be until somebody runs it
+## Still guesses, and still unmeasured
 
-Stated up front in the tradition of the rest of these docs. Nothing in this file has been built.
+This section said "nothing in this file has been built", which was true when it was written and
+has been wrong since 0.3.0 — see the status line at the top. What survives is the part that was
+never about whether it shipped:
+
 The conflation window default of 150 ms is a guess. The 2 MB signal ring budget is a guess. Both
 should be revisited against one real session before they are written into `INTEGRATION.md` as
-recommendations.
+recommendations. Per-tag retention caps were on this list and have left it — `cache` moved from 20
+to 500 against measured sessions — so these two are what remain. Tracked in
+[`ROADMAP.md`](ROADMAP.md).
