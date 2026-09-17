@@ -73,6 +73,23 @@ fun duplicateGroups(
         .sortedBy { group -> transactions.first { it.id == group.ids.first() }.mono }
 }
 
+/**
+ * Each duplicated transaction's id mapped to the group it belongs to, for surfaces that show
+ * *how many* and *over how long* rather than only that a row is one.
+ *
+ * The count worth showing is [DuplicateGroup.callCount] and not `ids.size`: a group whose members
+ * include retry attempts has more rows than calls, and "sent 5 times" would be wrong about the
+ * thing the reader cares about, which is how many times the app asked.
+ */
+fun duplicatesById(
+    transactions: List<NetworkTransaction>,
+    windowMs: Long = DEFAULT_DUPLICATE_WINDOW_MS,
+): Map<String, DuplicateGroup> = buildMap {
+    for (group in duplicateGroups(transactions, windowMs)) {
+        for (id in group.ids) put(id, group)
+    }
+}
+
 /** Every id that belongs to some duplicate group, for surfaces that only need to highlight. */
 fun duplicateIds(
     transactions: List<NetworkTransaction>,

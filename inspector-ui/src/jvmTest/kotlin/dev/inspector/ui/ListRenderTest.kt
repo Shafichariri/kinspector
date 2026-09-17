@@ -3,6 +3,7 @@ package dev.inspector.ui
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import dev.inspector.model.Marker
+import dev.inspector.model.Signal
 import dev.inspector.model.NetworkTransaction
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -81,6 +82,28 @@ class ListRenderTest {
         Marker(ts = "2026-09-15T10:00:06.000Z", mono = 650, label = "tapped submit", source = "user"),
     )
 
+    /**
+     * Signals shaped like a real session: a screen change, a cache read, and a state holder that
+     * fires four times in a row — which is what the run collapsing exists for and the only way the
+     * screenshot shows whether a collapsed run reads as one.
+     */
+    private fun signals(): List<Signal> {
+        var n = 0
+        fun sig(tag: String, name: String, mono: Long) = Signal(
+            id = "s${n++}".padStart(8, '0'),
+            ts = "2026-09-15T10:00:0${(mono / 100) % 10}.000Z",
+            mono = mono, tag = tag, name = name,
+        )
+        return listOf(
+            sig("screen", "dashboard", 150),
+            sig("cache", "portfolio:1299651", 450),
+            sig("state", "OrderFormViewModel", 610),
+            sig("state", "OrderFormViewModel", 620),
+            sig("state", "OrderFormViewModel", 640),
+            sig("state", "OrderFormViewModel", 690),
+        )
+    }
+
     private fun shoot(name: String, dark: Boolean) {
         val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
         val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
@@ -88,6 +111,7 @@ class ListRenderTest {
                 InspectorList(
                     transactions = session(),
                     markers = markers(),
+                    signals = signals(),
                     onSelect = {},
                     onClear = {},
                     onMark = {},

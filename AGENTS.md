@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**507 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**650 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -456,6 +456,90 @@ one rule that holds for all five beats five exceptions. The web tokens are there
 components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from the same token;
 `color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
 older engine drops the whole `background` declaration and the badge with it.
+
+**Signals merge into the overlay's existing list, and a run's head is not its earliest member.**
+`SIGNALS.md` → "Out, deliberately" said the overlay stays traffic-only; that is overturned, and
+the bullet is annotated rather than deleted because the reasoning is still the record. The fact it
+does not mention is that `Inspector.signals` is a public `StateFlow` and `Signal.data` is in device
+memory, so this was always unwritten UI.
+
+Merged into the traffic list rather than behind a tab: a phone has no room for a second view of one
+session, and the merged reading *is* the feature. `timeline()` takes signals and returns a third
+`TimelineEntry` kind, which broke every exhaustive `when` in the repo — the sealed type doing its
+job.
+
+**`timelineRuns()` collapses only adjacent identical observations.** A state holder firing on every
+keystroke produced 48 adjacent rows in one real session, which on a phone is the whole screen. A
+run interrupted by a call or a marker is two runs, because that interruption is information: the
+state settled, something else happened, and it moved again.
+
+**A run's members are in draw order, so `first` is the latest in newest-first.** Anything that must
+mean the same in both orders reads `TimelineRun.earliest`. The id does, and has to: a run grows at
+its newest end, so an id taken from the head would re-key on every observation during live tail and
+collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
+would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
+
+**Signal rows are deliberately not shaped like transaction rows.** A signal has no status, no
+duration and no byte count, and giving it those columns would leave four gaps that read as missing
+data. One line, a lane stripe, and the clock — the only column it shares with the traffic and the
+only one that makes the two comparable. Payloads are not drawn: a row cannot show a JSON object
+usefully at 360dp and a truncated one is worse than none.
+
+`InspectorColors.forTag` reuses the *method* palette, matching `app.js`'s `.lane-*` rules exactly.
+That does not contradict the method-colour rule above, which is about avoiding the *status* hues: a
+3dp stripe down a row with no status cannot be confused with a tinted badge in a fixed column.
+
+**The overlay's controls are one scrollable strip, not a row each.** A phone is 360dp by about
+720; the header, the filter field and the scope bar already spend four lines before any traffic
+appears. The order toggle, the freeze control, the quick filters, the marker chips and the endpoint
+chips each getting a row would have spent four more. One horizontally scrollable strip trades
+horizontal space, which is not scarce, for vertical space, which is. Order is deliberate: the two
+view toggles lead because they never move and never grow, then markers when there are any — a
+marker exists only because somebody dropped one, so it has earned the forward position — then the
+four presets, then endpoints. The toggles are muted and the filter chips are accent-tinted, because
+one changes how the list is *arranged* and the other changes what it *contains*, and a strip that
+made them look alike would invite tapping `newest first` expecting fewer rows.
+
+**Freezing holds a snapshot, not a flag.** Capture keeps running while the list is held and the
+ring keeps evicting, so a freeze that only stopped redrawing would let the reader's rows be
+replaced underneath them — exactly what they froze the list to prevent. Everything downstream
+reads the frozen rows and markers, including the header count, the scope bar and the context: a
+list frozen in some places and live in others is frozen in the one way nobody wants. Rows held past
+their eviction can no longer fetch a body, which is honest and visible rather than silent.
+
+**`:inspector-ui` has interaction tests, and `compose.uiTest` is jvmTest-only.** A toggle's whole
+behaviour is the transition between two states: `ListRenderTest` photographs one and can never
+show the step, and the state lives inside the composable where no unit test reaches it.
+`ListControlsTest` taps the chips instead. Two rules learned writing it. Select a chip by
+`hasText(…) and hasClickAction()`, never by text alone — a marker named `checkout` is on screen
+twice by design, as a chip and as the rule across the list, and matching on text finds both. And
+assert the *rows move*, not that the label flipped: a toggle wired to nothing would pass an
+assertion about its own text.
+Like `compose.desktop.currentOs`, this dependency must never reach a main source set.
+
+**The overlay's wall clock converts to local time through an `expect`/`actual` offset, not a
+datetime library.** `ts` is ISO-8601 UTC and the entire point of the column is lining a row up
+against logcat or a backend log, which are in the reader's zone — a UTC column would be correct
+and useless. `kotlin.time` has no zone support and `kotlinx-datetime` would be a transitive
+dependency on every consumer of `:inspector-ui` to render eight characters, so
+`localUtcOffsetSeconds()` is
+three one-line actuals instead. On iOS it needs `import platform.Foundation.secondsFromGMT`: that
+property comes from the `NSExtendedTimeZone` category, which Kotlin/Native surfaces as a
+package-level extension rather than a member, so it does not resolve without the import.
+
+`formatClock` takes the offset as a defaulted parameter so the conversion is testable at a fixed
+offset rather than at whatever zone the build machine is in. Two things it must keep doing: `mod`
+and not `%`, or an offset west of Greenwich produces a negative hour; and rejecting a 60th second
+rather than allowing it, because the arithmetic wraps `23:59:60` silently to `00:00:00` — a wrong
+time shown confidently instead of `--:--:--` admitting it could not read one. Unix time has no leap
+second, so this only ever means malformed input. `LocalOffsetJvmTest` cross-checks the JVM actual
+against `java.time`, because the common test can only ask whether the number is plausible and a
+stub returning `0` is plausible in London.
+
+**A repeat says `callCount`, never `ids.size`.** A duplicate group that swept up a retry attempt
+holds more rows than calls, and the reader is asking how many times the app asked — not how many
+lines the list drew. `repeatLabel` is `internal` purely so a test can pin that; the two read as
+interchangeable until a retry lands in a group.
 
 **Markers interleave through `timeline()` in `:inspector-model`, and newest-first is a reverse,
 never a descending sort.** Both surfaces draw markers between the rows they introduce, and the only

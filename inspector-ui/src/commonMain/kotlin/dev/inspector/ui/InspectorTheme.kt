@@ -12,6 +12,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import dev.inspector.model.SignalTags
 
 /**
  * Colour tokens for the inspector surfaces.
@@ -65,6 +66,29 @@ data class InspectorColors(
      * destructive is what red should mean here. Unrecognised verbs stay muted rather than
      * borrowing a colour that already means something.
      */
+    /**
+     * The lane colour for a signal tag, matching the web UI's `.lane-*` rules exactly.
+     *
+     * Reuses the method palette rather than introducing a second one. That is not an oversight
+     * about the rule above — method colours avoid the *status* hues, and this reuses the method
+     * hues, which is a different collision. A signal row and a method badge are never confusable:
+     * one is a tinted badge in a fixed column and the other is a 3dp stripe down the margin of a
+     * row with no status, no duration and no bytes.
+     *
+     * Unknown tags get the muted colour and a generic lane, which is the whole point of `tag`
+     * being an open string — an app emitting `featureflags` renders, it does not fall through.
+     *
+     * Internal: this module's colour set is already public without a `:inspector-noop-ui` twin,
+     * and there is no reason to widen that.
+     */
+    internal fun forTag(tag: String): Color = when (tag.lowercase()) {
+        SignalTags.SCREEN -> methodGet
+        SignalTags.STATE -> methodPut
+        SignalTags.CACHE -> methodPost
+        SignalTags.SESSION -> methodPatch
+        else -> onSurfaceMuted
+    }
+
     fun forMethod(method: String): Color = when (method.uppercase()) {
         "GET" -> methodGet
         "POST" -> methodPost
