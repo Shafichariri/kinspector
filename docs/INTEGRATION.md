@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v32 — 2026-09-17.**
+**Document version: v33 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1195,7 +1195,29 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v32 — 2026-09-17 (this document)
+### v33 — 2026-09-17 (this document)
+
+**Nothing to do. Your signals now show up in the overlay, not only in the web UI.**
+
+`Inspector.signal(...)` observations merge into the in-app list on the same clock as the traffic
+— a screen change, a cache read and the calls they caused, in order, on the device. Previously
+this was a web-UI-only view, so seeing it meant a daemon and a browser.
+
+Three things about how it reads:
+
+- **A run of identical observations collapses.** A state holder that emits on every keystroke
+  would otherwise be the whole screen. Three or more adjacent observations of the same
+  `(tag, name)` become one row carrying the count and the span — `×48 / 23s` — tap to expand.
+  Only *adjacent* ones group: a run interrupted by a call is two runs, because that interruption
+  is information.
+- **Payloads are not shown yet.** A row cannot render a JSON object usefully at phone width. The
+  web UI's tag browsers remain the way to read a payload.
+- **`screen`, `state`, `cache` and `session` get their own lane colour**; any other tag renders in
+  a generic lane rather than being dropped, which is why `tag` is an open string.
+
+Arrives with the library, like v30 through v32.
+
+### v32 — 2026-09-17
 
 **Nothing to do. The overlay list can be steered now.**
 
