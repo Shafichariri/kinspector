@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**457 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**507 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -456,6 +456,29 @@ one rule that holds for all five beats five exceptions. The web tokens are there
 components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from the same token;
 `color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
 older engine drops the whole `background` declaration and the badge with it.
+
+**Markers interleave through `timeline()` in `:inspector-model`, and newest-first is a reverse,
+never a descending sort.** Both surfaces draw markers between the rows they introduce, and the only
+arrangement that makes causal sense — "a marker, then what happened after it" — is expressible
+only while ascending. Reversing the finished sequence keeps each divider attached to the same
+rows; sorting descending attaches it to the rows *before* it, which is the same pixels claiming
+the opposite. The two agree on every session where no marker shares a `mono` with a call, so this
+is a bug that passes casual testing: `TimelineTest` pins it with a tie, because a marker dropped
+immediately before a request is exactly what a tie looks like on a millisecond clock.
+
+A marker at a call's `mono` is placed **before** it — `<=`, not `<` — because a marker is
+dropped just before the thing it marks. Markers after the last call are still emitted: "I marked
+it and then nothing happened" is an answer, and a divider that appeared only once the next
+request arrived would hide it. `app.js` carries a mirror; keep them in step.
+
+**A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
+the label and the grammar has **no escape inside the quotes**, so whether a label is expressible
+turns on the *parity* of its quote count, not on whether it contains one: the tokenizer toggles on
+every `"`, and `parseMarkerRef` recovers the label by prefix/suffix match rather than by parsing
+quotes. So `say "hello"` round-trips intact and `it"s` does not — which nobody would guess from
+reading either. The chip list therefore filters labels by running `FilterParser.parse` over the
+term it would emit, so it follows the grammar rather than a snapshot of it. The *divider* is drawn
+for every marker regardless; it is only the chip that cannot work.
 
 **The list's display order is `orderedRows()`, and both rendering and `j`/`k` go through it.** If
 navigation computes its own sort, `j` moves up the screen the moment newest-first is on. Marker

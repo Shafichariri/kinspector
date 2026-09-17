@@ -51,10 +51,13 @@ Everything below this line is data the overlay already has.
 Each of these is small and self-contained. They are listed in the order that buys the most per
 hour of work, not in the order they were thought of.
 
-- **Render markers.** The overlay already receives them and uses them for `since:marker(…)`
-  filtering only (`InspectorList.kt:73`) — they are never drawn. So a marker you can create with
-  the `mark` button is invisible the moment you create it, and there is no way to discover what
-  labels exist to type into a filter. Dividers in the list, and a list of labels to tap.
+- ~~**Render markers.**~~ **Done, 2026-09-17.** Dividers in the list and a chip per distinct
+  label under the filter field, applying and clearing `since:marker("…")` on tap. The interleave
+  rule moved into `:inspector-model` as `timeline(…)`, so the overlay and `app.js` now describe
+  the same arrangement in the same words — including the part that is easy to get wrong, which is
+  that newest-first is the *reverse* of the ascending sequence and not a descending sort. One
+  limit found on the way: the grammar has no escape inside its quotes, so a label with an odd
+  number of `"` gets a divider but no chip.
 - **A wall-clock column in the row.** The web row carries one; the mobile row does not, which
   makes correlating with anything outside the app harder than it should be.
 - **Repeat count and span.** Mobile says `repeated`; the web says how many times and over how

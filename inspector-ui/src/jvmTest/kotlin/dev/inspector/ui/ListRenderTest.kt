@@ -2,6 +2,7 @@ package dev.inspector.ui
 
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -69,13 +70,24 @@ class ListRenderTest {
         txn("GET", "/v3/some-service/notifications", null, null, 0, error = "SocketTimeoutException"),
     )
 
+    /**
+     * Markers placed inside the session above, at the two `mono` values that put a divider between
+     * rows rather than at either end — a divider that only ever renders at the top of the list
+     * would not show whether it sits correctly *between* two rows, which is the part that can go
+     * wrong. `session()` numbers rows from `mono = 100` upward in steps of 100.
+     */
+    private fun markers(): List<Marker> = listOf(
+        Marker(ts = "2026-09-15T10:00:02.000Z", mono = 250, label = "opened dashboard", source = "app"),
+        Marker(ts = "2026-09-15T10:00:06.000Z", mono = 650, label = "tapped submit", source = "user"),
+    )
+
     private fun shoot(name: String, dark: Boolean) {
         val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
         val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
             InspectorTheme(dark = dark) {
                 InspectorList(
                     transactions = session(),
-                    markers = emptyList(),
+                    markers = markers(),
                     onSelect = {},
                     onClear = {},
                     onMark = {},
