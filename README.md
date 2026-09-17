@@ -199,7 +199,8 @@ Read §1 first: **version alignment is the single most common integration failur
 | [`docs/SIGNALS-CHECKLIST.md`](docs/SIGNALS-CHECKLIST.md) | What must be true of a build that records signals. Assertions only. |
 | [`docs/REPLAY.md`](docs/REPLAY.md) | Design for request replay, re-signing, and daemon control. |
 | [`docs/schema.md`](docs/schema.md) | The data contract. Read before touching `:inspector-model`. |
-| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Full build order, phases, acceptance criteria. |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is next and what is deliberately not. The live list — start here. |
+| [`docs/implementation-plan.md`](docs/implementation-plan.md) | Full build order, phases, acceptance criteria. A record of the original build, not a live plan. |
 | [`AGENTS.md`](AGENTS.md) | Contributor and AI-agent brief: architecture, decisions that must not be "fixed", gotchas. |
 
 `AGENTS.md` is canonical; `CLAUDE.md` and `.cursorrules` are committed symlinks to it, so every
