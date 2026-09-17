@@ -944,7 +944,7 @@ itself has been stable, but the parameter-to-body mapping is the part worth re-r
 iOS `URLSession`, WebViews, and any SDK that hides its transport entirely. The universal answer
 is proxy-based capture — the daemon running a local proxy with a generated CA that the simulator
 trusts. That is a substantially larger piece of work and has not been started; see `AGENTS.md`
-→ "What is next".
+→ "Capturing what Ktor cannot see".
 
 ---
 
@@ -1204,6 +1204,13 @@ Two related corrections while here:
   Sessions already in your archive keep the wrong label — nothing rewrites them. Nothing to do.
 - **§6f used to say physical devices were out of scope.** For Android that is no longer true. For
   iOS it still is, and §6f now says why rather than only that.
+
+### v28 — 2026-09-17 (this document)
+
+**Nothing to do. One dead cross-reference, fixed.**
+
+§10 "Still not covered" pointed at `AGENTS.md` → "What is next", a heading that was renamed to
+"Capturing what Ktor cannot see" without this pointer following it. No code, and no other change.
 
 ### v27 — 2026-09-16
 
