@@ -104,6 +104,45 @@ To run it in the background instead of holding a terminal:
 nohup inspector serve > /tmp/inspector-daemon.log 2>&1 &
 ```
 
+### Connecting a physical Android device over USB
+
+The daemon binds loopback and nothing else, so a phone on your Wi-Fi cannot reach it and is not
+meant to. What a USB cable gives you instead is `adb reverse`, which forwards a port on the
+*device's* loopback to the same port on the machine running adb:
+
+```bash
+adb reverse tcp:8099 tcp:8099
+```
+
+That is the whole setup. The app then connects to `127.0.0.1:8099` from inside the phone, the
+traffic goes down the cable, and the daemon keeps listening on `127.0.0.1` on your Mac — the
+security boundary is untouched, because nothing was opened to the network.
+
+`defaultDaemonHost()` already picks the right address: `10.0.2.2` on an emulator, `127.0.0.1` on
+hardware. You do not pass anything to `StreamSink`.
+
+Two things about `adb reverse` that will cost you a debugging session each:
+
+- **It does not survive a replug**, an `adb kill-server`, or the device going away and coming
+  back. Run it again; it is idempotent.
+- **It is per-device.** With more than one device or emulator attached, `adb reverse` fails with
+  `more than one device/emulator` — name the one you mean with `adb -s <serial> reverse …`, from
+  `adb devices`.
+
+Check what is forwarded, and tear it down:
+
+```bash
+adb reverse --list              # host-15 tcp:8099 tcp:8099
+adb reverse --remove tcp:8099
+```
+
+The app still needs the cleartext exemption for `127.0.0.1` — see `INTEGRATION.md` §6d. That is a
+separate thing from the tunnel, and forgetting it fails the same silent way.
+
+**iOS hardware has no equivalent** and is not supported. There is no `adb reverse` for an iPhone,
+so the only routes are widening the daemon's bind to the network — which needs authentication
+first, and the daemon has none — or a `usbmuxd` tunnel, which nobody has built.
+
 ### It refuses to start: "port 8099 is already in use"
 
 That is deliberate and it means another daemon is already running. It used to start anyway and
@@ -502,6 +541,11 @@ unredacted credentials by default.
 
 **The web UI shows no sessions.** The app never connected. Work through `INTEGRATION.md` §9 —
 on Android the cause is almost always the cleartext config in §6d.
+
+**A USB Android device records nothing.** Check `adb reverse --list` first: an empty list is the
+usual answer, because the forward does not survive a replug or an adb restart. The app prints the
+reason it could not connect, and on a device it names `adb reverse` explicitly. If the forward is
+listed and it still fails, it is the cleartext exemption for `127.0.0.1` (`INTEGRATION.md` §6d).
 
 **The web UI shows an old session that is not mine.** You are looking at a different archive. Check
 the `inspector: archive at …` line, and whether something passed `--data`.

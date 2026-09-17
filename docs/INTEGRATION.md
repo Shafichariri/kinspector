@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v27 — 2026-09-16.**
+**Document version: v29 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -403,7 +403,8 @@ Inspector.addSink(stream)
 `defaultClientInfo` fills in platform, device name and OS version, and detects whether you are on
 a simulator or emulator. The daemon host defaults correctly per platform too — `127.0.0.1` on the
 iOS simulator and desktop, `10.0.2.2` on the Android emulator, which is how the emulator reaches
-your Mac.
+your Mac, and `127.0.0.1` on a physical Android device, which reaches your Mac over `adb reverse`
+(§6f). You do not pass a host.
 
 If no daemon is running, the sink stays disconnected and drops what it cannot send. Your app is
 unaffected either way — this is never on your app's critical path.
@@ -444,7 +445,7 @@ come from this page, so another browser tab cannot reach in and kill your daemon
 ### 6d. Android: permit cleartext to the daemon
 
 **Android 9+ blocks cleartext traffic by default, and the daemon connection is cleartext
-`ws://10.0.2.2:8099`.** Without this the socket fails and nothing reaches the web UI. This is the
+`ws://…:8099`.** Without this the socket fails and nothing reaches the web UI. This is the
 single most common reason an Android app records nothing.
 
 Add a debug-only network security config. Create
@@ -456,9 +457,14 @@ Add a debug-only network security config. Create
     <domain-config cleartextTrafficPermitted="true">
         <!-- The Android emulator's alias for your Mac's loopback. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- A USB device's own loopback, which `adb reverse` points at your Mac. See 6f. -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
 </network-security-config>
 ```
+
+Include both even if you only use one today. They cost nothing, and the failure when the right one
+is missing looks exactly like the daemon not running.
 
 And reference it from `src/debug/AndroidManifest.xml`:
 
@@ -507,11 +513,35 @@ screen, and Settings → Sessions lists every session with a per-row delete and 
 Both arm on the first click and fire on the second. A session the app is still writing to is never
 deleted — pulling the folder out from under an open writer would lose the traffic on screen.
 
-### 6f. Note for physical devices
+### 6f. A physical Android device, over USB
 
-`10.0.2.2` and `127.0.0.1` only work on emulators and simulators. On a real phone the daemon is
-not reachable at those addresses, so the overlay works but the web UI gets nothing. Physical
-device support is deliberately out of scope for v1.
+Works, with one command and no code change. The daemon still binds your Mac's loopback and
+nothing else; what the cable gives you is `adb reverse`, which forwards a port on the *phone's*
+loopback to the same port on the machine running adb:
+
+```bash
+adb reverse tcp:8099 tcp:8099
+```
+
+That is the setup. `defaultDaemonHost()` already returns `127.0.0.1` on hardware and `10.0.2.2` on
+an emulator, so `StreamSink(defaultClientInfo(…))` is unchanged — you pass no host. You do need
+`127.0.0.1` in the cleartext config from §6d.
+
+Two things will each cost you a debugging session:
+
+- **The forward does not survive a replug**, an `adb kill-server`, or the device dropping off and
+  coming back. Run it again; it is idempotent, and `adb reverse --list` tells you whether it is
+  there.
+- **It is per-device.** With a phone and an emulator both attached, plain `adb reverse` fails with
+  `more than one device/emulator`; use `adb -s <serial> reverse …`, from `adb devices`.
+
+If nothing arrives, the app says why — on a device the message names `adb reverse` rather than
+leaving you with a disconnected sink and no reason.
+
+**A physical iPhone is still not supported.** There is no `adb reverse` for iOS, so the routes are
+widening the daemon's bind to your network — which needs authentication the daemon does not have,
+and the archive holds unredacted credentials by default — or a `usbmuxd` tunnel, which nobody has
+built. The overlay works on an iPhone; the web UI and the archive do not.
 
 ---
 
@@ -655,7 +685,9 @@ Your app never connected. Work through these in order:
 4. **Check the daemon's console.** It prints `inspector: started session …` on every connect.
    Nothing there means nothing reached it.
 5. `stream.start()` was never called, or `Inspector.addSink(stream)` was missed.
-6. You are on a physical device (see §6f).
+6. **Android over USB: is the forward still there?** `adb reverse --list`. It does not survive a
+   replug or an adb restart, so an empty list is the usual answer. See §6f.
+7. **A physical iPhone.** Not supported — the overlay works, the web UI cannot. See §6f.
 
 **Web UI shows an old session that is not yours**
 You are looking at an archive from a different daemon run. Check which directory it is using —
@@ -1152,7 +1184,28 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v27 — 2026-09-16 (this document)
+### v29 — 2026-09-17 (this document)
+
+**If you test on a physical Android phone, you now can. Two things to do, both in §6f.**
+
+Run `adb reverse tcp:8099 tcp:8099` with the phone on USB, and add `127.0.0.1` alongside
+`10.0.2.2` in the cleartext config in §6d. No code change: `defaultDaemonHost()` returns
+`10.0.2.2` on an emulator and `127.0.0.1` on hardware, so the `StreamSink(defaultClientInfo(…))`
+line you already have is correct on both.
+
+This needs the library release that carries it, not just a rebuilt daemon — the host choice is in
+`:inspector-stream`. Until then §6f describes what is coming; the emulator path is unchanged and
+keeps working.
+
+Two related corrections while here:
+
+- **Emulator sessions were being archived as `android-device`.** The detection matched strings a
+  current AVD stopped reporting years ago, so every emulator session claimed to be a phone. Fixed.
+  Sessions already in your archive keep the wrong label — nothing rewrites them. Nothing to do.
+- **§6f used to say physical devices were out of scope.** For Android that is no longer true. For
+  iOS it still is, and §6f now says why rather than only that.
+
+### v27 — 2026-09-16
 
 **Released as 0.7.0. Bump your coordinates — a rebuild alone will not get you this one.**
 
