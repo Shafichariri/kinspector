@@ -10,15 +10,11 @@ import java.nio.charset.CodingErrorAction
 import java.util.Base64
 
 actual fun defaultClientInfo(appId: String, appVersion: String, buildType: String): ClientInfo {
-    // The usual emulator tell. v1 only supports emulators, but recording the truth means the
-    // archive is still accurate the day physical devices are added.
-    val emulator = Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
-        Build.MODEL.contains("Emulator", ignoreCase = true) ||
-        Build.MODEL.contains("Android SDK built for", ignoreCase = true)
+    // See EmulatorDetection.kt for why this is not a string match on the fingerprint any more.
     return ClientInfo(
         appId = appId,
         appVersion = appVersion,
-        platform = if (emulator) Platforms.ANDROID_EMULATOR else "android-device",
+        platform = if (isAndroidEmulator()) Platforms.ANDROID_EMULATOR else Platforms.ANDROID_DEVICE,
         device = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
         osVersion = Build.VERSION.RELEASE ?: Build.VERSION.SDK_INT.toString(),
         buildType = buildType,

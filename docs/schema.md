@@ -191,7 +191,7 @@ because this file is meant to be opened and read in a folder listing.
 | `v` | int | |
 | `sessionId` | string | Also the session folder name. |
 | `appId` / `appVersion` | string | |
-| `platform` | string | `ios-simulator`, `android-emulator`, `desktop`. A plain string, not an enum, so adding physical devices later does not break older daemons. |
+| `platform` | string | `ios-simulator`, `ios-device`, `android-emulator`, `android-device`, `desktop` — the `Platforms` constants. A plain string, not an enum, so a value an older daemon does not know does not break it. Archives written before 2026-09-17 record every Android emulator session as `android-device`; the detection was wrong, not the writer. |
 | `device` / `osVersion` / `buildType` | string | |
 | `startedAt` / `endedAt` | string / string? | |
 | `txnCount` / `errorCount` | int | |
