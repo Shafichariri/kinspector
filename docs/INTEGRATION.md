@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v30 — 2026-09-17.**
+**Document version: v31 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1195,7 +1195,20 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v30 — 2026-09-17 (this document)
+### v31 — 2026-09-17 (this document)
+
+**Nothing to do. The overlay row says more.**
+
+- **A wall-clock time per row**, `HH:MM:SS` in the device's own zone, so a call can be lined up
+  against logcat or a backend log without exporting anything. Seconds and no milliseconds — the
+  web has the width for `.mmm` and a phone does not.
+- **A repeated call now says how many and over how long** — `2× / 1.9s` instead of `repeated`,
+  which is the part that separates one code path fetching twice from a poll or a retry storm. The
+  count is calls, not rows: a repeat that swept up a retry still asked twice.
+
+Arrives with the library, like v30.
+
+### v30 — 2026-09-17
 
 **Nothing to do. Markers you already create now show up in the overlay.**
 

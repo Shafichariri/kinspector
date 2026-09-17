@@ -45,8 +45,9 @@ import dev.inspector.model.FilterContext
 import dev.inspector.model.FilterParser
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.DuplicateGroup
 import dev.inspector.model.TimelineEntry
-import dev.inspector.model.duplicateIds
+import dev.inspector.model.duplicatesById
 import dev.inspector.model.markerLabels
 import dev.inspector.model.timeline
 // Extension: `matches` on the interface takes a Row; this is the transaction overload.
@@ -182,7 +183,7 @@ internal fun InspectorList(
             // Computed over *all* transactions, not the filtered view: a duplicate whose twin is
             // filtered out is still a duplicate, and hiding that would make the highlight depend
             // on what you happened to be searching for. The scope shares the rule — see [pathScope].
-            val duplicates = remember(transactions) { duplicateIds(transactions) }
+            val duplicates = remember(transactions) { duplicatesById(transactions) }
             val scope = remember(transactions) { pathScope(transactions) }
 
             // Shown only while something on screen is actually under it. A filter that leaves only
@@ -209,7 +210,7 @@ internal fun InspectorList(
                         is TimelineEntry.Call -> TransactionRow(
                             txn = entry.txn,
                             scope = activeScope,
-                            isDuplicate = entry.txn.id in duplicates,
+                            duplicate = duplicates[entry.txn.id],
                             onClick = { onSelect(entry.txn) },
                         )
                         is TimelineEntry.Mark -> MarkerDivider(entry.marker)
@@ -373,7 +374,7 @@ private fun ScopeBar(scope: PathScope, total: Int) {
 private fun TransactionRow(
     txn: NetworkTransaction,
     scope: PathScope?,
-    isDuplicate: Boolean,
+    duplicate: DuplicateGroup?,
     onClick: () -> Unit,
 ) {
     val colors = LocalInspectorColors.current
@@ -385,7 +386,7 @@ private fun TransactionRow(
         Modifier.fillMaxWidth()
             .clickable(onClick = onClick)
             // Background before padding, so the tint fills the row rather than insetting with it.
-            .background(if (isDuplicate) colors.duplicate.copy(alpha = DUPLICATE_TINT_ALPHA) else Color.Transparent)
+            .background(if (duplicate != null) colors.duplicate.copy(alpha = DUPLICATE_TINT_ALPHA) else Color.Transparent)
             // A failure is findable by shape before it is read. Drawn rather than laid out, so it
             // costs the row no width and cannot pull the columns out of line.
             .drawBehind {
@@ -401,12 +402,23 @@ private fun TransactionRow(
         ) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
 
+            // Before the method, which is where the web UI puts it — one event should not need
+            // reading twice. On the metadata line rather than beside the path, because the path
+            // line is the one the 0.7.0 layout exists to protect and this column is fixed width.
+            Text(
+                formatClock(txn.ts),
+                color = colors.onSurfaceMuted,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+            )
+
             MethodBadge(txn.method, minWidth = 52.dp)
 
             // Everything unusual about this row, in the space the fixed columns leave over. Empty
             // on an ordinary call, which is most of them — so anything here is worth the glance.
             Text(
-                rowFlags(txn, scope, isDuplicate),
+                rowFlags(txn, scope, duplicate),
                 color = colors.onSurfaceMuted,
                 fontSize = 11.sp,
                 maxLines = 1,
@@ -464,17 +476,37 @@ private fun TransactionRow(
  *
  * The host appears only when it is not the one the scope bar claims: repeating it on every row is
  * noise when it never changes, and load-bearing on the one row where it does.
+ *
+ * A repeat says how many and over how long, which is the part that decides what it *is*: three
+ * calls over 40ms is a double-fetch on one code path, three over 2.4s is a retry storm or a poll,
+ * and the bare word "repeated" cannot tell them apart. The web says the same thing in a tooltip;
+ * there are no tooltips here, so it goes in the row.
  */
-private fun rowFlags(txn: NetworkTransaction, scope: PathScope?, isDuplicate: Boolean): String {
+private fun rowFlags(txn: NetworkTransaction, scope: PathScope?, duplicate: DuplicateGroup?): String {
     val parts = mutableListOf<String>()
     if (txn.attempt > 1) parts += "attempt ${txn.attempt}"
     // Said in words as well as colour: a tint alone is invisible to anyone who cannot distinguish
     // it, and unexplained to everyone else.
-    if (isDuplicate) parts += "repeated"
+    if (duplicate != null) parts += repeatLabel(duplicate)
     if (scope == null || txn.host != scope.host) parts += txn.host
     txn.error?.let { parts += it }
     return parts.joinToString("  ·  ")
 }
+
+/**
+ * `3× / 1.9s` — how many calls asked, and across how long.
+ *
+ * [DuplicateGroup.callCount] rather than `ids.size`, because a group containing retry attempts
+ * holds more rows than calls and the reader is asking how many times the app asked.
+ *
+ * `×` rather than the word, and a slash rather than "over": this shares one line with the host,
+ * the attempt number and any transport error, in whatever width the fixed columns leave.
+ *
+ * Internal rather than private so the `callCount` choice is pinned by a test — it is the kind of
+ * thing that reads as interchangeable with `ids.size` until a retry lands in the group.
+ */
+internal fun repeatLabel(group: DuplicateGroup): String =
+    "${group.callCount}× / ${formatDuration(group.spanMs)}"
 
 /**
  * @param prominent draws the button filled, for the one action on a screen that is the way out.

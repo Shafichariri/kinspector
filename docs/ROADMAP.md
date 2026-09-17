@@ -58,10 +58,15 @@ hour of work, not in the order they were thought of.
   that newest-first is the *reverse* of the ascending sequence and not a descending sort. One
   limit found on the way: the grammar has no escape inside its quotes, so a label with an odd
   number of `"` gets a divider but no chip.
-- **A wall-clock column in the row.** The web row carries one; the mobile row does not, which
-  makes correlating with anything outside the app harder than it should be.
-- **Repeat count and span.** Mobile says `repeated`; the web says how many times and over how
-  long, which is the part that tells you whether it is a retry storm or a double-fetch.
+- ~~**A wall-clock column in the row.**~~ **Done, 2026-09-17.** `HH:MM:SS` in the device's own
+  zone, on the metadata line before the method, which is the column order the web uses. Seconds
+  and no milliseconds: the web has the width for `.mmm` and a phone does not. The zone conversion
+  is an `expect`/`actual` for the UTC offset rather than a `kotlinx-datetime` dependency pushed
+  onto consumers, and it uses the *current* offset — a session shorter than a DST transition is
+  the only case, and it is the only case there is.
+- ~~**Repeat count and span.**~~ **Done, 2026-09-17.** `2× / 1.9s`, from `duplicatesById` in
+  `:inspector-model`. The count is `callCount` and not `ids.size`, because a group that swept up a
+  retry has more rows than calls and the question is how many times the app *asked*.
 - **Sort order toggle**, oldest/newest first. The mobile list is fixed.
 - **Freeze the list.** Mobile is always live by construction, which sounds better than it is:
   there is no way to hold still and read while traffic keeps arriving.
