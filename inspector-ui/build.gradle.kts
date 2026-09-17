@@ -1,3 +1,5 @@
+import org.jetbrains.compose.ExperimentalComposeLibrary
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
@@ -36,6 +38,11 @@ kotlin {
             // Test-only, and never published: ImageComposeScene needs skiko's native runtime to
             // render the list off-screen. `compose.ui` alone brings the API but not the binary.
             implementation(compose.desktop.currentOs)
+            // Also test-only. The order toggle and the freeze control are state held inside the
+            // composable, so the only honest way to test them is to tap them — a render test can
+            // photograph one state and never the transition between two.
+            @OptIn(ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
         }
         androidMain.dependencies {
             // Only for InspectorBackHandler. Every Compose Android app already has this — it is
