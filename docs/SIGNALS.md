@@ -42,6 +42,11 @@ and a merged timeline.
   dependency on somebody's architecture, and this one has stayed free of that.
 - **No overlay changes.** v1 is host-side only — daemon, web UI, CLI, MCP. The in-app pill and
   inspector screen stay traffic-only.
+  > **Overturned 2026-09-17, and left here because the reasoning is still the record.** The
+  > overlay now merges signals into its list. What the decision does not mention is that
+  > `Inspector.signals` is a public `StateFlow` and `Signal.data` is in device memory, so this was
+  > always unwritten UI rather than a missing capability. See `ROADMAP.md` → "Bringing the overlay
+  > closer to the web UI". The rest of this section stands.
 - **No redaction of signal payloads.** See [Redaction](#redaction-is-not-applied-in-v1). Deliberate,
   and it must be stated loudly rather than left to be discovered.
 

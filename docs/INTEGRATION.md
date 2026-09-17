@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v29 — 2026-09-17.**
+**Document version: v33 — 2026-09-17.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -615,6 +615,17 @@ Drop a labelled point into the timeline to correlate UI actions with traffic:
 Inspector.mark("tapped checkout")
 ```
 
+A marker is visible on **both** surfaces. In the overlay it draws as a labelled rule across the
+list, between the calls before it and the calls after, and every distinct label also appears as a
+chip under the filter field — tapping one applies `since:marker("…")`, tapping it again clears.
+The `mark` button in the overlay toolbar drops one too, so a marker made on a phone is visible on
+that phone without a daemon.
+
+Labels are yours to choose and nothing parses them, with one caveat worth knowing: the filter
+grammar quotes labels and has no escape inside the quotes, so a label containing an **odd** number
+of `"` characters cannot be written as a filter term. Such a marker still draws its rule; it just
+gets no chip. Any label without quotes — which is all of them in practice — is fine.
+
 ---
 
 ## 8. Performance
@@ -1184,7 +1195,73 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v29 — 2026-09-17 (this document)
+### v33 — 2026-09-17 (this document)
+
+**Nothing to do. Your signals now show up in the overlay, not only in the web UI.**
+
+`Inspector.signal(...)` observations merge into the in-app list on the same clock as the traffic
+— a screen change, a cache read and the calls they caused, in order, on the device. Previously
+this was a web-UI-only view, so seeing it meant a daemon and a browser.
+
+Three things about how it reads:
+
+- **A run of identical observations collapses.** A state holder that emits on every keystroke
+  would otherwise be the whole screen. Three or more adjacent observations of the same
+  `(tag, name)` become one row carrying the count and the span — `×48 / 23s` — tap to expand.
+  Only *adjacent* ones group: a run interrupted by a call is two runs, because that interruption
+  is information.
+- **Payloads are not shown yet.** A row cannot render a JSON object usefully at phone width. The
+  web UI's tag browsers remain the way to read a payload.
+- **`screen`, `state`, `cache` and `session` get their own lane colour**; any other tag renders in
+  a generic lane rather than being dropped, which is why `tag` is an open string.
+
+Arrives with the library, like v30 through v32.
+
+### v32 — 2026-09-17
+
+**Nothing to do. The overlay list can be steered now.**
+
+A scrollable strip above the list, holding — in order — the reading-order toggle, a freeze
+control, your markers, four filter presets (`errors`, `5xx`, `slow`, `retries`) and a chip per
+busiest endpoint. Every chip writes the same grammar into the filter field that you could type
+yourself, so tapping one shows you what it did; tapping it again clears it.
+
+**Freeze is the one worth knowing about.** The overlay is live by construction, which sounds
+better than it is — there was no way to hold still and read while traffic kept arriving. Freezing
+holds the rows you are looking at; capture carries on behind it, and thawing catches up. A row
+held long enough to be evicted from the ring can no longer show its body, which the detail screen
+says rather than guesses at.
+
+Arrives with the library, like v30 and v31.
+
+### v31 — 2026-09-17
+
+**Nothing to do. The overlay row says more.**
+
+- **A wall-clock time per row**, `HH:MM:SS` in the device's own zone, so a call can be lined up
+  against logcat or a backend log without exporting anything. Seconds and no milliseconds — the
+  web has the width for `.mmm` and a phone does not.
+- **A repeated call now says how many and over how long** — `2× / 1.9s` instead of `repeated`,
+  which is the part that separates one code path fetching twice from a poll or a retry storm. The
+  count is calls, not rows: a repeat that swept up a retry still asked twice.
+
+Arrives with the library, like v30.
+
+### v30 — 2026-09-17
+
+**Nothing to do. Markers you already create now show up in the overlay.**
+
+`Inspector.mark("…")` has always reached the in-app inspector — it is what `since:marker(…)`
+filters on there — but nothing drew it, so a marker was invisible on the surface that made it and
+there was no way to discover which labels existed to type. Now: a labelled rule across the list
+where the marker falls, and a chip per distinct label under the filter field that applies and
+clears `since:marker("…")` on tap. §7 → Markers describes it.
+
+Arrives with the library, not the daemon — the list lives in `:inspector-ui`, so a consumer who
+rebuilds the daemon and leaves the coordinates alone gets none of it. Same release as v29's
+`adb reverse` support.
+
+### v29 — 2026-09-17
 
 **If you test on a physical Android phone, you now can. Two things to do, both in §6f.**
 
