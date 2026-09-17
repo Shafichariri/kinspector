@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import dev.inspector.model.Marker
+import dev.inspector.model.Signal
 import dev.inspector.model.NetworkTransaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -177,4 +178,129 @@ class ListControlsTest {
         assertEquals(0, onAllNodesWithText("/v1/beta/detail").fetchSemanticsNodes().size)
         onNodeWithText("/v1/beta").assertExists()
     }
+    private var signalSeq = 0
+
+    private fun signal(tag: String, name: String, mono: Long) = Signal(
+        id = "s${++signalSeq}", ts = "2026-09-17T09:00:00Z", mono = mono, tag = tag, name = name,
+    )
+
+    @Test
+    fun `signals are on when a session has them and one tap hides them`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    signals = listOf(signal("screen", "dashboard", 150)),
+                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // On by default, mirroring the web opening a session with signals on its merged view.
+        onNodeWithText("dashboard").assertExists()
+
+        chip("signals 1").performClick()
+        waitForIdle()
+        assertEquals(0, onAllNodesWithText("dashboard").fetchSemanticsNodes().size)
+        // The traffic is untouched — hiding signals is not a filter on the calls.
+        onNodeWithText("/v1/alpha").assertExists()
+
+        chip("signals off").performClick()
+        waitForIdle()
+        onNodeWithText("dashboard").assertExists()
+    }
+
+    @Test
+    fun `a session with no signals offers no toggle`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // A control for something the session does not contain can only disappoint, and the strip
+        // has no room for one.
+        assertEquals(0, onAllNodesWithText("signals 0").fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithText("signals off").fetchSemanticsNodes().size)
+    }
+
+    /**
+     * The behaviour that keeps a chatty app from burying its own traffic.
+     *
+     * Four adjacent observations of one state holder collapse to a single row carrying the count
+     * and the span; tapping it shows the members. One real session had 48 in a row, which on a
+     * phone is the entire screen.
+     */
+    @Test
+    fun `a run of identical observations collapses and expands on tap`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    signals = listOf(
+                        signal("state", "form", 200),
+                        signal("state", "form", 210),
+                        signal("state", "form", 240),
+                        signal("state", "form", 290),
+                    ),
+                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // One row, not four, and it says how many and over how long.
+        assertEquals(1, onAllNodesWithText("form").fetchSemanticsNodes().size)
+        onNodeWithText("×4 / 90ms").assertExists()
+
+        onNodeWithText("×4 / 90ms").performClick()
+        waitForIdle()
+        // The header stays, with its four members under it.
+        assertEquals(5, onAllNodesWithText("form").fetchSemanticsNodes().size)
+
+        onNodeWithText("×4 / 90ms").performClick()
+        waitForIdle()
+        assertEquals(1, onAllNodesWithText("form").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `two adjacent observations are not worth collapsing`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    signals = listOf(signal("state", "form", 200), signal("state", "form", 210)),
+                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // Collapsing two rows hides as much as it saves.
+        assertEquals(2, onAllNodesWithText("form").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `freezing holds the signals too`() = runComposeUiTest {
+        val live = mutableStateOf(listOf(signal("screen", "dashboard", 150)))
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    signals = live.value,
+                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        chip("live").performClick()
+        waitForIdle()
+
+        live.value = live.value + signal("screen", "settings", 400)
+        waitForIdle()
+        // A list frozen for traffic and live for signals is frozen in the one way nobody wants.
+        assertEquals(0, onAllNodesWithText("settings").fetchSemanticsNodes().size)
+    }
+
 }

@@ -88,9 +88,23 @@ hour of work, not in the order they were thought of.
 
 In dependency order, because each stage makes the next one cheap:
 
-1. **Collect `Inspector.signals`** and show a merged timeline — traffic, signals and markers on
-   one clock. This is the single biggest gap, and it is the thing the web UI opens on for a
-   session that has signals.
+1. ~~**Collect `Inspector.signals`** and show a merged timeline~~ — **done, 2026-09-17.** Traffic,
+   signals and markers on one clock, in the list that was already there rather than behind a tab:
+   a phone has no room for a second view of the same session, and the merged reading *is* the
+   feature. On by default when the session has any, one tap off.
+
+   `timeline()` grew a `signals` parameter and a third `TimelineEntry` kind, which broke every
+   exhaustive `when` in the repository — the sealed type doing its job. `timelineRuns()` collapses
+   **adjacent** identical observations, which is what keeps a state holder firing on every
+   keystroke from burying the traffic the merged view exists to correlate.
+
+   One thing worth knowing before extending this: a run's members are in *draw* order, so in
+   newest-first the head of a run is the latest, not the earliest. Anything that must mean the same
+   in both orders reads `TimelineRun.earliest` instead — the id does, and has to, or an expanded
+   run re-keys on every observation during live tail.
+
+   Payloads are not drawn. A row cannot show a JSON object usefully at 360dp, and a truncated one
+   would be worse than none; reading them is stage 2.
 2. **Per-tag browsers** — cache, state, screen, and any tag an app invents. Freshness, provenance
    (`pushed` vs `pulled`), faceting, per-key history.
 3. **The "now" strip** — the last observation per `(tag, name)`, with age.
