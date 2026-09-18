@@ -51,7 +51,7 @@ class ListControlsTest {
                 InspectorList(
                     transactions = listOf(first, second),
                     markers = emptyList(),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -91,7 +91,7 @@ class ListControlsTest {
                 InspectorList(
                     transactions = live.value,
                     markers = emptyList(),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -120,7 +120,7 @@ class ListControlsTest {
                 InspectorList(
                     transactions = listOf(first, failing),
                     markers = emptyList(),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -147,7 +147,7 @@ class ListControlsTest {
                     markers = listOf(
                         Marker(ts = "2026-09-17T09:00:00Z", mono = 150, label = "checkout", source = "user"),
                     ),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -168,7 +168,7 @@ class ListControlsTest {
                 InspectorList(
                     transactions = listOf(second, nested, nested.copy(id = "d", mono = 400)),
                     markers = emptyList(),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -192,7 +192,7 @@ class ListControlsTest {
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = listOf(signal("screen", "dashboard", 150)),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -217,7 +217,7 @@ class ListControlsTest {
                 InspectorList(
                     transactions = listOf(first),
                     markers = emptyList(),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -247,7 +247,7 @@ class ListControlsTest {
                         signal("state", "form", 240),
                         signal("state", "form", 290),
                     ),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -273,7 +273,7 @@ class ListControlsTest {
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = listOf(signal("state", "form", 200), signal("state", "form", 210)),
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }
@@ -290,7 +290,7 @@ class ListControlsTest {
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = live.value,
-                    onSelect = {}, onClear = {}, onMark = {}, onClose = {},
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
                 )
             }
         }

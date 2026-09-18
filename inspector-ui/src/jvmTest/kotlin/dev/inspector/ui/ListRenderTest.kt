@@ -4,6 +4,9 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import dev.inspector.model.Marker
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalTrigger
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import dev.inspector.model.NetworkTransaction
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -104,6 +107,40 @@ class ListRenderTest {
         )
     }
 
+    /**
+     * The observation the detail shot opens, with a payload and two earlier versions of itself.
+     *
+     * A cache entry rather than a screen, because it is the case with something in every field the
+     * screen draws: a payload worth indenting, a size, a provenance that is not the default, and a
+     * history long enough to show the gap column doing its job.
+     */
+    private fun cacheObservations(): List<Signal> {
+        fun entry(mono: Long, items: Int, trigger: SignalTrigger) = Signal(
+            id = "c${mono}".padStart(8, '0'),
+            // Seconds derived from `mono`, so the clock column and the gap column tell the same
+            // story. `(mono / 100) % 10` wrapped — 450 and 4400 both rendered as :04 — and the
+            // history then read as though it were out of order, which is a defect in the picture
+            // rather than in the screen but is just as misleading to whoever looks at it.
+            ts = "2026-09-15T10:00:${((mono / 1000) % 60).toString().padStart(2, '0')}.000Z",
+            mono = mono,
+            tag = "cache",
+            name = "portfolio:1299651",
+            data = buildJsonObject {
+                put("storage", "disk")
+                put("items", items)
+                put("expired", false)
+                put("key", "portfolio/1299651/holdings")
+            },
+            bytes = 128 + items * 40L,
+            trigger = trigger,
+        )
+        return listOf(
+            entry(450, 3, SignalTrigger.App),
+            entry(1_900, 7, SignalTrigger.App),
+            entry(4_400, 9, SignalTrigger.Request),
+        )
+    }
+
     private fun shoot(name: String, dark: Boolean) {
         val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
         val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
@@ -112,7 +149,7 @@ class ListRenderTest {
                     transactions = session(),
                     markers = markers(),
                     signals = signals(),
-                    onSelect = {},
+                    onSelect = {}, onSelectSignal = {},
                     onClear = {},
                     onMark = {},
                     onClose = {},
@@ -129,9 +166,38 @@ class ListRenderTest {
         assertTrue(out.length() > 0, "no image written to $out")
     }
 
+    /** The signal detail screen, which is what stage 2 added and what nobody has looked at. */
+    private fun shootSignal(name: String, dark: Boolean) {
+        val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
+        val history = cacheObservations()
+        val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
+            InspectorTheme(dark = dark) {
+                InspectorSignalDetail(
+                    signal = history.last(),
+                    signals = history,
+                    onSelectSignal = {}, onCopy = {}, onBack = {}, onClose = {},
+                )
+            }
+        }
+        try {
+            val bytes = scene.render().encodeToData(EncodedImageFormat.PNG)?.bytes
+            assertTrue(bytes != null && bytes.isNotEmpty(), "the signal detail rendered nothing")
+            out.writeBytes(bytes)
+        } finally {
+            scene.close()
+        }
+        assertTrue(out.length() > 0, "no image written to $out")
+    }
+
     @Test
     fun renders_the_list_dark() = shoot("list-dark", dark = true)
 
     @Test
     fun renders_the_list_light() = shoot("list-light", dark = false)
+
+    @Test
+    fun renders_the_signal_detail_dark() = shootSignal("signal-dark", dark = true)
+
+    @Test
+    fun renders_the_signal_detail_light() = shootSignal("signal-light", dark = false)
 }
