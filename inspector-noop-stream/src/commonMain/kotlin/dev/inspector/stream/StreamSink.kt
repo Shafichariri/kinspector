@@ -46,6 +46,17 @@ class StreamSink(
     private val _dropped = MutableStateFlow(0L)
     val dropped: StateFlow<Long> = _dropped.asStateFlow()
 
+    /**
+     * Always null. The real sink reports why it could not reach the daemon; there is no daemon
+     * connection here to fail, so there is never a reason to report.
+     *
+     * Declared because an app that surfaces the reason in its own debug screen must still
+     * compile under `-Pinspector=off`, which is the whole contract of this module. The real
+     * sink has had it since before v0.1.0 and this one never did, so every release so far
+     * shipped the gap — see `StreamApiParityTest`, which is what now makes that visible.
+     */
+    val lastError: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
+
     fun start() = Unit
     fun stop() = Unit
 
