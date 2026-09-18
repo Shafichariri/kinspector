@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only, exactly as docs/INTEGRATION.md 6d tells a consumer to do it. Keeping it under
+  src/debug/ means the release manifest never references the exemption, so it cannot reach a
+  shipped build — the same gating the rest of the tool uses.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

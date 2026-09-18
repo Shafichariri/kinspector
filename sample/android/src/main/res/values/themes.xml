@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A bare Material theme with no action bar: the sample draws its own UI in Compose, and an
+      action bar would sit above the overlay's own insets handling and make the screenshots lie
+      about what a consuming app sees.
+    -->
+    <style name="Theme.InspectorSample" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

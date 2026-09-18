@@ -99,6 +99,29 @@ the daemon runs with no app, the MCP server reads an archive with neither.
 Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to collapse. This is
 the whole overlay, running against a real Ktor client, with nothing else set up.
 
+The same app builds for Android, which is where the overlay is actually meant to be looked at —
+a phone screen is 360dp wide and a desktop window never is:
+
+```bash
+./gradlew :sample:android:installDebug
+adb shell am start -n dev.inspector.sample/.MainActivity
+```
+
+It wires itself exactly as [`docs/INTEGRATION.md`](docs/INTEGRATION.md) tells a consuming app to,
+debug-only cleartext config included, so it is the reference wiring as well as the demo.
+
+And on iOS, through a checked-in Xcode project — open `sample/ios/iosApp/iosApp.xcodeproj` and run,
+or from a terminal:
+
+```bash
+xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp \
+  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+The Swift is about twenty lines hosting one `UIViewController`. Everything you see — the app and
+the inspector on top of it — is the same Kotlin the Android sample runs, which is the whole claim
+a Compose Multiplatform overlay makes.
+
 ---
 
 ### 1. The library — capture and the in-app overlay
