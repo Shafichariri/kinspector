@@ -4,7 +4,12 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-kotlin { jvmToolchain(21) }
+kotlin {
+    jvmToolchain(21)
+    // The demo server is shared with :sample:android rather than copied. Two copies of a fixture
+    // is how the two samples would quietly stop exercising the same endpoints.
+    sourceSets["main"].kotlin.srcDir("../shared/kotlin")
+}
 
 // Swapped by -Pinspector=off exactly as a consuming app would do it, so the sample doubles as
 // the reference wiring documented in the README.

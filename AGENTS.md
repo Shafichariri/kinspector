@@ -141,9 +141,11 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   The list layout that followed was checked the same way with one addition — `ListRenderTest`
   renders it off-screen at 360dp, which catches what a desktop window cannot, because a desktop
   window is never 360dp wide. It is still not a device.
-- There is still no Android app module and no Xcode project. UI code compiles for all targets.
-  This is what stops `adb reverse` being proven on a phone rather than an emulator: the tunnel is
-  verified, the app running inside it is not.
+- **There is an Android app module now, and everything in the overlay has been seen running on an
+  emulator** — the list, the clock column, the control strip, marker dividers and chips, signals
+  and a collapsed run, all on a 1080x2400 screen with a real status bar. What that does *not*
+  cover is hardware: a cutout, a gesture bar, a vendor skin, or `adb reverse` with a cable in it.
+  There is still no Xcode project, so the iOS side has none of this.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
   localhost by policy in this environment, so only a static snapshot has ever been produced.
@@ -611,6 +613,23 @@ fails silently on API 28+ without a debug-only `network_security_config.xml`. Th
 common reason an Android app records nothing, and the integration guide claiming "no manifest
 entries, no permissions" was wrong until it was corrected — see `docs/INTEGRATION.md` 6d.
 
+**The canary is invisible in an Android APK, and the guard refuses rather than passes.** D8 does
+not carry the constant's string into the dex pool. Measured on a debug APK of `:sample:android`,
+which contains capture code by construction: the canary appears **0** times while
+`dev/inspector/Inspector` appears 11 and `okHttpInterceptor` 3. So a canary miss on an Android
+artifact means the detector could not see, which is not the same answer as clean — and
+`check-release-clean.sh` said `PASSED` on that APK until this was found. It now exits 2 with an
+explanation when it finds dex and no canary. Same shape as the iOS case above; the difference is
+only the mechanism.
+
+**A directory target must unpack the archives inside it.** `--paths some/build/outputs/apk/debug`
+went down the plain-grep branch, and grepping a compressed archive for a plaintext canary finds
+nothing however much capture code is in it — so pointing the guard at any directory of jars, aars
+or APKs was a guaranteed false pass. Directories now expand to the archives they hold and scan each
+one, *and* still grep the directory itself, because klib output is an unpacked tree rather than an
+archive. Proved both ways: a raw grep of `inspector-core/build/libs` finds nothing, and the script
+now exits 1 on it.
+
 **Emulator detection reads the board, not the marketing strings, and iOS decides at link time.**
 The Android check used to look for `generic` in `Build.FINGERPRINT` and `Emulator` or
 `Android SDK built for` in `Build.MODEL`. A current AVD reports
@@ -774,6 +793,8 @@ every release build clean:
 npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
 INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
 ./gradlew :sample:desktop:run                     # runnable reference app
+./gradlew :sample:android:installDebug            # the same app on a device or emulator
+adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch it
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host

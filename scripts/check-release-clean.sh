@@ -103,6 +103,11 @@ hits=()
 
 missing=()
 
+# Targets the canary cannot prove anything about. Separate from `missing` because the path was
+# there and was read — what is absent is the *evidence*, which is a different kind of failure and
+# needs a different message.
+unproven=()
+
 scan_target() {
   local target="$1"
   # Never a skip. A guard that cannot find what it was asked to scan has proven nothing, and
@@ -122,14 +127,45 @@ scan_target() {
       if grep -rlaF -- "$CANARY" "$dest" >/dev/null 2>&1; then
         hits+=("$target")
         echo "  CANARY FOUND: $target"
+      elif find "$dest" -name "*.dex" 2>/dev/null | grep -q .; then
+        # An Android artifact, and the canary is not observable in one.
+        #
+        # D8 does not carry the constant's string into the DEX pool — measured on a debug APK of
+        # :sample:android, which contains capture code by construction: the canary appears zero
+        # times while `dev/inspector/Inspector` appears 11 and `okHttpInterceptor` 3. So a canary
+        # miss here means the detector could not see, not that the artifact is clean, and this
+        # script's own rule is that those are not the same answer.
+        #
+        # Same shape as the iOS case in AGENTS.md: the canary is ASCII in a klib and invisible in
+        # a linked binary. The consumer-side technique for both is in INTEGRATION.md section 3 —
+        # grep the package path, not the canary.
+        unproven+=("$target")
+        echo "  UNPROVEN (Android dex): $target"
       else
         echo "  clean: $target"
       fi
       ;;
     *)
-      local grep_args=(-laF)
-      [[ -d "$target" ]] && grep_args=(-rlaF)
-      if grep "${grep_args[@]}" -- "$CANARY" "$target" >/dev/null 2>&1; then
+      # A directory may hold archives, and grepping a compressed archive for a plaintext canary
+      # finds nothing however much capture code is inside it. Unpack each one first — without
+      # this, `--paths some/build/outputs/apk/debug` reported clean on an APK built from capture
+      # code, which is the false pass this script exists to make impossible.
+      if [[ -d "$target" ]]; then
+        local archive found_archive=0
+        while IFS= read -r archive; do
+          found_archive=1
+          scan_target "$archive"
+        done < <(find "$target" \( -name "*.jar" -o -name "*.aar" -o -name "*.apk" -o -name "*.aab" \) 2>/dev/null | grep -v sources | sort)
+        # Still grep the directory itself: klib output is an unpacked tree, not an archive.
+        if grep -rlaF -- "$CANARY" "$target" >/dev/null 2>&1; then
+          hits+=("$target")
+          echo "  CANARY FOUND: $target"
+        elif [[ $found_archive -eq 0 ]]; then
+          echo "  clean: $target"
+        fi
+        return
+      fi
+      if grep -laF -- "$CANARY" "$target" >/dev/null 2>&1; then
         hits+=("$target")
         echo "  CANARY FOUND: $target"
       else
@@ -153,6 +189,18 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   echo >&2
   echo "Nothing was proven about them. Check the paths, and note that relative paths are" >&2
   echo "resolved against the directory you ran this from ($INVOCATION_DIR)." >&2
+  exit 2
+fi
+
+if [[ ${#unproven[@]} -gt 0 ]]; then
+  echo "ERROR: ${#unproven[@]} target(s) carry Android dex, where the canary is not observable:" >&2
+  printf '  %s\n' "${unproven[@]}" >&2
+  echo >&2
+  echo "D8 does not carry the canary string into the dex pool, so a miss here proves nothing —" >&2
+  echo "this script would report an APK full of capture code as clean. It refuses to instead." >&2
+  echo >&2
+  echo "Scan the jars, aars and klibs the artifact was built from, which do carry the canary." >&2
+  echo "For a built app, grep the package path instead — see docs/INTEGRATION.md section 3." >&2
   exit 2
 fi
 

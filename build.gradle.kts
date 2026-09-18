@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.android.kmp.library) apply false
+    // Declared here, applied only by :sample:android. AGP is already on the build classpath via
+    // the KMP library plugin above, so a module asking for it *with a version* fails resolution —
+    // "already on the classpath with an unknown version, so compatibility cannot be checked".
+    alias(libs.plugins.android.application) apply false
 }
 
 group = "dev.inspector"

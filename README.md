@@ -99,6 +99,17 @@ the daemon runs with no app, the MCP server reads an archive with neither.
 Fire traffic with the buttons, then tap the pill. Drag to move it, long-press to collapse. This is
 the whole overlay, running against a real Ktor client, with nothing else set up.
 
+The same app builds for Android, which is where the overlay is actually meant to be looked at —
+a phone screen is 360dp wide and a desktop window never is:
+
+```bash
+./gradlew :sample:android:installDebug
+adb shell am start -n dev.inspector.sample/.MainActivity
+```
+
+It wires itself exactly as [`docs/INTEGRATION.md`](docs/INTEGRATION.md) tells a consuming app to,
+debug-only cleartext config included, so it is the reference wiring as well as the demo.
+
 ---
 
 ### 1. The library — capture and the in-app overlay
