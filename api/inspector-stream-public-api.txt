@@ -1,0 +1,19 @@
+# Generated. Public API shared by :inspector-stream and :inspector-noop-stream.
+# Ktor-typed members are excluded: a release build carries no Ktor, so the noop
+# twin cannot name them. See StreamApiParityTest.
+# Regenerate: ./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true
+
+dev.inspector.stream (top-level): fun defaultClientInfo(java.lang.String, java.lang.String, java.lang.String): ClientInfo
+dev.inspector.stream (top-level): fun defaultDaemonHost(): java.lang.String
+dev.inspector.stream.ReplaySigner: fun headersFor(method: String, url: String): Map<String, String>
+dev.inspector.stream.StreamSink: fun onMarker(marker: Marker): Unit
+dev.inspector.stream.StreamSink: fun onSignal(signal: Signal, data: ByteArray?): Unit
+dev.inspector.stream.StreamSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
+dev.inspector.stream.StreamSink: fun start(): Unit
+dev.inspector.stream.StreamSink: fun stop(): Unit
+dev.inspector.stream.StreamSink: val dropped: StateFlow<Long>
+dev.inspector.stream.StreamSink: val lastError: StateFlow<String?>
+dev.inspector.stream.StreamSink: val state: StateFlow<dev.inspector.stream.StreamState>
+dev.inspector.stream.StreamState: enum constant Connected
+dev.inspector.stream.StreamState: enum constant Connecting
+dev.inspector.stream.StreamState: enum constant Disconnected

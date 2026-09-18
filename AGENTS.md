@@ -220,7 +220,7 @@ new bounded queue here must do the same.
   judged it.
 - **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
   module and an Xcode project; the UI module already compiles for both.
-- **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
+- ~~**Stretch:** HAR export.~~ Built — `GET /api/sessions/{id}/har`, see the rule below.
 
 ---
 
@@ -432,6 +432,25 @@ client sends back. A process can exit between listing and killing and have its p
 alone is not evidence of what it identifies. Without that re-check the endpoint would be a
 "kill any pid" facility on an unauthenticated loopback port. It also refuses the daemon's own pid —
 `/api/server/stop` is the path that replies before shutting down.
+
+**The HAR export writes `-1` for everything capture never measured, and that is the whole
+design.** HAR was specified by wire-level tools and asks for a send/wait/receive breakdown, a
+`headersSize` and an `httpVersion`; Inspector has one duration measured around the call, parsed
+headers rather than the raw block, and no negotiated version at that layer. `-1` is what the spec
+reserves for "no information available", and it is the only honest answer — a plausible breakdown
+would draw a waterfall in DevTools out of numbers nobody measured, and a waterfall is read as
+evidence. `bodySize` is deliberately *not* `-1`: `reqBytes`/`resBytes` are true sizes, counted even
+when the body was not captured, so reporting them as unknown would throw away a real measurement.
+
+Two things the export must keep disclosing, because HAR has no field for either and silence reads
+as a claim: that a row is one **attempt** of a call that redirected or retried, and **what
+redaction removed**. Both go in the entry `comment`. A redacted capture handed over as a complete
+one is the export lying by omission.
+
+A response body that is not valid UTF-8 is base64, which HAR supports. A **request** body that is
+not is reported absent with the reason, because `postData.text` is a string with no encoding escape
+— and `String(bytes)` would not fail, it would substitute U+FFFD and present a page of replacement
+characters as the captured body. The strict decoder exists to reach that branch.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
@@ -648,6 +667,22 @@ Adding a module the consuming app calls into, without its twin, breaks `-Pinspec
 compilation and pushes users into `if (BuildConfig.DEBUG)` guards around their own wiring —
 which is the exact thing the noop artifacts exist to prevent.
 
+**A twin without a golden file drifts, and `stream` did for eleven releases.**
+`StreamSink.lastError` existed in `:inspector-stream` from before v0.1.0 and never in
+`:inspector-noop-stream`, so an app that surfaced the reason its daemon connection failed compiled
+in debug and failed to compile under `-Pinspector=off` — the one failure the twins exist to
+prevent, shipped by the module that prevents it. Nothing caught it because the golden file
+covered the `core` pair only. There are now two:
+`api/inspector-public-api.txt` and `api/inspector-stream-public-api.txt`.
+
+The stream pair needs a rule the core pair does not, because the two are **not** identical: the
+real module exposes Ktor types the noop must never name, or a release build would carry a Ktor
+dependency. So the contract is every public member whose signature names no Ktor type, and both
+modules assert **equality** against it — the real one with Ktor-typed members filtered out. Equality
+is the load-bearing word. A subset check on the real module would let it grow a member the noop
+lacks and say nothing, which is the hole that was already open. `StreamApiParityTest` carries the
+reasoning; `:inspector-noop-ui` still has no golden file and is the remaining gap of this shape.
+
 **There are four surfaces, and only two are for users.** The in-app overlay and the browser web
 UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
 Nobody should be told to "open the desktop app".
@@ -783,11 +818,34 @@ connection pool that outlive the test. Leaking them made *unrelated* Ktor test c
 intermittently: a 1 MB response arriving empty, a redirect chain losing a hop. Call
 `dispatcher.executorService.shutdown()` and `connectionPool.evictAll()` in teardown.
 
-**`ApiSurface` only sees classes it is named.** It reflects over an explicit `CONTRACT_CLASSES`
-list, so a new public declaration is unguarded until it is added there. Top-level *extension*
-functions need the Java-reflection fallback as well — Kotlin's `declaredMemberFunctions` and
-`staticFunctions` both miss them, and the guard reports a file facade as having no API at all.
-Prove any change to this file catches divergence in both directions before trusting it.
+**`ApiSurface` only sees classes it is named.** It reflects over an explicit contract list, so a
+new public declaration is unguarded until it is added there. Top-level *extension* functions need
+the Java-reflection fallback as well — Kotlin's `declaredMemberFunctions` and `staticFunctions`
+both miss them, and the guard reports a file facade as having no API at all. Prove any change to
+this file catches divergence in both directions before trusting it.
+
+Extending it to the stream pair turned up four more ways it could look right and check nothing,
+all of them found by reading the generated golden file rather than by a failing test:
+
+- **Java reflection reports `internal` as public.** Members of a class are name-mangled
+  (`f$module`) and so are droppable by name, but **top-level `internal` functions are not
+  mangled** — `connectionHelp` and `base64Encode` arrived looking exactly like public API. The
+  name cannot tell; `Method.kotlinFunction` is asked instead, falling back to *keeping* the member
+  when Kotlin reflection cannot answer, which is the extension-function case above.
+- **The two modules compile top-level functions into different facades.** `defaultDaemonHost` is
+  `expect`/`actual` in the real module, so its JVM actual lands in `Platform_jvmKt`; the noop has
+  no platform split and gets `StreamSinkKt`. Under their own class names every top-level function
+  reads as both missing and extra, so they are dumped under one label. At least one named facade
+  must resolve, or the guard would compare an empty set and pass.
+- **An enum's constants were invisible.** They are static fields, so no function or property list
+  reported them and a twin could have dropped a case unnoticed. They are dumped explicitly; the
+  generated `values`/`valueOf`/`getEntries` around them are not, carrying no contract.
+- **`parameters.drop(1)` assumed an instance receiver.** A static function has none, so its first
+  real parameter was being eaten — `valueOf(String)` rendered as `valueOf()`, a signature that
+  would go on matching after the parameter it hid had changed. It now drops by `KParameter.Kind`.
+
+None of these changed the `core` golden file by a byte, which is how they were confirmed to be
+fixes to the reflection rather than to the surface.
 
 ---
 
@@ -809,9 +867,11 @@ completeness is not.**
 
 ## Production safety — two layers
 
-1. **Artifact swap.** `-Pinspector=off` substitutes `:inspector-noop` / `:inspector-noop-ui`.
-   Both expose an identical public surface, verified against `api/inspector-public-api.txt` by
-   `ApiParityTest` running in *both* modules, so neither can drift silently.
+1. **Artifact swap.** `-Pinspector=off` substitutes `:inspector-noop` / `:inspector-noop-ui` /
+   `:inspector-noop-stream`. Each pair is verified against a golden file by a parity test running
+   in *both* modules of the pair, so neither can drift silently: `api/inspector-public-api.txt`
+   for `core`, and `api/inspector-stream-public-api.txt` for `stream`. The `ui` pair has no golden
+   file yet.
 2. **Canary guard.** `:inspector-core` carries `INSPECTOR_CANARY_…`;
    `scripts/check-release-clean.sh` fails if it appears in a release artifact. The script reads
    the canary from the Kotlin source rather than hardcoding it, and scans Kotlin/Native klib
@@ -896,6 +956,16 @@ Changing the public API is deliberately high-friction, because it is a contract:
 ./gradlew :inspector-core:jvmTest :inspector-noop:jvmTest
 ```
 
+The stream pair has its own golden file, and the same friction:
+
+```bash
+# 1. change BOTH :inspector-stream and :inspector-noop-stream
+# 2. regenerate (from the REAL module — it is the one that knows what is Ktor-typed):
+./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true
+# 3. confirm both modules pass:
+./gradlew :inspector-stream:jvmTest :inspector-noop-stream:jvmTest
+```
+
 ---
 
 ## Conventions
@@ -965,12 +1035,15 @@ else a scan turns up.
 | `docs/SIGNALS.md` | Why signals are shaped the way they are — app state on the traffic timeline. **Built and released in 0.3.0**; kept as the design record, so where it and the code disagree, the code won. Read it before changing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
 | `docs/SIGNALS-CHECKLIST.md` | What must be true of a build that records signals — assertions only, no rationale. The live companion to the spec above; update this one when the bar moves. |
 | `docs/REPLAY.md` | Replay, on-device re-signing and daemon control. Steps 1–2 are built; the edit UI and template generators are specified and not written. Read it before touching replay — the signing constraint decides the whole architecture. |
-| `api/inspector-public-api.txt` | Golden public API surface, asserted by both modules. |
+| `api/inspector-public-api.txt` | Golden public API surface for the `core` pair, asserted by both modules. |
+| `api/inspector-stream-public-api.txt` | The same for the `stream` pair, minus the Ktor-typed members a release build cannot carry. |
+| `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/` and `stream/` hold one test each. Every directory here is compiled into the `jvmTest` of the two modules it guards. |
 | `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
+| `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |

@@ -268,9 +268,41 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 | Replay step 4 — template generators | `REPLAY.md` §7 | Specified, including the generator set |
 | 4c — proxy capture | `AGENTS.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
 | 4b — report what we cannot see | `AGENTS.md` | Not designed; flagged there as possibly not worth it |
-| HAR export | `implementation-plan.md` Phase 3 stretch | Unbuilt, named in two documents |
+| HAR export | `implementation-plan.md` Phase 3 stretch | ~~Unbuilt~~ **Done, 2026-09-18.** `GET /api/sessions/{id}/har`, taking the same `filter` as the transaction list. Everything the format asks for and capture never saw is `-1`; attempts and redaction are disclosed per entry, because HAR has no field for either and silence reads as a claim |
 | Signal payload redaction | `SIGNALS.md`, `schema.md` | `Signal.redacted` is reserved and always empty; the schema field is already there |
 | Disconnected-transaction backfill | `schema.md` | Explicitly a v2 candidate |
+
+### Guards
+
+- ~~**The stream pair had no golden API file.**~~ **Done, 2026-09-18.** `StreamSink.lastError` was
+  present in `:inspector-stream` from before v0.1.0 and absent from `:inspector-noop-stream`, so a
+  call site reading it compiled in debug and failed under `-Pinspector=off` — the one failure the
+  noop twins exist to prevent, in the module that prevents it, unnoticed for eleven releases
+  because `ApiParityTest` only ever covered `core`/`noop`.
+
+  The contract for this pair could not be equality, because the real module must expose Ktor types
+  the noop must never name. It is instead *every public member whose signature names no Ktor type*,
+  with both modules asserting equality against that. Extending the reflection to a second pair
+  turned up four further ways it could have looked right while checking nothing — unmangled
+  top-level `internal` functions, facades with different names in the two modules, enum constants
+  visible to no reflection list, and a receiver-drop that ate a real parameter. All four are
+  recorded in `AGENTS.md`; none of them changed the `core` golden file by a byte, which is how they
+  were confirmed to be fixes to the guard rather than to the surface.
+
+- **`:inspector-noop-ui` still has no golden file, and already diverges.** Found while writing the
+  stream guard, not fixed with it. `:inspector-ui` publicly exposes `InspectorTheme`,
+  `InspectorColors` and `LocalInspectorColors`; the noop exposes `InspectorOverlay` alone, so a
+  consumer theming anything against those would hit the `lastError` failure exactly. It is latent
+  rather than live — no document has ever told a consumer to use them, which is the only reason
+  nobody has been bitten.
+
+  It is deliberately not folded into the stream fix, because the answer is a design decision and
+  not a stub: mirroring `InspectorColors` means a release artifact carrying the inspector's palette
+  as dead data. Either that cost is accepted, or the three are made `internal` and the divergence
+  disappears — the second looks right, and it is a public-API removal, so it is a decision rather
+  than a tidy-up. The guard itself is also harder here than for stream: `@Composable` functions
+  carry synthetic `Composer` and `changed` parameters into their JVM signatures, which reflection
+  reports and nobody wants in a golden file.
 
 ### Open questions
 

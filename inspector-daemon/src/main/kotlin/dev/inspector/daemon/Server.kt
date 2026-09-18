@@ -18,6 +18,7 @@ import dev.inspector.model.SignalRequest
 import dev.inspector.model.Txn
 import dev.inspector.model.WireMsg
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -25,6 +26,7 @@ import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.delete
@@ -662,6 +664,35 @@ class InspectorDaemon(
             )
         }
 
+        /**
+         * HAR 1.2, for sharing a session with a tool that is not Inspector.
+         *
+         * Takes the same `filter` as the transactions endpoint, because "export the four calls
+         * that failed" is the reason to export at all; a whole session is the default. The
+         * attachment header is what makes a browser save it rather than render a megabyte of JSON.
+         */
+        get("/api/sessions/{id}/har") {
+            val dir = call.resolveSession() ?: return@get
+            val filter = call.request.queryParameters["filter"].orEmpty()
+            val transactions = try {
+                // The cap is the session, not a page: a HAR missing rows because of an unmentioned
+                // default limit would be a quietly incomplete export.
+                repository.queryTransactions(dir, filter, offset = 0, limit = Int.MAX_VALUE).items
+            } catch (e: FilterParseException) {
+                return@get call.respondError(HttpStatusCode.BadRequest, e.message ?: "invalid filter")
+            }
+            val meta = repository.readMeta(dir)
+            val har = Har.export(
+                meta = meta,
+                transactions = transactions,
+                bodyOf = { txnId, side -> repository.readBody(dir, txnId, side) },
+                creatorVersion = daemonVersion(),
+            )
+            val name = meta?.sessionId ?: dir.fileName.toString()
+            call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name.har\"")
+            call.respondText(har, ContentType.Application.Json)
+        }
+
         get("/api/sessions/{id}/signals") {
             val dir = call.resolveSession() ?: return@get
             val tag = call.request.queryParameters["tag"]
@@ -807,6 +838,16 @@ class InspectorDaemon(
  * constant happened to be called.
  */
 private val KNOWN_MARKER_SOURCES = setOf(MarkerSource.APP, MarkerSource.AGENT, MarkerSource.USER)
+
+/**
+ * The daemon's own version, or `unknown`.
+ *
+ * Read from the jar manifest, which `:inspector-daemon`'s build stamps. A daemon run from a
+ * classes directory — every test, and `gradlew run` — has no manifest to read, so this says so
+ * rather than inventing a number that would then travel inside an exported HAR.
+ */
+internal fun daemonVersion(): String =
+    Har::class.java.`package`?.implementationVersion ?: "unknown"
 
 /** Long enough for CIO to write the response before the engine is torn down under it. */
 private const val RESPONSE_FLUSH_MILLIS = 150L
