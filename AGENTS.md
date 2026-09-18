@@ -355,6 +355,20 @@ identifies rows that are *indistinguishable at row level* — a weaker claim tha
 bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
 algorithm; keep them in step.
 
+**The scope bar's rule lives in `:inspector-model`, and `app.js` mirrors it.** `pathScope` began
+in `:inspector-ui`'s `Formatting.kt` when the overlay was the only surface that lifted a shared
+prefix out of its rows. The web UI now draws the same bar, so the rule moved beside `timeline` and
+`endpointShortcuts` for the same reason those did — three thresholds and a segment walk are exactly
+what drifts invisibly, and a bar that appears on one surface and not the other, for a session both
+are showing, reads as a bug in whichever one you are looking at. `PathScopeTest` in that module is
+the authority; the copy in `app.js` follows it.
+
+The bar is **sticky on both surfaces, and that is load-bearing.** It is a standing claim that every
+path below it is missing the same front, so a stripped path read after the bar scrolled away is not
+merely unhelpful — it names an endpoint nobody called. The host appears on a row only when it is
+not the one the bar claims: repeating it everywhere is noise when it never changes, and
+load-bearing on the one row where it does.
+
 **The web UI keeps an unfiltered copy of the session, and two features depend on it.**
 `state.transactions` holds the rows the *daemon* matched against the current filter, so it is the
 wrong source for anything describing the session as a whole. `state.allTransactions` is the whole
@@ -439,6 +453,20 @@ listens on loopback with no authentication, so any page the developer has open c
 web page. A custom header forces a CORS preflight, and this server answers none, so only its own
 page gets through. Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the
 MCP tools post markers without it, and a marker is not a weapon.
+
+**`endedAt` and "is anything connected" are different questions, and `GET /api/recording` is the
+second one.** A session whose daemon was killed, or whose app vanished without a clean close, has
+no `endedAt` and no open connection either — so anything gating on `endedAt` offers a control that
+the daemon then refuses with a 409, on exactly the sessions where the app went away. Which is when
+somebody most wants to mark where it happened. The web UI's add-marker form asks the endpoint.
+
+**A posted marker says who dropped it, and `source` is not decoration.** `MarkerSource.USER`
+existed with no caller until the web UI grew the button: every marker in every archive said `app`
+or `agent`. A marker left by an agent working through a session is a different claim from one a
+person dropped while watching it, and whoever reads the archive later is entitled to tell them
+apart. The field defaults to `agent`, because that is what every caller was before, and an
+unrecognised value is refused rather than stored — the archive outlives the binary, and a fourth
+value would render as nothing in both UIs and in the MCP tools.
 
 **`ServerControl` is an interface because the real one ends the JVM.** The daemon tests run a
 daemon inside the test JVM; a hardcoded `exitProcess` in the stop handler would kill the test
@@ -808,6 +836,7 @@ every release build clean:
 ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
 npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
 INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
+INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 node scripts/render-web-ui.js   # ... a daemon off 8099
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :sample:android:installDebug            # the same app on a device or emulator
 adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch it

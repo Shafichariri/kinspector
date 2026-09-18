@@ -459,6 +459,33 @@ has:error    text:refund        since:marker("tapped checkout")
 
 Space-separated terms are ANDed; `|` ORs and binds more loosely.
 
+### Marking a moment
+
+The web UI has a field under the **markers** button. Markers are what make "what happened when I
+tapped checkout" a lookup instead of timestamp arithmetic, and they back the
+`since:marker("…")` filter term.
+
+A marker needs a session your app is **still connected to** — there is no clock to place it on
+once the app has gone, and the daemon refuses with a 409. That is not the same as the session
+having an `endedAt`: one whose daemon was killed, or whose app vanished without a clean close, has
+neither. `GET /api/recording` lists the sessions something is actually writing to, which is the
+question the button asks before enabling itself.
+
+```bash
+curl -s http://127.0.0.1:8099/api/recording
+curl -s -X POST http://127.0.0.1:8099/api/sessions/latest/markers \
+     -d '{"label":"tapped checkout","source":"user"}'
+```
+
+`source` is one of `app`, `agent` or `user`, and defaults to `agent` — which is what every caller
+was before the web UI grew the button. An unrecognised value is refused rather than stored: the
+archive outlives the binary that wrote it, and a fourth value would render as nothing everywhere
+that reads one.
+
+Posting a marker deliberately needs **no** `X-Inspector-Control` header. That header exists to stop
+any page you have open from POSTing to the daemon's control endpoints, and a marker is not a
+weapon.
+
 ---
 
 ## 8. The MCP server

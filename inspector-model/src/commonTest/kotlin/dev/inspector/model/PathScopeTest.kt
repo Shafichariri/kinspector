@@ -1,6 +1,5 @@
-package dev.inspector.ui
+package dev.inspector.model
 
-import dev.inspector.model.NetworkTransaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -17,7 +16,12 @@ class PathScopeTest {
 
     private var next = 0
 
-    private fun txn(path: String, host: String = "api.example.com"): NetworkTransaction {
+    /**
+     * Named `row` rather than `txn` because this package already has a top-level `txn`
+     * fixture: a same-named member would shadow it inside this class only, which is exactly
+     * the sort of thing that reads as the shared fixture until someone changes the shared one.
+     */
+    private fun row(path: String, host: String = "api.example.com"): NetworkTransaction {
         val id = (next++).toString(16).padStart(8, '0')
         return NetworkTransaction(
             id = id,
@@ -35,10 +39,10 @@ class PathScopeTest {
     fun lifts_the_segments_every_path_shares() {
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/client-dashboard"),
-                txn("/v3/some-service/client-settings"),
-                txn("/v3/some-service/orders/submit"),
-                txn("/v3/some-service/portfolio/holdings"),
+                row("/v3/some-service/client-dashboard"),
+                row("/v3/some-service/client-settings"),
+                row("/v3/some-service/orders/submit"),
+                row("/v3/some-service/portfolio/holdings"),
             )
         )
 
@@ -52,10 +56,10 @@ class PathScopeTest {
     fun strip_leaves_the_part_that_differs() {
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/client-dashboard"),
-                txn("/v3/some-service/client-settings"),
-                txn("/v3/some-service/orders/submit"),
-                txn("/v3/some-service/market/quotes"),
+                row("/v3/some-service/client-dashboard"),
+                row("/v3/some-service/client-settings"),
+                row("/v3/some-service/orders/submit"),
+                row("/v3/some-service/market/quotes"),
             )
         )!!
 
@@ -69,10 +73,10 @@ class PathScopeTest {
         // a whole path and leave that row with nothing to show.
         val scope = pathScope(
             listOf(
-                txn("/v3/orders/submit"),
-                txn("/v3/orders/cancel"),
-                txn("/v3/orders/amend"),
-                txn("/v3/orders/status"),
+                row("/v3/orders/submit"),
+                row("/v3/orders/cancel"),
+                row("/v3/orders/amend"),
+                row("/v3/orders/status"),
             )
         )
 
@@ -86,29 +90,29 @@ class PathScopeTest {
         // the whole path as the prefix would leave every row blank, and the bar covering nothing.
         val scope = pathScope(
             listOf(
-                txn("/v3/orders/status"),
-                txn("/v3/orders/status"),
-                txn("/v3/orders/status"),
-                txn("/v3/orders/status"),
+                row("/v3/orders/status"),
+                row("/v3/orders/status"),
+                row("/v3/orders/status"),
+                row("/v3/orders/status"),
             )
         )!!
 
         assertEquals("/v3/orders/", scope.prefix)
         assertEquals("status", scope.strip("/v3/orders/status"))
-        assertTrue(scope.covers(txn("/v3/orders/status")))
+        assertTrue(scope.covers(row("/v3/orders/status")))
     }
 
     @Test
     fun a_path_that_is_the_front_of_the_others_stops_the_prefix_short() {
         // `/v3/orders` has nothing after the segments the rest share, so the prefix has to stop
         // short of it — otherwise the collection endpoint is the one row the bar does not cover.
-        val collection = txn("/v3/orders")
+        val collection = row("/v3/orders")
         val scope = pathScope(
             listOf(
                 collection,
-                txn("/v3/orders/submit"),
-                txn("/v3/orders/cancel"),
-                txn("/v3/orders/amend"),
+                row("/v3/orders/submit"),
+                row("/v3/orders/cancel"),
+                row("/v3/orders/amend"),
             )
         )
 
@@ -121,10 +125,10 @@ class PathScopeTest {
     fun stops_at_the_first_segment_that_differs() {
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/a/one"),
-                txn("/v3/some-service/a/two"),
-                txn("/v3/some-service/b/three"),
-                txn("/v3/some-service/b/four"),
+                row("/v3/some-service/a/one"),
+                row("/v3/some-service/a/two"),
+                row("/v3/some-service/b/three"),
+                row("/v3/some-service/b/four"),
             )
         )
 
@@ -136,10 +140,10 @@ class PathScopeTest {
         assertNull(
             pathScope(
                 listOf(
-                    txn("/alpha/one"),
-                    txn("/beta/two"),
-                    txn("/gamma/three"),
-                    txn("/delta/four"),
+                    row("/alpha/one"),
+                    row("/beta/two"),
+                    row("/gamma/three"),
+                    row("/delta/four"),
                 )
             )
         )
@@ -152,9 +156,9 @@ class PathScopeTest {
         assertNull(
             pathScope(
                 listOf(
-                    txn("/v3/some-service/client-dashboard"),
-                    txn("/v3/some-service/client-settings"),
-                    txn("/v3/some-service/orders/submit"),
+                    row("/v3/some-service/client-dashboard"),
+                    row("/v3/some-service/client-settings"),
+                    row("/v3/some-service/orders/submit"),
                 )
             )
         )
@@ -166,10 +170,10 @@ class PathScopeTest {
         assertNull(
             pathScope(
                 listOf(
-                    txn("/v3/alpha/one"),
-                    txn("/v3/beta/two"),
-                    txn("/v3/gamma/three"),
-                    txn("/v3/delta/four"),
+                    row("/v3/alpha/one"),
+                    row("/v3/beta/two"),
+                    row("/v3/gamma/three"),
+                    row("/v3/delta/four"),
                 )
             )
         )
@@ -177,13 +181,13 @@ class PathScopeTest {
 
     @Test
     fun the_busier_host_wins_and_the_other_is_not_covered() {
-        val other = txn("/v1/oauth/token", host = "auth.example.com")
+        val other = row("/v1/oauth/token", host = "auth.example.com")
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/client-dashboard"),
-                txn("/v3/some-service/client-settings"),
-                txn("/v3/some-service/orders/submit"),
-                txn("/v3/some-service/market/quotes"),
+                row("/v3/some-service/client-dashboard"),
+                row("/v3/some-service/client-settings"),
+                row("/v3/some-service/orders/submit"),
+                row("/v3/some-service/market/quotes"),
                 other,
             )
         )!!
@@ -197,13 +201,13 @@ class PathScopeTest {
 
     @Test
     fun a_path_outside_the_prefix_on_the_same_host_is_not_covered() {
-        val outside = txn("/assets/config.json")
+        val outside = row("/assets/config.json")
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/client-dashboard"),
-                txn("/v3/some-service/client-settings"),
-                txn("/v3/some-service/orders/submit"),
-                txn("/v3/some-service/market/quotes"),
+                row("/v3/some-service/client-dashboard"),
+                row("/v3/some-service/client-settings"),
+                row("/v3/some-service/orders/submit"),
+                row("/v3/some-service/market/quotes"),
                 outside,
             )
         )
@@ -216,17 +220,17 @@ class PathScopeTest {
     fun the_dominant_host_is_scoped_even_when_another_host_has_no_prefix() {
         val scope = pathScope(
             listOf(
-                txn("/v3/some-service/client-dashboard"),
-                txn("/v3/some-service/client-settings"),
-                txn("/v3/some-service/orders/submit"),
-                txn("/v3/some-service/market/quotes"),
-                txn("/one", host = "cdn.example.com"),
-                txn("/two", host = "cdn.example.com"),
+                row("/v3/some-service/client-dashboard"),
+                row("/v3/some-service/client-settings"),
+                row("/v3/some-service/orders/submit"),
+                row("/v3/some-service/market/quotes"),
+                row("/one", host = "cdn.example.com"),
+                row("/two", host = "cdn.example.com"),
             )
         )!!
 
         assertEquals("api.example.com", scope.host)
-        assertTrue(scope.covers(txn("/v3/some-service/anything")))
+        assertTrue(scope.covers(row("/v3/some-service/anything")))
     }
 
     @Test
