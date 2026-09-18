@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v34 — 2026-09-17.**
+**Document version: v35 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -263,10 +263,15 @@ isn't reaching this module and release builds would ship capture code.
 > The same guarantee is a few lines of your own: grep your release artifacts for `dev/inspector/`
 > and `dev.inspector.`, and fail the build if either appears. Those needles work on every target.
 >
-> **Do not grep for the canary string itself on iOS.** Kotlin/Native stores string literals as
-> UTF-16, so an ASCII search for the canary finds nothing in an iOS binary *whether or not capture
-> code is present* — a guard written that way passes forever and tells you nothing. The package
-> path above is what actually catches it.
+> **Do not grep for the canary string itself in a built app, on either platform.** It is absent
+> from both for different reasons, and a guard written that way passes forever and tells you
+> nothing.
+>
+> On iOS, Kotlin/Native stores string literals as UTF-16, so an ASCII search finds nothing in a
+> linked binary. On Android, D8 does not carry the constant into the dex pool — measured on a
+> debug APK that contains capture code by construction: the canary appears **zero** times, while
+> `dev/inspector/Inspector` appears 11 and `okHttpInterceptor` 3. The package path above is what
+> actually catches it, on both.
 
 ---
 
@@ -1195,7 +1200,23 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v34 — 2026-09-17 (this document)
+### v35 — 2026-09-18 (this document)
+
+**If your release CI greps for the canary string, it is not doing anything. Section 3 was only
+half right.**
+
+Section 3 has always told you to grep `dev/inspector/` and `dev.inspector.`, and warned that the
+canary string is invisible in an **iOS** binary. It is invisible in an **Android** APK too, for a
+different reason — D8 does not carry the constant into the dex pool. Measured on a debug APK built
+from capture code: the canary appears zero times while `dev/inspector/Inspector` appears 11 times.
+
+**What to do:** if you wrote a release check that greps for the canary, it has been passing
+regardless of what is in the build. Switch it to the package path, which section 3 now says for
+both platforms rather than singling out iOS.
+
+Nothing in the library changed.
+
+### v34 — 2026-09-17
 
 **Released as 0.8.0. Bump your coordinates — a rebuild alone will not get you any of this.**
 

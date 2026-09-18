@@ -215,10 +215,21 @@ credentials on a network.
 
 ### And the thing that blocks actually trying any of it
 
-**There is no Android app module and no Xcode project.** `AGENTS.md` has carried "Android + iOS
-sample shells, to finally see the overlay on a device" for a while. Everything above is untestable
-on hardware without them, so they come first in practice even though they are the least
-interesting item here.
+~~**There is no Android app module**~~ — **added 2026-09-18.** `:sample:android` is a real APK
+that wires Inspector the way `INTEGRATION.md` tells a consumer to, including the debug-only
+cleartext config. The whole overlay has now been seen running on an emulator, and the emulator
+detection verified itself end to end in the process: the session it wrote says
+`platform: android-emulator`, where the same image used to say `android-device`.
+
+Three things came out of running it that no test had caught: a main-thread `NetworkOnMainThread`
+swallowed by `runCatching`, so the sample's OkHttp button silently did nothing; the release guard
+reporting an APK full of capture code as clean, because D8 drops the canary from the dex pool; and
+the same guard never unpacking archives inside a directory target. The first was the sample's, the
+other two were real holes in production safety.
+
+**The Xcode project is still missing**, so none of this covers iOS. And an emulator is not
+hardware: a cutout, a gesture bar, a vendor skin and a cable running `adb reverse` are all still
+unexercised.
 
 ---
 
