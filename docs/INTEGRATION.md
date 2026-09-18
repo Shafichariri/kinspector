@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v36 — 2026-09-18.**
+**Document version: v37 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.8.0")
-implementation("dev.inspector:inspector-ui:0.8.0")
+implementation("dev.inspector:inspector-core:0.8.1")
+implementation("dev.inspector:inspector-ui:0.8.1")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.8.0")
-            implementation("dev.inspector:inspector-ui:0.8.0")
+            implementation("dev.inspector:inspector-core:0.8.1")
+            implementation("dev.inspector:inspector-ui:0.8.1")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.8.0")
-                implementation("dev.inspector:inspector-noop-ui:0.8.0")
+                implementation("dev.inspector:inspector-noop:0.8.1")
+                implementation("dev.inspector:inspector-noop-ui:0.8.1")
             } else {
-                implementation("dev.inspector:inspector-core:0.8.0")
-                implementation("dev.inspector:inspector-ui:0.8.0")
+                implementation("dev.inspector:inspector-core:0.8.1")
+                implementation("dev.inspector:inspector-ui:0.8.1")
             }
         }
     }
@@ -397,13 +397,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.8.0")
-    implementation("dev.inspector:inspector-noop-ui:0.8.0")
-    implementation("dev.inspector:inspector-noop-stream:0.8.0")
+    implementation("dev.inspector:inspector-noop:0.8.1")
+    implementation("dev.inspector:inspector-noop-ui:0.8.1")
+    implementation("dev.inspector:inspector-noop-stream:0.8.1")
 } else {
-    implementation("dev.inspector:inspector-core:0.8.0")
-    implementation("dev.inspector:inspector-ui:0.8.0")
-    implementation("dev.inspector:inspector-stream:0.8.0")
+    implementation("dev.inspector:inspector-core:0.8.1")
+    implementation("dev.inspector:inspector-ui:0.8.1")
+    implementation("dev.inspector:inspector-stream:0.8.1")
 }
 ```
 
@@ -1216,10 +1216,23 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v36 — 2026-09-18 (this document)
+### v37 — 2026-09-18 (this document)
 
-**If the overlay pill sits under the notch or Dynamic Island on your iPhone, that is fixed — take
-the next release. Nothing to do otherwise.**
+**Released as 0.8.1, and it is a bug-fix release with one bug in it. Bump your coordinates if you
+run on iOS; ignore it otherwise.**
+
+Every snippet below now reads `0.8.1`. The whole library change is one file: the overlay pill
+positioned itself from the top of the display rather than the safe area, so on an iPhone with a
+notch or a Dynamic Island it started underneath the system UI, which takes the touch. The pill
+was visible and updating live and could not be opened at all. v36 below has the detail.
+
+Nothing else in the library moved, so the daemon is unchanged from 0.8.0 and there is no migration
+beyond the coordinate. If you are not on iOS, 0.8.0 is still correct for you.
+
+### v36 — 2026-09-18
+
+**Released as 0.8.1.** If the overlay pill sits under the notch or Dynamic Island on your iPhone,
+that is fixed — bump your coordinates. Nothing to do otherwise.
 
 The pill positioned itself from the top of the *display* rather than the safe area, so on a modern
 iPhone it started underneath the system UI, which takes the touch: the pill was visible, updated
