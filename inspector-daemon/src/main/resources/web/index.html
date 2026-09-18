@@ -91,6 +91,18 @@
 
   <div id="markers-pop" class="pop" hidden>
     <ul id="markers" class="markers"><li class="muted">none</li></ul>
+    <!--
+      Until now the web UI could only read markers: an agent could drop one through MCP and the
+      overlay could too, but the surface a person actually watches traffic in could not. "Mark the
+      moment I clicked the thing" is the whole point of a marker, and the moment is gone by the
+      time you reach for another tool.
+    -->
+    <form id="marker-form" class="marker-form">
+      <input id="marker-label" type="text" maxlength="120" spellcheck="false" autocomplete="off"
+             placeholder="mark this moment…" aria-label="New marker label">
+      <button id="marker-add" class="btn btn-sm" type="submit">add</button>
+    </form>
+    <div id="marker-status" class="marker-status muted" hidden></div>
   </div>
 
   <div id="keys-pop" class="pop" hidden>
@@ -136,6 +148,13 @@
 
   <main id="panes">
     <section id="list-pane">
+      <!--
+        The shared front of most paths in this session, lifted out of the rows.
+
+        Sticky rather than scrolled with the list: it is a standing claim about what every path
+        below it is missing, and a row read after it had scrolled off would be read wrong.
+      -->
+      <div id="scope-bar" class="scope-bar" hidden></div>
       <div id="list" role="listbox" aria-label="Transactions"></div>
       <div id="list-empty" class="empty muted">no transactions</div>
       <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
