@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v40 — 2026-09-18.**
+**Document version: v42 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,54 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v40 — 2026-09-18 (this document)
+### v42 — 2026-09-18 (this document)
+
+**A session can now be exported as HAR. Nothing to do; download a newer daemon when you want it.**
+
+`GET /api/sessions/latest/har` on the daemon, taking the same filter grammar as everything else,
+so "export the four calls that failed" is one request:
+
+```bash
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/har?filter=has:error'
+```
+
+This is for handing a session to somebody who does not have Inspector — Chrome and Firefox
+DevTools, Charles, Proxyman and Postman all import HAR 1.2.
+
+**Read the entry comments before drawing a conclusion from one.** Inspector is not a wire-level
+capture and HAR was designed by tools that are, so `timings.send`/`wait`/`receive`, `headersSize`
+and `httpVersion` are all `-1` — the spec's value for "no information available". The total `time`
+is real, and so is `bodySize`. Each entry's `comment` also names what redaction removed, if
+anything, and whether the row is one attempt of a call that retried.
+
+### v41 — 2026-09-18
+
+**`StreamSink.lastError` now exists in release builds too. Nothing to do unless you tried to read
+it and gave up.**
+
+`:inspector-stream` has exposed `lastError` — why the last attempt to reach the daemon failed —
+since before the first release. `:inspector-noop-stream`, the stand-in `-Pinspector=off` swaps in,
+never did. So this compiled in your debug build and failed your release build:
+
+```kotlin
+val problem by sink.lastError.collectAsState()
+```
+
+If you hit that, the workaround was to not show the reason at all, or to wrap the call site in a
+build-type guard — which is the exact thing the noop artifacts exist to save you from. It is fixed
+in the noop, where it is always `null`: there is no daemon connection in a release build, so there
+is never a reason to report.
+
+**What to do:** nothing, unless you dropped a connection-status line from your debug screen because
+of this. You can put it back, from the next release onward. The value is the `<reason>` half of
+the `inspector: cannot reach daemon at … — <reason>` line that §9 step 1 sends you to logcat for
+— an exception class and its message — and it is `null` while the connection is up.
+
+The gap is also now guarded. The `:inspector-core`/`:inspector-noop` pair has been checked against
+a golden API file since the beginning; the stream pair was not, which is why this survived eleven
+releases. It is, from this version.
+
+### v40 — 2026-09-18
 
 **Three things in the web UI. Nothing to do; download a newer daemon when you want them.**
 
