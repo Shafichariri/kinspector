@@ -73,12 +73,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" "$ZIP" \
-            --title "Inspector daemon $VERSION" \
+            --title "Inspector $VERSION" \
             --notes-file - <<NOTES
-          Host daemon for the Compose Multiplatform network inspector: the web UI at
-          \`http://127.0.0.1:8099\`, the on-disk session archive, the CLI and the MCP server.
+          One tag, both halves. This release page carries the **daemon**; the same version of the
+          **library** went to GitHub Packages from the job beside this one. There is no separate
+          daemon version and library version.
 
-          **Requires JDK 21.** Nothing else — the zip carries its own dependencies.
+          A release does not always change both halves — see \`docs/INTEGRATION.md\` section 14,
+          which says per version what changed and what you have to do about it.
+
+          ### Daemon — web UI, session archive, CLI, MCP server
+
+          **Requires JDK 21.** Nothing else: the zip carries its own dependencies, and no account
+          is needed to download it.
 
           \`\`\`bash
           gh release download $GITHUB_REF_NAME --repo $GITHUB_REPOSITORY --pattern '*.zip'
@@ -86,8 +93,19 @@ jobs:
           ./inspector-$VERSION/bin/inspector serve
           \`\`\`
 
-          The daemon binds \`127.0.0.1\` only and never calls out. Integrating the library into an
-          app is a separate thing — see \`docs/INTEGRATION.md\`.
+          It binds \`127.0.0.1\` only and never calls out.
+
+          ### Library — capture and the in-app overlay
+
+          Seven modules at \`$VERSION\`, from GitHub Packages. That registry wants an
+          authenticated token even for public packages, which surprises people — \`docs/ACCESS.md\`
+          leads with it.
+
+          \`\`\`kotlin
+          implementation("dev.inspector:inspector-core:$VERSION")
+          implementation("dev.inspector:inspector-ui:$VERSION")
+          implementation("dev.inspector:inspector-stream:$VERSION")
+          \`\`\`
           NOTES
 
   library:
