@@ -48,7 +48,8 @@ kotlin {
     }
 
     sourceSets.named("jvmTest") {
-        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/src"))
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/shared/src"))
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/core/src"))
     }
 }
 
