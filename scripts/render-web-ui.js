@@ -11,6 +11,7 @@
  *   npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html
  *
  * INSPECTOR_UI_SESSION=<id or substring> targets a session other than the newest.
+ * INSPECTOR_UI_ORIGIN=http://127.0.0.1:PORT reads a daemon somewhere other than 8099.
  *
  * The report goes to stderr; a self-contained static snapshot goes to stdout.
  * A healthy run reports non-zero rows and 'errors: none'.
@@ -26,7 +27,12 @@ try {
 }
 
 const WEB = require('path').join(__dirname, '..', 'inspector-daemon', 'src', 'main', 'resources', 'web');
-const ORIGIN = 'http://127.0.0.1:8099';
+/*
+ * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
+ * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
+ * write its traffic into whatever archive this is pointed at. A private port avoids that entirely.
+ */
+const ORIGIN = process.env.INSPECTOR_UI_ORIGIN || 'http://127.0.0.1:8099';
 
 const css = fs.readFileSync(`${WEB}/style.css`, 'utf8');
 const js = fs.readFileSync(`${WEB}/app.js`, 'utf8');
@@ -169,6 +175,133 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const BUILT_IN_VIEWS = ['network', 'all', 'waterfall'];
   const firstTagBrowserTab = () =>
     [...doc.querySelectorAll('#tabs .tab')].find((t) => !BUILT_IN_VIEWS.includes(t.dataset.view));
+
+  /**
+   * The scope bar, and the rows that depend on it.
+   *
+   * The bar is a standing claim that every path below it is missing the same front, so the two
+   * halves have to be checked together: a bar that renders while the rows still show their full
+   * path is merely redundant, but rows stripped with no bar on screen are *wrong* — they read as
+   * endpoints nobody called.
+   *
+   * `stickyInCss` is audited as text rather than as computed style. jsdom resolves layout for
+   * nothing, so `getComputedStyle(...).position` would answer `static` whatever the sheet says,
+   * and the check would pass with the rule deleted.
+   */
+  async function probeScopeBar() {
+    const bar = doc.querySelector('#scope-bar');
+    const stickyInCss = /\.scope-bar\s*\{[^}]*position:\s*sticky/.test(css);
+    if (!bar || bar.hidden) {
+      return { shown: false, stickyInCss, reason: 'no shared prefix in this session (or fewer than 4 rows)' };
+    }
+
+    const label = bar.querySelector('.scope-label')?.textContent || '';
+    const count = bar.querySelector('.scope-count')?.textContent || '';
+    const prefix = label.slice(label.indexOf('/'));
+
+    // A stripped path has **no leading slash**: the prefix is both-slashed, so removing it leaves
+    // a name rather than a path fragment. Testing `!startsWith(prefix)` instead would count the
+    // rows the bar does not cover as stripped — they start with a slash and a different prefix —
+    // and the check would report 7 of 7 on a session where only 6 are covered.
+    const rows = [...doc.querySelectorAll('#list .row')];
+    const paths = rows.map((r) => r.querySelector('.path')?.firstChild?.textContent || '');
+    const hosts = rows.map((r) => r.querySelector('.host')?.textContent || null);
+    const strippedIdx = paths.map((p, i) => (p && !p.startsWith('/') ? i : -1)).filter((i) => i !== -1);
+
+    return {
+      shown: true,
+      stickyInCss,
+      label,
+      count,
+      strippedRows: strippedIdx.length,
+      totalRows: rows.length,
+      // A covered row must not also name the host the bar already claims, and a row that was not
+      // stripped must name its own — otherwise it reads as belonging under the bar.
+      noRepeatedHost: strippedIdx.every((i) => !hosts[i]),
+      uncoveredNameTheirHost: paths.every((p, i) => (p && !p.startsWith('/')) || Boolean(hosts[i])),
+    };
+  }
+
+  /**
+   * Adding a marker from the page.
+   *
+   * Two things worth asserting and one that cannot be. The form must refuse an empty label — a
+   * marker with no label is a line across the list that explains nothing — and it must disable
+   * itself on a session that has finished recording, because the daemon refuses that with a 409
+   * and finding out by submitting is a worse way to learn it.
+   *
+   * Whether a *successful* add lands is not asserted here: it would write a marker into whatever
+   * archive this run is pointed at, and a smoke test that mutates the thing it is reading is one
+   * that reports differently the second time it runs. `RestApiTest` covers the POST.
+   *
+   * The blank-label check watches **fetch**, not the marker list. Watching the list was the first
+   * version and it was worthless: the daemon refuses a marker on a session nothing is connected to,
+   * so the count stayed put whether the client guarded or not, and the probe reported a pass with
+   * the guard deleted. What is being asserted is that the page does not ask — so the thing to
+   * observe is the asking.
+   */
+  async function probeMarkerForm() {
+    const form = doc.querySelector('#marker-form');
+    if (!form) return { present: false };
+    const input = doc.querySelector('#marker-label');
+    const button = doc.querySelector('#marker-add');
+
+    let posted = 0;
+    const realFetch = window.fetch;
+    window.fetch = (url, init) => {
+      if (String(url).includes('/markers') && init && init.method === 'POST') posted++;
+      return realFetch(url, init);
+    };
+    input.value = '   ';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await settle();
+    window.fetch = realFetch;
+    input.value = '';
+
+    return {
+      present: true,
+      blankRejected: posted === 0,
+      // The form's enabled state must agree with what the daemon says is recording — an enabled
+      // form on a session nothing is connected to is a 409 waiting to happen, and a disabled one
+      // on a live session is a dead control.
+      matchesRecording: button.disabled === !recordingNow.includes(sessionOnScreen()),
+      disabled: button.disabled,
+    };
+  }
+
+  /**
+   * Per-field copy.
+   *
+   * The count is the point: one button per header, one per overview field, one per body. The
+   * failure this catches is a helper that renders a single button for the whole pane, which looks
+   * fine in a screenshot and copies the wrong thing.
+   *
+   * Visibility is audited as CSS text, again because jsdom computes no layout — and specifically
+   * that `:focus-within` is in the rule. Without it the button is reachable by Tab, invisible
+   * while focused, and the focus ring lands on nothing.
+   */
+  function probeCopyFields() {
+    const pane = doc.querySelector('#detail');
+    const buttons = [...(pane?.querySelectorAll('.copy-field') || [])];
+    const headers = [...(pane?.querySelectorAll('.headers .copyable') || [])];
+    return {
+      buttons: buttons.length,
+      headerRows: headers.length,
+      everyHeaderHasOne: headers.length > 0 && headers.every((h) => h.querySelector('.copy-field')),
+      // The value alone, not `name: value` — what gets pasted into a terminal is the value.
+      labelled: buttons.length > 0 && buttons.every((b) => b.getAttribute('aria-label')?.startsWith('Copy ')),
+      focusWithinInCss: /\.copyable:focus-within\s+\.copy-field/.test(css),
+      bodyButton: Boolean(pane?.querySelector('.body-wrap .copy-field')),
+    };
+  }
+
+  const scopeProbe = await probeScopeBar();
+
+  // Asked of the daemon directly rather than read out of the page's own state, so the check is
+  // against the truth the endpoint reports and not against whatever the page believes.
+  const recordingNow = await fetch(`${ORIGIN}/api/recording`).then((r) => r.json()).catch(() => []);
+  const sessionOnScreen = () => doc.querySelector('#session-picker')?.value || '';
+  const markerFormProbe = await probeMarkerForm();
 
   const chipProbe = await probeEndpointChip();
 
@@ -827,7 +960,11 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     result.bodyBeforeHeaders = (() => {
       if (!open) return 'n/a';
       const kids = [...open.children];
-      const body = kids.findIndex((k) => k.tagName === 'PRE' || k.classList.contains('muted'));
+      // `.body-wrap` is the body plus its copy button; `.muted` is the branch that explains an
+      // absent one. Both are "the body slot", and the claim is about where that slot sits.
+      const body = kids.findIndex(
+        (k) => k.tagName === 'PRE' || k.classList.contains('body-wrap') || k.classList.contains('muted'),
+      );
       const headers = kids.findIndex((k) => k.classList.contains('headers'));
       return body !== -1 && headers !== -1 && body < headers
         ? 'yes'
@@ -1174,6 +1311,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const waterfallProbe = await probeWaterfall();
   const glanceProbe = await probeGlance();
   const detailTabProbe = await probeDetailTabs();
+  // After the detail probe, which is what leaves a row open and its panes populated.
+  const copyProbe = probeCopyFields();
   const drawerProbe = await probeDrawer();
   const toolbarProbe = await probeToolbar();
   const nowProbe = await probeNowStrip();
@@ -1359,6 +1498,22 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
   console.error('drawer on tab swap :', drawerProbe.tabSwitch);
   console.error('tab labels         :', tabProbe.labels);
+  console.error('--- scope bar ---');
+  console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);
+  console.error('sticky in css      :', scopeProbe.stickyInCss, '(a bar that scrolls away makes the rows below it wrong)');
+  console.error('rows stripped      :', scopeProbe.shown ? `${scopeProbe.strippedRows} of ${scopeProbe.totalRows}` : 'n/a');
+  console.error('host not repeated  :', scopeProbe.noRepeatedHost ?? 'n/a', '(a covered row must not repeat the bar)');
+  console.error('outside rows say it:', scopeProbe.uncoveredNameTheirHost ?? 'n/a', '(a row the bar does not cover names its host)');
+  console.error('--- adding a marker ---');
+  console.error('form present       :', markerFormProbe.present);
+  console.error('blank label refused:', markerFormProbe.blankRejected ?? 'n/a');
+  console.error('matches recording  :', markerFormProbe.matchesRecording ?? 'n/a', `- disabled: ${markerFormProbe.disabled}, recording: ${recordingNow.length}`);
+  console.error('--- per-field copy ---');
+  console.error('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows`);
+  console.error('every header has 1 :', copyProbe.everyHeaderHasOne);
+  console.error('body has one       :', copyProbe.bodyButton);
+  console.error('all labelled       :', copyProbe.labelled, '(a screen reader must be able to say which value)');
+  console.error('focus-within in css:', copyProbe.focusWithinInCss, '(without it, tabbing focuses an invisible button)');
   console.error('long tokens wrap   :', auditLongTokenWrap(css), '(a bearer token must not widen the pane)');
 
   for (const probe of [browserProbe, stateProbe]) {

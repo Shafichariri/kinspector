@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v37 — 2026-09-18.**
+**Document version: v40 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,29 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v37 — 2026-09-18 (this document)
+### v40 — 2026-09-18 (this document)
+
+**Three things in the web UI. Nothing to do; download a newer daemon when you want them.**
+
+- **A scope bar.** The host and leading path segments most of a session shares, lifted above the
+  list, with those rows showing only what is left. The overlay has had this since 0.7.0; the rule
+  is now one piece of shared code rather than two, so the two surfaces cannot disagree about it.
+  Rows outside the scope — a call to your auth server, say — keep their full path and name their
+  host, so the bar is never read as covering them.
+- **You can add a marker.** There is a field under the markers popover. Until now only an agent
+  (through MCP) or your own app code could drop one, and "mark the moment I clicked the thing" is
+  the whole point of a marker. It needs a session your app is still connected to; the form says so
+  when it is not.
+- **Per-field copy.** One button per header value, per overview field and per body. Copying a
+  bearer token no longer means selecting it by hand out of a wrapping monospace block.
+
+Markers now carry who dropped them — `user`, `agent` or `app`. If you post markers from your own
+code through `HttpMarkerPoster` or the REST endpoint, nothing changes: the field is optional and
+still defaults to `agent`. Pass `"source": "app"` if you would rather your own markers said so.
+
+The library is unchanged, so your coordinates do not move.
+
+### v37 — 2026-09-18
 
 **Released as 0.8.1, and it is a bug-fix release with one bug in it. Bump your coordinates if you
 run on iOS; ignore it otherwise.**

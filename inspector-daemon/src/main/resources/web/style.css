@@ -8,6 +8,10 @@
   --fg-muted: #9aa1ac;
   --divider: #2c3038;
   --accent: #6aa9ff;
+  /* Same colour as --accent, as bare RGB components, so a tint can be taken from it with
+     rgb(var(--accent-rgb) / alpha) — the same trick the --m-* tokens below use. Two spellings of
+     one colour; change both together. */
+  --accent-rgb: 106 169 255;
   --ok: #4cc38a;
   --redirect: #5b9bd5;
   --warn: #e0a030;
@@ -34,6 +38,7 @@
     --fg-muted: #5f6672;
     --divider: #e1e4e8;
     --accent: #2563eb;
+    --accent-rgb: 37 99 235;
     --ok: #13875b;
     --redirect: #2563eb;
     --warn: #b45309;
@@ -382,6 +387,25 @@ body { display: flex; flex-direction: column; }
   opacity: 0.65;
 }
 
+/* The marker form, under the list it adds to. */
+.marker-form { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); }
+.marker-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 3px 7px;
+}
+.marker-form input:focus { outline: none; border-color: var(--accent); }
+.marker-form input:disabled, .marker-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+.marker-status { font-size: 11px; margin-top: 6px; }
+.marker-status.bad { color: var(--err); }
+.marker-status[hidden] { display: none; }
+
 .markers, .keys { list-style: none; margin: 0; padding: 0; font-size: 12px; }
 .markers li { padding: 3px 0; cursor: pointer; color: var(--accent); }
 .markers li.muted { color: var(--fg-muted); cursor: default; }
@@ -466,6 +490,42 @@ kbd {
   #detail-pane { transition: none; }
 }
 
+/* The shared path prefix, above the list rather than in it.
+
+   Sticky, because it is a claim about every row below it: scrolled away, the stripped paths in
+   those rows read as the whole path. `top: 0` inside #list-pane, which is the scrolling box. */
+.scope-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+}
+.scope-bar[hidden] { display: none; }
+.scope-label {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  border: 1px solid rgb(var(--accent-rgb) / 0.35);
+  background: rgb(var(--accent-rgb) / 0.12);
+  /* The front of a host identifies it, so this truncates the opposite way round from the rows
+     below: `direction: rtl` moves the ellipsis to the start, and the isolate keeps the text
+     itself in logical order. */
+  direction: rtl;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.scope-count { font-size: 11px; flex: 0 0 auto; }
+
 .row {
   display: flex;
   align-items: center;
@@ -482,6 +542,9 @@ kbd {
    the path column lines up across rows whose verbs differ in length. */
 .row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
 .row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Only drawn on rows the scope bar does not cover, so this is never repetition — it is the one
+   row in a session that went somewhere else. */
+.row .host { font-size: 11px; flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .status { font-family: var(--mono); font-weight: 600; width: 40px; text-align: right; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
 .row .attempt { font-size: 10px; color: var(--warn); }
@@ -608,6 +671,53 @@ pre.body {
   margin: 0;
   max-height: 460px;
   overflow: auto;   /* wide bodies scroll here, never the page */
+}
+
+/* --- per-field copy ------------------------------------------------------
+
+   Quiet until wanted. The button is always in the DOM so it is reachable by keyboard and
+   announced by a screen reader; opacity is what keeps a detail pane full of header rows from
+   reading as a wall of icons. `:focus-within` is the half that makes tabbing to it work — without
+   it the button is focused, invisible, and the focus ring lands on nothing. */
+.copyable { display: flex; align-items: baseline; gap: 6px; }
+.copyable-value { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+
+.copy-field {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.copyable:hover .copy-field,
+.copyable:focus-within .copy-field,
+.body-wrap:hover .copy-field,
+.body-wrap:focus-within .copy-field,
+.copy-field:focus-visible { opacity: 1; }
+.copy-field:hover { color: var(--accent); border-color: var(--divider); }
+.copy-field.done { opacity: 1; color: var(--ok); }
+.copy-field.bad { opacity: 1; color: var(--err); }
+
+@media (prefers-reduced-motion: reduce) {
+  .copy-field { transition: none; }
+}
+
+/* Positioned over the body rather than beside it: a body is a block, and a button on its own
+   line under it reads as belonging to whatever comes next. */
+.body-wrap { position: relative; }
+.body-wrap .copy-field {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--bg-elevated);
+  border-color: var(--divider);
 }
 
 .banner {
