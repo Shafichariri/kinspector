@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v34 — 2026-09-17.**
+**Document version: v36 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -263,10 +263,15 @@ isn't reaching this module and release builds would ship capture code.
 > The same guarantee is a few lines of your own: grep your release artifacts for `dev/inspector/`
 > and `dev.inspector.`, and fail the build if either appears. Those needles work on every target.
 >
-> **Do not grep for the canary string itself on iOS.** Kotlin/Native stores string literals as
-> UTF-16, so an ASCII search for the canary finds nothing in an iOS binary *whether or not capture
-> code is present* — a guard written that way passes forever and tells you nothing. The package
-> path above is what actually catches it.
+> **Do not grep for the canary string itself in a built app, on either platform.** It is absent
+> from both for different reasons, and a guard written that way passes forever and tells you
+> nothing.
+>
+> On iOS, Kotlin/Native stores string literals as UTF-16, so an ASCII search finds nothing in a
+> linked binary. On Android, D8 does not carry the constant into the dex pool — measured on a
+> debug APK that contains capture code by construction: the canary appears **zero** times, while
+> `dev/inspector/Inspector` appears 11 and `okHttpInterceptor` 3. The package path above is what
+> actually catches it, on both.
 
 ---
 
@@ -324,6 +329,22 @@ platform-specific code, no manifest entries, no permissions.
 ---
 
 ## 5. Verify
+
+> **iOS: your app must already have `CADisableMinimumFrameDurationOnPhone` in its `Info.plist`.**
+> This is a Compose Multiplatform requirement, not an Inspector one, and it is *enforced* —
+> `PlistSanityCheck` throws at startup and the process aborts before anything renders. Every CMP
+> wizard template includes it, so you almost certainly have it; a hand-written plist is how it goes
+> missing. If your app dies on launch with `Abort trap: 6` and the crash report names
+> `PlistSanityCheck`, this is why.
+>
+> ```xml
+> <key>CADisableMinimumFrameDurationOnPhone</key>
+> <true/>
+> ```
+>
+> You also need an ATS exception for loopback if you take the daemon, since `ws://127.0.0.1:8099`
+> is cleartext — the iOS counterpart of the Android config in 6d. `sample/ios/iosApp/iosApp/
+> Info.plist` in the Inspector repo has both, scoped to loopback rather than opened globally.
 
 Run your app, trigger a network call, and look for a small pill near the left edge.
 
@@ -1195,7 +1216,40 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v34 — 2026-09-17 (this document)
+### v36 — 2026-09-18 (this document)
+
+**If the overlay pill sits under the notch or Dynamic Island on your iPhone, that is fixed — take
+the next release. Nothing to do otherwise.**
+
+The pill positioned itself from the top of the *display* rather than the safe area, so on a modern
+iPhone it started underneath the system UI, which takes the touch: the pill was visible, updated
+live, and could not be opened. Dragging it clear worked, which is probably how you would have
+worked around it. Its drag bounds now stop at the safe edge too, so it cannot be pushed back under
+the status bar or the home indicator.
+
+Android was unaffected in practice — the same offset clears a status bar at typical Android
+densities, which is why this survived as long as it did.
+
+Section 5 also now leads with the Compose Multiplatform `Info.plist` requirement, which is not an
+Inspector thing but is the first way a CMP iOS app dies on launch.
+
+### v35 — 2026-09-18
+
+**If your release CI greps for the canary string, it is not doing anything. Section 3 was only
+half right.**
+
+Section 3 has always told you to grep `dev/inspector/` and `dev.inspector.`, and warned that the
+canary string is invisible in an **iOS** binary. It is invisible in an **Android** APK too, for a
+different reason — D8 does not carry the constant into the dex pool. Measured on a debug APK built
+from capture code: the canary appears zero times while `dev/inspector/Inspector` appears 11 times.
+
+**What to do:** if you wrote a release check that greps for the canary, it has been passing
+regardless of what is in the build. Switch it to the package path, which section 3 now says for
+both platforms rather than singling out iOS.
+
+Nothing in the library changed.
+
+### v34 — 2026-09-17
 
 **Released as 0.8.0. Bump your coordinates — a rebuild alone will not get you any of this.**
 

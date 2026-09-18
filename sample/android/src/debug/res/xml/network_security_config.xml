@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The Android emulator's alias for the host machine's loopback. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!--
+          Two things at once, and both are cleartext. The demo server this app embeds listens on
+          the device's own loopback, and `adb reverse tcp:8099 tcp:8099` points that same loopback
+          at the daemon on the host when the app is on a physical phone. See INTEGRATION.md 6f.
+        -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

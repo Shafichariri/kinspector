@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,7 +69,15 @@ internal fun OverlayPill(
         animationSpec = tween(durationMillis = 400),
     )
 
-    BoxWithConstraints(modifier) {
+    // Insets first, so every offset below is measured inside the safe area rather than the raw
+    // screen. Without this the pill starts 120px from the top of the *display*, which is 40pt at
+    // 3x — inside the Dynamic Island on a modern iPhone, where the system takes the touch and the
+    // pill cannot be opened at all. It looked fine on Android only because a 120px offset clears a
+    // status bar at that density. Found by running it; see docs/ROADMAP.md.
+    //
+    // The drag bounds inherit the same frame, so the pill also cannot be *dragged* under the
+    // status bar, the home indicator or a cutout — `coerceIn(0f, …)` now means the safe edge.
+    BoxWithConstraints(modifier.windowInsetsPadding(WindowInsets.safeDrawing)) {
         val maxWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxWidth.toPx() }
         val maxHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxHeight.toPx() }
 

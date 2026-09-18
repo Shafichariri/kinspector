@@ -215,10 +215,32 @@ credentials on a network.
 
 ### And the thing that blocks actually trying any of it
 
-**There is no Android app module and no Xcode project.** `AGENTS.md` has carried "Android + iOS
-sample shells, to finally see the overlay on a device" for a while. Everything above is untestable
-on hardware without them, so they come first in practice even though they are the least
-interesting item here.
+~~**There is no Android app module**~~ — **added 2026-09-18.** `:sample:android` is a real APK
+that wires Inspector the way `INTEGRATION.md` tells a consumer to, including the debug-only
+cleartext config. The whole overlay has now been seen running on an emulator, and the emulator
+detection verified itself end to end in the process: the session it wrote says
+`platform: android-emulator`, where the same image used to say `android-device`.
+
+Three things came out of running it that no test had caught: a main-thread `NetworkOnMainThread`
+swallowed by `runCatching`, so the sample's OkHttp button silently did nothing; the release guard
+reporting an APK full of capture code as clean, because D8 drops the canary from the dex pool; and
+the same guard never unpacking archives inside a directory target. The first was the sample's, the
+other two were real holes in production safety.
+
+~~**The Xcode project is still missing**~~ — **added 2026-09-18.** `sample/ios/` is a KMP module
+producing a static framework plus a hand-written `.xcodeproj` and about twenty lines of Swift; a
+Compose Multiplatform sample that reimplemented its UI in Swift would be demonstrating the opposite
+of the claim. The overlay has now been seen on iOS, and the compile-time `IS_IOS_SIMULATOR` from
+0.8.0 verified itself: the session says `platform: ios-simulator`.
+
+It found the last unfixed defect from the original device outing. `Modifier.inspectorScreen` gave
+the *screens* insets; the **pill** never got them, and at 3x its 120-pixel default offset is 40pt —
+inside the Dynamic Island, where the system eats the touch and the overlay cannot be opened at all.
+Android only looked right because 120px clears a status bar at that density.
+
+**Neither sample has run on physical hardware.** A cutout, a vendor skin, a gesture bar and a cable
+running `adb reverse` are all still unexercised, and no Inspector build has ever been on a real
+phone of either kind.
 
 ---
 

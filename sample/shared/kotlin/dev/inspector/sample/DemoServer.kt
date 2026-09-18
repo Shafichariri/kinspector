@@ -3,33 +3,45 @@ package dev.inspector.sample
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
-import io.ktor.server.plugins.compression.Compression
-import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
-import io.ktor.server.response.respondTextWriter
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.delay
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.atomics.AtomicInt
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 
-/** Embedded demo server so the sample needs no external service. Mirrors the test server. */
+/**
+ * Embedded demo server so the sample needs no external service. Mirrors the test server.
+ *
+ * Shared by all three sample apps — desktop, Android and iOS — which constrains it to APIs that
+ * exist on Kotlin/Native too. Hence `kotlin.concurrent.AtomicInt` rather than
+ * `java.util.concurrent`, and hence two things that are deliberately *not* here:
+ *
+ * **No `Compression` plugin and no chunked writer.** `ktor-server-compression` has no native
+ * variant and `respondTextWriter` is JVM-only, so keeping either would have meant three copies of
+ * this file or an `expect`/`actual` seam per consuming module. Gzipped and chunked *responses* are
+ * the more valuable thing to cover and they already are, in `:inspector-core`'s byte-identical
+ * body tests across all four platforms — which is stronger evidence than a human clicking a
+ * button. `/large` still returns a couple of megabytes; it simply builds the body rather than
+ * streaming it.
+ */
+@OptIn(ExperimentalAtomicApi::class)
 object DemoServer {
     const val PORT = 9090
-    private val flakyAttempts = AtomicInteger(0)
+    private val flakyAttempts = AtomicInt(0)
 
     fun url(path: String) = "http://127.0.0.1:$PORT$path"
 
     fun start() {
         embeddedServer(CIO, port = PORT) {
-            install(Compression) { gzip() }
             routing {
                 get("/json") {
                     call.respondText(
@@ -54,7 +66,7 @@ object DemoServer {
                     call.respond(HttpStatusCode.Found)
                 }
                 get("/flaky") {
-                    val n = flakyAttempts.incrementAndGet()
+                    val n = flakyAttempts.incrementAndFetch()
                     if (n % 3 != 0) {
                         call.respondText(
                             """{"attempt":$n}""",
@@ -67,10 +79,7 @@ object DemoServer {
                 }
                 get("/large") {
                     val kb = call.request.queryParameters["kb"]?.toIntOrNull() ?: 2048
-                    call.respondTextWriter(ContentType.Text.Plain) {
-                        val chunk = "x".repeat(1024)
-                        repeat(kb) { write(chunk) }
-                    }
+                    call.respondText("x".repeat(kb * 1024), ContentType.Text.Plain)
                 }
                 get("/binary") {
                     call.respondBytes(ByteArray(4096) { (it % 256).toByte() }, ContentType.Application.OctetStream)
