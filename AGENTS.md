@@ -220,7 +220,7 @@ new bounded queue here must do the same.
   judged it.
 - **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
   module and an Xcode project; the UI module already compiles for both.
-- **Stretch:** HAR export (`GET /api/sessions/{id}/har`).
+- ~~**Stretch:** HAR export.~~ Built — `GET /api/sessions/{id}/har`, see the rule below.
 
 ---
 
@@ -432,6 +432,25 @@ client sends back. A process can exit between listing and killing and have its p
 alone is not evidence of what it identifies. Without that re-check the endpoint would be a
 "kill any pid" facility on an unauthenticated loopback port. It also refuses the daemon's own pid —
 `/api/server/stop` is the path that replies before shutting down.
+
+**The HAR export writes `-1` for everything capture never measured, and that is the whole
+design.** HAR was specified by wire-level tools and asks for a send/wait/receive breakdown, a
+`headersSize` and an `httpVersion`; Inspector has one duration measured around the call, parsed
+headers rather than the raw block, and no negotiated version at that layer. `-1` is what the spec
+reserves for "no information available", and it is the only honest answer — a plausible breakdown
+would draw a waterfall in DevTools out of numbers nobody measured, and a waterfall is read as
+evidence. `bodySize` is deliberately *not* `-1`: `reqBytes`/`resBytes` are true sizes, counted even
+when the body was not captured, so reporting them as unknown would throw away a real measurement.
+
+Two things the export must keep disclosing, because HAR has no field for either and silence reads
+as a claim: that a row is one **attempt** of a call that redirected or retried, and **what
+redaction removed**. Both go in the entry `comment`. A redacted capture handed over as a complete
+one is the export lying by omission.
+
+A response body that is not valid UTF-8 is base64, which HAR supports. A **request** body that is
+not is reported absent with the reason, because `postData.text` is a string with no encoding escape
+— and `String(bytes)` would not fail, it would substitute U+FFFD and present a page of replacement
+characters as the captured body. The strict decoder exists to reach that branch.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
@@ -1024,6 +1043,7 @@ else a scan turns up.
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
+| `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |

@@ -486,6 +486,45 @@ Posting a marker deliberately needs **no** `X-Inspector-Control` header. That he
 any page you have open from POSTing to the daemon's control endpoints, and a marker is not a
 weapon.
 
+### Exporting a session as HAR
+
+For handing a session to somebody who does not have Inspector. HAR 1.2 is what Chrome and Firefox
+DevTools, Charles, Proxyman and Postman all import.
+
+```bash
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/har'       # whole session
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/har?filter=has:error'
+```
+
+The `filter` parameter is the same grammar as everywhere else, because "export the four calls that
+failed" is usually the reason to export at all. `-O -J` makes curl honour the filename the daemon
+sends; without `-J` you get a file named `har`.
+
+**Read the entry comments before drawing conclusions from one.** Inspector is not a wire-level
+capture, and HAR was designed by tools that are, so several fields it asks for describe things
+capture never saw. Every one of them is `-1`, which is what the spec reserves for "no information
+available":
+
+| Field | Why it is unknown |
+|---|---|
+| `timings.send` / `wait` / `receive` | There is one duration, measured around the call. `time` carries it. A plausible-looking breakdown would draw a waterfall in DevTools out of numbers nobody measured |
+| `headersSize` | Capture holds parsed headers, never the raw block |
+| `httpVersion` | Ktor's client does not surface the negotiated version at this layer |
+
+`bodySize` is **not** unknown — `reqBytes`/`resBytes` are true sizes, counted even when the body
+itself was not captured. Cookies are empty arrays; the `Cookie` and `Set-Cookie` headers are
+present and complete, so nothing is lost.
+
+Two things the export discloses per entry, in `comment`, that a HAR has no field for: that a row is
+one **attempt** of a call that redirected or retried, and **what redaction removed**. Handing
+somebody a redacted capture as though it were complete is the kind of omission that gets read as
+"no credential was sent".
+
+A response body that is not valid UTF-8 travels base64-encoded, which the format supports. A
+**request** body that is not valid UTF-8 does not: `postData.text` is a string and HAR offers no
+encoding escape for it, so it is reported as absent with the reason rather than decoded into
+replacement characters that would read as a captured body.
+
 ---
 
 ## 8. The MCP server

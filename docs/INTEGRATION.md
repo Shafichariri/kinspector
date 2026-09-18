@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v41 — 2026-09-18.**
+**Document version: v42 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,27 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v41 — 2026-09-18 (this document)
+### v42 — 2026-09-18 (this document)
+
+**A session can now be exported as HAR. Nothing to do; download a newer daemon when you want it.**
+
+`GET /api/sessions/latest/har` on the daemon, taking the same filter grammar as everything else,
+so "export the four calls that failed" is one request:
+
+```bash
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/har?filter=has:error'
+```
+
+This is for handing a session to somebody who does not have Inspector — Chrome and Firefox
+DevTools, Charles, Proxyman and Postman all import HAR 1.2.
+
+**Read the entry comments before drawing a conclusion from one.** Inspector is not a wire-level
+capture and HAR was designed by tools that are, so `timings.send`/`wait`/`receive`, `headersSize`
+and `httpVersion` are all `-1` — the spec's value for "no information available". The total `time`
+is real, and so is `bodySize`. Each entry's `comment` also names what redaction removed, if
+anything, and whether the row is one attempt of a call that retried.
+
+### v41 — 2026-09-18
 
 **`StreamSink.lastError` now exists in release builds too. Nothing to do unless you tried to read
 it and gave up.**
