@@ -64,6 +64,13 @@
     // Collapsed timeline runs the user has opened, by run key. Held in state rather than in the
     // DOM so an expanded run survives the re-render that every live signal triggers.
     expandedRuns: new Set(),
+    // The host and leading path segments most of this session shares, or null when lifting one
+    // would not pay for itself. Recomputed from `allTransactions`, never from the filtered view —
+    // a prefix that changed as you typed would make each row mean something different mid-search.
+    scope: null,
+    // Session ids an app is connected to right now, from `/api/recording`. Not derivable from
+    // `endedAt`: a session whose daemon was killed has neither an `endedAt` nor an open app.
+    recording: [],
     // A stretch of the session selected on the axis, in device `mono` ms, or null for all of it.
     // Client-side on purpose: the text filter round-trips to the daemon, and a brush you drag
     // across a chart cannot wait for a fetch per pixel.
@@ -254,9 +261,11 @@
     }
     renderCounts();
     state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
+    state.recording = await api('/api/recording').catch(() => []);
     await syncAllTransactions();
     await loadSignals();
     renderMarkers();
+    markerFormState();
     renderList();
     renderTimeline();
   }
@@ -439,6 +448,89 @@
     }
   }
 
+  /**
+   * Dropping a marker from here.
+   *
+   * The daemon refuses a marker on a session that is not currently recording — there is no clock
+   * to place it on once the app has gone — so the form says that up front instead of letting
+   * someone type a label and collect a 409.
+   *
+   * The check is `/api/recording`, **not** `sessionIsLive()`. They disagree exactly where it
+   * matters: `sessionIsLive` asks whether `endedAt` is absent, and a session whose daemon was
+   * killed or whose app vanished without a clean close has no `endedAt` and no open connection
+   * either. Gating on that would leave the control enabled on precisely the sessions where the
+   * app went away, which is when somebody most wants to mark where it happened.
+   *
+   * `source: 'user'` matters. `MarkerSource.USER` existed and had no caller: every marker in every
+   * archive so far says `app` or `agent`. A marker dropped by the person watching is a different
+   * claim from one an agent left while working through the session, and whoever reads the archive
+   * later is entitled to tell them apart.
+   */
+  function markerFormState() {
+    const form = $('marker-form');
+    const input = $('marker-label');
+    const status = $('marker-status');
+    const live = state.recording.includes(state.sessionId);
+    input.disabled = !live;
+    $('marker-add').disabled = !live;
+    if (!live) {
+      status.hidden = false;
+      status.textContent = 'no app is connected to this session — a marker needs a live one';
+    } else if (status.dataset.sticky !== '1') {
+      status.hidden = true;
+      status.textContent = '';
+    }
+    return form;
+  }
+
+  function wireMarkerForm() {
+    const form = $('marker-form');
+    const input = $('marker-label');
+    const status = $('marker-status');
+
+    const say = (text, isError) => {
+      status.hidden = false;
+      status.textContent = text;
+      status.classList.toggle('bad', Boolean(isError));
+      status.dataset.sticky = '1';
+      setTimeout(() => { status.dataset.sticky = '0'; markerFormState(); }, 2500);
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const label = input.value.trim();
+      // A marker with no label is a line across the list that explains nothing.
+      if (!label) return;
+      $('marker-add').disabled = true;
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label, source: 'user' }),
+        });
+        if (res.ok) {
+          input.value = '';
+          say('added');
+          // The marker arrives over the live socket like any other, but only for a viewer that
+          // has one. Re-reading is what makes the divider appear for everyone else.
+          state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`)
+            .catch(() => state.markers);
+          renderMarkers();
+          renderList();
+        } else {
+          // The daemon's own message names the reason — "markers can only be added to a session
+          // that is currently recording" is more use than "failed".
+          const detail = await res.json().catch(() => ({}));
+          say(detail.error || `refused (${res.status})`, true);
+        }
+      } catch {
+        say('could not reach the daemon', true);
+      } finally {
+        markerFormState();
+      }
+    });
+  }
+
   /** Inside the brushed stretch of the session, if one is selected. */
   const inRange = (mono) =>
     !state.timeRange || (mono >= state.timeRange.from && mono <= state.timeRange.to);
@@ -454,6 +546,85 @@
     return state.newestFirst ? rows.reverse() : rows;
   };
 
+  // --- the scope bar ------------------------------------------------------
+
+  /**
+   * A mirror of `pathScope` in `:inspector-model`. Keep them in step.
+   *
+   * It lives there because the overlay draws the same bar, and three thresholds plus a segment
+   * walk are exactly the kind of rule that drifts invisibly: a bar that appears on one surface and
+   * not the other, for a session both are showing, reads as a bug in whichever one you are looking
+   * at. `PathScopeTest` in that module is the authority; this is the copy that must follow it.
+   *
+   * Three rules, each of which has a test named after it over there:
+   *
+   * - **The dominant host only.** A session talking to an API and an auth server has no single
+   *   prefix. Rows outside the scope name their host, so the bar is never read as covering them.
+   * - **Never the last segment.** `/v3/orders/submit` and `/v3/orders/cancel` share `/v3/orders/`
+   *   and that is as far as this may go; a prefix that swallowed a whole path leaves a blank row.
+   * - **Thresholds.** A four-row session, or a two-character saving, is not worth a bar.
+   */
+  const SCOPE_MIN_ROWS = 4;
+  const SCOPE_MIN_LENGTH = 6;
+
+  function pathScope(transactions) {
+    if (transactions.length < SCOPE_MIN_ROWS) return null;
+
+    const counts = new Map();
+    for (const txn of transactions) counts.set(txn.host, (counts.get(txn.host) || 0) + 1);
+    let host = null;
+    let best = -1;
+    for (const [candidate, count] of counts) {
+      if (count > best) { host = candidate; best = count; }
+    }
+    if (host === null) return null;
+
+    const paths = transactions.filter((t) => t.host === host).map((t) => t.path);
+    if (paths.length < SCOPE_MIN_ROWS) return null;
+
+    const segmented = paths.map((path) => path.split('/').filter((s) => s.length > 0));
+    const shared = [];
+    for (let i = 0; ; i++) {
+      const segment = segmented[0][i];
+      if (segment === undefined) break;
+      // `length <= i + 1` is the never-the-last-segment rule: this path has nothing left over.
+      if (segmented.some((s) => s.length <= i + 1 || s[i] !== segment)) break;
+      shared.push(segment);
+    }
+    if (!shared.length) return null;
+
+    const prefix = `/${shared.join('/')}/`;
+    if (prefix.length < SCOPE_MIN_LENGTH) return null;
+
+    return {
+      host,
+      prefix,
+      covered: paths.length,
+      label: host + prefix,
+      covers: (txn) => txn.host === host && txn.path.startsWith(prefix),
+      strip: (path) => (path.startsWith(prefix) ? path.slice(prefix.length) : path),
+    };
+  }
+
+  /**
+   * Drawn above the list and not scrolled with it.
+   *
+   * It is a standing claim about what every path beneath it is missing, so a row read after the
+   * bar had scrolled off would be read wrong. Same reasoning as the overlay's, and the same place
+   * on screen.
+   */
+  function renderScopeBar() {
+    const bar = $('scope-bar');
+    const scope = state.scope;
+    bar.hidden = !scope;
+    if (!scope) return;
+    bar.innerHTML = '';
+    const label = el('span', 'scope-label mono', scope.label);
+    label.title = 'Shared by most of this session, and lifted out of the rows below';
+    bar.appendChild(label);
+    bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
+  }
+
   function renderList() {
     const list = $('list');
     list.innerHTML = '';
@@ -465,6 +636,9 @@
     // still a duplicate, and making the highlight depend on the current filter would hide exactly
     // the case you go looking for.
     state.duplicates = computeDuplicates(state.allTransactions, state.duplicateWindowMs);
+    // Same source as the duplicates and the endpoint chips, and for the same reason.
+    state.scope = pathScope(state.allTransactions);
+    renderScopeBar();
     renderEndpointChips();
 
     const rows = orderedRows();
@@ -705,6 +879,51 @@
    * localhost, and it rejects rather than throwing — a silent failure that looks exactly like a
    * successful copy. The button reports it.
    */
+  /**
+   * A copy button for one value.
+   *
+   * The UI could copy a whole cURL command and a whole AI bundle, and could not copy one header
+   * value — so getting a bearer token into another terminal meant selecting it by hand out of a
+   * monospace block that wraps, which is where the ends get clipped and nobody notices until the
+   * request 401s. The overlay has had per-field copy since the first device outing; this is the
+   * same affordance.
+   *
+   * Always in the DOM rather than created on hover, so it is reachable by keyboard and by a
+   * screen reader. It is CSS that keeps it quiet until the row is hovered or the button focused.
+   *
+   * @param what names the value in the confirmation, because several of these sit close together
+   *   and a bare "copied" does not say which one took.
+   */
+  function copyButton(text, what) {
+    const button = el('button', 'copy-field', '⧉');
+    button.type = 'button';
+    button.title = `Copy ${what}`;
+    button.setAttribute('aria-label', `Copy ${what}`);
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      navigator.clipboard.writeText(text).then(
+        () => {
+          button.classList.add('done');
+          button.textContent = '✓';
+          setTimeout(() => { button.classList.remove('done'); button.textContent = '⧉'; }, 1200);
+        },
+        () => {
+          button.classList.add('bad');
+          button.title = 'The clipboard is unavailable here. Open the UI on 127.0.0.1 rather than a LAN address.';
+        },
+      );
+    });
+    return button;
+  }
+
+  /** The value, with its copy button beside it. */
+  function copyableRow(cls, text, what) {
+    const line = el('div', `copyable ${cls}`);
+    line.appendChild(el('span', 'copyable-value', text));
+    line.appendChild(copyButton(text, what));
+    return line;
+  }
+
   function copyBundle(button, build, label) {
     button.disabled = true;
     Promise.resolve()
@@ -1270,7 +1489,17 @@
     row.appendChild(el('span', 'clock mono muted', fmtClock(txn.ts)));
     row.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
 
-    const path = el('span', 'path', txn.path);
+    // The host appears only when it is not the one the scope bar claims. Repeating it on every
+    // row is noise when it never changes, and load-bearing on the one row where it does — the
+    // same rule the overlay applies, which is why both read `scope.covers`.
+    const scope = state.scope;
+    if (!scope || txn.host !== scope.host) {
+      row.appendChild(el('span', 'host mono muted', txn.host));
+    }
+
+    // Stripped when the bar above already says this front. The bar is what makes that safe: it is
+    // on screen, it does not scroll away, and it names the exact prefix that was removed.
+    const path = el('span', 'path', scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path);
     if (txn.attempt > 1) {
       const badge = el('span', 'attempt', ` ·attempt ${txn.attempt}`);
       path.appendChild(badge);
@@ -1398,7 +1627,12 @@
     const panel = el('div', 'dtab-panel');
     panel.dataset.dtab = 'overview';
     const kv = el('dl', 'kv');
-    const put = (k, v) => { kv.appendChild(el('dt', null, k)); kv.appendChild(el('dd', null, v)); };
+    const put = (k, v) => {
+      kv.appendChild(el('dt', null, k));
+      const dd = el('dd');
+      dd.appendChild(copyableRow('', String(v), k.toLowerCase()));
+      kv.appendChild(dd);
+    };
     put('URL', urlOf(txn));
     put('Status', txn.status ?? 'transport failure');
     if (txn.error) put('Error', txn.error);
@@ -1472,7 +1706,13 @@
         );
       }
       const isJson = (contentType || '').includes('json') || /^\s*[{[]/.test(body);
-      panel.appendChild(el('pre', 'body', isJson ? prettyJson(body) : body));
+      const pretty = isJson ? prettyJson(body) : body;
+      const wrap = el('div', 'body-wrap');
+      wrap.appendChild(el('pre', 'body', pretty));
+      // The body as shown, pretty-printing included: what you are looking at is what you meant to
+      // copy, and re-minifying it on the way to the clipboard would be a surprise.
+      wrap.appendChild(copyButton(pretty, `${side === 'req' ? 'request' : 'response'} body`));
+      panel.appendChild(wrap);
     }
 
     panel.appendChild(el('div', 'section-title', `${title} headers`));
@@ -1482,9 +1722,15 @@
       box.appendChild(el('div', 'muted', 'none'));
     } else {
       for (const [name, values] of entries) {
-        const line = el('div');
-        line.appendChild(el('span', 'hname', `${name}: `));
-        line.appendChild(el('span', null, values.join(', ')));
+        const value = values.join(', ');
+        const line = el('div', 'copyable');
+        const text = el('span', 'copyable-value');
+        text.appendChild(el('span', 'hname', `${name}: `));
+        text.appendChild(el('span', null, value));
+        line.appendChild(text);
+        // The value alone, not `name: value` — what you are about to paste into a curl or a
+        // terminal is the value.
+        line.appendChild(copyButton(value, name));
         box.appendChild(line);
       }
     }
@@ -3219,6 +3465,7 @@
   (async function init() {
     setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
     wirePops();
+    wireMarkerForm();
     wireAxis();
     $('drawer-close').addEventListener('click', closeDrawer);
     // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.

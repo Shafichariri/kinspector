@@ -132,13 +132,27 @@ In dependency order, because each stage makes the next one cheap:
 
 ### Going the other way
 
-Three things the overlay has that the web UI does not, and at least two should cross over:
+~~Three things the overlay has that the web UI does not.~~ **All three done, 2026-09-18.**
 
-- **The scope bar** — the shared host and path prefix lifted out of the rows. The web repeats the
-  full path on every row and has the same redundancy, with more width to waste it in.
-- **Creating a marker from the UI.** The web can only read markers; only MCP can add one.
-- **Per-field copy buttons.** The web has copy-cURL and the AI bundles, but cannot copy one header
-  value.
+- ~~**The scope bar**~~ — `pathScope` moved from `:inspector-ui` into `:inspector-model`, beside
+  `timeline` and `endpointShortcuts`, and `app.js` carries the mirror. Sticky rather than scrolled
+  with the list on both surfaces, because it is a standing claim about what every path below it is
+  missing: a stripped path read after the bar had gone names an endpoint nobody called.
+- ~~**Creating a marker from the UI**~~ — and it turned up two things the item did not anticipate.
+  `MarkerSource.USER` had existed with no caller, so every marker in every archive said `app` or
+  `agent`; the endpoint now takes a `source`, defaulting to `agent` for the callers that came
+  before. And gating the control on `endedAt` would have been wrong: a session whose daemon was
+  killed has no `endedAt` and no open connection either, so the form would have been offered on
+  exactly the sessions the daemon refuses. `GET /api/recording` answers the question that is
+  actually being asked.
+- ~~**Per-field copy buttons**~~ — one per header, per overview field and per body. Always in the
+  DOM rather than conjured on hover, so they are reachable by keyboard; CSS keeps them quiet.
+
+The smoke test grew probes for all three, each proved by deliberately breaking the feature. One of
+those probes was worthless on the first attempt: it watched the marker list for a blank submission,
+and the daemon refuses a marker on a session nothing is connected to, so the count stayed put
+whether the client guarded or not. It watches `fetch` now — the claim is that the page does not
+ask, so the thing to observe is the asking.
 
 ---
 

@@ -43,6 +43,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -495,6 +496,25 @@ class InspectorDaemon(
     // --- REST ---------------------------------------------------------------------------------
 
     private fun io.ktor.server.routing.Route.apiRoutes() {
+        /**
+         * The sessions an app is connected to right now.
+         *
+         * `endedAt` on a session is not the same question, and the difference is not academic: a
+         * session whose daemon was killed, or whose app vanished without a clean close, has no
+         * `endedAt` and is not open either. Anything deciding whether a marker can be added has to
+         * ask this rather than infer it from the metadata, or it offers a control that is refused
+         * on exactly the sessions where the app went away — which is when you most want to mark
+         * where it happened.
+         */
+        get("/api/recording") {
+            call.respondJson(
+                InspectorJson.encodeToString(
+                    ListSerializer(String.serializer()),
+                    manager.activeSessionIds().toList().sorted(),
+                )
+            )
+        }
+
         get("/api/sessions") {
             call.respondJson(
                 InspectorJson.encodeToString(
@@ -735,10 +755,25 @@ class InspectorDaemon(
         post("/api/sessions/{id}/markers") {
             val id = call.parameters["id"].orEmpty()
             val body = call.receiveText()
-            val label = runCatching {
-                InspectorJson.decodeFromString<Map<String, String>>(body)["label"]
-            }.getOrNull()
+            val fields = runCatching {
+                InspectorJson.decodeFromString<Map<String, String>>(body)
+            }.getOrNull().orEmpty()
+            val label = fields["label"]
                 ?: return@post call.respondError(HttpStatusCode.BadRequest, "expected {\"label\":\"…\"}")
+
+            // Who dropped it, defaulting to `agent` because that is what every caller was until
+            // the web UI grew a button. `source` is the only thing separating "an agent marked
+            // this while working through the session" from "a person watching it happen", and a
+            // marker attributed to the wrong one sends whoever reads the archive later to the
+            // wrong question. An unrecognised value is refused rather than stored: the field is
+            // read by both UIs and by the MCP tools, and a fourth value would render as nothing.
+            val source = fields["source"] ?: MarkerSource.AGENT
+            if (source !in KNOWN_MARKER_SOURCES) {
+                return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "source must be one of ${KNOWN_MARKER_SOURCES.joinToString(", ")}",
+                )
+            }
 
             val resolvedId = if (id == "latest") {
                 repository.resolve("latest")?.fileName?.toString()
@@ -756,13 +791,22 @@ class InspectorDaemon(
                     ts = java.time.Instant.now().toString(),
                     mono = 0,
                     label = label,
-                    source = MarkerSource.AGENT,
+                    source = source,
                 ),
             )
             call.respondJson("""{"ok":true}""")
         }
     }
 }
+
+/**
+ * The `source` values a posted marker may carry.
+ *
+ * Named here rather than derived from [MarkerSource]'s members, because that object is a plain set
+ * of constants with no enumeration — and a reflective list would silently accept whatever a future
+ * constant happened to be called.
+ */
+private val KNOWN_MARKER_SOURCES = setOf(MarkerSource.APP, MarkerSource.AGENT, MarkerSource.USER)
 
 /** Long enough for CIO to write the response before the engine is torn down under it. */
 private const val RESPONSE_FLUSH_MILLIS = 150L

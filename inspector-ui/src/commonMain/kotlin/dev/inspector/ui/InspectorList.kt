@@ -45,6 +45,8 @@ import dev.inspector.model.FilterContext
 import dev.inspector.model.FilterParser
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.PathScope
+import dev.inspector.model.pathScope
 import dev.inspector.model.Signal
 import dev.inspector.model.SignalTrigger
 import dev.inspector.model.DuplicateGroup
