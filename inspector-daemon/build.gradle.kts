@@ -32,3 +32,12 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
+
+// So the running daemon can name its own version — the HAR export reports it as the creator, and
+// "which build produced this file" is the first question asked of any exported capture. Absent
+// from a classes directory, which is why the reader falls back rather than failing.
+tasks.jar {
+    manifest {
+        attributes("Implementation-Version" to project.version)
+    }
+}

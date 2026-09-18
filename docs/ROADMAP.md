@@ -268,7 +268,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 | Replay step 4 — template generators | `REPLAY.md` §7 | Specified, including the generator set |
 | 4c — proxy capture | `AGENTS.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
 | 4b — report what we cannot see | `AGENTS.md` | Not designed; flagged there as possibly not worth it |
-| HAR export | `implementation-plan.md` Phase 3 stretch | Unbuilt, named in two documents |
+| HAR export | `implementation-plan.md` Phase 3 stretch | ~~Unbuilt~~ **Done, 2026-09-18.** `GET /api/sessions/{id}/har`, taking the same `filter` as the transaction list. Everything the format asks for and capture never saw is `-1`; attempts and redaction are disclosed per entry, because HAR has no field for either and silence reads as a claim |
 | Signal payload redaction | `SIGNALS.md`, `schema.md` | `Signal.redacted` is reserved and always empty; the schema field is already there |
 | Disconnected-transaction backfill | `schema.md` | Explicitly a v2 candidate |
 
