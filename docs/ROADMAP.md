@@ -227,9 +227,20 @@ reporting an APK full of capture code as clean, because D8 drops the canary from
 the same guard never unpacking archives inside a directory target. The first was the sample's, the
 other two were real holes in production safety.
 
-**The Xcode project is still missing**, so none of this covers iOS. And an emulator is not
-hardware: a cutout, a gesture bar, a vendor skin and a cable running `adb reverse` are all still
-unexercised.
+~~**The Xcode project is still missing**~~ — **added 2026-09-18.** `sample/ios/` is a KMP module
+producing a static framework plus a hand-written `.xcodeproj` and about twenty lines of Swift; a
+Compose Multiplatform sample that reimplemented its UI in Swift would be demonstrating the opposite
+of the claim. The overlay has now been seen on iOS, and the compile-time `IS_IOS_SIMULATOR` from
+0.8.0 verified itself: the session says `platform: ios-simulator`.
+
+It found the last unfixed defect from the original device outing. `Modifier.inspectorScreen` gave
+the *screens* insets; the **pill** never got them, and at 3x its 120-pixel default offset is 40pt —
+inside the Dynamic Island, where the system eats the touch and the overlay cannot be opened at all.
+Android only looked right because 120px clears a status bar at that density.
+
+**Neither sample has run on physical hardware.** A cutout, a vendor skin, a gesture bar and a cable
+running `adb reverse` are all still unexercised, and no Inspector build has ever been on a real
+phone of either kind.
 
 ---
 

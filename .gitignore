@@ -8,3 +8,10 @@ local.properties
 node_modules/
 package.json
 package-lock.json
+
+# Xcode, from sample/ios. The project file itself is checked in — it is the sample — but per-user
+# state and build output are not.
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcuserstate

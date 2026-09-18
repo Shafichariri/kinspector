@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v35 — 2026-09-18.**
+**Document version: v36 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -329,6 +329,22 @@ platform-specific code, no manifest entries, no permissions.
 ---
 
 ## 5. Verify
+
+> **iOS: your app must already have `CADisableMinimumFrameDurationOnPhone` in its `Info.plist`.**
+> This is a Compose Multiplatform requirement, not an Inspector one, and it is *enforced* —
+> `PlistSanityCheck` throws at startup and the process aborts before anything renders. Every CMP
+> wizard template includes it, so you almost certainly have it; a hand-written plist is how it goes
+> missing. If your app dies on launch with `Abort trap: 6` and the crash report names
+> `PlistSanityCheck`, this is why.
+>
+> ```xml
+> <key>CADisableMinimumFrameDurationOnPhone</key>
+> <true/>
+> ```
+>
+> You also need an ATS exception for loopback if you take the daemon, since `ws://127.0.0.1:8099`
+> is cleartext — the iOS counterpart of the Android config in 6d. `sample/ios/iosApp/iosApp/
+> Info.plist` in the Inspector repo has both, scoped to loopback rather than opened globally.
 
 Run your app, trigger a network call, and look for a small pill near the left edge.
 
@@ -1200,7 +1216,24 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v35 — 2026-09-18 (this document)
+### v36 — 2026-09-18 (this document)
+
+**If the overlay pill sits under the notch or Dynamic Island on your iPhone, that is fixed — take
+the next release. Nothing to do otherwise.**
+
+The pill positioned itself from the top of the *display* rather than the safe area, so on a modern
+iPhone it started underneath the system UI, which takes the touch: the pill was visible, updated
+live, and could not be opened. Dragging it clear worked, which is probably how you would have
+worked around it. Its drag bounds now stop at the safe edge too, so it cannot be pushed back under
+the status bar or the home indicator.
+
+Android was unaffected in practice — the same offset clears a status bar at typical Android
+densities, which is why this survived as long as it did.
+
+Section 5 also now leads with the Compose Multiplatform `Info.plist` requirement, which is not an
+Inspector thing but is the first way a CMP iOS app dies on launch.
+
+### v35 — 2026-09-18
 
 **If your release CI greps for the canary string, it is not doing anything. Section 3 was only
 half right.**
