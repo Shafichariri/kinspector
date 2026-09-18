@@ -141,11 +141,12 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   The list layout that followed was checked the same way with one addition — `ListRenderTest`
   renders it off-screen at 360dp, which catches what a desktop window cannot, because a desktop
   window is never 360dp wide. It is still not a device.
-- **There is an Android app module now, and everything in the overlay has been seen running on an
-  emulator** — the list, the clock column, the control strip, marker dividers and chips, signals
-  and a collapsed run, all on a 1080x2400 screen with a real status bar. What that does *not*
-  cover is hardware: a cutout, a gesture bar, a vendor skin, or `adb reverse` with a cable in it.
-  There is still no Xcode project, so the iOS side has none of this.
+- **There are Android and iOS sample apps now, and the overlay has been seen running on both** —
+  an emulator and an iOS simulator. The list, the clock column, the control strip, marker dividers
+  and chips, signals and a collapsed run, on a real screen with a real status bar and a Dynamic
+  Island. What that does *not*
+  cover is hardware: a physical cutout, a vendor skin, or `adb reverse` with a cable in it. No
+  Inspector build has ever run on a physical phone of either kind.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
   localhost by policy in this environment, so only a static snapshot has ever been produced.
@@ -571,6 +572,21 @@ navigation computes its own sort, `j` moves up the screen the moment newest-firs
 dividers are interleaved oldest-first and the whole sequence is then reversed, so a divider stays
 attached to the same rows; `scripts/render-web-ui.js` asserts the sequence is an exact mirror.
 
+**The overlay pill insets itself too, and that was missed for a year.** `Modifier.inspectorScreen`
+fixed the *screens* after the first device outing; the pill kept a raw `offset` starting at 120
+**pixels** with drag bounds of `coerceIn(0f, …)`. On Android at that density 120px clears a status
+bar, so it looked right. At 3x on an iPhone it is 40pt — inside the Dynamic Island, where the
+system takes the touch and the overlay cannot be opened at all. The pill's frame is now
+`windowInsetsPadding(safeDrawing)`, so both the default position and the drag bounds mean the safe
+edge. Verified by tapping the default position before the fix (nothing) and after (opens).
+
+**A Compose Multiplatform iOS app aborts at launch without `CADisableMinimumFrameDurationOnPhone`
+in its Info.plist.** `androidx.compose.ui.uikit.PlistSanityCheck.performIfNeeded` throws, the
+Kotlin terminate handler calls abort, and the app dies before anything renders — the crash report
+names the check, which is the only reason it takes minutes rather than hours. Only a hand-written
+plist can get this wrong; the wizard templates include it. `sample/ios/iosApp/iosApp/Info.plist`
+carries it with a comment, and `INTEGRATION.md` section 5 tells consumers.
+
 **Overlay screens inset themselves; the host is not asked to.** `Modifier.inspectorScreen` applies
 `background` *before* `windowInsetsPadding(safeDrawing)`, so colour bleeds edge to edge while
 content stays clear of the status bar, cutout, nav bar and keyboard. Reversing that order leaves a
@@ -795,6 +811,9 @@ INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against 
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :sample:android:installDebug            # the same app on a device or emulator
 adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch it
+xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp \
+  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build
+xcrun simctl install booted <path>/iosApp.app && xcrun simctl launch booted dev.inspector.sample
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host

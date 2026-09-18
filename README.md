@@ -110,6 +110,18 @@ adb shell am start -n dev.inspector.sample/.MainActivity
 It wires itself exactly as [`docs/INTEGRATION.md`](docs/INTEGRATION.md) tells a consuming app to,
 debug-only cleartext config included, so it is the reference wiring as well as the demo.
 
+And on iOS, through a checked-in Xcode project — open `sample/ios/iosApp/iosApp.xcodeproj` and run,
+or from a terminal:
+
+```bash
+xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp \
+  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+The Swift is about twenty lines hosting one `UIViewController`. Everything you see — the app and
+the inspector on top of it — is the same Kotlin the Android sample runs, which is the whole claim
+a Compose Multiplatform overlay makes.
+
 ---
 
 ### 1. The library — capture and the in-app overlay
