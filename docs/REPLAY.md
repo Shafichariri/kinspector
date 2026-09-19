@@ -210,10 +210,18 @@ replay failure, and it has nothing to do with signing.
 
 ## 7. Build order
 
-1. **Daemon list + kill.** Independent of everything else, small, immediately useful.
-2. **Signing callback + replay.** Must ship together (§0).
-3. **Edit before replay.** Builds on 2; respects the re-sign ordering in §2.
-4. **Template generators.** Additive once replay exists.
+1. ~~**Daemon list + kill.**~~ Built. Independent of everything else, small, immediately useful.
+2. ~~**Signing callback + replay.**~~ Built. Must ship together (§0).
+3. ~~**Edit before replay.**~~ Built 2026-09-19. Builds on 2; respects the re-sign ordering in §2.
+   The daemon had accepted `method`, `url`, `headers` and `body` since step 2 — this was the form
+   around them. Two things the plan did not anticipate: a sent `headers` map replaces the captured
+   set *entirely* and skips the daemon's own hop-by-hop filtering, so the form seeds from the
+   filtered set; and the plain replay button turned out to have been throwing on ordinary rows
+   since the tabbed detail pane arrived, which is why nobody had exercised replay much.
+4. **Template generators.** Additive once replay exists. Not built — and §8's first two open
+   questions are its blockers, not step 3's: a generated curl cannot be labelled with how long it
+   stays valid without knowing the skew window, and "Run" cannot be called idempotent without
+   knowing whether a nonce is single-use.
 
 ### Work item not visible from the feature request
 

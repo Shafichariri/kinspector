@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v46 — 2026-09-19.**
+**Document version: v47 — 2026-09-19.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,30 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v46 — 2026-09-19 (this document)
+### v47 — 2026-09-19 (this document)
+
+**You can edit a request before replaying it, and replay itself was broken on most rows. Download
+a newer daemon.**
+
+The web UI's replay button now has an **edit & replay** beside it: change the method, URL, headers
+or body, then send. The app still signs what is *actually* sent — edits are applied before your
+`ReplaySigner` is asked, so a signature always covers the request that goes out.
+
+This is what the daemon's own refusals have been telling you to do. If you have seen any of these,
+supplying the body in the form is how that request gets replayed at all:
+
+- *"the captured request body was truncated at the capture cap … Edit the body to supply it"*
+- *"the request body was streamed and never buffered … Edit the body to supply it"*
+- *"its content type is outside the capture allowlist … Edit the body to supply it"*
+
+**And a bug worth knowing about if you tried replay and gave up.** The plain replay button threw
+before it built the request on any row *without* a redaction banner or an attempt chain — which is
+most rows — so it appeared to do nothing at all. It worked on the unusual rows, which is why it
+survived. Fixed; nothing you do differently.
+
+Nothing in the library changed, so your coordinates do not move.
+
+### v46 — 2026-09-19
 
 **Released as 0.9.0, and it changes both halves. Bump your coordinates and download the daemon.**
 
