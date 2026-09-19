@@ -61,7 +61,10 @@ fun InspectorOverlay(
     // this the overlay is a trap on Android: it covers the app, and back goes to the app's own
     // previous screen (or leaves the app) with the inspector still on top of it.
     InspectorBackHandler(enabled = screen != Screen.Hidden) {
-        screen = if (screen is Screen.Detail) Screen.List else Screen.Hidden
+        // Every screen that is not the list unwinds *to* the list. Written as "is not the list"
+        // rather than by naming the detail screens, so a screen added later cannot quietly become
+        // one where back closes the inspector from two levels down.
+        screen = if (screen is Screen.List) Screen.Hidden else Screen.List
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -83,11 +86,31 @@ fun InspectorOverlay(
                     markers = markers,
                     signals = signals,
                     onSelect = { screen = Screen.Detail(it.id) },
+                    onSelectSignal = { screen = Screen.SignalDetail(it.id) },
                     onClear = { Inspector.clear() },
                     onMark = { Inspector.mark("mark ${++markCounter}") },
                     onClose = { screen = Screen.Hidden },
                     modifier = Modifier.fillMaxSize(),
                 )
+
+                is Screen.SignalDetail -> {
+                    val signal = signals.firstOrNull { it.id == current.id }
+                    if (signal == null) {
+                        // The signal ring evicted it while it was open — the same thing the
+                        // transaction branch below handles, and for the same reason.
+                        screen = Screen.List
+                    } else {
+                        InspectorSignalDetail(
+                            signal = signal,
+                            signals = signals,
+                            onSelectSignal = { screen = Screen.SignalDetail(it.id) },
+                            onCopy = copy,
+                            onBack = { screen = Screen.List },
+                            onClose = { screen = Screen.Hidden },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
 
                 is Screen.Detail -> {
                     val txn = transactions.firstOrNull { it.id == current.id }
@@ -118,4 +141,5 @@ private sealed interface Screen {
     data object Hidden : Screen
     data object List : Screen
     data class Detail(val id: String) : Screen
+    data class SignalDetail(val id: String) : Screen
 }

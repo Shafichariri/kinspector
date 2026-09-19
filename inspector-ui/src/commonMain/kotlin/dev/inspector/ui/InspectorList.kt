@@ -57,6 +57,9 @@ import dev.inspector.model.duplicatesById
 import dev.inspector.model.endpointFilterTerm
 import dev.inspector.model.endpointShortcuts
 import dev.inspector.model.markerLabels
+import dev.inspector.model.TagShortcut
+import dev.inspector.model.signalTagShortcuts
+import dev.inspector.model.tagFilterTerm
 import dev.inspector.model.timeline
 import dev.inspector.model.timelineRuns
 // Extension: `matches` on the interface takes a Row; this is the transaction overload.
@@ -74,6 +77,7 @@ internal fun InspectorList(
     markers: List<Marker>,
     signals: List<Signal> = emptyList(),
     onSelect: (NetworkTransaction) -> Unit,
+    onSelectSignal: (Signal) -> Unit,
     onClear: () -> Unit,
     onMark: () -> Unit,
     onClose: () -> Unit,
@@ -107,6 +111,17 @@ internal fun InspectorList(
     val context = remember(marks) { FilterContext(marks) }
     val visible = remember(rows, filter, context) {
         rows.filter { filter.matches(it, context) }
+    }
+    // Signals go through the same filter, which they did not until now — the overlay filtered the
+    // traffic and let every observation through, so `path:/v2` thinned the calls and left the
+    // signals untouched. The web UI has always passed its filter to the signal route; this is the
+    // surface that disagreed.
+    //
+    // The exclusion rule then does the rest, and is the point rather than a side effect: `tag:` is
+    // a SignalTerm so it drops every transaction, and `path:` is a TransactionTerm so it drops
+    // every signal. That is what turns a tag chip into a browser for one tag.
+    val visibleSignals = remember(observations, filter, context) {
+        observations.filter { filter.matches(it, context) }
     }
 
     Column(modifier.inspectorScreen(colors.surface)) {
@@ -184,6 +199,11 @@ internal fun InspectorList(
                 markerLabels(marks).filter { FilterParser.parse(markerFilterTerm(it)).isSuccess }
             }
             val endpoints = remember(rows) { endpointShortcuts(rows, ENDPOINT_CHIP_LIMIT) }
+            // Built from the session's own tags, never from `SignalTags`: the tag set is open, so
+            // a fixed list would be the tags this build knows about rather than the ones the app
+            // emits. Off the *unfiltered* observations, like the endpoint chips and for the same
+            // reason — chips built from the filtered view collapse to the one you just tapped.
+            val tags = remember(observations) { signalTagShortcuts(observations, TAG_CHIP_LIMIT) }
 
             ControlStrip(
                 newestFirst = newestFirst,
@@ -198,6 +218,7 @@ internal fun InspectorList(
                 filterText = filterText,
                 onFilter = { filterText = it },
                 markerLabels = labels,
+                tags = tags,
                 endpoints = endpoints,
             )
         }
@@ -207,7 +228,7 @@ internal fun InspectorList(
         // Markers are not filtered with the rows. The filter grammar describes traffic, and a
         // divider still says where in the session you are looking — which is most of its job when
         // a filter has thinned the rows around it. The web UI does the same.
-        val shown = if (showSignals) observations else emptyList()
+        val shown = if (showSignals) visibleSignals else emptyList()
         val entries = remember(visible, marks, shown, newestFirst) {
             timeline(visible, marks, shown, newestFirst)
         }
@@ -269,8 +290,11 @@ internal fun InspectorList(
                                     onClick = { onSelect(entry.txn) },
                                 )
                                 is TimelineEntry.Mark -> MarkerDivider(entry.marker)
-                                is TimelineEntry.Observation ->
-                                    SignalRow(entry.signal, indented = collapsible)
+                                is TimelineEntry.Observation -> SignalRow(
+                                    signal = entry.signal,
+                                    indented = collapsible,
+                                    onClick = { onSelectSignal(entry.signal) },
+                                )
                             }
                             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
                         }
@@ -289,16 +313,18 @@ internal fun InspectorList(
  * line, a coloured stripe naming its tag, and the clock — which is the only column it shares with
  * the traffic and the only one that makes the two comparable.
  *
- * The payload is in device memory and is not drawn here. A row cannot show a JSON object usefully
- * at 360dp, and a truncated one would be worse than none; reading it is stage 2 of the overlay
- * signals work — see `docs/ROADMAP.md`.
+ * The payload is still not drawn *here*. A row cannot show a JSON object usefully at 360dp and a
+ * truncated one would be worse than none — so the row opens one instead. Tapping it is the way to
+ * the payload, its history and where it came from, the same way tapping a call is the way to a
+ * body.
  */
 @Composable
-private fun SignalRow(signal: Signal, indented: Boolean) {
+private fun SignalRow(signal: Signal, indented: Boolean, onClick: () -> Unit) {
     val colors = LocalInspectorColors.current
     val tagColor = colors.forTag(signal.tag)
     Row(
         Modifier.fillMaxWidth()
+            .clickable(onClick = onClick)
             // Drawn rather than laid out, like the failure stripe on a transaction row, so the
             // lane costs the row no width and cannot pull the clock out of line with the traffic.
             .drawBehind { drawRect(tagColor, size = Size(STRIPE_WIDTH.toPx(), size.height)) }
@@ -457,6 +483,7 @@ private fun ControlStrip(
     filterText: String,
     onFilter: (String) -> Unit,
     markerLabels: List<String>,
+    tags: List<TagShortcut>,
     endpoints: List<EndpointShortcut>,
 ) {
     Row(
@@ -489,10 +516,30 @@ private fun ControlStrip(
             )
         }
 
-        // Markers first among the filters, and ahead of the quick filters, because a marker only
-        // exists because somebody deliberately dropped one — so when there are any, they are what
-        // the reader came to the strip for. The quick filters and the endpoints are always there
-        // and lose nothing by being a swipe further along. A session with no markers pays nothing.
+        // Tags before the markers, and the reason is arithmetic rather than taste: there are at
+        // most four tags and there is no limit at all on markers. Putting the unbounded list first
+        // pushes the bounded one off the right-hand edge by however many markers somebody happened
+        // to drop, and this strip is 360dp wide. The reverse costs the markers a fixed four chips.
+        //
+        // Measured, not reasoned: with the tags after the markers, `list-dark.png` showed the
+        // strip ending mid-marker with no tag chip on screen at all — so the one route from
+        // "something changed" to "this is what it changed to" was the hardest chip to reach.
+        if (tags.isNotEmpty()) {
+            StripDivider()
+            for (tag in tags) {
+                FilterChip(
+                    label = "${tag.tag} ${tag.count}",
+                    term = tagFilterTerm(tag.tag),
+                    filterText = filterText,
+                    onFilter = onFilter,
+                )
+            }
+        }
+
+        // Markers ahead of the quick filters, because a marker only exists because somebody
+        // deliberately dropped one — so when there are any, they are what the reader came to the
+        // strip for. The quick filters and the endpoints are always there and lose nothing by
+        // being a swipe further along. A session with no markers pays nothing.
         if (markerLabels.isNotEmpty()) {
             StripDivider()
             for (label in markerLabels) {
@@ -616,6 +663,15 @@ internal val QUICK_FILTERS: List<Pair<String, String>> = listOf(
  * the knob in.
  */
 private const val ENDPOINT_CHIP_LIMIT = 6
+
+/**
+ * How many tag chips the strip offers.
+ *
+ * Fewer than the endpoints, because a session has few tags and many endpoints: the four
+ * conventional ones plus whatever the app invented is the realistic ceiling, and a session with
+ * more than four distinct tags is one where the strip is no longer the right way in.
+ */
+private const val TAG_CHIP_LIMIT = 4
 
 /**
  * How many adjacent identical observations before the run collapses to one row.
@@ -864,6 +920,6 @@ private const val SLOW_MS = 1_000L
 /** Fits `1234ms` at 11sp monospace, which is the widest [formatDuration] produces. */
 private val DURATION_COLUMN = 42.dp
 
-private val PILL_RADIUS = 999.dp
+internal val PILL_RADIUS = 999.dp
 private const val SCOPE_FILL_ALPHA = 0.13f
 private const val SCOPE_BORDER_ALPHA = 0.26f

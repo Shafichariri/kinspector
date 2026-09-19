@@ -529,6 +529,57 @@ its newest end, so an id taken from the head would re-key on every observation d
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
 
+**Signals go through the same filter as the traffic, and did not until stage 2.** The overlay
+filtered the rows and passed every observation to `timeline()` untouched, so `path:/v2` thinned the
+calls and left the signals sitting between them. The web UI has always sent its filter to the
+signal route; this was the surface that disagreed.
+
+The exclusion rule then does the interesting half, and it is the feature rather than a side effect:
+`tag:` is a `SignalTerm` so a tag chip **drops every transaction**, and `path:` is a
+`TransactionTerm` so it drops every signal. That is what makes a tag chip a browser for one tag
+rather than a highlight over an unchanged list. Anyone wanting both writes the `|` form by hand.
+
+**Tag chips are built from the session, never from `SignalTags`, and they come before the markers.**
+The tag set is open by design, so a chip list built from the constants would be a list of the tags
+*this build* knows about — which is not a fact about the app being debugged. The position is
+arithmetic rather than taste: there are at most four tags and no limit at all on markers, so the
+unbounded list going first pushes the bounded one off a 360dp strip by however many markers
+somebody dropped. That was not reasoned, it was seen — `list-dark.png` showed the strip ending
+mid-marker with no tag chip on screen.
+
+**A signal's payload is rendered from `Signal.data`, and the truncated case is not the element.**
+`Recorder.emit` cuts the *encoded* payload at `maxPayloadBytes` and keeps the prefix as a
+`JsonPrimitive` **string**, because a cut JSON document is not JSON and the archive holds one
+payload type rather than two. Pretty-encoding that element therefore renders a whole cache snapshot
+as a single quoted line with every `"` escaped — the least readable form of exactly the payload
+somebody opened the row to read. `formatSignalPayload` unwraps it first and runs `prettyJson`,
+which formats malformed input rather than giving up on it. A `JsonPrimitive` string that is *not*
+truncated is a `toString()` dump from the `signal(tag, name, text)` overload: it is not JSON and
+must not be re-quoted either.
+
+**A signal's history is keyed on `(tag, name)`, never on `name`.** `Signal.name` is documented as
+identity *within* `tag`, and the daemon's last-wins `current` query uses the same pair. Grouping on
+the name alone splices a cache entry into a view-model's history and shows a value changing into
+something it never was. A test decoy for this has to differ in the tag **and share the name** — one
+that differs in both is excluded by either rule and cannot tell the two apart, which is how the
+first version of that test passed with the grouping broken.
+
+`signalGroups` orders groups by recency, which is the opposite of `endpointShortcuts` and right for
+the opposite reason: chips are aimed at while traffic arrives, and a history list is read to find
+what changed. Within a group the observations are ascending by `mono` and do **not** take the
+list's sort toggle — a history is a sequence of changes, so it has one true order.
+
+**Provenance is drawn on every observation, not only the pulled ones.** `SignalTrigger`'s own
+documentation is the argument: a snapshot with no provenance reads as the current state of the app,
+and if it was pushed at app start and the session is now twenty minutes old that reading is
+confidently wrong. Drawing it only for `request` rows would leave the common case — pushed,
+possibly long ago — as the one with nothing said about it.
+
+**`app.js` does not share `signalGroups`, and that is not yet a mirror to keep in step.** The web's
+`browserGroups` does the same `(tag, name)` grouping *and* expands a cache snapshot's `items[]` into
+one row per entry, which is payload-shaped work the overlay does not do. They agree on the grouping
+and differ in what they group; converging them is in `ROADMAP.md` rather than claimed here.
+
 **Signal rows are deliberately not shaped like transaction rows.** A signal has no status, no
 duration and no byte count, and giving it those columns would leave four gaps that read as missing
 data. One line, a lane stripe, and the clock — the only column it shares with the traffic and the
@@ -1047,6 +1098,7 @@ else a scan turns up.
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
-| `inspector-ui/src/jvmTest/.../ListRenderTest.kt` | The mobile equivalent of `render-web-ui.js`: renders the real list at 360dp and writes a PNG to `inspector-ui/build/screenshots/`. Run it after touching the list, then *look at the output* — it is there to be read, not just to pass. |
+| `inspector-ui/.../InspectorSignalDetail.kt` | One observation: payload, provenance and the history of its key. Where stage 1's undrawn payloads went. |
+| `inspector-ui/src/jvmTest/.../ListRenderTest.kt` | The mobile equivalent of `render-web-ui.js`: renders the real list **and the signal screen** at 360dp and writes PNGs to `inspector-ui/build/screenshots/`. Run it after touching either, then *look at the output* — it is there to be read, not just to pass. Two layout defects and a misleading fixture clock in stage 2 were found only by looking. |
 | `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |
