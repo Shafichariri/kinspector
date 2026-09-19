@@ -89,6 +89,77 @@ class NowStripTest {
     }
 
     @Test
+    fun a_long_breakdown_gives_way_to_a_total() {
+        val summary = nowSummary(
+            currentObservations(
+                listOf(
+                    obs("cache", "a", 100, ts = "2026-09-19T09:59:00.000Z"),
+                    obs("screen", "b", 200, ts = "2026-09-19T09:59:00.000Z"),
+                    obs("session", "c", 300, ts = "2026-09-19T09:59:00.000Z"),
+                    obs("state", "d", 400, ts = "2026-09-19T09:59:00.000Z"),
+                )
+            ),
+            now,
+            unread = 1,
+        )
+        // Four tags spelled out ran past the right edge at 360dp and took the staleness and the
+        // unread count with them — the two numbers that decide whether to open the panel.
+        assertEquals("4 keys — oldest 1m ago · 1 never read", summary)
+    }
+
+    @Test
+    fun a_short_breakdown_is_kept() {
+        val summary = nowSummary(
+            currentObservations(
+                listOf(
+                    obs("cache", "a", 100, ts = "2026-09-19T09:59:00.000Z"),
+                    obs("cache", "b", 200, ts = "2026-09-19T09:59:00.000Z"),
+                    obs("state", "c", 300, ts = "2026-09-19T09:59:00.000Z"),
+                )
+            ),
+            now,
+        )
+        // Two tags, and the breakdown says more than a total does.
+        assertEquals("2 cache · 1 state — oldest 1m ago", summary)
+    }
+
+    @Test
+    fun unread_providers_are_counted_separately_and_last() {
+        val summary = nowSummary(
+            listOf(obs("cache", "a", 100, ts = "2026-09-19T09:58:00.000Z")),
+            now,
+            unread = 2,
+        )
+        // Never folded into the tag counts: those describe what the app *holds*, and a provider
+        // that has never answered is not held. Left out entirely, though, the collapsed line said
+        // one where the open panel drew three.
+        assertEquals("1 cache — oldest 2m ago · 2 never read", summary)
+    }
+
+    @Test
+    fun a_session_with_only_unread_providers_still_says_so() {
+        // Nothing observed at all, which is an app that registered providers and has pushed
+        // nothing. The panel is the only place that fact appears.
+        assertEquals("3 never read", nowSummary(emptyList(), now, unread = 3))
+    }
+
+    @Test
+    fun unread_providers_are_the_registered_ones_with_nothing_recorded() {
+        val observed = listOf(obs("cache", "profile", 100))
+        val registered = listOf(
+            dev.inspector.model.SignalKey("cache", "profile"),
+            dev.inspector.model.SignalKey("state", "Checkout"),
+        )
+        // Pushed *or* pulled even once and it drops out of this list, appearing among the current
+        // values instead — where it has an age, which is more useful than "could be re-read".
+        assertEquals(
+            listOf("state" to "Checkout"),
+            unreadProviders(observed, registered).map { it.tag to it.name },
+        )
+        assertTrue(unreadProviders(observed, emptyList()).isEmpty())
+    }
+
+    @Test
     fun an_empty_session_has_no_summary() {
         assertTrue(currentObservations(emptyList()).isEmpty())
         assertEquals("", nowSummary(emptyList(), now))

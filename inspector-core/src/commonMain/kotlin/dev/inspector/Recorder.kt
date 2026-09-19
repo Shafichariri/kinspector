@@ -13,6 +13,7 @@ import dev.inspector.model.Marker
 import dev.inspector.model.MarkerSource
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalKey
 import dev.inspector.model.SignalTrigger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -204,6 +205,18 @@ internal class Recorder(
         providers.keys.map { it.replace('\u0000', '/') }.sorted()
 
     /**
+     * The registered pairs, structured.
+     *
+     * Not [registeredProviders]: that joins with `/` for a human to read in an error, and a tag or
+     * name containing a slash comes back out of it ambiguous. A caller that means to *call* one
+     * needs the two strings exactly as they were registered.
+     */
+    internal fun providerKeys(): List<SignalKey> =
+        providers.keys
+            .map { val parts = it.split('\u0000'); SignalKey(parts[0], parts.getOrElse(1) { "" }) }
+            .sortedWith(compareBy({ it.tag }, { it.name }))
+
+    /**
      * Answers a host pull by reading the registered provider and recording the result.
      *
      * Returns null on success — the row goes out through the normal sink path, carrying
@@ -213,7 +226,13 @@ internal class Recorder(
     internal suspend fun answerProviderRequest(
         tag: String,
         name: String,
-        requestId: String,
+        /**
+         * The host request this answers, or null when nothing asked over a wire.
+         *
+         * Nullable because the overlay pulls in-process: there is no [dev.inspector.model.SignalRequest]
+         * to correlate to, and inventing an id would put a reference to nothing in the archive.
+         */
+        requestId: String?,
     ): String? {
         val provider = providers[key(tag, name)]
             ?: return "no provider for $tag/$name; registered: " +

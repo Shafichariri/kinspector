@@ -316,6 +316,60 @@ class RecorderSignalTest {
     }
 
     @Test
+    fun a_local_pull_records_a_requested_row_that_correlates_to_nothing() = runBlocking {
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.registerProvider(SignalTags.CACHE, "response") { JsonPrimitive("fresh") }
+
+            val error = runBlocking {
+                recorder.answerProviderRequest(SignalTags.CACHE, "response", requestId = null)
+            }
+            scheduler.advanceUntilIdle()
+
+            assertNull(error)
+            val row = recorder.signals.value.single()
+            // Still `request`: the distinction the trigger carries is pushed-by-the-app versus
+            // read-on-demand, and an overlay pull is a read on demand. Where the demand came from
+            // is what `requestId` says.
+            assertEquals(SignalTrigger.Request, row.trigger)
+            // Null rather than an invented id. Nothing asked over a wire, so there is no
+            // SignalRequest to point at, and a fabricated correlation in the archive is worse than
+            // an absent one — it looks answerable.
+            assertNull(row.requestId)
+        }
+    }
+
+    @Test
+    fun the_provider_keys_are_the_pairs_as_registered() {
+        withRecorder(policy()) { recorder, _ ->
+            recorder.registerProvider(SignalTags.STATE, "Checkout") { null }
+            recorder.registerProvider(SignalTags.CACHE, "response") { null }
+
+            assertEquals(
+                listOf("cache" to "response", "state" to "Checkout"),
+                recorder.providerKeys().map { it.tag to it.name },
+            )
+        }
+    }
+
+    @Test
+    fun a_name_containing_a_slash_survives_the_structured_listing() {
+        withRecorder(policy()) { recorder, _ ->
+            recorder.registerProvider(SignalTags.CACHE, "portfolio/holdings") { JsonPrimitive(1) }
+
+            // The joined listing is for a human to read in an error message and cannot be split
+            // back: `cache/portfolio/holdings` has three parts and two of them are the name.
+            assertEquals(listOf("cache/portfolio/holdings"), recorder.registeredProviders())
+
+            // The structured one can, which is why a caller that means to *call* a provider uses
+            // it — and a round trip through it must still reach the provider.
+            val key = recorder.providerKeys().single()
+            assertEquals("cache", key.tag)
+            assertEquals("portfolio/holdings", key.name)
+            assertNull(runBlocking { recorder.answerProviderRequest(key.tag, key.name, null) })
+        }
+    }
+
+    @Test
     fun unregistering_removes_the_provider_from_the_listing() {
         withRecorder(policy()) { recorder, _ ->
             recorder.registerProvider(SignalTags.CACHE, "response") { null }
