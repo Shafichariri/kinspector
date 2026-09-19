@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import dev.inspector.Inspector
+import dev.inspector.model.SignalKey
 
 /**
  * Wraps the app's root, drawing the inspector on top of it.
@@ -47,6 +48,16 @@ fun InspectorOverlay(
     // merged timeline was never a missing capability — see `docs/ROADMAP.md`.
     val signals by Inspector.signals.collectAsState()
     val latest by Inspector.latest.collectAsState()
+
+    /*
+     * A snapshot, deliberately, and re-read on every recomposition rather than collected.
+     *
+     * `Inspector.signalProviders()` is not a flow: providers are registered and removed as caches
+     * and repositories are built, so any answer is historical the moment it is read. Rather than
+     * invent a flow to make it look otherwise, the controls built from it treat a failed pull as
+     * ordinary — which it is, and which `pullSignal` reports as a message rather than throwing.
+     */
+    val providers = Inspector.signalProviders()
 
     var screen by remember { mutableStateOf<Screen>(Screen.Hidden) }
     var collapsed by remember { mutableStateOf(false) }
@@ -91,6 +102,8 @@ fun InspectorOverlay(
                     onMark = { Inspector.mark("mark ${++markCounter}") },
                     onClose = { screen = Screen.Hidden },
                     modifier = Modifier.fillMaxSize(),
+                    providers = providers,
+                    onPull = { key -> Inspector.pullSignal(key.tag, key.name) },
                 )
 
                 is Screen.SignalDetail -> {
@@ -100,6 +113,7 @@ fun InspectorOverlay(
                         // transaction branch below handles, and for the same reason.
                         screen = Screen.List
                     } else {
+                        val key = SignalKey(signal.tag, signal.name)
                         InspectorSignalDetail(
                             signal = signal,
                             signals = signals,
@@ -108,6 +122,25 @@ fun InspectorOverlay(
                             onBack = { screen = Screen.List },
                             onClose = { screen = Screen.Hidden },
                             modifier = Modifier.fillMaxSize(),
+                            // Only when this key actually has one, so the button appearing is the
+                            // same fact as the button working.
+                            onPull = if (key in providers) {
+                                {
+                                    val failure = Inspector.pullSignal(key.tag, key.name)
+                                    if (failure == null) {
+                                        // Move to the answer. Staying on the row that was stale
+                                        // enough to make somebody ask for a fresh reading would be
+                                        // showing the old value under a button that just worked;
+                                        // the history on the screen keeps the old one reachable.
+                                        Inspector.signals.value
+                                            .lastOrNull { it.tag == key.tag && it.name == key.name }
+                                            ?.let { screen = Screen.SignalDetail(it.id) }
+                                    }
+                                    failure
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
                 }

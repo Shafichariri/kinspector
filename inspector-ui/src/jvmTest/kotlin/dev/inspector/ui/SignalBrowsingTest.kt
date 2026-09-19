@@ -10,7 +10,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import dev.inspector.model.NetworkTransaction
+import androidx.compose.foundation.layout.Column
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalKey
 import dev.inspector.model.SignalTrigger
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -372,6 +374,119 @@ class SignalBrowsingTest {
         waitForIdle()
         // Thawing catches the clock up along with the rows.
         onNodeWithText("oldest 6m ago", substring = true).assertExists()
+    }
+
+    // --- pulling on demand ----------------------------------------------------
+
+    @Test
+    fun `the pull button appears only where a provider exists`() = runComposeUiTest {
+        val observed = signal("cache", "profile", 100)
+        setContent {
+            InspectorTheme(dark = true) {
+                Column {
+                    InspectorSignalDetail(
+                        signal = observed,
+                        signals = listOf(observed),
+                        onSelectSignal = {}, onCopy = {}, onBack = {}, onClose = {},
+                        onPull = null,
+                    )
+                }
+            }
+        }
+        // The overlay knows the registry rather than guessing at it, so a button that is not
+        // drawn is a provider that does not exist — not one it was unsure about.
+        assertEquals(0, onAllNodesWithText("pull").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `pulling reports the provider's own failure verbatim`() = runComposeUiTest {
+        val observed = signal("cache", "profile", 100)
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorSignalDetail(
+                    signal = observed,
+                    signals = listOf(observed),
+                    onSelectSignal = {}, onCopy = {}, onBack = {}, onClose = {},
+                    onPull = { "IllegalStateException: cache closed" },
+                )
+            }
+        }
+        onNode(hasText("pull") and hasClickAction()).performClick()
+        waitForIdle()
+        // A pull can fail because the provider threw, or because it was unregistered between the
+        // screen being drawn and the button being pressed. Either way the app said what went
+        // wrong, and paraphrasing it here would lose the only diagnosis there is.
+        onNodeWithText("IllegalStateException: cache closed").assertExists()
+    }
+
+    @Test
+    fun `a successful pull leaves no error behind`() = runComposeUiTest {
+        val observed = signal("cache", "profile", 100)
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorSignalDetail(
+                    signal = observed,
+                    signals = listOf(observed),
+                    onSelectSignal = {}, onCopy = {}, onBack = {}, onClose = {},
+                    onPull = { null },
+                )
+            }
+        }
+        onNode(hasText("pull") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("pull") and hasClickAction()).assertExists()
+        assertEquals(0, onAllNodesWithText("Exception", substring = true).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `a provider that has never answered is reachable in the now strip`() = runComposeUiTest {
+        val pulled = mutableStateOf<SignalKey?>(null)
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(signal("cache", "profile", 100)),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                    providers = listOf(SignalKey("cache", "profile"), SignalKey("state", "Checkout")),
+                    onPull = { key -> pulled.value = key; null },
+                )
+            }
+        }
+        onNode(hasText("now") and hasClickAction()).performClick()
+        waitForIdle()
+
+        // `cache/profile` has an observation, so it appears among the current values with an age.
+        // `state/Checkout` has none: with no row to open, the detail screen's pull button is
+        // unreachable for it, and without this it would exist nowhere in the UI at all.
+        onNodeWithText("never read").assertExists()
+        onNodeWithText("Checkout").assertExists()
+
+        onNode(hasText("pull") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(SignalKey("state", "Checkout"), pulled.value)
+    }
+
+    @Test
+    fun `a provider that has answered is not listed as never read`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(signal("state", "Checkout", 100)),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                    providers = listOf(SignalKey("state", "Checkout")),
+                    onPull = { null },
+                )
+            }
+        }
+        onNode(hasText("now") and hasClickAction()).performClick()
+        waitForIdle()
+        // Once it has been observed it belongs among the current values, where it has an age —
+        // which is the more useful thing to know about it than that it could be re-read.
+        assertEquals(0, onAllNodesWithText("never read").fetchSemanticsNodes().size)
+        onNodeWithText("pushed").assertExists()
     }
 
     @Test

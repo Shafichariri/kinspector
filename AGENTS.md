@@ -529,6 +529,36 @@ its newest end, so an id taken from the head would re-key on every observation d
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
 
+**The overlay can enumerate providers and the host cannot, which is the whole of stage 4.** A
+daemon learns a provider's name only when one answers, so `app.js` infers the set from what a
+session already holds and says in its own comment that it is guessing — conservatively, to avoid
+firing fifty doomed requests at an app. In-process there is nothing to infer:
+`Inspector.signalProviders()` **is** the registry. Two consequences the host can never have: a pull
+is offered exactly where it will work, and a provider that has **never answered** is still
+findable, where host-side it is invisible until the first time it does.
+
+That last case is why the now strip lists unread providers. With no observation there is no row to
+open, so the detail screen's pull button is unreachable for exactly the providers nobody has used
+yet — they would exist nowhere in the UI at all.
+
+**`pullSignal` is separate from `answerSignalRequest` because the `requestId` differs, and that is
+not cosmetic.** A host pull correlates to a `SignalRequest`; a local one correlates to nothing, so
+the recorded row carries a **null** `requestId` rather than an invented id pointing at a request
+that was never made. The trigger stays `request` in both: what it distinguishes is pushed-by-the-app
+versus read-on-demand, and an overlay pull is a read on demand.
+
+**`Recorder.providerKeys()` exists beside `registeredProviders()` and neither replaces the other.**
+The latter joins `tag` and `name` with `/` for a human to read in an error message and **cannot be
+split back** — `cache/portfolio/holdings` has three parts and two of them are the name. Anything
+that means to *call* a provider needs the pair exactly as registered, which is what the structured
+one returns.
+
+**`signalProviders()` is a snapshot and deliberately not a flow.** Providers come and go as caches
+and repositories are built, so any answer is historical by the time it is read. Rather than invent
+a flow to look otherwise, the controls built from it treat a failed pull as ordinary — which it is
+— and `pullSignal` reports that as a message rather than throwing. The message is the app's own and
+is shown verbatim: it is the only diagnosis there is.
+
 **The "now" strip is a lookup and the list is the feed, which is why they sort differently.**
 `signalGroups` orders by recency — right for a history, where the reader is looking for what
 changed. `currentObservations` sorts alphabetically by tag then name, because the strip is glanced
