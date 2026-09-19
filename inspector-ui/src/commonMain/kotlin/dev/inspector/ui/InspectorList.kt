@@ -58,6 +58,7 @@ import dev.inspector.model.duplicatesById
 import dev.inspector.model.endpointFilterTerm
 import dev.inspector.model.endpointShortcuts
 import dev.inspector.model.markerLabels
+import dev.inspector.model.SignalKey
 import dev.inspector.model.TagShortcut
 import dev.inspector.model.signalTagShortcuts
 import dev.inspector.model.tagFilterTerm
@@ -92,6 +93,10 @@ internal fun InspectorList(
      * paragraph of comment rather than a behaviour. Defaulted, so no call site changes.
      */
     nowMsProvider: () -> Long = ::nowEpochMs,
+    /** `(tag, name)` the app registered a provider for; see `Inspector.signalProviders`. */
+    providers: List<SignalKey> = emptyList(),
+    /** Reads one provider now, returning null on success or a message to show. */
+    onPull: (suspend (SignalKey) -> String?)? = null,
 ) {
     val colors = LocalInspectorColors.current
     var filterText by remember { mutableStateOf("") }
@@ -270,8 +275,10 @@ internal fun InspectorList(
                 expanded = nowExpanded,
                 onToggle = { nowExpanded = !nowExpanded },
                 onSelectSignal = onSelectSignal,
+                providers = providers,
+                onPull = onPull,
             )
-            if (observations.isNotEmpty()) {
+            if (observations.isNotEmpty() || providers.isNotEmpty()) {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
             }
         }

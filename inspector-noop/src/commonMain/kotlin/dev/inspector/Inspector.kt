@@ -3,6 +3,7 @@ package dev.inspector
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalKey
 import kotlinx.serialization.json.JsonElement
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,6 +67,20 @@ object Inspector {
      * build is what stops a host operator reading the empty answer as a broken app.
      */
     suspend fun answerSignalRequest(tag: String, name: String, requestId: String): String? =
+        "this build has no capture code; signals are not recorded"
+
+    /**
+     * Always empty. `registerProvider` above discards what it is given without storing it, so
+     * there is no registry to report — and reporting one would be worse than reporting none: a
+     * caller offering a pull control from this list would offer a control that cannot work.
+     */
+    fun signalProviders(): List<SignalKey> = emptyList()
+
+    /**
+     * Always an error, for the same reason [answerSignalRequest] is. A local pull has even less to
+     * work with than a host one: there is no provider, because none was ever kept.
+     */
+    suspend fun pullSignal(tag: String, name: String): String? =
         "this build has no capture code; signals are not recorded"
 
     fun requestBody(txn: NetworkTransaction): ByteArray? = null

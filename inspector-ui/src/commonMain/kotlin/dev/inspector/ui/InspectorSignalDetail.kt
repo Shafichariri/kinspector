@@ -15,7 +15,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import dev.inspector.model.Signal
 import dev.inspector.model.SignalTrigger
 import dev.inspector.model.signalHistory
+import kotlinx.coroutines.launch
 
 /**
  * One observation: what the app said, when, where it came from, and how it got there.
@@ -51,8 +56,19 @@ internal fun InspectorSignalDetail(
     onBack: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Reads this key's provider now, or null when the app registered none.
+     *
+     * Nullable rather than a boolean beside a lambda, so "there is nothing to pull" and "here is
+     * how to pull it" cannot disagree. Returns null on success or a message to show — the same
+     * contract as `Inspector.pullSignal`, passed through rather than re-interpreted.
+     */
+    onPull: (suspend () -> String?)? = null,
 ) {
     val colors = LocalInspectorColors.current
+    val scope = rememberCoroutineScope()
+    var pulling by remember(signal.tag, signal.name) { mutableStateOf(false) }
+    var pullError by remember(signal.tag, signal.name) { mutableStateOf<String?>(null) }
     val tagColor = colors.forTag(signal.tag)
     val history = remember(signals, signal.tag, signal.name) {
         signalHistory(signals, signal.tag, signal.name)
@@ -78,9 +94,49 @@ internal fun InspectorSignalDetail(
                 overflow = TextOverflow.StartEllipsis,
                 modifier = Modifier.weight(1f),
             )
+            /*
+             * Offered exactly where it will work.
+             *
+             * The web UI cannot do this: a daemon only learns a provider's name once one has
+             * answered, so `app.js` infers the set from what the session holds and says in its own
+             * comment that it is guessing. In-process there is nothing to guess — the registry is
+             * readable, so a button that appears is a button that works.
+             */
+            if (onPull != null) {
+                ToolbarButton(
+                    if (pulling) "…" else "pull",
+                    onClick = {
+                        if (!pulling) {
+                            pulling = true
+                            pullError = null
+                            scope.launch {
+                                pullError = onPull()
+                                pulling = false
+                            }
+                        }
+                    },
+                )
+            }
             ToolbarButton("✕", onClose, prominent = true)
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+
+        // The provider's own message, verbatim. A pull can fail because the provider threw, or
+        // because it was unregistered between this screen being drawn and the button being
+        // pressed — `Inspector.signalProviders()` is a snapshot of something that changes as
+        // caches and repositories come and go. Either way the app said what went wrong and this
+        // is not the place to paraphrase it.
+        pullError?.let { message ->
+            Text(
+                message,
+                color = colors.clientError,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.fillMaxWidth()
+                    .background(colors.surfaceElevated)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
             // No "Tag" field: the badge in the header is the tag, in colour, and a phone screen

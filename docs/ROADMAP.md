@@ -153,8 +153,26 @@ In dependency order, because each stage makes the next one cheap:
    Freezing holds the clock too, and `InspectorList` gained a defaulted `nowMsProvider` so that is
    *provable* rather than asserted in a comment: the ages come from the real clock and a test
    cannot move the real clock.
-4. **Pull a signal on demand.** Providers are in-process (`Recorder.kt`), so this needs an
-   internal API surfaced rather than any transport.
+4. ~~**Pull a signal on demand.**~~ **Done, 2026-09-19.** No transport, as expected — but the
+   internal API that needed surfacing was not the pull. `Inspector.answerSignalRequest` was already
+   public, for `:inspector-stream`. What was missing was the **registry**: `signalProviders()`,
+   which is the thing the host can never have.
+
+   A daemon learns a provider's name only when one answers, so `app.js` infers the set from what a
+   session holds and says in its own comment that it is guessing. In-process there is nothing to
+   infer. Two things follow that the web cannot do: a pull is offered exactly where it will work,
+   and a provider that has **never answered** is still findable — which is why the now strip lists
+   unread providers. Without that, the pull button is unreachable for precisely the providers
+   nobody has used yet.
+
+   `pullSignal` is separate from `answerSignalRequest` rather than an overload, because a local
+   pull correlates to no `SignalRequest`: the row carries a null `requestId` rather than an
+   invented id pointing at a request that was never made.
+
+   Found by looking at the screenshot again: the collapsed line counted four where the open panel
+   drew five, and once the unread count was added the whole line ran off a 360dp strip — taking
+   the staleness with it. The per-tag breakdown now gives way to a total past three tags, which is
+   the first thing worth surrendering when the line is over budget.
 
 ### An age from `mono`, if it is ever worth a public API
 
