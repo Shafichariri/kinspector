@@ -1310,6 +1310,133 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const axisProbe = await probeAxis();
   const waterfallProbe = await probeWaterfall();
   const glanceProbe = await probeGlance();
+  /**
+   * The replay editor, which is `REPLAY.md` step 3.
+   *
+   * Nothing here may reach the network. Pressing **send** would fire a real edited request at
+   * whatever host the captured session talked to, from a smoke test whose job is to read a page.
+   *
+   * The malformed-header check does press send, because "the form refuses this" is only
+   * observable by trying — so `fetch` is stubbed for the duration. That is not belt-and-braces:
+   * the first version relied on the guard being *present* to stop the request, so the one run
+   * where the guard was broken was the one run that sent something. Against an unreachable host
+   * that surfaced as the whole script dying on an uncaught DOMException; against a reachable one
+   * it would have sent a real request and reported a pass.
+   *
+   * The seeding is the part worth checking. `Replayer` uses a sent header map **verbatim** and
+   * skips its own filtering, so a form seeded from the raw capture would quietly put
+   * `Content-Length` and `Host` back on a request whose body the user is about to change.
+   */
+  async function probeReplayEditor() {
+    const result = { opened: false };
+    const rows = [...doc.querySelectorAll('#list .row')];
+    if (!rows.length) return { ...result, reason: 'no rows' };
+
+    await click(rows[0]);
+    await new Promise((r) => setTimeout(r, 400));
+
+    const button = [...doc.querySelectorAll('#detail .btn')]
+      .find((b) => b.textContent === 'edit & replay');
+    if (!button) return { ...result, reason: 'no edit button' };
+
+    button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+
+    const form = doc.querySelector('.replay-editor');
+    if (!form) return { ...result, reason: 'form did not open' };
+    const [methodInput, urlInput] = form.querySelectorAll('input.replay-input');
+    const [headerBox, bodyBox] = form.querySelectorAll('textarea');
+
+    const headerText = headerBox ? headerBox.value : '';
+    const headerNames = headerText.split('\n').filter(Boolean).map((l) => l.split(':')[0].toLowerCase());
+    const HOP = ['host', 'content-length', 'connection', 'accept-encoding', 'transfer-encoding'];
+
+    // A malformed line must be reported rather than skipped: a request silently missing a header
+    // the user believes they set fails in a way that looks like a server problem.
+    const problem = form.querySelector('.replay-error');
+    const realFetch = window.fetch;
+    let sent = 0;
+    window.fetch = (url, init) => {
+      if (String(url).includes('/api/replay')) { sent++; return Promise.resolve({ json: async () => ({ ok: false, error: 'stubbed' }) }); }
+      return realFetch(url, init);
+    };
+    headerBox.value = `${headerText}\nthis line has no colon`;
+    form.querySelector('.btn').dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+    window.fetch = realFetch;
+    const rejected = Boolean(problem && !problem.hidden && /no colon/.test(problem.textContent));
+
+    // Put it back, and shut the form so the snapshot and later probes are unaffected.
+    headerBox.value = headerText;
+    button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+
+    return {
+      opened: true,
+      seeded: Boolean(methodInput && methodInput.value) && Boolean(urlInput && urlInput.value.startsWith('http')),
+      headerLines: headerNames.length,
+      hopByHopStripped: headerNames.every((n) => !HOP.includes(n)),
+      hasBodyBox: Boolean(bodyBox),
+      resignDefaultsOn: Boolean(form.querySelector('input[type=checkbox]')?.checked),
+      malformedHeaderRejected: rejected,
+      // The other half of the same claim, and the one that says the probe itself is safe: a
+      // refused line must not have reached `/api/replay` at all.
+      nothingSent: sent === 0,
+      closesAgain: !doc.querySelector('.replay-editor'),
+    };
+  }
+
+  /**
+   * The plain replay button, pressed — with `fetch` stubbed so nothing reaches the network.
+   *
+   * This probe exists because its absence hid a real defect. `runReplay` anchored its result panel
+   * on `pane.querySelector('.section-title')`, and `querySelector` searches the whole subtree: on
+   * an ordinary row — no redaction banner, no attempt chain — the first match is a *grandchild*
+   * inside a `.dtab-panel`, so `insertBefore` threw NotFoundError and the replay never ran. It
+   * worked on exactly the rows with a direct-child section title, which are the interesting ones
+   * somebody reaches for when testing replay by hand.
+   *
+   * The assertion is only that pressing the button renders a result panel. That is enough: the
+   * failure was an exception before the request was even built.
+   */
+  async function probeReplayButton() {
+    const rows = [...doc.querySelectorAll('#list .row')];
+    if (!rows.length) return { pressed: false, reason: 'no rows' };
+    await click(rows[0]);
+    await new Promise((r) => setTimeout(r, 400));
+
+    const pane = doc.getElementById('detail');
+    const button = [...pane.querySelectorAll('.btn')].find((b) => b.textContent === 'replay');
+    if (!button) return { pressed: false, reason: 'no replay button' };
+
+    const realFetch = window.fetch;
+    let reached = 0;
+    window.fetch = (url, init) => {
+      if (String(url).includes('/api/replay')) {
+        reached++;
+        return Promise.resolve({ json: async () => ({ ok: true, status: 200, ms: 1, resignedHeaders: [] }) });
+      }
+      return realFetch(url, init);
+    };
+    button.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+    window.fetch = realFetch;
+
+    const panel = pane.querySelector('.replay-result');
+    return {
+      pressed: true,
+      // Direct children, because that is the thing that was wrong: the anchor has to be one.
+      sectionTitlesDirect: [...pane.children].filter((c) => c.classList.contains('section-title')).length,
+      sectionTitlesAnywhere: pane.querySelectorAll('.section-title').length,
+      panelRendered: Boolean(panel),
+      requestBuilt: reached === 1,
+      statusShown: Boolean(panel && panel.querySelector('.status')),
+    };
+  }
+
+  const replayButtonProbe = await probeReplayButton();
+  const replayEditorProbe = await probeReplayEditor();
+
   const detailTabProbe = await probeDetailTabs();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
@@ -1508,6 +1635,22 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('form present       :', markerFormProbe.present);
   console.error('blank label refused:', markerFormProbe.blankRejected ?? 'n/a');
   console.error('matches recording  :', markerFormProbe.matchesRecording ?? 'n/a', `- disabled: ${markerFormProbe.disabled}, recording: ${recordingNow.length}`);
+  console.error('--- replay ---');
+  console.error('button pressed    :', replayButtonProbe.pressed, replayButtonProbe.pressed ? '' : `- ${replayButtonProbe.reason}`);
+  console.error('section titles    :', `${replayButtonProbe.sectionTitlesDirect ?? '?'} direct, ${replayButtonProbe.sectionTitlesAnywhere ?? '?'} anywhere (the anchor must be a direct child)`);
+  console.error('result panel drawn:', replayButtonProbe.panelRendered ?? 'n/a', '(it threw before building the request until 2026-09-19)');
+  console.error('request built     :', replayButtonProbe.requestBuilt ?? 'n/a');
+  console.error('status shown      :', replayButtonProbe.statusShown ?? 'n/a');
+  console.error('--- replay editor (REPLAY.md step 3) ---');
+  console.error('form opens        :', replayEditorProbe.opened, replayEditorProbe.opened ? '' : `- ${replayEditorProbe.reason}`);
+  console.error('seeded from capture:', replayEditorProbe.seeded ?? 'n/a');
+  console.error('header lines      :', replayEditorProbe.headerLines ?? 'n/a');
+  console.error('hop-by-hop stripped:', replayEditorProbe.hopByHopStripped ?? 'n/a', '(a sent map skips the daemon\'s own filtering)');
+  console.error('body box present  :', replayEditorProbe.hasBodyBox ?? 'n/a');
+  console.error('re-sign defaults on:', replayEditorProbe.resignDefaultsOn ?? 'n/a');
+  console.error('bad header refused:', replayEditorProbe.malformedHeaderRejected ?? 'n/a', '(never skipped silently)');
+  console.error('and nothing sent  :', replayEditorProbe.nothingSent ?? 'n/a', '(a refused line must not reach the wire)');
+  console.error('closes again      :', replayEditorProbe.closesAgain ?? 'n/a');
   console.error('--- per-field copy ---');
   console.error('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows`);
   console.error('every header has 1 :', copyProbe.everyHeaderHasOne);
@@ -1539,6 +1682,42 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('ages tick          :', ageProbe.ticks);
   console.error('hidden panes hide  :', hiddenPaneAudit);
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
+
+  /*
+   * Re-open the replay editor for the snapshot only.
+   *
+   * `probeReplayEditor` shuts it so the probes after it see an unperturbed pane, and one of those
+   * probes re-renders the detail pane anyway — so the form was in no snapshot at all, and the
+   * snapshot is the only thing anyone *looks* at. Done here, after every assertion, so it cannot
+   * affect one.
+   */
+  const snapshotEditor = [...doc.querySelectorAll('#detail .btn')]
+    .find((b) => b.textContent === 'edit & replay');
+  if (snapshotEditor && !doc.querySelector('.replay-editor')) {
+    snapshotEditor.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await settle();
+  }
+
+  /*
+   * Write every field's value into the markup before serialising.
+   *
+   * `input.value` and `textarea.value` are DOM *properties*; the `value` attribute and a
+   * textarea's text content are what `outerHTML` writes. Anything a page fills in from JavaScript
+   * — which here is the filter box, the settings fields and every box in the replay editor — was
+   * therefore blank in every snapshot this script has ever produced, and a snapshot of a form is
+   * mostly its contents.
+   */
+  for (const input of doc.querySelectorAll('input')) {
+    if (input.type === 'checkbox' || input.type === 'radio') {
+      if (input.checked) input.setAttribute('checked', '');
+      else input.removeAttribute('checked');
+    } else if (input.value) {
+      input.setAttribute('value', input.value);
+    }
+  }
+  for (const area of doc.querySelectorAll('textarea')) {
+    if (area.value) area.textContent = area.value;
+  }
 
   // Freeze as a static, self-contained page.
   doc.querySelectorAll('script').forEach((s) => s.remove());
