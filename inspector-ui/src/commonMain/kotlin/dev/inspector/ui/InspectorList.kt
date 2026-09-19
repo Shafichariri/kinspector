@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +62,7 @@ import dev.inspector.model.TagShortcut
 import dev.inspector.model.signalTagShortcuts
 import dev.inspector.model.tagFilterTerm
 import dev.inspector.model.timeline
+import kotlinx.coroutines.delay
 import dev.inspector.model.timelineRuns
 // Extension: `matches` on the interface takes a Row; this is the transaction overload.
 import dev.inspector.model.matches
@@ -82,6 +84,14 @@ internal fun InspectorList(
     onMark: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Wall-clock now, injectable so the freeze rule below can be proved.
+     *
+     * It would otherwise be unprovable: the ages come from the real clock, a test cannot move the
+     * real clock, and a rule about what happens to ages over time that nothing can exercise is a
+     * paragraph of comment rather than a behaviour. Defaulted, so no call site changes.
+     */
+    nowMsProvider: () -> Long = ::nowEpochMs,
 ) {
     val colors = LocalInspectorColors.current
     var filterText by remember { mutableStateOf("") }
@@ -93,6 +103,10 @@ internal fun InspectorList(
     var showSignals by remember { mutableStateOf(true) }
     var expandedRuns by remember { mutableStateOf(emptySet<String>()) }
 
+    // Collapsed by default. The strip is worth a line as a summary and worth several only when
+    // somebody asks, and on a phone the several are taken from the traffic below it.
+    var nowExpanded by remember { mutableStateOf(false) }
+
     // Non-null while the list is held still. Holding the snapshot rather than a boolean is what
     // makes freezing mean anything: capture keeps running and the ring keeps evicting, so a flag
     // that merely stopped redrawing would still lose rows out from under the reader.
@@ -103,6 +117,27 @@ internal fun InspectorList(
     val rows = frozen?.transactions ?: transactions
     val marks = frozen?.markers ?: markers
     val observations = frozen?.signals ?: signals
+
+    /*
+     * Wall-clock now, re-read once a second so ages tick, and held still while the list is frozen.
+     *
+     * Frozen has to include this. A held list whose ages kept climbing would be describing a
+     * snapshot with a clock that had moved on from it — and "oldest 4m ago" under rows that stopped
+     * updating four minutes ago is a sentence about two different moments. Everything downstream of
+     * the freeze reads the snapshot; the clock is downstream.
+     *
+     * The ticker only runs while the inspector is open, which is the whole of this composable's
+     * life: the app is already behind a full-screen overlay by then, so a 1s recomposition is not a
+     * cost the efficiency contract is about.
+     */
+    var nowMs by remember { mutableStateOf(nowMsProvider()) }
+    LaunchedEffect(frozen != null) {
+        if (frozen != null) return@LaunchedEffect
+        while (true) {
+            nowMs = nowMsProvider()
+            delay(1_000)
+        }
+    }
 
     val parsed = remember(filterText) { FilterParser.parse(filterText) }
     val filter = parsed.getOrNull() ?: Filter.MatchAll
@@ -224,6 +259,22 @@ internal fun InspectorList(
         }
 
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+
+        // Above the list, and fed the *unfiltered* observations: "what the app holds" is a fact
+        // about the session, not about what you happened to type. Same rule as the endpoint chips
+        // and the duplicate highlighting.
+        if (showSignals) {
+            NowStrip(
+                signals = observations,
+                nowMs = nowMs,
+                expanded = nowExpanded,
+                onToggle = { nowExpanded = !nowExpanded },
+                onSelectSignal = onSelectSignal,
+            )
+            if (observations.isNotEmpty()) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+            }
+        }
 
         // Markers are not filtered with the rows. The filter grammar describes traffic, and a
         // divider still says where in the session you are looking — which is most of its job when

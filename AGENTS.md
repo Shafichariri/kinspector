@@ -529,6 +529,36 @@ its newest end, so an id taken from the head would re-key on every observation d
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
 
+**The "now" strip is a lookup and the list is the feed, which is why they sort differently.**
+`signalGroups` orders by recency — right for a history, where the reader is looking for what
+changed. `currentObservations` sorts alphabetically by tag then name, because the strip is glanced
+at repeatedly and a row that moves whenever the app mentions something else is one you have to find
+again each time. Two orderings of the same data, each wrong for the other's job.
+
+**The collapsed line says how stale the oldest of it is, and that is the half that earns the line.**
+A count says the panel has something in it; the age says whether opening it is worth doing, and it
+is what makes the word "now" a claim rather than a label. Most observations are *pushed* — the app
+said something once and has not been asked since — so a panel headed "now" listing a value pushed
+at app start with nothing saying when is the confidently-wrong reading `SignalTrigger` exists to
+prevent. An unreadable timestamp is skipped rather than counted as zero: reporting it as the
+freshest thing on screen is that job done backwards.
+
+**Freezing holds the clock as well as the rows.** The ticker stops while the list is frozen, so a
+held snapshot is not described by a clock that has moved on from it — "oldest 6m ago" over rows
+that stopped updating five minutes ago is a sentence about two different moments. `InspectorList`
+takes a defaulted `nowMsProvider` **so this is provable**: the ages come from the real clock, a
+test cannot move the real clock, and a rule about what happens to ages over time that nothing can
+exercise is a paragraph of comment rather than a behaviour.
+
+**An age is wall clock, and `mono` would be better if it were reachable.** The overlay runs in the
+process that recorded the row, so `mono` — which cannot jump — is the right clock for an age. It is
+unusable: `mono` is measured from an origin private to `:inspector-core`, and a
+`TimeSource.Monotonic.markNow()` taken in `:inspector-ui` is a different origin and yields ages
+wrong by however long the process had been running. Exposing the origin is a public API change to
+carry an age column, which is not a trade worth making. So both surfaces use wall clock — the web
+because it is a different machine, the overlay because the better clock is out of reach — and both
+are wrong in the same single case, a clock change mid-session.
+
 **Signals go through the same filter as the traffic, and did not until stage 2.** The overlay
 filtered the rows and passed every observation to `timeline()` untouched, so `path:/v2` thinned the
 calls and left the signals sitting between them. The web UI has always sent its filter to the
@@ -1099,6 +1129,7 @@ else a scan turns up.
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
 | `inspector-ui/.../InspectorSignalDetail.kt` | One observation: payload, provenance and the history of its key. Where stage 1's undrawn payloads went. |
+| `inspector-ui/.../NowStrip.kt` | What the app holds now — latest per `(tag, name)`, with age and provenance. Sorted stably, unlike `signalGroups`; read its doc before changing either. |
 | `inspector-ui/src/jvmTest/.../ListRenderTest.kt` | The mobile equivalent of `render-web-ui.js`: renders the real list **and the signal screen** at 360dp and writes PNGs to `inspector-ui/build/screenshots/`. Run it after touching either, then *look at the output* — it is there to be read, not just to pass. Two layout defects and a misleading fixture clock in stage 2 were found only by looking. |
 | `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |

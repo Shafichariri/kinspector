@@ -210,6 +210,170 @@ class SignalBrowsingTest {
         assertEquals(0, onAllNodesWithText("three items").fetchSemanticsNodes().size)
     }
 
+    // --- the now strip ------------------------------------------------------
+
+    @Test
+    fun `the now strip is collapsed, summarises, and opens`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(
+                        signal("cache", "profile", 100),
+                        signal("cache", "holdings", 150),
+                        signal("state", "CartViewModel", 200),
+                    ),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // Collapsed it is one line, and that line says how much and how stale — a count alone
+        // dodges the second half, which is the reason to open it.
+        onNodeWithText("now").assertExists()
+        onNodeWithText("2 cache · 1 state", substring = true).assertExists()
+
+        // Counted by the provenance word, which only a strip row draws. Counting the *names*
+        // was the first attempt and asserted nothing: the list underneath shows every
+        // observation, so "holdings" is on screen whether the strip is open or shut.
+        assertEquals(0, onAllNodesWithText("pushed").fetchSemanticsNodes().size)
+
+        onNode(hasText("now") and hasClickAction()).performClick()
+        waitForIdle()
+        // One row per key, and not one per observation.
+        assertEquals(3, onAllNodesWithText("pushed").fetchSemanticsNodes().size)
+        // Not `onNodeWithText`: the name is now on screen twice, once in the strip and once in
+        // the list, and "exactly one node" would fail for the very reason the strip exists.
+        assertTrue(onAllNodesWithText("CartViewModel").fetchSemanticsNodes().size >= 2)
+    }
+
+    @Test
+    fun `the strip shows the latest of each key, not every observation`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(
+                        signal("state", "Cart", 100),
+                        signal("state", "Cart", 500),
+                        signal("state", "Cart", 900),
+                    ),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // Three observations of one key, and the summary counts the key once. A panel headed
+        // "now" listing the same name three times is a feed, which is what the list below is.
+        onNodeWithText("1 state", substring = true).assertExists()
+        onNode(hasText("now") and hasClickAction()).performClick()
+        waitForIdle()
+        // Exactly one strip row. Counting the name across the whole screen was the first attempt
+        // and it coupled this test to run collapsing — three adjacent identical observations
+        // collapse to one header, so the "obvious" total was wrong for a reason that has nothing
+        // to do with what is being asserted here.
+        assertEquals(1, onAllNodesWithText("pushed").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `tapping a now row opens that observation`() = runComposeUiTest {
+        val opened = mutableStateOf<Signal?>(null)
+        val latest = signal("cache", "profile", 900)
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(signal("cache", "profile", 100), latest),
+                    onSelect = {}, onSelectSignal = { opened.value = it },
+                    onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNode(hasText("now") and hasClickAction()).performClick()
+        waitForIdle()
+        onNode(hasText("pushed") and hasClickAction()).performClick()
+        waitForIdle()
+        // The *latest* observation of that key, which is the one the panel is showing — opening
+        // the first one would be showing a row and then explaining a different one.
+        assertEquals(latest.id, opened.value?.id)
+    }
+
+    @Test
+    fun `the strip disappears with the signals toggle`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(signal("cache", "profile", 100)),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNodeWithText("now").assertExists()
+        chip("signals 1").performClick()
+        waitForIdle()
+        // "Signals off" that left a signal panel on screen would be the toggle not meaning what
+        // it says.
+        assertEquals(0, onAllNodesWithText("now").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `a session with no signals gets no strip at all`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // A panel for something a session does not contain is a line of chrome that can only
+        // disappoint, and this screen has no room for one.
+        assertEquals(0, onAllNodesWithText("now").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `freezing holds the ages still, not only the rows`() = runComposeUiTest {
+        // 2026-09-19T10:00:00Z, and a clock this test owns.
+        val clock = mutableStateOf(1_789_812_000_000L)
+        val observed = signal("cache", "profile", 100).copy(ts = "2026-09-19T09:59:00.000Z")
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(call),
+                    markers = emptyList(),
+                    signals = listOf(observed),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                    nowMsProvider = { clock.value },
+                )
+            }
+        }
+        onNodeWithText("oldest 1m ago", substring = true).assertExists()
+
+        chip("live").performClick()
+        waitForIdle()
+
+        // Five minutes pass with the list held.
+        clock.value += 5 * 60_000
+        mainClock.advanceTimeBy(5_000)
+        waitForIdle()
+
+        // Still 1m. A held list whose ages kept climbing would be describing a snapshot with a
+        // clock that had moved on from it — "oldest 6m ago" over rows that stopped updating five
+        // minutes ago is a sentence about two different moments.
+        onNodeWithText("oldest 1m ago", substring = true).assertExists()
+
+        chip("frozen").performClick()
+        waitForIdle()
+        mainClock.advanceTimeBy(2_000)
+        waitForIdle()
+        // Thawing catches the clock up along with the rows.
+        onNodeWithText("oldest 6m ago", substring = true).assertExists()
+    }
+
     @Test
     fun `a key observed once has no history section`() = runComposeUiTest {
         val only = signal("screen", "Home", 150)
