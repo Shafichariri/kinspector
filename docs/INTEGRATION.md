@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v45 — 2026-09-19.**
+**Document version: v46 — 2026-09-19.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.8.1")
-implementation("dev.inspector:inspector-ui:0.8.1")
+implementation("dev.inspector:inspector-core:0.9.0")
+implementation("dev.inspector:inspector-ui:0.9.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.8.1")
-            implementation("dev.inspector:inspector-ui:0.8.1")
+            implementation("dev.inspector:inspector-core:0.9.0")
+            implementation("dev.inspector:inspector-ui:0.9.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.8.1")
-                implementation("dev.inspector:inspector-noop-ui:0.8.1")
+                implementation("dev.inspector:inspector-noop:0.9.0")
+                implementation("dev.inspector:inspector-noop-ui:0.9.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.8.1")
-                implementation("dev.inspector:inspector-ui:0.8.1")
+                implementation("dev.inspector:inspector-core:0.9.0")
+                implementation("dev.inspector:inspector-ui:0.9.0")
             }
         }
     }
@@ -397,13 +397,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.8.1")
-    implementation("dev.inspector:inspector-noop-ui:0.8.1")
-    implementation("dev.inspector:inspector-noop-stream:0.8.1")
+    implementation("dev.inspector:inspector-noop:0.9.0")
+    implementation("dev.inspector:inspector-noop-ui:0.9.0")
+    implementation("dev.inspector:inspector-noop-stream:0.9.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.8.1")
-    implementation("dev.inspector:inspector-ui:0.8.1")
-    implementation("dev.inspector:inspector-stream:0.8.1")
+    implementation("dev.inspector:inspector-core:0.9.0")
+    implementation("dev.inspector:inspector-ui:0.9.0")
+    implementation("dev.inspector:inspector-stream:0.9.0")
 }
 ```
 
@@ -1216,7 +1216,31 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v45 — 2026-09-19 (this document)
+### v46 — 2026-09-19 (this document)
+
+**Released as 0.9.0, and it changes both halves. Bump your coordinates and download the daemon.**
+
+Every snippet above now reads `0.9.0`. A minor bump rather than a patch because the public API grew
+two functions — `Inspector.signalProviders()` and `Inspector.pullSignal(tag, name)` — which v45
+below describes. **Nothing was removed or changed**, so your existing code compiles untouched; the
+work in this release is almost entirely in the two UIs.
+
+What you get, with the detail in the entries below:
+
+| Half | What changed |
+|---|---|
+| **Overlay** | Signals became readable: tag chips, payloads, per-key history, a **now** panel showing what your app holds with how stale it is, and a **pull** on any key with a registered provider (v45, v44, v43) |
+| **Overlay** | The filter now applies to signals, which it did not before (v43) |
+| **Web UI** | A scope bar, adding a marker from the page, and per-field copy (v40) |
+| **Daemon** | HAR export at `GET /api/sessions/{id}/har` (v39) |
+| **Release builds** | `StreamSink.lastError` exists in `:inspector-noop-stream`, so a call site reading it compiles under `-Pinspector=off` (v38) |
+
+**The one thing to actually do:** if you dropped a connection-status line from a debug screen
+because `lastError` would not compile in your release build, you can put it back. Everything else
+is available by moving the coordinate and downloading a newer daemon, in whichever order suits you
+— the two halves do not depend on each other's version.
+
+### v45 — 2026-09-19
 
 **You can pull a signal from the overlay now. Nothing to do, and one thing worth knowing if you
 register providers.**
