@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v47 — 2026-09-19.**
+**Document version: v48 — 2026-09-19.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.9.0")
-implementation("dev.inspector:inspector-ui:0.9.0")
+implementation("dev.inspector:inspector-core:0.9.1")
+implementation("dev.inspector:inspector-ui:0.9.1")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.9.0")
-            implementation("dev.inspector:inspector-ui:0.9.0")
+            implementation("dev.inspector:inspector-core:0.9.1")
+            implementation("dev.inspector:inspector-ui:0.9.1")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.9.0")
-                implementation("dev.inspector:inspector-noop-ui:0.9.0")
+                implementation("dev.inspector:inspector-noop:0.9.1")
+                implementation("dev.inspector:inspector-noop-ui:0.9.1")
             } else {
-                implementation("dev.inspector:inspector-core:0.9.0")
-                implementation("dev.inspector:inspector-ui:0.9.0")
+                implementation("dev.inspector:inspector-core:0.9.1")
+                implementation("dev.inspector:inspector-ui:0.9.1")
             }
         }
     }
@@ -397,13 +397,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.9.0")
-    implementation("dev.inspector:inspector-noop-ui:0.9.0")
-    implementation("dev.inspector:inspector-noop-stream:0.9.0")
+    implementation("dev.inspector:inspector-noop:0.9.1")
+    implementation("dev.inspector:inspector-noop-ui:0.9.1")
+    implementation("dev.inspector:inspector-noop-stream:0.9.1")
 } else {
-    implementation("dev.inspector:inspector-core:0.9.0")
-    implementation("dev.inspector:inspector-ui:0.9.0")
-    implementation("dev.inspector:inspector-stream:0.9.0")
+    implementation("dev.inspector:inspector-core:0.9.1")
+    implementation("dev.inspector:inspector-ui:0.9.1")
+    implementation("dev.inspector:inspector-stream:0.9.1")
 }
 ```
 
@@ -1216,7 +1216,24 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v47 — 2026-09-19 (this document)
+### v48 — 2026-09-19 (this document)
+
+**Released as 0.9.1. Daemon-only — download it and leave your coordinates alone.**
+
+Not one line of Kotlin changed in this release: the diff is the web UI, the smoke-test script and
+these docs. The snippets above read `0.9.1` because a single tag publishes both halves at the same
+version, but the library artifacts are the 0.9.0 ones rebuilt. **If you are on 0.9.0 you do not
+need to move.**
+
+What you get by downloading the daemon, with the detail in v47 below:
+
+- **Replay works on ordinary rows again.** It threw before building the request on any row without
+  a redaction banner or an attempt chain, so for most rows the button appeared to do nothing. If
+  you tried replay and gave up, this is why.
+- **edit & replay** — change the method, URL, headers or body before sending. This is what the
+  daemon's "Edit the body to supply it" refusals have been pointing at.
+
+### v47 — 2026-09-19
 
 **You can edit a request before replaying it, and replay itself was broken on most rows. Download
 a newer daemon.**
