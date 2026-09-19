@@ -4,6 +4,7 @@ import dev.inspector.internal.installInspector
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalKey
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import io.ktor.client.HttpClientConfig
@@ -145,6 +146,38 @@ object Inspector {
      */
     suspend fun answerSignalRequest(tag: String, name: String, requestId: String): String? =
         recorder.answerProviderRequest(tag, name, requestId)
+
+    /**
+     * The `(tag, name)` pairs an app has registered a provider for.
+     *
+     * Exists because the **overlay can ask and the host cannot**. A daemon learns a provider's name
+     * only once one has answered, so the web UI infers the set from what a session already holds —
+     * conservatively, and it says so in `app.js`. In-process there is nothing to infer: this is the
+     * registry.
+     *
+     * Two things follow that the host can never do. A pull is offered exactly where one will work,
+     * rather than where one probably will; and a provider that has **never answered** is still
+     * findable, where host-side it is invisible until the first time it does.
+     *
+     * A snapshot, not a flow. Providers come and go as caches and repositories are built, so any
+     * answer is already historical by the time it is read — a caller offering a control from it
+     * must cope with the pull failing, which [pullSignal] reports rather than throws.
+     */
+    fun signalProviders(): List<SignalKey> = recorder.providerKeys()
+
+    /**
+     * Reads the provider for `(tag, name)` **now** and records the answer with `trigger = request`.
+     *
+     * For an in-process caller — the overlay — as opposed to [answerSignalRequest], which answers a
+     * host that asked over a socket. The difference is not cosmetic: a local pull correlates to no
+     * [dev.inspector.model.SignalRequest], so the recorded row carries a null `requestId` rather
+     * than an invented one pointing at nothing.
+     *
+     * Returns null when the answer was recorded, or a message naming what *is* registered. As with
+     * a host pull, a failure is a reply and never a row: nothing reaches the ring buffer.
+     */
+    suspend fun pullSignal(tag: String, name: String): String? =
+        recorder.answerProviderRequest(tag, name, requestId = null)
 
     /**
      * Captured request body for [txn], or null when it was not captured — either the content type

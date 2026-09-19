@@ -4,6 +4,7 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import dev.inspector.model.Marker
 import dev.inspector.model.Signal
+import dev.inspector.model.SignalKey
 import dev.inspector.model.SignalTrigger
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -204,7 +205,7 @@ class ListRenderTest {
                 tag = "session", name = "signed in", trigger = SignalTrigger.App,
             ),
         )
-        val scene = ImageComposeScene(width = 360, height = 220, density = Density(1f)) {
+        val scene = ImageComposeScene(width = 360, height = 250, density = Density(1f)) {
             InspectorTheme(dark = dark) {
                 NowStrip(
                     signals = observations,
@@ -216,6 +217,14 @@ class ListRenderTest {
                     expanded = true,
                     onToggle = {},
                     onSelectSignal = {},
+                    // One registered and observed, one registered and never answered. The second
+                    // is the row worth photographing: it exists nowhere else in the UI, and the
+                    // host cannot show it at all.
+                    providers = listOf(
+                        SignalKey("cache", "portfolio:1299651"),
+                        SignalKey("state", "CheckoutRepository"),
+                    ),
+                    onPull = { null },
                 )
             }
         }

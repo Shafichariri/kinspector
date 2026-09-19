@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v44 — 2026-09-19.**
+**Document version: v45 — 2026-09-19.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,32 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v44 — 2026-09-19 (this document)
+### v45 — 2026-09-19 (this document)
+
+**You can pull a signal from the overlay now. Nothing to do, and one thing worth knowing if you
+register providers.**
+
+If your app calls `Inspector.registerProvider(tag, name) { … }`, the overlay now offers a **pull**
+on any observation whose key has one — and lists providers that have **never answered** in the now
+panel, so you can read one without your app having pushed it first. The web UI cannot do either:
+the daemon only learns a provider's name once one has answered, so it guesses at the set.
+
+A pull from the overlay calls your provider in-process. It records a row with `trigger = request`
+and a **null** `requestId` — nothing asked over a socket, so there is no request to correlate to. If
+your own tooling reads `requestId`, treat null as "asked locally" rather than as missing data.
+
+Two small additions to the public API, both mirrored in `:inspector-noop` so a release build still
+compiles:
+
+```kotlin
+Inspector.signalProviders()            // the (tag, name) pairs you registered
+Inspector.pullSignal(tag, name)        // reads one now; null on success, else a message
+```
+
+If your provider throws, the message is shown verbatim in the overlay and **no row is recorded** —
+a failed pull leaves the archive untouched, as it always has for a host pull.
+
+### v44 — 2026-09-19
 
 **A "now" panel in the overlay. Nothing to do; bump your coordinates when you want it.**
 

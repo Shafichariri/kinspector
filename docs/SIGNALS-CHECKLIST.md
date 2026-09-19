@@ -104,6 +104,12 @@ once.
 - [x] An unreadable timestamp is skipped from the staleness rather than counted as fresh
 - [x] **Freezing holds the ages still along with the rows**, and this is proved rather than
       commented: `InspectorList` takes an injectable clock because a test cannot move the real one
+- [x] A **pull** control on an observation whose key has a registered provider — and **only**
+      there, because in-process the registry is readable rather than inferred
+- [x] A provider that has never answered is reachable, in the now strip, with a pull of its own
+- [x] A local pull records `trigger = request` with a **null** `requestId`: nothing asked over a
+      wire, so there is no request to correlate to
+- [x] A failed pull shows the app's own message verbatim and leaves no row in the ring
 - [ ] Seen on a device. The screens have been rendered at 360dp and driven in tests; no build of
       them has run on a phone
 
