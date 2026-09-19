@@ -32,14 +32,16 @@ CI — see [Production safety](#production-safety).
 | **4b** | Report the traffic we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**650 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
+**779 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
 Compose Multiplatform app, on an Android emulator and the iOS simulator.
 
 Honest gaps: the overlay has been run on one Android device, the iOS simulator and desktop, never on
 iOS hardware — and everything added to it since 0.7.0 has only been exercised in an off-screen
-render at 360dp and by driving its controls in tests, never on a phone; the Auth0 adapter compiles
-against the real SDK but has not been run against a live tenant; and nothing non-Ktor is captured
-on iOS.
+render at 360dp and by driving its controls in tests, never on a phone. That is now the whole of
+the signals work in the overlay: the payload viewer, the per-key history, the **now** panel and
+pulling a provider on demand have between them never been touched by a thumb. The Auth0 adapter
+compiles against the real SDK but has not been run against a live tenant, and nothing non-Ktor is
+captured on iOS.
 
 ### One tag, two halves
 
@@ -47,11 +49,11 @@ The badge above is the current version of **everything**. A single tag publishes
 the Releases page *and* the seven library modules to GitHub Packages, at the same version — there
 is no separate version per surface, and never has been.
 
-What a release does **not** promise is that every surface changed in it. 0.8.0 is library-only: a
-consumer who downloads the new daemon and leaves their Gradle coordinates alone gets none of it,
-and 0.6.0 was the reverse. [`docs/INTEGRATION.md` §14](docs/INTEGRATION.md) says, per version, what
-changed and what you have to do about it — that is the list to read before deciding whether to
-move.
+What a release does **not** promise is that every surface changed in it. 0.8.0 was library-only: a
+consumer who downloaded the new daemon and left their Gradle coordinates alone got none of it, and
+0.6.0 was the reverse. 0.9.0 is both, which is the less usual case.
+[`docs/INTEGRATION.md` §14](docs/INTEGRATION.md) says, per version, what changed and what you have
+to do about it — that is the list to read before deciding whether to move.
 
 | Half | Current version | How you get it |
 |---|---|---|
@@ -153,9 +155,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.8.1")
-implementation("dev.inspector:inspector-ui:0.8.1")
-implementation("dev.inspector:inspector-stream:0.8.1")
+implementation("dev.inspector:inspector-core:0.9.0")
+implementation("dev.inspector:inspector-ui:0.9.0")
+implementation("dev.inspector:inspector-stream:0.9.0")
 ```
 
 Three lines of code:
