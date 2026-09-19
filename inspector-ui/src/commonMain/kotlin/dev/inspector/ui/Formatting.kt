@@ -3,6 +3,9 @@ package dev.inspector.ui
 import dev.inspector.model.InspectorJsonPretty
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -148,3 +151,50 @@ internal fun formatSignalPayload(signal: Signal): String? {
     }
     return InspectorJsonPretty.encodeToString(JsonElement.serializer(), data)
 }
+
+/**
+ * How long ago something happened, in the coarsest unit that is still true.
+ *
+ * Mirrors the web UI's `fmtAge` so one session does not describe the same observation two ways.
+ * Coarse on purpose past a minute: nobody reads "127s ago", and the question this answers is
+ * "is this stale", which a rounded minute answers as well as a precise one.
+ *
+ * Negative input is clamped rather than rendered as the future. That is not defensive
+ * programming — `ts` is the device's own wall clock and the overlay reads it from the same
+ * process, so the two disagree exactly when the clock moved between the observation and now.
+ */
+internal fun formatAge(ms: Long): String {
+    val age = ms.coerceAtLeast(0)
+    return when {
+        age < 2_000 -> "just now"
+        age < 60_000 -> "${age / 1_000}s ago"
+        age < 3_600_000 -> "${age / 60_000}m ago"
+        age < 86_400_000 -> "${age / 3_600_000}h ago"
+        else -> "${age / 86_400_000}d ago"
+    }
+}
+
+/**
+ * Milliseconds between an ISO-8601 instant and [nowMs], or null when it cannot be read.
+ *
+ * **Wall clock, not `mono`, and that is a compromise rather than a preference.** The overlay runs
+ * in the same process that recorded the row, so in principle `mono` — which cannot jump — is the
+ * better clock for an age. It is unusable here: `mono` is measured from an origin private to
+ * `:inspector-core`, and a `TimeSource.Monotonic.markNow()` taken in this module would be a
+ * different origin and produce ages that are wrong by however long the process had been running.
+ * Exposing the origin would be a public API change to carry an age column, which is not a trade
+ * worth making — see `docs/ROADMAP.md`.
+ *
+ * So this is what the web UI does, for a different reason: it must use wall clock because it is a
+ * different machine, and this uses it because the better clock is out of reach. Both are wrong in
+ * the same single case — a clock change mid-session — and both report it rather than hide it.
+ */
+@OptIn(ExperimentalTime::class)
+internal fun ageMsOf(ts: String, nowMs: Long): Long? {
+    val at = runCatching { Instant.parse(ts).toEpochMilliseconds() }.getOrNull() ?: return null
+    return nowMs - at
+}
+
+/** Wall-clock milliseconds now, from the same source that stamped `ts`. */
+@OptIn(ExperimentalTime::class)
+internal fun nowEpochMs(): Long = Clock.System.now().toEpochMilliseconds()

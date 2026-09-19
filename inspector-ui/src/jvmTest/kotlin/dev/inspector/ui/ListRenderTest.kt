@@ -189,6 +189,52 @@ class ListRenderTest {
         assertTrue(out.length() > 0, "no image written to $out")
     }
 
+    /**
+     * The now strip open.
+     *
+     * Rendered directly rather than through the list, because it opens on a tap and a render test
+     * cannot tap. The collapsed line is in the list shots above; this is the half nobody would
+     * otherwise look at.
+     */
+    private fun shootNow(name: String, dark: Boolean) {
+        val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
+        val observations = signals() + cacheObservations() + listOf(
+            Signal(
+                id = "sess0001", ts = "2026-09-15T09:58:00.000Z", mono = 50,
+                tag = "session", name = "signed in", trigger = SignalTrigger.App,
+            ),
+        )
+        val scene = ImageComposeScene(width = 360, height = 220, density = Density(1f)) {
+            InspectorTheme(dark = dark) {
+                NowStrip(
+                    signals = observations,
+                    // 2026-09-15T10:03:10Z — fixed, so the shot does not change every time it is
+                    // taken, and about three minutes after the newest observation in the fixture.
+                    // The spread is the point: a `now` far enough out that every row rounds to the
+                    // same age photographs an age column that could be a constant.
+                    nowMs = 1_789_466_590_000L,
+                    expanded = true,
+                    onToggle = {},
+                    onSelectSignal = {},
+                )
+            }
+        }
+        try {
+            val bytes = scene.render().encodeToData(EncodedImageFormat.PNG)?.bytes
+            assertTrue(bytes != null && bytes.isNotEmpty(), "the now strip rendered nothing")
+            out.writeBytes(bytes)
+        } finally {
+            scene.close()
+        }
+        assertTrue(out.length() > 0, "no image written to $out")
+    }
+
+    @Test
+    fun renders_the_now_strip_dark() = shootNow("now-dark", dark = true)
+
+    @Test
+    fun renders_the_now_strip_light() = shootNow("now-light", dark = false)
+
     @Test
     fun renders_the_list_dark() = shoot("list-dark", dark = true)
 
