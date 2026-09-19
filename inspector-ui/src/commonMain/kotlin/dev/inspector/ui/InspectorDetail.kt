@@ -286,7 +286,7 @@ private fun bodyAbsenceReason(omitted: String?, contentType: String?, totalBytes
 }
 
 @Composable
-private fun Field(label: String, value: String, onCopy: (() -> Unit)? = null) {
+internal fun Field(label: String, value: String, onCopy: (() -> Unit)? = null) {
     val colors = LocalInspectorColors.current
     Column(Modifier.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -301,7 +301,7 @@ private fun Field(label: String, value: String, onCopy: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun SectionTitle(title: String, onCopy: (() -> Unit)? = null) {
+internal fun SectionTitle(title: String, onCopy: (() -> Unit)? = null) {
     val colors = LocalInspectorColors.current
     Row(
         Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp),
@@ -328,7 +328,7 @@ private fun SectionTitle(title: String, onCopy: (() -> Unit)? = null) {
  * as broken — which is exactly how the first phone tester read the toolbar.
  */
 @Composable
-private fun CopyButton(onCopy: () -> Unit) {
+internal fun CopyButton(onCopy: () -> Unit) {
     val colors = LocalInspectorColors.current
     var copied by remember { mutableStateOf(false) }
 

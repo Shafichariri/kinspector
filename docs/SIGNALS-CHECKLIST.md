@@ -80,6 +80,26 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 - [x] Current-state panel renders, showing each observation's `trigger` and age
 - [x] No console errors
 
+### 7 — The overlay (added after 0.3.0)
+
+The build order above stops at the host. These are the overlay's, numbered on from it rather than
+restarting: `ROADMAP.md` counts the overlay work 1–4 and the collision has already been confusing
+once.
+
+- [x] Signals merge into the traffic list on one clock, on by default, one tap off *(0.8.0)*
+- [x] Adjacent identical observations collapse, and expanding one loses nothing *(0.8.0)*
+- [x] **Signals go through the same filter as the traffic.** They did not until stage 2: the
+      overlay filtered the rows and let every observation through
+- [x] A tag chip narrows the list to that tag, and the exclusion rule drops the traffic with it
+- [x] Tag chips are built from the session's own tags, never from `SignalTags`
+- [x] Tapping an observation opens it, and the screen draws the payload
+- [x] A truncated payload is unwrapped before it is formatted, never re-quoted as one JSON string
+- [x] **Provenance is drawn on every observation, not only the pulled ones**
+- [x] History is every observation of `(tag, name)` — never of `name` alone — oldest-first
+      regardless of the list's sort toggle, with the gap from the previous one
+- [ ] Seen on a device. The screen has been rendered at 360dp and driven in tests; no build of it
+      has run on a phone
+
 ### 6 — Ship it
 
 - [x] `docs/schema.md` has the `Signal` section, carrying the unredacted-payload warning verbatim

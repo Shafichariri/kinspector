@@ -105,11 +105,53 @@ In dependency order, because each stage makes the next one cheap:
 
    Payloads are not drawn. A row cannot show a JSON object usefully at 360dp, and a truncated one
    would be worse than none; reading them is stage 2.
-2. **Per-tag browsers** — cache, state, screen, and any tag an app invents. Freshness, provenance
-   (`pushed` vs `pulled`), faceting, per-key history.
+2. ~~**Per-tag browsers**~~ — **done, 2026-09-18.** Not a browser pane, which is a shape a 360dp
+   screen has no room for: a **tag chip** narrows the list to one tag, and **tapping an observation
+   opens it**. Payload, provenance, size, and the history of that key with the gap between each
+   observation and the one before it.
+
+   Three things came out of building it that the entry did not anticipate.
+
+   **The overlay was not filtering signals at all.** It filtered the rows and handed `timeline()`
+   every observation, so `path:/v2` thinned the calls and left the signals between them. The web UI
+   has always passed its filter to the signal route. Fixing it is also what makes a tag chip work:
+   `tag:` is a `SignalTerm`, so applying one drops every transaction — the exclusion rule turning a
+   chip into a browser rather than a highlight.
+
+   **A truncated payload is not the element it looks like.** `Recorder.emit` keeps the cut prefix
+   as a `JsonPrimitive` *string*, so pretty-encoding it renders a whole cache snapshot as one
+   quoted line with every quote escaped. `formatSignalPayload` unwraps it first.
+
+   **Two layout defects and a misleading fixture were found by looking at the screenshot**, not by
+   a failing test: a `Tag` field duplicating the header badge, two adjacent headings both reading
+   "Payload", and tag chips sitting off the right-hand edge behind an unbounded list of marker
+   chips. The render test now photographs the signal screen too.
+
+   Left out deliberately: **faceting**. The web's facets are built from cache-payload fields —
+   `storage`, `scope`, `expired`, `kind` — which is a browser-shaped control for a screen that is
+   now one key at a time. A phone that has narrowed to `tag:cache` and opened an entry has already
+   done what a facet chip is for.
+
+   Not converged: `app.js`'s `browserGroups` does the same `(tag, name)` grouping as the model's
+   new `signalGroups` *and* expands a cache snapshot's `items[]` into a row per entry. They agree
+   on the grouping and differ in what they group, so this is not yet one rule with a mirror — see
+   below.
 3. **The "now" strip** — the last observation per `(tag, name)`, with age.
 4. **Pull a signal on demand.** Providers are in-process (`Recorder.kt`), so this needs an
    internal API surfaced rather than any transport.
+
+### Converging the two signal groupings
+
+`signalGroups` in `:inspector-model` and `browserGroups` in `app.js` both group observations by
+`(tag, name)`; the web one additionally expands a cache snapshot's `items[]` into one row per
+entry, so it groups *entries* where the model groups *observations*. Lifting the expansion into the
+model would make them one rule with a mirror, the way `timeline` and `endpointShortcuts` are.
+
+It is not obviously worth it. The expansion reads `items[]`, `id`, `storage`, `scope`, `expired`
+and `kind` out of a payload — all app-defined conventions rather than schema — and
+`:inspector-model` is the module that is supposed to know nothing about what a payload means.
+Doing it there would be the first place Inspector encoded a convention about payload *contents*.
+Worth deciding deliberately rather than drifting into.
 
 ### Bigger, and worth doing after the above
 

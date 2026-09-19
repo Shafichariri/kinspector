@@ -1,6 +1,10 @@
 package dev.inspector.ui
 
+import dev.inspector.model.InspectorJsonPretty
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.Signal
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /** `143ms`, `1.2s`, `—` while in flight. */
 internal fun formatDuration(ms: Long?): String = when {
@@ -108,4 +112,39 @@ internal fun looksLikeJson(contentType: String?, body: String?): Boolean {
     if (contentType?.contains("json", ignoreCase = true) == true) return true
     val trimmed = body?.trimStart() ?: return false
     return trimmed.startsWith("{") || trimmed.startsWith("[")
+}
+
+/**
+ * A signal's payload as text worth reading, or null when there is none to read.
+ *
+ * The truncated case is the one that needs the care, and it is not rare — it is what a large cache
+ * snapshot produces. `Recorder.emit` cuts the *encoded* payload at `maxPayloadBytes` and keeps the
+ * prefix as a `JsonPrimitive` string, because a cut JSON document is not JSON and the archive
+ * holds one payload type rather than two. Pretty-encoding that element would therefore render the
+ * whole snapshot as a single quoted string with every `"` escaped — the least readable form of
+ * exactly the payload someone opened the row to read.
+ *
+ * So a truncated payload is unwrapped to its content and run through [prettyJson], which formats
+ * malformed input rather than giving up on it. That is the same reason the body viewer uses it:
+ * the bodies worth reading are disproportionately the broken ones.
+ *
+ * An untruncated payload is encoded from the element, so `{"a":1}` arrives indented rather than as
+ * the app happened to spell it.
+ */
+internal fun formatSignalPayload(signal: Signal): String? {
+    val data = signal.data ?: return null
+    if (signal.dataTruncated) {
+        val prefix = (data as? JsonPrimitive)?.takeIf { it.isString }?.content
+        // Falls through to the ordinary path when the flag and the shape disagree, rather than
+        // rendering nothing: the flag describes what capture did, and a reader is owed whatever
+        // is actually there.
+        if (prefix != null) return prettyJson(prefix)
+    }
+    if (data is JsonPrimitive && data.isString) {
+        // The `signal(tag, name, text)` overload wraps a `toString()` dump as a JSON string. It is
+        // not JSON and must not be re-quoted — the app wrote a line of text and that is what to
+        // show.
+        return data.content
+    }
+    return InspectorJsonPretty.encodeToString(JsonElement.serializer(), data)
 }

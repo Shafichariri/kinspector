@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v42 — 2026-09-18.**
+**Document version: v43 — 2026-09-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,31 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v42 — 2026-09-18 (this document)
+### v43 — 2026-09-18 (this document)
+
+**The overlay can now read a signal's payload. Nothing to do; bump your coordinates when you want
+it.**
+
+If your app calls `Inspector.signal(...)`, the in-app overlay showed you that an observation
+happened and would not show you what it said — payloads were host-side only. Now:
+
+- **Tag chips** in the control strip, built from the tags *your* app emits. One tap narrows the
+  list to `cache`, or `state`, or `featureflags` if that is what you called it.
+- **Tap an observation** to open it: the payload pretty-printed, its size, where it came from, and
+  every earlier observation of the same `(tag, name)` with the gap between each one.
+
+Two behaviour changes worth knowing about, both in the overlay only:
+
+1. **The filter now applies to signals.** It did not before — typing `path:/v2` thinned the calls
+   and left every observation on screen. It now behaves as the web UI always has.
+2. **A `tag:` filter hides the traffic**, and a `path:`/`status:` filter hides the signals. That is
+   the filter grammar's exclusion rule, documented since signals shipped, and it is what makes a
+   tag chip show you one tag rather than highlight rows in an unchanged list. Write
+   `tag:cache | status>=400` if you want both.
+
+Nothing in the library's API moved, so your own code compiles untouched.
+
+### v42 — 2026-09-18
 
 **A session can now be exported as HAR. Nothing to do; download a newer daemon when you want it.**
 
