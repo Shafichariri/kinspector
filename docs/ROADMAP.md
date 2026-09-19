@@ -352,8 +352,8 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 | Item | Where it is specified | State |
 |---|---|---|
-| Replay step 3 — edit before replay | `REPLAY.md` §7 | Specified; the API already accepts edits, so this is the form around it |
-| Replay step 4 — template generators | `REPLAY.md` §7 | Specified, including the generator set |
+| Replay step 3 — edit before replay | `REPLAY.md` §7 | ~~Specified~~ **Done, 2026-09-19.** Method, URL, headers and body, above the tabs of the request they describe. It also uncovered that the plain replay button had been throwing `NotFoundError` on ordinary rows since the tabbed detail pane arrived — `querySelector` finds a grandchild and `insertBefore` will not take one |
+| Replay step 4 — template generators | `REPLAY.md` §7 | Specified, including the generator set. Blocked on two of `REPLAY.md` §8's questions for the backend team: the clock-skew window decides whether a generated curl needs a validity label, and nonce reuse decides whether Run is idempotent |
 | 4c — proxy capture | `AGENTS.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
 | 4b — report what we cannot see | `AGENTS.md` | Not designed; flagged there as possibly not worth it |
 | HAR export | `implementation-plan.md` Phase 3 stretch | ~~Unbuilt~~ **Done, 2026-09-18.** `GET /api/sessions/{id}/har`, taking the same `filter` as the transaction list. Everything the format asks for and capture never saw is `-1`; attempts and redaction are disclosed per entry, because HAR has no field for either and silence reads as a claim |
