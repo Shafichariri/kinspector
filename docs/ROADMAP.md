@@ -136,9 +136,37 @@ In dependency order, because each stage makes the next one cheap:
    new `signalGroups` *and* expands a cache snapshot's `items[]` into a row per entry. They agree
    on the grouping and differ in what they group, so this is not yet one rule with a mirror — see
    below.
-3. **The "now" strip** — the last observation per `(tag, name)`, with age.
+3. ~~**The "now" strip**~~ — **done, 2026-09-19.** The latest observation of every `(tag, name)`,
+   above the list, collapsed to one line by default: `now · 2 cache · 1 state — oldest 4m ago`.
+   Open it for a row per key with its provenance and age; tapping one opens the observation, which
+   is stage 2's screen doing the work stage 2 built it for.
+
+   The sorting is the decision worth recording. `signalGroups` orders by recency and this does not:
+   the strip is a **lookup** glanced at repeatedly, and a row that moves whenever the app mentions
+   something else is one you have to find again each time. The list underneath is the feed. Two
+   orderings of the same data, each wrong for the other's job.
+
+   The age column is what makes the word "now" a claim rather than a label — most observations are
+   pushed, so a panel headed "now" listing a value pushed at app start with nothing saying when is
+   exactly the confidently-wrong reading `SignalTrigger` exists to prevent.
+
+   Freezing holds the clock too, and `InspectorList` gained a defaulted `nowMsProvider` so that is
+   *provable* rather than asserted in a comment: the ages come from the real clock and a test
+   cannot move the real clock.
 4. **Pull a signal on demand.** Providers are in-process (`Recorder.kt`), so this needs an
    internal API surfaced rather than any transport.
+
+### An age from `mono`, if it is ever worth a public API
+
+The overlay's ages are wall clock, which is wrong across a clock change mid-session. `mono` cannot
+jump and the overlay runs in the very process that recorded it — but `mono` is measured from an
+origin private to `:inspector-core`, so `:inspector-ui` cannot convert one to an age at all. A
+`TimeSource.Monotonic.markNow()` taken in the UI module is a different origin and produces ages
+wrong by however long the process had been running.
+
+Fixing it means exposing the origin, or a "mono now" reading, as public API on `Inspector` — both
+modules plus the golden file, to carry an age column. Not obviously worth it; recorded so the next
+person does not re-derive why the obvious clock is not being used.
 
 ### Converging the two signal groupings
 

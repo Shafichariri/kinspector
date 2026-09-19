@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v43 — 2026-09-18.**
+**Document version: v44 — 2026-09-19.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1216,7 +1216,31 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v43 — 2026-09-18 (this document)
+### v44 — 2026-09-19 (this document)
+
+**A "now" panel in the overlay. Nothing to do; bump your coordinates when you want it.**
+
+If your app emits signals, the overlay now shows what it currently holds — the latest observation
+of each `(tag, name)` — above the traffic list. Collapsed it is one line:
+
+```
+▸ now   2 cache · 1 state — oldest 4m ago
+```
+
+Open it for a row per key with its age and whether it was pushed by your app or pulled by the host,
+and tap a row to open that observation.
+
+**Read the ages.** Most observations are *pushed*: your app said something once and has not been
+asked since. A value in this panel is what your app last **mentioned**, not necessarily what it
+holds this second — which is why every row carries how long ago, and why the collapsed line leads
+with the stalest one. If you want a genuinely current reading, that is what a registered provider
+and a host-side pull are for (§12).
+
+The ages hold still while the list is frozen, so a held list and its panel describe the same moment.
+
+Nothing in the library's API moved.
+
+### v43 — 2026-09-18
 
 **The overlay can now read a signal's payload. Nothing to do; bump your coordinates when you want
 it.**

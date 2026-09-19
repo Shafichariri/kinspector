@@ -97,8 +97,15 @@ once.
 - [x] **Provenance is drawn on every observation, not only the pulled ones**
 - [x] History is every observation of `(tag, name)` — never of `name` alone — oldest-first
       regardless of the list's sort toggle, with the gap from the previous one
-- [ ] Seen on a device. The screen has been rendered at 360dp and driven in tests; no build of it
-      has run on a phone
+- [x] A **now** panel above the list: the latest observation of each `(tag, name)`, collapsed to
+      one line that says how much there is **and how stale the oldest of it is**
+- [x] It lists one row per key, never one per observation, and sorts stably rather than by recency
+- [x] Every row carries its provenance and its age — "now" is a claim, and most rows are pushed
+- [x] An unreadable timestamp is skipped from the staleness rather than counted as fresh
+- [x] **Freezing holds the ages still along with the rows**, and this is proved rather than
+      commented: `InspectorList` takes an injectable clock because a test cannot move the real one
+- [ ] Seen on a device. The screens have been rendered at 360dp and driven in tests; no build of
+      them has run on a phone
 
 ### 6 — Ship it
 
