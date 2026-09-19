@@ -369,6 +369,35 @@ merely unhelpful — it names an endpoint nobody called. The host appears on a r
 not the one the bar claims: repeating it everywhere is noise when it never changes, and
 load-bearing on the one row where it does.
 
+**`querySelector` searches the whole subtree, and the replay panel anchored on that for two
+releases.** `runReplay` inserted its result with
+`pane.insertBefore(title, pane.querySelector('.section-title'))`. On a row with a redaction banner
+or an attempt chain the first match is a direct child and it works; on an **ordinary** row the
+first match is the one inside a `.dtab-panel`, a grandchild, and `insertBefore` throws
+`NotFoundError` before the request is even built. So replay failed on most rows and worked on
+exactly the interesting ones somebody reaches for when testing it by hand. It anchors on `.dtabs`
+now, which is a direct child. Nothing caught it because `render-web-ui.js` never pressed the
+button; it does now.
+
+**A replay's `headers` map replaces the captured set entirely.** `Replayer` uses a sent map
+verbatim and skips `replayableHeaders`, so anything the UI leaves out is simply not sent — and its
+own hop-by-hop filtering never runs either. The edit form therefore seeds from *filtered* captured
+headers rather than the raw capture, or changing a body would quietly put the captured
+`Content-Length` and `Host` back on the request. `HOP_BY_HOP` in `app.js` mirrors
+`HOP_BY_HOP_HEADERS` in `Replay.kt`; keep them in step.
+
+**A probe that presses a button must stub `fetch` itself, not rely on the guard it is testing.**
+The editor's malformed-header check presses **send**, because "the form refuses this" is only
+observable by trying. The first version relied on the guard being present to stop the request — so
+the one run where the guard was broken was the one run that sent something. Against an unreachable
+host that surfaced as the whole script dying; against a reachable one it would have fired a real
+edited request from a smoke test and reported a pass.
+
+**The snapshot now writes field values into the markup.** `input.value` and `textarea.value` are
+DOM *properties*; `outerHTML` serialises the `value` attribute and a textarea's text content. Every
+snapshot this script ever produced therefore showed the filter box, the settings fields and the
+replay editor empty — and the snapshot is the only thing anyone *looks* at.
+
 **The web UI keeps an unfiltered copy of the session, and two features depend on it.**
 `state.transactions` holds the rows the *daemon* matched against the current filter, so it is the
 wrong source for anything describing the session as a whole. `state.allTransactions` is the whole
@@ -1145,7 +1174,7 @@ else a scan turns up.
 | `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–4 shipped, signals in 0.3.0; of the capture mechanisms, 4a shipped and 4b/4c have not started. A record of the original build — do not rewrite it to match later work. |
 | `docs/SIGNALS.md` | Why signals are shaped the way they are — app state on the traffic timeline. **Built and released in 0.3.0**; kept as the design record, so where it and the code disagree, the code won. Read it before changing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
 | `docs/SIGNALS-CHECKLIST.md` | What must be true of a build that records signals — assertions only, no rationale. The live companion to the spec above; update this one when the bar moves. |
-| `docs/REPLAY.md` | Replay, on-device re-signing and daemon control. Steps 1–2 are built; the edit UI and template generators are specified and not written. Read it before touching replay — the signing constraint decides the whole architecture. |
+| `docs/REPLAY.md` | Replay, on-device re-signing and daemon control. Steps 1–3 are built; the template generators (step 4) are specified and not written. Read it before touching replay — the signing constraint decides the whole architecture. |
 | `api/inspector-public-api.txt` | Golden public API surface for the `core` pair, asserted by both modules. |
 | `api/inspector-stream-public-api.txt` | The same for the `stream` pair, minus the Ktor-typed members a release build cannot carry. |
 | `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/` and `stream/` hold one test each. Every directory here is compiled into the `jvmTest` of the two modules it guards. |
