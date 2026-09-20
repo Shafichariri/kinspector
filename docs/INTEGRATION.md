@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v48 — 2026-09-19.**
+**Document version: v49 — 2026-09-20.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("dev.inspector:inspector-core:0.9.1")
-implementation("dev.inspector:inspector-ui:0.9.1")
+implementation("io.github.shafichariri:inspector-core:1.0.0")
+implementation("io.github.shafichariri:inspector-ui:1.0.0")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.inspector:inspector-core:0.9.1")
-            implementation("dev.inspector:inspector-ui:0.9.1")
+            implementation("io.github.shafichariri:inspector-core:1.0.0")
+            implementation("io.github.shafichariri:inspector-ui:1.0.0")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("dev.inspector:inspector-noop:0.9.1")
-                implementation("dev.inspector:inspector-noop-ui:0.9.1")
+                implementation("io.github.shafichariri:inspector-noop:1.0.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.0.0")
             } else {
-                implementation("dev.inspector:inspector-core:0.9.1")
-                implementation("dev.inspector:inspector-ui:0.9.1")
+                implementation("io.github.shafichariri:inspector-core:1.0.0")
+                implementation("io.github.shafichariri:inspector-ui:1.0.0")
             }
         }
     }
@@ -397,13 +397,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("dev.inspector:inspector-noop:0.9.1")
-    implementation("dev.inspector:inspector-noop-ui:0.9.1")
-    implementation("dev.inspector:inspector-noop-stream:0.9.1")
+    implementation("io.github.shafichariri:inspector-noop:1.0.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.0.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.0.0")
 } else {
-    implementation("dev.inspector:inspector-core:0.9.1")
-    implementation("dev.inspector:inspector-ui:0.9.1")
-    implementation("dev.inspector:inspector-stream:0.9.1")
+    implementation("io.github.shafichariri:inspector-core:1.0.0")
+    implementation("io.github.shafichariri:inspector-ui:1.0.0")
+    implementation("io.github.shafichariri:inspector-stream:1.0.0")
 }
 ```
 
@@ -1216,7 +1216,41 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v48 — 2026-09-19 (this document)
+### v49 — 2026-09-20 (this document)
+
+**Released as 1.0.0, and the group id changed. Edit three lines; your source is untouched.**
+
+```diff
+-implementation("dev.inspector:inspector-core:0.9.1")
+-implementation("dev.inspector:inspector-ui:0.9.1")
+-implementation("dev.inspector:inspector-stream:0.9.1")
++implementation("io.github.shafichariri:inspector-core:1.0.0")
++implementation("io.github.shafichariri:inspector-ui:1.0.0")
++implementation("io.github.shafichariri:inspector-stream:1.0.0")
+```
+
+…and the same for the `inspector-noop*` modules in your release configuration (§3).
+
+**Nothing else moves.** Artifact ids are unchanged, so `inspector-core` is still `inspector-core`.
+The Kotlin package is unchanged, so `import dev.inspector.Inspector` and
+`import dev.inspector.ui.InspectorOverlay` compile exactly as before. There is **no source edit**
+in this upgrade — if your IDE offers to rewrite imports, it is wrong.
+
+Section 3's release-guard advice is also unchanged for the same reason: you still grep a release
+artifact for `dev/inspector/` and `dev.inspector.`, because that is the package, not the group.
+
+**Why.** Maven Central verifies a `dev.*` namespace against the matching domain, and
+`inspector.dev` is registered to somebody else — so `dev.inspector` was never claimable there,
+however long it had been in use here. `io.github.<user>` is verified by GitHub account ownership.
+This release is only the rename: the library still comes from GitHub Packages and still needs a
+token ([`ACCESS.md`](ACCESS.md)). Moving the *repository* to Central is a separate change, and
+doing it separately is deliberate — the coordinate change is the breaking half and the repository
+move is not, so together they would be one event a consumer could not tell apart.
+
+**Staying on 0.9.1 is fine.** It keeps working from the old group; nothing is being unpublished.
+You will just not get anything after it.
+
+### v48 — 2026-09-19
 
 **Released as 0.9.1. Daemon-only — download it and leave your coordinates alone.**
 

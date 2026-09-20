@@ -49,9 +49,15 @@ The badge above is the current version of **everything**. A single tag publishes
 the Releases page *and* the seven library modules to GitHub Packages, at the same version — there
 is no separate version per surface, and never has been.
 
-What a release does **not** promise is that every surface changed in it. 0.9.1 is daemon-only —
-not one line of Kotlin changed in it, so a consumer's coordinates can stay where they are and the
-new daemon is the whole of it. 0.9.0 was the unusual case of both halves at once, 0.8.0 was
+**1.0.0 moved the group id.** The library is published as `io.github.shafichariri:…` and was
+`dev.inspector:…` up to 0.9.1 — Maven Central verifies a `dev.*` namespace against the matching
+domain, and `inspector.dev` belongs to somebody else, so that group was never going to be
+claimable there. **Artifact ids and the Kotlin package did not change**: `inspector-core` is still
+`inspector-core`, and `import dev.inspector.Inspector` still compiles. Three dependency lines,
+no source edits.
+
+What a release does **not** promise is that every surface changed in it. 0.9.1 was daemon-only —
+not one line of Kotlin in it — while 0.9.0 was the unusual case of both halves at once, 0.8.0 was
 library-only, and 0.6.0 was the reverse.
 [`docs/INTEGRATION.md` §14](docs/INTEGRATION.md) says, per version, what changed and what you have
 to do about it — that is the list to read before deciding whether to move.
@@ -156,9 +162,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.9.1")
-implementation("dev.inspector:inspector-ui:0.9.1")
-implementation("dev.inspector:inspector-stream:0.9.1")
+implementation("io.github.shafichariri:inspector-core:1.0.0")
+implementation("io.github.shafichariri:inspector-ui:1.0.0")
+implementation("io.github.shafichariri:inspector-stream:1.0.0")
 ```
 
 Three lines of code:
