@@ -12,7 +12,20 @@ plugins {
     alias(libs.plugins.android.application) apply false
 }
 
-group = "dev.inspector"
+/*
+ * The publishing namespace, and deliberately not `dev.inspector`.
+ *
+ * Maven Central verifies a `dev.*` namespace by DNS on the matching domain, and `inspector.dev` is
+ * registered to somebody else — so `dev.inspector` was never claimable there however long it had
+ * been in use here. `io.github.<user>` is verified by GitHub account ownership instead, which is
+ * the route for a project without a domain.
+ *
+ * Changed **before** going to Central rather than as part of it: the coordinate change is the
+ * breaking half and the repository move is not, so doing them together would make one event out
+ * of two, and a consumer would have no way to tell which had broken them. Artifact ids and the
+ * Kotlin package are untouched — `dev.inspector.Inspector` still imports exactly as it did.
+ */
+group = "io.github.shafichariri"
 
 // Overridable so a tagged release can stamp the real version onto the daemon distribution --
 // `inspector-0.2.0.zip` rather than `inspector-0.1.0-SNAPSHOT.zip` -- without a commit that edits
@@ -23,6 +36,23 @@ version = providers.gradleProperty("inspector.version").getOrElse("0.1.0-SNAPSHO
 subprojects {
     group = rootProject.group
     version = rootProject.version
+
+    /*
+     * Captured here, in the `subprojects` body, where `this` is the Project.
+     *
+     * Two receivers have already got this wrong. Inside `pom {}` it is the POM, which is why the
+     * original escaped the dollar so hard that the interpolation never ran — every POM from
+     * 0.3.0 to 0.9.1 carries the placeholder text verbatim in its <name>. Inside
+     * `pluginManager.withPlugin("maven-publish") {}` it is the applied plugin, so a plain `name`
+     * there reads `Inspector maven-publish`, which is what the first attempt at this fix
+     * published to the local repository. Neither mistake fails the build; both are only visible
+     * by reading the generated POM.
+     */
+    // The `inspector-` prefix is dropped, or every name stutters: the artifact id already says
+    // `inspector-core`, so `Inspector inspector-core` is what the original would have produced
+    // had it ever interpolated. `Inspector core` and `Inspector noop-ui` are what a dependency
+    // report wants beside the coordinate.
+    val moduleLabel = "Inspector ${project.name.removePrefix("inspector-")}"
 
     // Publishing is opt-in per module: this configures whichever modules apply `maven-publish`
     // themselves, rather than listing them here. An allowlist in this file would be a second
@@ -49,7 +79,8 @@ subprojects {
 
             publications.withType<MavenPublication>().configureEach {
                 pom {
-                    name = "Inspector ${'$'}{this@subprojects.name}"
+                    // Computed in the subprojects body; see the note on `moduleLabel`.
+                    name = moduleLabel
                     description = "Network debugger for Compose Multiplatform apps that use Ktor."
                     url = "https://github.com/Shafichariri/kinspector"
                     // Consumers' dependency scanners read this, not the LICENSE file, so an
@@ -59,6 +90,21 @@ subprojects {
                             name = "The Apache License, Version 2.0"
                             url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
                         }
+                    }
+                    // Both required by Maven Central, and useful before it: a dependency report
+                    // that cannot say who publishes a library or where its source is gets the
+                    // library queried inside companies that check.
+                    developers {
+                        developer {
+                            id = "Shafichariri"
+                            name = "Chafic El Hariri"
+                            url = "https://github.com/Shafichariri"
+                        }
+                    }
+                    scm {
+                        url = "https://github.com/Shafichariri/kinspector"
+                        connection = "scm:git:https://github.com/Shafichariri/kinspector.git"
+                        developerConnection = "scm:git:ssh://git@github.com/Shafichariri/kinspector.git"
                     }
                 }
             }

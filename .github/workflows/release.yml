@@ -102,9 +102,9 @@ jobs:
           leads with it.
 
           \`\`\`kotlin
-          implementation("dev.inspector:inspector-core:$VERSION")
-          implementation("dev.inspector:inspector-ui:$VERSION")
-          implementation("dev.inspector:inspector-stream:$VERSION")
+          implementation("io.github.shafichariri:inspector-core:$VERSION")
+          implementation("io.github.shafichariri:inspector-ui:$VERSION")
+          implementation("io.github.shafichariri:inspector-stream:$VERSION")
           \`\`\`
           NOTES
 
