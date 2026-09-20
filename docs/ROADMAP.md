@@ -420,7 +420,7 @@ coordinate published to GitHub Packages can be deleted, which is why the group r
 | Sources jar | **Done.** Kotlin MPP emits it already |
 | Javadoc jar | **Done.** One stub file rather than empty, because empty is also what a silently failed Dokka run produces |
 | GPG signing | **Done, wired to be inert without a key.** No `Sign` task exists when none is configured, so `build`, `publishToMavenLocal` and the GitHub Packages release job keep working on a machine that has never held a key |
-| A published signing key | **Not done, and only the maintainer can do it.** Central verifies the signature against a public key on a keyserver, so the key has to be generated, published and then held as `SIGNING_KEY`/`SIGNING_PASSWORD` |
+| A published signing key | **Done, 2026-09-20.** `A5D94B7324C7B709`, RSA 4096, expires 2028-09-19, served by `keyserver.ubuntu.com`. Held as the `SIGNING_KEY`/`SIGNING_PASSWORD` repository secrets, and passed to the GitHub Packages publish although that repository does not ask for a signature — so the key is exercised on the low-stakes target before Central depends on it |
 | Namespace verification on the Portal | **Not done.** `io.github.<user>` is verified by proving ownership of the GitHub account |
 | Publishing repository switched to the Central Portal | **Not done.** The last mechanical step, and the one that spends the irreversible bit |
 | Keep publishing to GitHub Packages as well | **Undecided.** Dropping it strands anyone still on 1.0.0 or earlier at their current version; keeping both means two repositories to keep in step, and a release that half-fails |

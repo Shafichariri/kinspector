@@ -132,10 +132,22 @@ jobs:
       # The seven library modules, each as a root metadata module plus one variant per target.
       # GITHUB_TOKEN carries packages:write from the permissions block above, so no personal
       # token is involved in publishing -- only in *consuming*, which GitHub requires separately.
+      #
+      # SIGNING_* are passed although GitHub Packages does not ask for a signature, and that is
+      # the point: it exercises the key on the low-stakes target before Maven Central depends on
+      # it. A key that is wrong, a passphrase that is wrong, or an armoured block mangled on its
+      # way into a secret all fail here, on a repository that tolerates an unsigned artifact --
+      # rather than at the Central upload, where the publication is rejected whole.
+      #
+      # If either secret is absent the build creates no Sign task and publishes unsigned, exactly
+      # as it did through 1.0.0. An *unset* secret interpolates to the empty string rather than
+      # going absent, which is why the build filters on blankness and not on presence.
       - name: Publish to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           ./gradlew publishAllPublicationsToGitHubPackagesRepository \
             -Pinspector.version="${GITHUB_REF_NAME#v}"
