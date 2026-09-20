@@ -49,6 +49,11 @@ The badge above is the current version of **everything**. A single tag publishes
 the Releases page *and* the seven library modules to GitHub Packages, at the same version — there
 is no separate version per surface, and never has been.
 
+**1.0.1 signs the artifacts.** Every jar, klib, aar, POM and module file now ships with a
+detached PGP signature and a javadoc jar beside it. No library source differs from 1.0.0 —
+nothing under any `src/` directory — so there is nothing to do but bump the version if you want
+the signatures.
+
 **1.0.0 moved the group id.** The library is published as `io.github.shafichariri:…` and was
 `dev.inspector:…` up to 0.9.1 — Maven Central verifies a `dev.*` namespace against the matching
 domain, and `inspector.dev` belongs to somebody else, so that group was never going to be
@@ -162,9 +167,9 @@ maven {
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.0")
-implementation("io.github.shafichariri:inspector-ui:1.0.0")
-implementation("io.github.shafichariri:inspector-stream:1.0.0")
+implementation("io.github.shafichariri:inspector-core:1.0.1")
+implementation("io.github.shafichariri:inspector-ui:1.0.1")
+implementation("io.github.shafichariri:inspector-stream:1.0.1")
 ```
 
 Three lines of code:
