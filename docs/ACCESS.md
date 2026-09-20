@@ -17,7 +17,7 @@ for downloads even when the package is public**. GitHub's own documentation puts
 need an access token "to publish, install, and delete private, internal, and public packages" —
 where *install* means what Gradle does when it resolves a dependency.
 
-So there is no anonymous `implementation("dev.inspector:…")`. This is a property of GitHub
+So there is no anonymous `implementation("io.github.shafichariri:…")`. This is a property of GitHub
 Packages, not a decision made here, and no visibility setting turns it off. Maven Central and
 JitPack do not work this way, which is exactly why the expectation trips people up.
 
@@ -75,8 +75,8 @@ maven {
 ```
 
 ```kotlin
-implementation("dev.inspector:inspector-core:0.9.1")
-implementation("dev.inspector:inspector-ui:0.9.1")
+implementation("io.github.shafichariri:inspector-core:1.0.0")
+implementation("io.github.shafichariri:inspector-ui:1.0.0")
 ```
 
 Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do §3 — the debug-only swap — before
