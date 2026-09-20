@@ -33,6 +33,28 @@ group = "io.github.shafichariri"
 // stripped; local builds get the snapshot and are unaffected.
 version = providers.gradleProperty("inspector.version").getOrElse("0.1.0-SNAPSHOT")
 
+/*
+ * Signing inputs, hoisted so the subprojects' signing config and the root's Central tasks read
+ * one source. Two copies of this would drift in the direction that matters least visibly: the
+ * bundle task would think a key was present while the publications went out unsigned.
+ *
+ * `filter` on blankness, not merely on presence. An unset repository secret arrives as an
+ * *empty* environment variable rather than an absent one, so the obvious `isPresent` check turns
+ * "no key configured" into "sign with the empty string" the moment a workflow passes
+ * `${{ secrets.SIGNING_KEY }}` before the secret exists -- a failure at publish time, in CI, on
+ * a tag, which is the worst place to discover it.
+ */
+val signingKey: Provider<String> = providers.gradleProperty("signingKey")
+    .orElse(providers.environmentVariable("SIGNING_KEY"))
+    .filter { it.isNotBlank() }
+val signingPassword: Provider<String> = providers.gradleProperty("signingPassword")
+    .orElse(providers.environmentVariable("SIGNING_PASSWORD"))
+    .filter { it.isNotBlank() }
+
+// Where every module stages its artifacts for the Central bundle: one directory under the ROOT
+// build dir, not one per module, because the bundle is a single Maven repository layout.
+val centralStagingDir: Provider<Directory> = layout.buildDirectory.dir("central/repo")
+
 subprojects {
     group = rootProject.group
     version = rootProject.version
@@ -90,6 +112,15 @@ subprojects {
         }
         extensions.configure<PublishingExtension> {
             repositories {
+                // A local Maven layout on disk, which the root `centralBundle` task zips and
+                // `publishToCentralPortal` uploads. The Portal takes an archive, not a deploy:
+                // it replaced OSSRH's protocol and there is no official Gradle plugin for it,
+                // so "point a maven {} at Central" is not available however much it looks like
+                // the obvious shape.
+                maven {
+                    name = "CentralBundle"
+                    url = uri(centralStagingDir)
+                }
                 maven {
                     name = "GitHubPackages"
                     url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
@@ -160,18 +191,6 @@ subprojects {
          * ~/.gradle/gradle.properties locally, or SIGNING_KEY/SIGNING_PASSWORD in the
          * environment. Neither belongs in this repository.
          */
-        // `filter` on blankness, not merely on presence. An unset repository secret arrives as an
-        // *empty* environment variable rather than an absent one, so the obvious `isPresent`
-        // check turns "no key configured" into "sign with the empty string" the moment a
-        // workflow passes `${{ secrets.SIGNING_KEY }}` before the secret exists -- a failure
-        // at publish time, in CI, on a tag, which is the worst place to discover it.
-        val signingKey = providers.gradleProperty("signingKey")
-            .orElse(providers.environmentVariable("SIGNING_KEY"))
-            .filter { it.isNotBlank() }
-        val signingPassword = providers.gradleProperty("signingPassword")
-            .orElse(providers.environmentVariable("SIGNING_PASSWORD"))
-            .filter { it.isNotBlank() }
-
         if (signingKey.isPresent) {
             apply(plugin = "signing")
             extensions.configure<SigningExtension> {
@@ -185,6 +204,25 @@ subprojects {
             tasks.withType<AbstractPublishToMaven>().configureEach {
                 dependsOn(tasks.withType<Sign>())
             }
+        }
+
+        // Staging for Central runs only after the key check has passed, so a keyless attempt
+        // stops before it has written half a repository rather than after.
+        //
+        // The guard hangs off **every** publish task targeting this repository, not off the
+        // `publishAllPublications...` aggregate. Depending on the aggregate alone looks right
+        // and is not: the aggregate waits for both the guard and the individual publications,
+        // but imposes no order *between* them, so Gradle is free to run the publications first.
+        // Measured -- a keyless run failed with the correct message and a non-zero exit after
+        // it had already written 180 files. A guard that refuses once the thing it was guarding
+        // has happened is decoration.
+        tasks.withType<PublishToMavenRepository>().configureEach {
+            if (name.endsWith("ToCentralBundleRepository")) {
+                dependsOn(rootProject.tasks.named("requireSigningKey"))
+            }
+        }
+        rootProject.tasks.named("stageCentralBundle") {
+            dependsOn(tasks.named("publishAllPublicationsToCentralBundleRepository"))
         }
     }
 
@@ -202,5 +240,175 @@ subprojects {
             showStackTraces = true
             showCauses = true
         }
+    }
+}
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * Maven Central, via the Central Portal.
+ *
+ * The Portal does not accept a Maven deploy. It replaced OSSRH's protocol, Sonatype's own Gradle
+ * page says there is no official Gradle plugin for it, and what it takes is a **zipped Maven
+ * repository layout** POSTed to a Publisher API. So "switch the repository URL to Central" is not
+ * a thing that exists, however much the `maven {}` block invites it.
+ *
+ * Three tasks, deliberately separate, because they fail for different reasons and only the last
+ * one leaves the machine:
+ *
+ *   requireSigningKey     refuses early, before anything is built
+ *   centralBundle         produces build/central/bundle-<version>.zip
+ *   publishToCentralPortal  uploads it and polls until the Portal has an opinion
+ *
+ * GitHub Packages keeps running alongside and is untouched by all of this: the two repositories
+ * are separate `maven {}` entries and separate tasks, so a Central failure cannot take the
+ * Packages release with it.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+// Refuses a keyless Central build *before* any module has staged anything.
+//
+// The build is otherwise deliberately happy without a key -- that is what keeps `build` and the
+// GitHub Packages release working on a machine that has never held one. Central is the one place
+// where unsigned is not a quieter outcome but a rejected one, so this is where the tolerance
+// stops. Without it the bundle would build cleanly, upload, and be refused at the far end, which
+// is the failure the whole signing design was shaped to avoid.
+tasks.register("requireSigningKey") {
+    group = "publishing"
+    description = "Fails unless a signing key is configured. Guards the Central tasks."
+    val present = signingKey.isPresent
+    doLast {
+        if (!present) {
+            throw GradleException(
+                """
+                No signing key configured, and Maven Central rejects unsigned artifacts.
+
+                Set `signingKey` and `signingPassword` in ~/.gradle/gradle.properties, or
+                SIGNING_KEY and SIGNING_PASSWORD in the environment. `signingKey` is the
+                ASCII-armoured private key, whole, including its BEGIN and END lines.
+
+                A blank value counts as absent: an unset CI secret arrives as an empty string.
+                """.trimIndent()
+            )
+        }
+    }
+}
+
+// Lifecycle only. Every publishing module attaches its
+// `publishAllPublicationsToCentralBundleRepository` to this from the subprojects block above,
+// rather than this task naming the modules -- the same reason the root build does not keep an
+// allowlist of what publishes.
+tasks.register("stageCentralBundle") {
+    group = "publishing"
+    description = "Stages every published module into one local Maven layout for Central."
+    dependsOn("requireSigningKey")
+}
+
+val centralBundle = tasks.register<Zip>("centralBundle") {
+    group = "publishing"
+    description = "Zips the staged Maven layout into a Central Portal deployment bundle."
+    dependsOn("stageCentralBundle")
+    from(centralStagingDir)
+    // Gradle writes maven-metadata.xml into a file repository; the Portal validates the archive
+    // as a deployment rather than as a repository and has no use for it. Excluded rather than
+    // left to be ignored, because an unsignable file in a bundle of signed ones is exactly the
+    // kind of thing a validator changes its mind about between releases.
+    exclude("**/maven-metadata.xml*")
+    archiveFileName = "bundle-${project.version}.zip"
+    destinationDirectory = layout.buildDirectory.dir("central")
+}
+
+tasks.register("publishToCentralPortal") {
+    group = "publishing"
+    description = "Uploads the deployment bundle to the Central Portal and reports its state."
+    dependsOn(centralBundle)
+
+    // Portal *user token*, generated in the Portal account page -- not the GitHub token and not
+    // the signing passphrase. Three different secrets are in play by now and they are not
+    // interchangeable.
+    val user = providers.gradleProperty("centralUsername")
+        .orElse(providers.environmentVariable("CENTRAL_USERNAME"))
+        .filter { it.isNotBlank() }
+    val pass = providers.gradleProperty("centralPassword")
+        .orElse(providers.environmentVariable("CENTRAL_PASSWORD"))
+        .filter { it.isNotBlank() }
+    // USER_MANAGED, not AUTOMATIC, and that default is the point: the upload validates and
+    // stages, then waits for a human to press publish in the Portal. Releasing to Central is the
+    // one irreversible act in this whole sequence -- a coordinate there can never be replaced or
+    // deleted -- so it does not belong behind a Gradle task that a tag could trigger by accident.
+    val publishingType = providers.gradleProperty("centralPublishingType").getOrElse("USER_MANAGED")
+    val bundle = centralBundle.flatMap { it.archiveFile }
+    val deploymentName = "${project.group}:${project.version}"
+
+    doLast {
+        if (!user.isPresent || !pass.isPresent) {
+            throw GradleException(
+                "No Portal credentials. Set centralUsername/centralPassword, or " +
+                    "CENTRAL_USERNAME/CENTRAL_PASSWORD. These are the Portal user token, not " +
+                    "the GitHub token and not the signing passphrase."
+            )
+        }
+        val file = bundle.get().asFile
+        val auth = java.util.Base64.getEncoder()
+            .encodeToString("${user.get()}:${pass.get()}".toByteArray())
+
+        val boundary = "----inspector${System.nanoTime()}"
+        val head = (
+            "--$boundary\r\n" +
+                "Content-Disposition: form-data; name=\"bundle\"; filename=\"${file.name}\"\r\n" +
+                "Content-Type: application/octet-stream\r\n\r\n"
+            ).toByteArray()
+        val tail = "\r\n--$boundary--\r\n".toByteArray()
+        val body = head + file.readBytes() + tail
+
+        val client = java.net.http.HttpClient.newHttpClient()
+        val uploadUri = java.net.URI.create(
+            "https://central.sonatype.com/api/v1/publisher/upload" +
+                "?name=" + java.net.URLEncoder.encode(deploymentName, "UTF-8") +
+                "&publishingType=$publishingType"
+        )
+        val upload = java.net.http.HttpRequest.newBuilder(uploadUri)
+            .header("Authorization", "Bearer $auth")
+            .header("Content-Type", "multipart/form-data; boundary=$boundary")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body))
+            .build()
+        val uploaded = client.send(upload, java.net.http.HttpResponse.BodyHandlers.ofString())
+        if (uploaded.statusCode() != 201) {
+            throw GradleException("Portal upload failed: ${uploaded.statusCode()} ${uploaded.body()}")
+        }
+        val deploymentId = uploaded.body().trim()
+        logger.lifecycle("Uploaded ${file.name} (${file.length()} bytes) as $deploymentId")
+
+        // The Portal validates asynchronously, so a 201 says "received", never "accepted".
+        // Reporting success on the upload alone would be the same mistake as reading a green
+        // tick instead of the published artifact.
+        val statusUri = java.net.URI.create(
+            "https://central.sonatype.com/api/v1/publisher/status?id=$deploymentId"
+        )
+        repeat(60) {
+            Thread.sleep(5_000)
+            val status = client.send(
+                java.net.http.HttpRequest.newBuilder(statusUri)
+                    .header("Authorization", "Bearer $auth")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.noBody())
+                    .build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString()
+            )
+            val payload = status.body()
+            val state = Regex("\"deploymentState\"\\s*:\\s*\"([A-Z_]+)\"")
+                .find(payload)?.groupValues?.get(1)
+            logger.lifecycle("  $state")
+            when (state) {
+                "FAILED" -> throw GradleException("Portal rejected the deployment: $payload")
+                "PUBLISHED" -> return@doLast
+                "VALIDATED" -> {
+                    logger.lifecycle(
+                        "Validated and waiting for you. Press Publish at " +
+                            "https://central.sonatype.com/publishing/deployments"
+                    )
+                    return@doLast
+                }
+            }
+        }
+        throw GradleException("Timed out waiting for the Portal; deployment $deploymentId")
     }
 }
