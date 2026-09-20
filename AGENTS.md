@@ -464,6 +464,29 @@ so the two are indistinguishable to whoever opens it next. It holds a README poi
 repository instead. Dokka is the upgrade if real API docs are ever wanted; it is a new toolchain
 across seven KMP modules, which is more than "the jar must exist" is asking for.
 
+**Maven Central takes an archive, not a deploy, and `maven { url = … }` cannot reach it.** The
+Central Portal replaced OSSRH's protocol; Sonatype's own Gradle page says there is no official
+Gradle plugin for it. So the shape that looks obvious — swap the repository URL — does not exist,
+and "switch the publishing repository to Central" was a wrong description of this work for several
+days before anyone checked. What the Portal wants is a zipped **Maven repository layout** POSTed to
+`/api/v1/publisher/upload`, which is why `centralBundle` stages every module into one local
+`file://` repository and zips that. GitHub Packages is a second `maven {}` entry and a separate task
+on purpose: both run, and a Central failure cannot take the Packages release with it.
+
+`publishToCentralPortal` defaults to `USER_MANAGED` rather than `AUTOMATIC`, so the upload validates
+and stages and then waits for a person to press publish. Releasing to Central is the one
+irreversible act in the whole sequence — a coordinate there can never be replaced or deleted — and
+that does not belong behind a Gradle task a tag could trigger by accident. The task also polls the
+status endpoint rather than trusting the 201: the Portal validates asynchronously, so a 201 means
+"received", never "accepted".
+
+**A guard on the `publishAllPublications…` aggregate guards nothing.** `requireSigningKey` first
+hung off the aggregate task, and a keyless run failed with the right message and a non-zero exit
+**after writing 180 files** — the aggregate waits for both the guard and the individual publications
+but imposes no order *between* them, so Gradle ran the publications first. It hangs off every
+`PublishToMavenRepository` whose name ends `ToCentralBundleRepository` now. The general rule:
+depending on an aggregate orders you against the aggregate, not against what it aggregates.
+
 **Publishing is opt-in per module, and the list lives in the modules.** The root build configures
 whichever subproject applied `maven-publish`; it does not name them. An allowlist in the root would
 be a second place to keep current, and the failure mode is silent in the wrong direction —
