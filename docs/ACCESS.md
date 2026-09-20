@@ -75,8 +75,8 @@ maven {
 ```
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.0")
-implementation("io.github.shafichariri:inspector-ui:1.0.0")
+implementation("io.github.shafichariri:inspector-core:1.0.1")
+implementation("io.github.shafichariri:inspector-ui:1.0.1")
 ```
 
 Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do §3 — the debug-only swap — before

@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v49 — 2026-09-20.**
+**Document version: v50 — 2026-09-20.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -46,8 +46,8 @@ maven {
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.0.0")
-implementation("io.github.shafichariri:inspector-ui:1.0.0")
+implementation("io.github.shafichariri:inspector-core:1.0.1")
+implementation("io.github.shafichariri:inspector-ui:1.0.1")
 ```
 
 ```kotlin
@@ -169,8 +169,8 @@ of reading them from a Gradle property is that the committed build file is ident
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.0.0")
-            implementation("io.github.shafichariri:inspector-ui:1.0.0")
+            implementation("io.github.shafichariri:inspector-core:1.0.1")
+            implementation("io.github.shafichariri:inspector-ui:1.0.1")
         }
     }
 }
@@ -230,11 +230,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.0.0")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.0.0")
+                implementation("io.github.shafichariri:inspector-noop:1.0.1")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.0.1")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.0.0")
-                implementation("io.github.shafichariri:inspector-ui:1.0.0")
+                implementation("io.github.shafichariri:inspector-core:1.0.1")
+                implementation("io.github.shafichariri:inspector-ui:1.0.1")
             }
         }
     }
@@ -397,13 +397,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.0.0")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.0.0")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.0.0")
+    implementation("io.github.shafichariri:inspector-noop:1.0.1")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.0.1")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.0.1")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.0.0")
-    implementation("io.github.shafichariri:inspector-ui:1.0.0")
-    implementation("io.github.shafichariri:inspector-stream:1.0.0")
+    implementation("io.github.shafichariri:inspector-core:1.0.1")
+    implementation("io.github.shafichariri:inspector-ui:1.0.1")
+    implementation("io.github.shafichariri:inspector-stream:1.0.1")
 }
 ```
 
@@ -1215,6 +1215,42 @@ If your copy has no version line at the top, identify it by what it contains:
 | Web UI has stop/restart buttons and coloured methods | **v8** |
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
+
+### v50 — 2026-09-20 (this document)
+
+**Released as 1.0.1. The artifacts are signed now. Nothing for you to do.**
+
+No library source changed between 1.0.0 and 1.0.1 — nothing under any `src/` directory, so the
+compiled bytes you depend on are the same ones. The whole diff is build configuration.
+What you get by bumping is that every artifact arrives with a detached PGP signature beside it:
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.0.0")
++implementation("io.github.shafichariri:inspector-core:1.0.1")
+```
+
+**Staying on 1.0.0 is fine.** The bytes are the same. Bump only if your build verifies signatures,
+or if you would rather be on the version that can be verified.
+
+**If you do verify**, the key is `A5D94B7324C7B709`, RSA 4096, on `keyserver.ubuntu.com`:
+
+```bash
+gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys A5D94B7324C7B709
+gpg --verify inspector-core-1.0.1.jar.asc inspector-core-1.0.1.jar
+```
+
+Gradle will not check these for you unless you ask it to — signature verification is opt-in, via
+dependency verification in `gradle/verification-metadata.xml`. An unsigned dependency is not
+something a default build complains about, which is worth knowing before assuming you are covered.
+
+**There is also a javadoc jar now**, carrying a pointer to this repository rather than generated
+API docs. It exists because Maven Central requires the artifact to be present; Inspector is Kotlin
+and has no javadoc.
+
+**This is not on Maven Central yet.** The library still comes from GitHub Packages and still needs
+a token ([`ACCESS.md`](ACCESS.md)). Signing is the prerequisite being put in place, not the move
+itself — and when Central does happen, GitHub Packages keeps running alongside it rather than
+being switched off under anyone.
 
 ### v49 — 2026-09-20 (this document)
 
