@@ -59,6 +59,35 @@ subprojects {
     // place to keep current, and the failure mode is silent -- :inspector-daemon is a tool and
     // :sample:desktop is a demo, and neither should ever appear in the repository.
     pluginManager.withPlugin("maven-publish") {
+        /*
+         * A javadoc jar, because Maven Central rejects a publication without one.
+         *
+         * Kotlin has no javadoc, and Central checks only that the artifact is *present* -- an
+         * empty jar satisfies it and is what most Kotlin libraries ship. Empty is also exactly
+         * what a Dokka run that silently failed would produce, so this carries one line of text
+         * instead: somebody who unzips it learns where the documentation actually is rather than
+         * concluding the build dropped it. Dokka is the upgrade if real API docs are ever wanted;
+         * it is a new toolchain across seven KMP modules, which is more than "the jar must exist"
+         * is asking for.
+         */
+        val javadocStub = layout.buildDirectory.file("javadoc-jar/README.md")
+        val writeJavadocStub = tasks.register("writeJavadocStub") {
+            outputs.file(javadocStub)
+            doLast {
+                javadocStub.get().asFile.apply {
+                    parentFile.mkdirs()
+                    writeText(
+                        "Inspector is written in Kotlin and ships no javadoc.\n\n" +
+                            "Source, API notes and the integration guide:\n" +
+                            "https://github.com/Shafichariri/kinspector\n"
+                    )
+                }
+            }
+        }
+        val javadocJar = tasks.register<Jar>("javadocJar") {
+            archiveClassifier = "javadoc"
+            from(writeJavadocStub)
+        }
         extensions.configure<PublishingExtension> {
             repositories {
                 maven {
@@ -78,6 +107,10 @@ subprojects {
             }
 
             publications.withType<MavenPublication>().configureEach {
+                // Attached to every publication, including each target's: Central wants a
+                // javadoc artifact beside every coordinate, not only the root one.
+                artifact(javadocJar)
+
                 pom {
                     // Computed in the subprojects body; see the note on `moduleLabel`.
                     name = moduleLabel
@@ -107,6 +140,50 @@ subprojects {
                         developerConnection = "scm:git:ssh://git@github.com/Shafichariri/kinspector.git"
                     }
                 }
+            }
+        }
+
+        /*
+         * Signing, which Maven Central requires as a detached .asc beside every artifact.
+         *
+         * Wired to be completely inert without a key, and that is the load-bearing part. GitHub
+         * Packages does not want signatures -- 1.0.0 went there unsigned -- so `build`,
+         * `publishToMavenLocal` and the existing release job all have to keep working on a
+         * machine that has never held a GPG key. Rather than declaring the signing tasks and
+         * setting `isRequired = false`, no Sign task is created at all when no key is configured:
+         * a task that exists and quietly signs nothing is the shape that ends with an unsigned
+         * publication reaching Central and being rejected at the far end of a ten-minute job.
+         *
+         * The key is read in memory rather than from a keyring file. CI has no keyring, and a
+         * secret that has to arrive as a file is one more moving part on the runner. Provide it
+         * as the ASCII-armoured private key: `signingKey`/`signingPassword` in
+         * ~/.gradle/gradle.properties locally, or SIGNING_KEY/SIGNING_PASSWORD in the
+         * environment. Neither belongs in this repository.
+         */
+        // `filter` on blankness, not merely on presence. An unset repository secret arrives as an
+        // *empty* environment variable rather than an absent one, so the obvious `isPresent`
+        // check turns "no key configured" into "sign with the empty string" the moment a
+        // workflow passes `${{ secrets.SIGNING_KEY }}` before the secret exists -- a failure
+        // at publish time, in CI, on a tag, which is the worst place to discover it.
+        val signingKey = providers.gradleProperty("signingKey")
+            .orElse(providers.environmentVariable("SIGNING_KEY"))
+            .filter { it.isNotBlank() }
+        val signingPassword = providers.gradleProperty("signingPassword")
+            .orElse(providers.environmentVariable("SIGNING_PASSWORD"))
+            .filter { it.isNotBlank() }
+
+        if (signingKey.isPresent) {
+            apply(plugin = "signing")
+            extensions.configure<SigningExtension> {
+                useInMemoryPgpKeys(signingKey.get(), signingPassword.getOrElse(""))
+                sign(extensions.getByType<PublishingExtension>().publications)
+            }
+            // Gradle does not infer this for a Kotlin Multiplatform publication: each publish
+            // task consumes the matching Sign task's output without declaring the dependency, so
+            // the build warns and, with a build cache or parallel execution, can publish before
+            // the signature exists.
+            tasks.withType<AbstractPublishToMaven>().configureEach {
+                dependsOn(tasks.withType<Sign>())
             }
         }
     }
