@@ -15,3 +15,13 @@ xcuserdata/
 *.xcworkspace/xcuserdata/
 DerivedData/
 *.xcuserstate
+
+# Web UI snapshots. `scripts/render-web-ui.js` writes to stdout, so a snapshot lands wherever the
+# redirect points — and it is a render of a real session, which on a real app means real traffic in
+# a public repo. The convention is /tmp; this catches a redirect that missed.
+#
+# The web UI itself is hand-written HTML with no build step, so it is un-ignored explicitly: a
+# blanket rule would silently drop a second page somebody added there, and a file that never shows
+# up in `git status` is not something a failing build would tell you about.
+*.html
+!inspector-daemon/src/main/resources/web/*.html
