@@ -418,6 +418,28 @@ build full of capture code. That is why `INTEGRATION.md` §3 tells them to grep 
 and `dev.inspector.` instead, and why a consumer-side guard is not the same script as this one.
 Do not "fix" this by making the script search UTF-16: it never sees a linked binary.
 
+**The group is `io.github.shafichariri`, and `dev.inspector` is the package, not the group.** The
+two differ on purpose and the difference is load-bearing: Maven Central verifies a `dev.*`
+namespace against the matching domain and `inspector.dev` belongs to somebody else, so that group
+was never claimable there. Artifact ids and the Kotlin package were left alone in the move —
+`import dev.inspector.Inspector` still compiles, and §3's release-guard advice still greps
+`dev/inspector/` for exactly that reason.
+
+**A POM value that reads a receiver is the easiest thing here to get silently wrong.** Three
+attempts at one line, none of which failed a build:
+
+- `"Inspector ${'$'}{this@subprojects.name}"` inside `pom {}` — the escape stopped the Kotlin
+  string interpolating at all, so **every POM from 0.3.0 to 0.9.1 published the placeholder text
+  verbatim** as its `<name>`.
+- The same expression moved into `pluginManager.withPlugin("maven-publish") {}`, where the
+  receiver is the *applied plugin*: `<name>Inspector maven-publish</name>`.
+- Interpolating correctly but reading the raw project name: `<name>Inspector inspector-core</name>`
+  beside an artifact id that already says `inspector-core`.
+
+It is computed once in the `subprojects` body now, where `this` is the Project. The rule worth
+keeping: after changing anything in the `pom {}` block, run `publishToMavenLocal` and **read the
+generated POM**. None of the three was visible any other way.
+
 **Publishing is opt-in per module, and the list lives in the modules.** The root build configures
 whichever subproject applied `maven-publish`; it does not name them. An allowlist in the root would
 be a second place to keep current, and the failure mode is silent in the wrong direction —
