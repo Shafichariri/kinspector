@@ -402,6 +402,36 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 - **The Auth0 adapter** compiles against the real SDK and has never run against a live tenant.
 - **Nobody has judged how the web UI looks.** It renders correctly; that is a different claim.
 
+## 4. Maven Central
+
+Nothing is on Central. Everything published so far is GitHub Packages, which is why every consumer
+still needs a token — `ACCESS.md` leads with that because it is the single thing new
+consumers trip over, and Central is the only thing that would remove it.
+
+Split into one irreversible step and a pile of mechanical ones on purpose. A coordinate published
+to Central can never be replaced or deleted, so the first push is the point of no return; a
+coordinate published to GitHub Packages can be deleted, which is why the group rename went out as
+1.0.0 **before** any of this rather than bundled with it.
+
+| Step | State |
+|---|---|
+| Group changed to `io.github.shafichariri` | **Done, 1.0.0.** `dev.*` is verified by DNS on the matching domain and `inspector.dev` belongs to somebody else, so `dev.inspector` was never claimable. Artifact ids and the Kotlin package were left alone, so it cost consumers three dependency lines and no source edit |
+| POM `name`, `description`, `url`, licence, `developers`, `scm` | **Done, 1.0.0.** The `<name>` had published a literal placeholder since 0.3.0 |
+| Sources jar | **Done.** Kotlin MPP emits it already |
+| Javadoc jar | **Done.** One stub file rather than empty, because empty is also what a silently failed Dokka run produces |
+| GPG signing | **Done, wired to be inert without a key.** No `Sign` task exists when none is configured, so `build`, `publishToMavenLocal` and the GitHub Packages release job keep working on a machine that has never held a key |
+| A published signing key | **Not done, and only the maintainer can do it.** Central verifies the signature against a public key on a keyserver, so the key has to be generated, published and then held as `SIGNING_KEY`/`SIGNING_PASSWORD` |
+| Namespace verification on the Portal | **Not done.** `io.github.<user>` is verified by proving ownership of the GitHub account |
+| Publishing repository switched to the Central Portal | **Not done.** The last mechanical step, and the one that spends the irreversible bit |
+| Keep publishing to GitHub Packages as well | **Undecided.** Dropping it strands anyone still on 1.0.0 or earlier at their current version; keeping both means two repositories to keep in step, and a release that half-fails |
+
+The namespace is therefore **still changeable**, despite 1.0.0 being out. Nothing has reached the
+registry that refuses deletions. If `io.github.shafichariri:inspector-core` is not the name to
+live with, changing it now is an ordinary breaking change with a changelog entry — the same
+shape as the 0.9.1 → 1.0.0 move, and no harder.
+
+---
+
 ---
 
 ## What this document does not overturn

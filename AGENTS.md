@@ -440,6 +440,30 @@ It is computed once in the `subprojects` body now, where `this` is the Project. 
 keeping: after changing anything in the `pom {}` block, run `publishToMavenLocal` and **read the
 generated POM**. None of the three was visible any other way.
 
+**Signing is wired to create no `Sign` task at all when no key is configured, rather than to
+create one that signs nothing.** Maven Central wants a detached `.asc` beside every artifact;
+GitHub Packages, which is where everything through 1.0.0 went, does not. So the build has to keep
+working untouched on a machine that has never held a GPG key — `build`, `publishToMavenLocal` and
+the release job all run that way today. The rejected alternative is `isRequired = false`, which
+leaves the tasks in place and quietly produces an unsigned publication: that failure surfaces at
+the far end of a ten-minute tagged job, as a rejection from Central, which is the worst place to
+learn it.
+
+The key is read in memory (`useInMemoryPgpKeys`) rather than from a keyring file, because CI has
+no keyring. **Presence is not the test — blankness is.** An unset repository secret arrives as an
+*empty* environment variable, not an absent one, so an `isPresent` check flips to "sign with the
+empty string" the moment a workflow references `${{ secrets.SIGNING_KEY }}` before the secret
+exists. The provider is `filter { it.isNotBlank() }` for that reason. Three states are proven:
+no key → no signatures and exit 0; a key → a valid `.asc` beside every artifact including
+the iOS klibs; an *empty* key → identical to no key.
+
+**The javadoc jar carries one file, and empty was rejected deliberately.** Kotlin has no javadoc
+and Central only checks the artifact exists, so an empty jar satisfies it and is what most Kotlin
+libraries ship. But an empty jar is also exactly what a Dokka run that failed silently produces,
+so the two are indistinguishable to whoever opens it next. It holds a README pointing at the
+repository instead. Dokka is the upgrade if real API docs are ever wanted; it is a new toolchain
+across seven KMP modules, which is more than "the jar must exist" is asking for.
+
 **Publishing is opt-in per module, and the list lives in the modules.** The root build configures
 whichever subproject applied `maven-publish`; it does not name them. An allowlist in the root would
 be a second place to keep current, and the failure mode is silent in the wrong direction —
