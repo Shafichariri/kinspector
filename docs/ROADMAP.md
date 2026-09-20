@@ -422,8 +422,8 @@ coordinate published to GitHub Packages can be deleted, which is why the group r
 | GPG signing | **Done, wired to be inert without a key.** No `Sign` task exists when none is configured, so `build`, `publishToMavenLocal` and the GitHub Packages release job keep working on a machine that has never held a key |
 | A published signing key | **Done, 2026-09-20.** `A5D94B7324C7B709`, RSA 4096, expires 2028-09-19, served by `keyserver.ubuntu.com`. Held as the `SIGNING_KEY`/`SIGNING_PASSWORD` repository secrets, and passed to the GitHub Packages publish although that repository does not ask for a signature — so the key is exercised on the low-stakes target before Central depends on it |
 | Namespace verification on the Portal | **Not done.** `io.github.<user>` is verified by proving ownership of the GitHub account |
-| Publishing repository switched to the Central Portal | **Not done.** The last mechanical step, and the one that spends the irreversible bit |
-| Keep publishing to GitHub Packages as well | **Undecided.** Dropping it strands anyone still on 1.0.0 or earlier at their current version; keeping both means two repositories to keep in step, and a release that half-fails |
+| Publishing to the Central Portal | **Built, never run.** Not a repository URL: the Portal replaced OSSRH's protocol and has no official Gradle plugin, so it takes a zipped Maven layout POSTed to a Publisher API. `centralBundle` produces the zip and `publishToCentralPortal` uploads it, defaulting to `USER_MANAGED` so the Portal stages and waits rather than releasing. Blocked on namespace verification and a Portal user token |
+| Keep publishing to GitHub Packages as well | **Decided: both.** Dropping it would strand anyone on 1.0.0 or earlier. They are separate `maven {}` entries and separate tasks, so a Central failure cannot take the Packages release with it |
 
 The namespace is therefore **still changeable**, despite 1.0.0 being out. Nothing has reached the
 registry that refuses deletions. If `io.github.shafichariri:inspector-core` is not the name to
