@@ -892,6 +892,54 @@ is the load-bearing word. A subset check on the real module would let it grow a 
 lacks and say nothing, which is the hole that was already open. `StreamApiParityTest` carries the
 reasoning; `:inspector-noop-ui` still has no golden file and is the remaining gap of this shape.
 
+**A matching public API is not a matching ABI: the JVM file facade is named for the *file*.**
+A twin pair can declare byte-identical Kotlin signatures and still be binary-incompatible.
+`defaultDaemonHost` and `defaultClientInfo` are `expect`/`actual` in `:inspector-stream`, so the
+actuals landed in `Platform_jvmKt` and `Platform_androidKt`, named for `Platform.jvm.kt` and
+`Platform.android.kt`. The noop has no platform split and declared them in `StreamSink.kt`,
+giving `StreamSinkKt`. Same package, same signatures, same Kotlin call site, **different JVM
+class** — so anything compiled against one and linked against the other dies at runtime on a
+class that is not in the artifact. Source-compatible, binary-incompatible, and therefore invisible
+to every check that reads source or public API. Kotlin/Native has no file facades, which is why
+iOS never saw it and why it survived eleven releases. Reported from a consuming app.
+
+The real module now pins `@file:JvmName("StreamSinkKt")` on both actuals. Pinning *to the noop's*
+name rather than the reverse is deliberate: it leaves the published noop ABI untouched, and the
+noop is what a release build links against. The noop cannot pin the same way — `kotlin.jvm.JvmName`
+does not resolve in a common source set shared with Native, so `@file:JvmName` there fails
+`compileKotlinIosArm64` with "Unresolved reference" — so **that file's name is load-bearing and
+renaming `StreamSink.kt` is a breaking change.** Both files say so.
+
+The guard is what holds it, and the previous guard *structurally could not have*: `ApiSurface`
+dumped both facades under one shared label, `dev.inspector.stream (top-level)`, specifically so
+the differing names would stop differing. It erased the only fact that mattered. `StreamSinkKt` is
+now named in `STREAM_CONTRACT_CLASSES` like any other type, the golden file records it, and an
+unresolvable contract class fails with the reason rather than a bare `ClassNotFoundException`.
+Proven in both directions and on both modules: removing the pin fails `:inspector-stream:jvmTest`,
+renaming the noop's file fails `:inspector-noop-stream:jvmTest`.
+
+**A raw class-set diff between twins was measured and rejected — it is noise, not a guard.**
+The obvious generalisation is to diff every public class of each pair and fail on asymmetry. It
+was built and run: **19** entries for the `core` pair, **19** for `ui`, **4** for `stream`, and
+every one legitimate. Kotlin `internal` is JVM-public, so `Redactor`, `RingBuffer`, `CallState`
+and the whole `dev.inspector.internal` package read as public API; `InspectorConfigKt` is
+real-only *by design*, because the canary must be absent from the noop for
+`check-release-clean.sh` to mean anything; `EmulatorDetectionKt` is genuinely real-only. The
+facade mismatch this exists to catch would have been two lines inside nineteen, indistinguishable
+from the rest without already knowing the answer — and an allowlist covering the rest needs
+editing on every internal refactor, which is how a guard gets switched off. The check that works
+asks Kotlin what is public rather than asking the JVM, which is what `ApiSurface` already does.
+Do not rebuild the class-set diff without reading this paragraph.
+
+**`PassThroughInterceptor` in `:inspector-noop` is not an asymmetry — it is package-private.**
+It was reported as one, on the reasoning that it exists in the noop and not in `:inspector-core`
+and so is the same bug waiting for a consumer to reference it. No consumer can: it is a
+`private object` backing `okHttpInterceptor()`, and `javap` reports `final class` with no
+`public` — package-private in bytecode and `private` in Kotlin metadata, unreachable from Kotlin
+and from Java outside `dev.inspector`. The public surface is `okHttpInterceptor()` on
+`OkHttpCaptureKt`, which both modules have and the golden file covers. Nothing to fix; check the
+access flags before treating a class-name difference as a contract difference.
+
 **There are four surfaces, and only two are for users.** The in-app overlay and the browser web
 UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
 Nobody should be told to "open the desktop app".

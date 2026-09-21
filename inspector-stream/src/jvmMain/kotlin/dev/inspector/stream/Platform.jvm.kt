@@ -1,3 +1,22 @@
+// The JVM file facade is pinned, and the name is part of the ABI.
+//
+// `defaultDaemonHost` and `defaultClientInfo` are `expect`/`actual` here, so their actuals land
+// in a facade named for *this file* — `Platform_jvmKt`, `Platform_androidKt`. The noop twin has
+// no platform split and declares them outright in `StreamSink.kt`, giving `StreamSinkKt`. Same
+// package, same signatures, same Kotlin call site, different JVM class: source-compatible and
+// binary-incompatible, so anything compiled against one and linked against the other fails at
+// runtime with a NoSuchMethodError naming a class that isn't there. Kotlin/Native has no
+// facades, which is why only Android and JVM ever saw it.
+//
+// Pinning to the noop's name rather than the other way round is deliberate: it leaves the noop's
+// published ABI untouched, and the noop is the artifact a release build links against.
+//
+// The rule this is an instance of: in a paired real/noop artifact, top-level declarations must
+// live in identically-named files on both sides or carry a pinned `@file:JvmName`. Matching the
+// *public API* is not enough — the file name is part of the ABI. `StreamApiParityTest` asserts
+// the facade name now, so this cannot drift back.
+@file:JvmName("StreamSinkKt")
+
 package dev.inspector.stream
 
 import dev.inspector.model.ClientInfo
