@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v52 — 2026-09-22.**
+**Document version: v53 — 2026-09-22.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.0.1")
-implementation("io.github.shafichariri:inspector-ui:1.0.1")
+implementation("io.github.shafichariri:inspector-core:1.0.2")
+implementation("io.github.shafichariri:inspector-ui:1.0.2")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.0.1")
-            implementation("io.github.shafichariri:inspector-ui:1.0.1")
+            implementation("io.github.shafichariri:inspector-core:1.0.2")
+            implementation("io.github.shafichariri:inspector-ui:1.0.2")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.0.1")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.0.1")
+                implementation("io.github.shafichariri:inspector-noop:1.0.2")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.0.2")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.0.1")
-                implementation("io.github.shafichariri:inspector-ui:1.0.1")
+                implementation("io.github.shafichariri:inspector-core:1.0.2")
+                implementation("io.github.shafichariri:inspector-ui:1.0.2")
             }
         }
     }
@@ -406,13 +406,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.0.1")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.0.1")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.0.1")
+    implementation("io.github.shafichariri:inspector-noop:1.0.2")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.0.2")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.0.2")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.0.1")
-    implementation("io.github.shafichariri:inspector-ui:1.0.1")
-    implementation("io.github.shafichariri:inspector-stream:1.0.1")
+    implementation("io.github.shafichariri:inspector-core:1.0.2")
+    implementation("io.github.shafichariri:inspector-ui:1.0.2")
+    implementation("io.github.shafichariri:inspector-stream:1.0.2")
 }
 ```
 
@@ -1229,7 +1229,33 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v52 — 2026-09-22 (this document)
+### v53 — 2026-09-22 (this document)
+
+**Released as 1.0.2. This is the fix described in v52. Bump the version; nothing else changes.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.0.1")
++implementation("io.github.shafichariri:inspector-core:1.0.2")
+```
+
+…and the same for every other `inspector-*` coordinate you declare, including the `inspector-noop*`
+modules in your release configuration (§3). Version only — the group, the artifact ids, the
+package and every call site stay as they are.
+
+**What it fixes:** `inspector-stream` and `inspector-noop-stream` compiled `defaultDaemonHost()`
+and `defaultClientInfo(...)` into differently named JVM classes, so the two had an identical
+public API and an incompatible ABI. v52 has the full account and the symptom to recognise. Android
+and JVM only; iOS was never affected.
+
+**Do bump even if you never saw a crash.** The failure needs a compiled artifact to outlive the
+§3 swap, so plenty of builds were self-consistent and fine — but which ones is not something you
+can tell by looking, and on 1.0.1 the hazard is still in the artifacts.
+
+**No source change between 1.0.1 and 1.0.2 beyond that fix and its guard.** The captured data, the
+wire protocol, the archive layout and the daemon are untouched, so a 1.0.1 daemon serves a 1.0.2
+app and an archive recorded by either reads the same.
+
+### v52 — 2026-09-22
 
 **If your release build crashes at startup with `NoSuchMethodError` naming
 `dev.inspector.stream.StreamSinkKt` or `dev.inspector.stream.Platform_jvmKt`, this is that bug.
