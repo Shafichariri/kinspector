@@ -3,25 +3,35 @@
 Inspector is a **public** repository, `Shafichariri/kinspector`, licensed
 [Apache-2.0](../LICENSE). Nobody needs to be invited to anything.
 
-There is still one setup step, and it surprises people, so it is the first thing on this page.
+From **1.0.1** there is no setup step at all: the library is on Maven Central and resolves
+anonymously. Earlier versions need a token, and that is further down.
 
 Integrating into an app is [`INTEGRATION.md`](INTEGRATION.md); running the daemon is
 [`DAEMON.md`](DAEMON.md). Come here only for "how do I get it".
 
 ---
 
-## The one catch: GitHub Packages always wants a token
+## From 1.0.1: nothing to set up
 
-The library is published to GitHub Packages, and **that registry requires an authenticated token
-for downloads even when the package is public**. GitHub's own documentation puts it plainly: you
-need an access token "to publish, install, and delete private, internal, and public packages" —
-where *install* means what Gradle does when it resolves a dependency.
+```kotlin
+repositories { mavenCentral() }
+```
 
-So there is no anonymous `implementation("io.github.shafichariri:…")`. This is a property of GitHub
-Packages, not a decision made here, and no visibility setting turns it off. Maven Central and
-JitPack do not work this way, which is exactly why the expectation trips people up.
+```kotlin
+implementation("io.github.shafichariri:inspector-core:1.0.1")
+implementation("io.github.shafichariri:inspector-ui:1.0.1")
+```
 
-The token is free, takes a minute, and is the only thing standing between you and the library.
+No token, no account, no repository block. Maven Central serves anonymously, and `mavenCentral()`
+is already in most builds.
+
+**If you were on 1.0.1 from GitHub Packages, the version does not change.** Delete the
+`maven { url = "https://maven.pkg.github.com/…" }` block and the credentials with it: the same
+coordinate now resolves from Central. Nothing else about the dependency moves.
+
+**1.0.0 and earlier are not on Central and never will be.** They were published before the
+signing and metadata Central requires, and a coordinate cannot be backfilled there. Those versions
+stay on GitHub Packages, which means a token — see *The older path* below.
 
 ---
 
@@ -29,7 +39,7 @@ The token is free, takes a minute, and is the only thing standing between you an
 
 | Half | What it is | How it reaches you |
 |---|---|---|
-| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | A Gradle dependency from GitHub Packages. Needs a token. |
+| **Library** (`:inspector-core`, `:inspector-ui`, `:inspector-stream`) | Compiles into your app. Captures the traffic and draws the overlay. | A Gradle dependency from Maven Central, anonymously, from 1.0.1. Also still on GitHub Packages, which needs a token. |
 | **Daemon** (`:inspector-daemon`) | A program on your machine. Web UI, session archive, CLI, MCP server. | A zip from the [Releases page](https://github.com/Shafichariri/kinspector/releases). No token, no account. |
 
 Neither needs a checkout. Clone only if you are changing Inspector itself.
@@ -42,7 +52,23 @@ it as a badge. Whether a given release actually *changed* your half is a differe
 
 ---
 
-## 1. Create a token
+Once you can resolve the dependency, follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do
+§3 — the debug-only swap — before writing app code rather than after.
+
+---
+
+## The older path: GitHub Packages and a token
+
+**Skip this entirely on 1.0.1 or later.** It is here for 1.0.0 and earlier, and for anyone who
+would rather keep resolving from GitHub Packages — both halves are still published there, and
+that is not changing.
+
+GitHub Packages **requires an authenticated token for downloads even when the package is
+public**. GitHub's own documentation puts it plainly: you need an access token "to publish,
+install, and delete private, internal, and public packages" — where *install* means what Gradle
+does when it resolves a dependency. No visibility setting turns it off. It is a property of that
+registry, not a decision made here, and it is the single thing every new consumer used to trip
+over.
 
 **It has to be a *classic* token.** GitHub Packages does not accept fine-grained tokens; one will
 return 401 however you scope it, which looks like a permissions mistake and is not one.
@@ -59,8 +85,6 @@ gpr.key=ghp_yourClassicToken
 
 Never commit it. The file you check in stays identical for everyone; only this one does not.
 
-## 2. Add the repository and depend on it
-
 In your app's `settings.gradle.kts`, inside
 `dependencyResolutionManagement { repositories { … } }`:
 
@@ -74,15 +98,15 @@ maven {
 }
 ```
 
-```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.1")
-implementation("io.github.shafichariri:inspector-ui:1.0.1")
-```
+**Your release builds need the token too, and that surprises people.** The `-Pinspector=off` swap
+in [`INTEGRATION.md`](INTEGRATION.md) §3 resolves `inspector-noop`, `inspector-noop-ui` and
+`inspector-noop-stream` from the same registry, so a CI runner that has the token for debug jobs
+and not for release ones fails on the *no-op* modules — the ones whose whole purpose is that
+release builds carry nothing. The error names a no-op artifact and says 401, which points at the
+wrong thing entirely. Resolving from Central removes this, because nothing there needs a
+credential.
 
-Then follow [`INTEGRATION.md`](INTEGRATION.md) from §1, and do §3 — the debug-only swap — before
-writing app code rather than after.
-
-## 3. Get the daemon, if you want the web UI
+## Get the daemon, if you want the web UI
 
 ```bash
 gh release download --repo Shafichariri/kinspector --pattern '*.zip'
@@ -110,16 +134,25 @@ repository.
 
 ## What each person actually needs
 
-| You want | GitHub account | Classic token | Anything else |
+On 1.0.1 or later, from Maven Central:
+
+| You want | GitHub account | Token | Anything else |
 |---|---|---|---|
-| The in-app overlay | yes | `read:packages` | Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
-| Overlay + web UI + archive | yes | `read:packages` | the daemon, running on your machine |
-| To read sessions from an AI agent | yes | `read:packages` | the daemon, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
+| The in-app overlay | no | no | Kotlin/CMP versions matching [`INTEGRATION.md`](INTEGRATION.md) §1 |
+| Overlay + web UI + archive | no | no | the daemon, running on your machine |
+| To read sessions from an AI agent | no | no | the daemon, plus the MCP registration in [`INTEGRATION.md`](INTEGRATION.md) §10 |
 | To run the daemon only | no | no | the release zip and a JDK 21 |
 | To change Inspector itself | yes | no | a clone; `main` takes pull requests, not pushes |
 
-The fourth row is the only one that needs nothing: the daemon runs for anybody. It will show an
-empty archive until some app with the library in it starts sending rows.
+Nothing in that table needs an account except changing Inspector itself, which needs one to open
+a pull request. That is new in 1.0.1; every row above said `read:packages` before it.
+
+On 1.0.0 or earlier, or resolving from GitHub Packages by choice, every library row needs a
+GitHub account and a **classic** token with `read:packages` — including release builds, which
+resolve the no-op modules from the same registry.
+
+The daemon has never needed either, and still does not. It will show an empty archive until some
+app with the library in it starts sending rows.
 
 > Session archives hold **unredacted** credentials by default: bearer tokens, login bodies, the
 > lot. That is deliberate, because a debugger that hides the auth header is useless when the bug

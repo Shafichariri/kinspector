@@ -404,9 +404,10 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 ## 4. Maven Central
 
-Nothing is on Central. Everything published so far is GitHub Packages, which is why every consumer
-still needs a token — `ACCESS.md` leads with that because it is the single thing new
-consumers trip over, and Central is the only thing that would remove it.
+**1.0.1 is on Central, published 2026-09-21.** It resolves anonymously, so the token that was
+the single thing every new consumer tripped over is no longer needed for current versions.
+GitHub Packages keeps running alongside it; 1.0.0 and earlier remain Packages-only, because they
+predate the signing and metadata Central requires and a coordinate cannot be backfilled.
 
 Split into one irreversible step and a pile of mechanical ones on purpose. A coordinate published
 to Central can never be replaced or deleted, so the first push is the point of no return; a
@@ -422,7 +423,7 @@ coordinate published to GitHub Packages can be deleted, which is why the group r
 | GPG signing | **Done, wired to be inert without a key.** No `Sign` task exists when none is configured, so `build`, `publishToMavenLocal` and the GitHub Packages release job keep working on a machine that has never held a key |
 | A published signing key | **Done, 2026-09-20.** `A5D94B7324C7B709`, RSA 4096, expires 2028-09-19, served by `keyserver.ubuntu.com`. Held as the `SIGNING_KEY`/`SIGNING_PASSWORD` repository secrets, and passed to the GitHub Packages publish although that repository does not ask for a signature — so the key is exercised on the low-stakes target before Central depends on it |
 | Namespace verification on the Portal | **Done, 2026-09-21.** `io.github.<user>` is verified by GitHub account ownership, and signing in to the Portal *with* GitHub verified it outright — no repository to create. Note the Portal's own warning: namespaces are tied to the sign-in method, so a user token generated under a different sign-in with the same email belongs to a different account and does not own the namespace |
-| Publishing to the Central Portal | **Built, never run.** Not a repository URL: the Portal replaced OSSRH's protocol and has no official Gradle plugin, so it takes a zipped Maven layout POSTed to a Publisher API. `centralBundle` produces the zip and `publishToCentralPortal` uploads it, defaulting to `USER_MANAGED` so the Portal stages and waits rather than releasing. Run from CI by dispatching `central.yml`, on macOS, because a bundle built anywhere else is missing the iOS klibs that only a Mac can produce |
+| Publishing to the Central Portal | **Built, never run.** Not a repository URL: the Portal replaced OSSRH's protocol and has no official Gradle plugin, so it takes a zipped Maven layout POSTed to a Publisher API. `centralBundle` produces the zip and `publishToCentralPortal` uploads it, defaulting to `USER_MANAGED` so the Portal stages and waits rather than releasing. Run from CI by dispatching `central.yml`, on macOS, because a bundle built anywhere else is missing the iOS klibs that only a Mac can produce. **First run 2026-09-21: uploaded, VALIDATED and published on the first attempt** |
 | Keep publishing to GitHub Packages as well | **Decided: both.** Dropping it would strand anyone on 1.0.0 or earlier. They are separate `maven {}` entries and separate tasks, so a Central failure cannot take the Packages release with it |
 
 The namespace is therefore **still changeable**, despite 1.0.0 being out. Nothing has reached the

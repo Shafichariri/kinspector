@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v50 — 2026-09-20.**
+**Document version: v51 — 2026-09-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -27,21 +27,9 @@ the overlay working is how you know capture works before adding a second moving 
 Enough to see traffic, if you would rather skim first and read properly after. Every line has a
 section behind it.
 
-```properties
-# ~/.gradle/gradle.properties — once per machine, never committed. §2
-gpr.user=your-github-username
-gpr.key=ghp_yourClassicToken          # classic token, read:packages. Fine-grained returns 401.
-```
-
 ```kotlin
-// settings.gradle.kts, in dependencyResolutionManagement { repositories { … } }. §2
-maven {
-    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
-    credentials {
-        username = providers.gradleProperty("gpr.user").orNull
-        password = providers.gradleProperty("gpr.key").orNull
-    }
-}
+// settings.gradle.kts — from 1.0.1 this is all the setup there is. §2
+repositories { mavenCentral() }
 ```
 
 ```kotlin
@@ -137,7 +125,20 @@ Also confirm: your app builds and runs *before* you start. Do not debug two thin
 
 ### `settings.gradle.kts`
 
-Add the repository, inside `dependencyResolutionManagement { repositories { … } }`:
+Inside `dependencyResolutionManagement { repositories { … } }`:
+
+```kotlin
+mavenCentral()
+```
+
+That is the whole of it from **1.0.1**. No credentials, no repository block, nothing per-developer
+and nothing in `~/.gradle/gradle.properties`. Most builds already have this line.
+
+<details>
+<summary><strong>On 1.0.0 or earlier, or staying on GitHub Packages</strong></summary>
+
+Those versions are not on Central and cannot be put there — a coordinate cannot be backfilled.
+Both registries carry 1.0.1 and later, so this path also works if you would rather keep it.
 
 ```kotlin
 maven {
@@ -163,6 +164,13 @@ GitHub Packages does not accept fine-grained tokens, so one will return 401 no m
 it. **Do not commit it**, and do not put the token or any path in the file you check in: the point
 of reading them from a Gradle property is that the committed build file is identical for everyone.
 
+**Your release builds need the token too.** The §3 swap resolves `inspector-noop`,
+`inspector-noop-ui` and `inspector-noop-stream` from the same registry, so a CI runner holding the
+token for debug jobs and not for release ones fails on the *no-op* modules — the ones whose whole
+purpose is that release builds carry nothing — with a 401 that names the wrong culprit.
+
+</details>
+
 ### Your shared module's `build.gradle.kts`
 
 ```kotlin
@@ -182,8 +190,9 @@ Build once now and confirm it resolves before writing any code:
 ./gradlew :shared:compileKotlinJvm     # or whichever target you build fastest
 ```
 
-A 401 here means the token; a 404 usually means the repository, not the version — GitHub Packages
-answers "not found" for a package you are not allowed to see.
+From Central, a failure here is a plain 404 and means the coordinate or the version. From GitHub
+Packages, a 401 means the token, and a 404 usually means the repository rather than the version —
+that registry answers "not found" for a package you are not allowed to see.
 
 ### Only if you are changing Inspector: build against a checkout
 
@@ -680,6 +689,10 @@ the composite build is not substituting — check the `includeBuild` path is cor
 the repository root.
 
 **`401 Unauthorized` or `404 Not Found` from `maven.pkg.github.com`**
+First: on 1.0.1 or later you do not need that registry at all. `mavenCentral()` serves the same
+coordinates anonymously, and deleting the `maven { … }` block makes this whole class of failure go
+away. The rest of this entry is for 1.0.0 and earlier.
+
 401 is the token. Check it is a **classic** token — fine-grained ones are rejected by GitHub
 Packages — that it carries `read:packages`, and that `gpr.user` is your GitHub username.
 404, now that the repository is public, really does mean not found: check the coordinates and that
@@ -1216,6 +1229,60 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
+### v51 — 2026-09-21 (this document)
+
+**1.0.1 is on Maven Central. Delete your repository block and your token. The version does not
+change.**
+
+This is not a new release. The artifacts are the ones you already have — same coordinates, same
+bytes, same `1.0.1`. What changed is that they are now served from somewhere that does not ask
+who you are.
+
+```diff
+ dependencyResolutionManagement {
+     repositories {
+-        maven {
+-            url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
+-            credentials {
+-                username = providers.gradleProperty("gpr.user").orNull
+-                password = providers.gradleProperty("gpr.key").orNull
+-            }
+-        }
++        mavenCentral()
+     }
+ }
+```
+
+Your dependency lines do not move:
+
+```kotlin
+implementation("io.github.shafichariri:inspector-core:1.0.1")
+```
+
+**`gpr.user`/`gpr.key` can go** from `~/.gradle/gradle.properties`, and from your CI secrets,
+unless something else in your build uses them.
+
+**This fixes a failure you may not have hit yet.** The §3 release swap resolves the
+`inspector-noop*` modules from the same registry as the real ones, so a CI runner holding the token
+for debug jobs and not for release ones fails on the *no-op* modules — the artifacts whose entire
+purpose is that release builds carry nothing — with a 401 naming the wrong culprit. From Central
+there is no credential to be missing.
+
+**GitHub Packages keeps running.** Both registries carry 1.0.1 and later, and nothing is being
+switched off, so staying where you are is a valid choice rather than a deprecation. The only
+versions that are Central-only-never are **1.0.0 and earlier**: they were published before the
+signing and metadata Central requires, and a coordinate cannot be backfilled there.
+
+**Verifying signatures, if you do.** The key is `A5D94B7324C7B709`, RSA 4096:
+
+```bash
+gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys A5D94B7324C7B709
+gpg --verify inspector-core-1.0.1.jar.asc inspector-core-1.0.1.jar
+```
+
+As v50 said, Gradle does not check these unless you turn on dependency verification. Being on
+Central does not change that.
+
 ### v50 — 2026-09-20 (this document)
 
 **Released as 1.0.1. The artifacts are signed now. Nothing for you to do.**
@@ -1246,6 +1313,9 @@ something a default build complains about, which is worth knowing before assumin
 **There is also a javadoc jar now**, carrying a pointer to this repository rather than generated
 API docs. It exists because Maven Central requires the artifact to be present; Inspector is Kotlin
 and has no javadoc.
+
+**[Superseded by v51 — 1.0.1 *is* on Central now, at the same coordinates. The paragraph below
+was true when this entry was written.]**
 
 **This is not on Maven Central yet.** The library still comes from GitHub Packages and still needs
 a token ([`ACCESS.md`](ACCESS.md)). Signing is the prerequisite being put in place, not the move
