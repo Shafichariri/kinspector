@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v51 — 2026-09-21.**
+**Document version: v52 — 2026-09-22.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1229,7 +1229,41 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v51 — 2026-09-21 (this document)
+### v52 — 2026-09-22 (this document)
+
+**If your release build crashes at startup with `NoSuchMethodError` naming
+`dev.inspector.stream.StreamSinkKt` or `dev.inspector.stream.Platform_jvmKt`, this is that bug.
+Rebuild against the next release. Your code does not change.**
+
+`defaultDaemonHost()` and `defaultClientInfo(...)` were compiled into a **differently named JVM
+class** in `inspector-stream` than in `inspector-noop-stream`. Kotlin names the class holding a
+file's top-level functions after the file: the real module declares them in `Platform.jvm.kt` and
+`Platform.android.kt`, giving `Platform_jvmKt` and `Platform_androidKt`; the noop declares them in
+`StreamSink.kt`, giving `StreamSinkKt`.
+
+The two modules therefore had an identical public API and an **incompatible ABI**. Anything
+compiled against one and linked against the other calls a class that is not in the artifact. It
+typechecks, it builds, and it fails when the code runs.
+
+Android and JVM only. Kotlin/Native has no file facades, so iOS was never affected.
+
+**What you have to do:** rebuild once against the release that carries the fix. No source change,
+no coordinate change beyond the version, no call site to update — `defaultDaemonHost()` and
+`defaultClientInfo(...)` keep their names, signatures and behaviour.
+
+**Whether this ever bit you depends on whether anything in your build compiled against one module
+and ran against the other.** The §3 swap recompiles your app module against whichever module the
+property selects, so a clean debug build and a clean release build were each self-consistent and
+fine. It bites where a compiled artifact outlives the swap — a library module of your own built
+against one and assembled into an app resolving the other, a cached or prebuilt module, an
+`assembleRelease` over a tree built without `-Pinspector=off`. If you have ever had an
+inspector-related `NoSuchMethodError` that a clean build made go away, this was almost certainly
+it.
+
+Both modules now compile those functions into `StreamSinkKt`, and the parity guard asserts the
+facade name rather than looking past it, so the two cannot diverge again silently.
+
+### v51 — 2026-09-21
 
 **1.0.1 is on Maven Central. Delete your repository block and your token. The version does not
 change.**

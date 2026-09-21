@@ -22,6 +22,20 @@ import kotlin.test.Test
  * module would let it grow a member the noop lacks and report nothing, which is exactly the hole
  * this test was written to close.
  *
+ * **The JVM file facade is part of what this asserts, and it was the second drift.** Top-level
+ * functions compile into a class named for their file, so `defaultDaemonHost` and
+ * `defaultClientInfo` were `Platform_jvmKt`/`Platform_androidKt` in the real module and
+ * `StreamSinkKt` in the noop — identical Kotlin API, different JVM class. A consumer compiled
+ * against one and linked against the other got a `NoSuchMethodError` naming a class that is not
+ * in the artifact, which is a swap that typechecks and then fails at runtime. Reported from a
+ * consuming app; Kotlin/Native has no facades, so iOS never saw it.
+ *
+ * The earlier version of this guard **could not have caught it**: it dumped both facades under one
+ * shared label precisely so the names would stop differing, which erased the only fact that did.
+ * `StreamSinkKt` is now named in `STREAM_CONTRACT_CLASSES` like any other type, both modules pin
+ * it with `@file:JvmName`, and renaming either file fails this test with an explanation rather
+ * than shipping.
+ *
  * Constructors are outside this guard, as they are for the core pair — `ApiSurface` reflects
  * functions and properties only.
  *
@@ -35,7 +49,6 @@ class StreamApiParityTest {
         GoldenSurface.assertMatches(
             actual = ApiSurface.dump(
                 classes = ApiSurface.STREAM_CONTRACT_CLASSES,
-                facades = ApiSurface.STREAM_FACADES,
                 skipKtorTyped = IS_REAL_MODULE,
             ),
             goldenPath = GOLDEN,
