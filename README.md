@@ -50,10 +50,10 @@ The badges above are the current version of **everything**. A single tag publish
 to the Releases page *and* the seven library modules to GitHub Packages, at the same version —
 there is no separate version per surface, and never has been.
 
-**Maven Central is a separate, deliberate step.** A tag does not reach it: publishing there is
-irreversible, so it is a manual workflow dispatch followed by a human pressing Publish in the
-Portal. That means the Maven Central badge can legitimately sit a version behind the release badge
-for a while after a tag. If it stays behind, the Central step has not been done yet.
+**Maven Central takes one deliberate step.** A tag *stages* the artifacts there automatically, but
+publishing is irreversible, so it stops short: the Portal validates the bundle and waits for a
+human to press Publish. That means the Maven Central badge legitimately sits a version behind the
+release badge until somebody does. If it stays behind, that button has not been pressed.
 
 **1.0.1 signs the artifacts.** Every jar, klib, aar, POM and module file now ships with a
 detached PGP signature and a javadoc jar beside it. No library source differs from 1.0.0 —
