@@ -140,28 +140,14 @@ a Compose Multiplatform overlay makes.
 
 ### 1. The library — capture and the in-app overlay
 
-**You need:** a GitHub account and a **classic** token with `read:packages`. GitHub Packages
-requires an authenticated download even for public packages; there is no way around it, and a
-fine-grained token returns 401 however you scope it. [`docs/ACCESS.md`](docs/ACCESS.md) has the
-detail.
-
-Once per machine, in `~/.gradle/gradle.properties` — outside any repository, never committed:
-
-```properties
-gpr.user=your-github-username
-gpr.key=ghp_yourClassicToken
-```
-
-In your app's `settings.gradle.kts`, inside `dependencyResolutionManagement { repositories { … } }`:
+**You need:** nothing. From **1.0.1** the library is on Maven Central and resolves anonymously —
+no account, no token, no repository block. Versions up to 1.0.0 are on GitHub Packages only, which
+does require a classic token even for public packages; [`docs/ACCESS.md`](docs/ACCESS.md) has that
+path.
 
 ```kotlin
-maven {
-    url = uri("https://maven.pkg.github.com/Shafichariri/kinspector")
-    credentials {
-        username = providers.gradleProperty("gpr.user").orNull
-        password = providers.gradleProperty("gpr.key").orNull
-    }
-}
+// settings.gradle.kts — from 1.0.1, the whole of the setup
+repositories { mavenCentral() }
 ```
 
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
