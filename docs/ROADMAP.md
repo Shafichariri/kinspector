@@ -431,19 +431,19 @@ that refuses deletions, and `io.github.shafichariri` could have been changed as 
 breaking release. Publishing 1.0.1 spent that. `io.github.shafichariri:*:1.0.1` cannot be
 replaced, deleted or re-pointed, and every future release lives under the same group.
 
-### What is left, and it is operational rather than built
+### ~~What is left~~ — closed 2026-09-21
 
-**A tag does not publish to Central.** `release.yml` ships the daemon zip and GitHub Packages;
-Central is `central.yml`, dispatched by hand, then a person presses Publish in the Portal. That
-split is deliberate — the irreversible step should not be reachable by pushing a tag — but it
-means **every future release needs the extra step or it silently never reaches Central**, while
-the docs now present Central as the default path. The README's two badges make the gap visible:
-the Maven Central one sits behind until the dispatch happens.
+**A tag now stages on Central automatically**, and stops there. `release.yml` gained a third job
+alongside `daemon` and `library`; it pins `USER_MANAGED`, so the Portal validates the bundle and
+parks it, and a person still presses Publish.
 
-Worth considering rather than done: have the tag build and *stage* the bundle automatically
-(`USER_MANAGED` uploads but does not release), so the artifacts are always waiting in the Portal
-and the only manual act left is the irreversible one. That keeps the guard and removes the way to
-forget.
+That was the gap: publishing was a manual dispatch that was easy to forget, while the docs already
+pointed consumers at Central by default — so a release could quietly never arrive for anyone
+following them. Staging automatically removes the way to forget without making the irreversible
+act reachable from a tag push, which is the property worth keeping.
+
+`central.yml` stays for dispatching a tag by hand — re-staging after a dropped deployment, or a
+tag cut before any of this existed.
 
 ---
 

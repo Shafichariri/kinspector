@@ -1136,15 +1136,28 @@ That a bypass is available is not a reason to take it, and release-docs commits 
 not either — it is the mechanical-looking commits that get the least scrutiny. Waiting costs
 nothing: the tag is a separate step that comes after the docs land, and tags are not protected.
 
-`.github/workflows/release.yml` does two independent things on that tag. The **daemon** job builds
-the zip, unzips it, starts it and checks the web UI and the MCP server both answer, and only then
-publishes the release. The **library** job publishes all seven modules to GitHub Packages, and runs
-on macOS because the iOS klibs cannot be produced anywhere else — a publication missing its iOS
-variants resolves fine on JVM and Android and then fails on device, furthest from the cause.
+`.github/workflows/release.yml` does three independent things on that tag. The **daemon** job
+builds the zip, unzips it, starts it and checks the web UI and the MCP server both answer, and only
+then publishes the release. The **library** job publishes all seven modules to GitHub Packages. The
+**central** job stages the same artifacts on Maven Central. Both of the latter run on macOS because
+the iOS klibs cannot be produced anywhere else — a publication missing its iOS variants resolves
+fine on JVM and Android and then fails on device, furthest from the cause.
 
-The repository is public, so release assets are an anonymous download. The library is not:
-GitHub Packages demands an authenticated token even for public packages, which is the single thing
-every new consumer trips over. `docs/ACCESS.md` leads with it for that reason.
+Three jobs rather than one with three steps, because the registries fail independently: a Central
+rejection must not take the Packages release with it, and neither must stop the daemon zip.
+
+**The central job stages and never publishes.** It pins `USER_MANAGED`, so the Portal validates
+the bundle and parks it for a person to press Publish. Both halves of that are load-bearing. A
+coordinate on Central can never be replaced or deleted, so the irreversible act must not be
+reachable by pushing a tag — and equally, forgetting to upload at all should not be possible,
+which is what the job fixes: Central was a manual dispatch for one release and the docs already
+pointed consumers there by default. A re-pushed tag stages coordinates that exist and the Portal
+rejects it per component; that red job does not mean the release failed.
+
+The repository is public, so release assets are an anonymous download. From 1.0.1 the library is
+too, through Maven Central. GitHub Packages still carries it and still demands an authenticated
+token even for public packages — which is why it is no longer the path `docs/ACCESS.md` leads
+with.
 
 Driving the MCP server by hand, which is the fastest way to check a tool change:
 
