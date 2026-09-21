@@ -151,3 +151,61 @@ jobs:
         run: |
           ./gradlew publishAllPublicationsToGitHubPackagesRepository \
             -Pinspector.version="${GITHUB_REF_NAME#v}"
+
+  central:
+    # Stages the tag's artifacts on Maven Central. It does NOT publish them.
+    #
+    # `publishToCentralPortal` is pinned here to USER_MANAGED, so the Portal validates the bundle
+    # and parks it, and a person still has to press Publish. That split is the whole point: a
+    # coordinate on Central can never be replaced or deleted, so the irreversible act must not be
+    # reachable by pushing a tag -- while forgetting to upload at all should not be possible
+    # either, which is what this job fixes. Before it, Central was a manual dispatch that was easy
+    # to forget, and the docs point consumers at Central by default.
+    #
+    # Deliberately a separate job from `library`, not a step in it. The two registries fail
+    # independently: a Central rejection must not take the GitHub Packages release with it, and a
+    # Packages outage must not stop the bundle being staged.
+    #
+    # macOS for the same reason as `library`: the iOS klibs cannot be produced anywhere else, and
+    # a bundle missing them would be staged, published and only fail on device.
+    runs-on: macos-latest
+
+    permissions:
+      contents: read # no release to create, nothing to publish to Packages
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Point at the Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      # A re-pushed or re-run tag uploads a bundle whose coordinates already exist, and the Portal
+      # rejects it with "already exists" per component. That is the correct outcome and a red job
+      # here does not mean the release failed -- the daemon and Packages jobs are independent.
+      - name: Stage the bundle on Central
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          ./gradlew publishToCentralPortal \
+            -Pinspector.version="${GITHUB_REF_NAME#v}" \
+            -PcentralPublishingType=USER_MANAGED
+
+      - name: Keep the bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-bundle-${{ github.ref_name }}
+          path: build/central/*.zip
+          if-no-files-found: warn
