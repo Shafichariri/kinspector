@@ -1,6 +1,7 @@
 # Inspector
 
 [![release](https://img.shields.io/github/v/release/Shafichariri/kinspector)](https://github.com/Shafichariri/kinspector/releases/latest)
+[![maven-central](https://img.shields.io/maven-central/v/io.github.shafichariri/inspector-core)](https://central.sonatype.com/artifact/io.github.shafichariri/inspector-core)
 
 A network debugger for **Compose Multiplatform** apps that use Ktor — the thing Wormholy is for
 iOS, but cross-platform, archived to disk, and readable by an AI agent.
@@ -45,9 +46,14 @@ captured on iOS.
 
 ### One tag, two halves
 
-The badge above is the current version of **everything**. A single tag publishes the daemon zip to
-the Releases page *and* the seven library modules to GitHub Packages, at the same version — there
-is no separate version per surface, and never has been.
+The badges above are the current version of **everything**. A single tag publishes the daemon zip
+to the Releases page *and* the seven library modules to GitHub Packages, at the same version —
+there is no separate version per surface, and never has been.
+
+**Maven Central is a separate, deliberate step.** A tag does not reach it: publishing there is
+irreversible, so it is a manual workflow dispatch followed by a human pressing Publish in the
+Portal. That means the Maven Central badge can legitimately sit a version behind the release badge
+for a while after a tag. If it stays behind, the Central step has not been done yet.
 
 **1.0.1 signs the artifacts.** Every jar, klib, aar, POM and module file now ships with a
 detached PGP signature and a javadoc jar beside it. No library source differs from 1.0.0 —

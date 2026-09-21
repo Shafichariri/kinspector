@@ -402,7 +402,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 - **The Auth0 adapter** compiles against the real SDK and has never run against a live tenant.
 - **Nobody has judged how the web UI looks.** It renders correctly; that is a different claim.
 
-## 4. Maven Central
+## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
 
 **1.0.1 is on Central, published 2026-09-21.** It resolves anonymously, so the token that was
 the single thing every new consumer tripped over is no longer needed for current versions.
@@ -426,12 +426,24 @@ coordinate published to GitHub Packages can be deleted, which is why the group r
 | Publishing to the Central Portal | **Built, never run.** Not a repository URL: the Portal replaced OSSRH's protocol and has no official Gradle plugin, so it takes a zipped Maven layout POSTed to a Publisher API. `centralBundle` produces the zip and `publishToCentralPortal` uploads it, defaulting to `USER_MANAGED` so the Portal stages and waits rather than releasing. Run from CI by dispatching `central.yml`, on macOS, because a bundle built anywhere else is missing the iOS klibs that only a Mac can produce. **First run 2026-09-21: uploaded, VALIDATED and published on the first attempt** |
 | Keep publishing to GitHub Packages as well | **Decided: both.** Dropping it would strand anyone on 1.0.0 or earlier. They are separate `maven {}` entries and separate tasks, so a Central failure cannot take the Packages release with it |
 
-The namespace is therefore **still changeable**, despite 1.0.0 being out. Nothing has reached the
-registry that refuses deletions. If `io.github.shafichariri:inspector-core` is not the name to
-live with, changing it now is an ordinary breaking change with a changelog entry — the same
-shape as the 0.9.1 → 1.0.0 move, and no harder.
+**The namespace is now permanent.** Until 2026-09-21 it was not: nothing had reached the registry
+that refuses deletions, and `io.github.shafichariri` could have been changed as an ordinary
+breaking release. Publishing 1.0.1 spent that. `io.github.shafichariri:*:1.0.1` cannot be
+replaced, deleted or re-pointed, and every future release lives under the same group.
 
----
+### What is left, and it is operational rather than built
+
+**A tag does not publish to Central.** `release.yml` ships the daemon zip and GitHub Packages;
+Central is `central.yml`, dispatched by hand, then a person presses Publish in the Portal. That
+split is deliberate — the irreversible step should not be reachable by pushing a tag — but it
+means **every future release needs the extra step or it silently never reaches Central**, while
+the docs now present Central as the default path. The README's two badges make the gap visible:
+the Maven Central one sits behind until the dispatch happens.
+
+Worth considering rather than done: have the tag build and *stage* the bundle automatically
+(`USER_MANAGED` uploads but does not release), so the artifacts are always waiting in the Portal
+and the only manual act left is the irreversible one. That keeps the guard and removes the way to
+forget.
 
 ---
 
