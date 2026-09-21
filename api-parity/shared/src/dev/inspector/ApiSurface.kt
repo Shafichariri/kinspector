@@ -40,65 +40,47 @@ object ApiSurface {
         "dev.inspector.OkHttpCaptureKt",
     )
 
-    /** Classes forming the `:inspector-stream` contract. Keep in sync with its golden file. */
+    /**
+     * Classes forming the `:inspector-stream` contract. Keep in sync with its golden file.
+     *
+     * `StreamSinkKt` is a **file facade**, and listing it by name is the point rather than an
+     * implementation detail leaking in. Top-level functions compile into a class named for the
+     * file that declares them, so `defaultDaemonHost` and `defaultClientInfo` landed in
+     * `Platform_jvmKt`/`Platform_androidKt` in the real module and `StreamSinkKt` in the noop —
+     * same Kotlin API, different JVM class, which is a runtime break for anything compiled
+     * against one and linked against the other. Both modules now pin `@file:JvmName`, and naming
+     * the facade here is what holds them to it: change either side and this list stops resolving.
+     */
     val STREAM_CONTRACT_CLASSES: List<String> = listOf(
         "dev.inspector.stream.StreamSink",
         "dev.inspector.stream.StreamState",
         "dev.inspector.stream.ReplaySigner",
-    )
-
-    /**
-     * File facades carrying `:inspector-stream`'s top-level functions, which the two modules
-     * compile into **different** classes.
-     *
-     * `defaultDaemonHost` and `defaultClientInfo` are `expect`/`actual` in the real module, so its
-     * JVM actuals land in `Platform_jvmKt`, named for `Platform.jvm.kt`. The noop has no platform
-     * split and declares them outright in `StreamSink.kt`, giving `StreamSinkKt`. Same functions,
-     * same call sites, different JVM class — so comparing them under their own class names would
-     * report every top-level function as both missing and extra, and the guard would be unusable
-     * rather than wrong, which is at least the safe direction.
-     *
-     * They are therefore dumped under [FACADE_LABEL] instead. Only Kotlin call sites are in
-     * scope; a Java consumer calling `Platform_jvmKt.defaultDaemonHost` is not something either
-     * module promises.
-     */
-    val STREAM_FACADES: List<String> = listOf(
         "dev.inspector.stream.StreamSinkKt",
-        "dev.inspector.stream.Platform_jvmKt",
     )
-
-    /** Stands in for whichever file facade a module happened to compile. */
-    const val FACADE_LABEL = "dev.inspector.stream (top-level)"
 
     /**
      * @param classes types that must be present; a missing one fails loudly rather than shrinking
-     *   the surface being compared.
-     * @param facades file facades dumped under [facadeLabel] instead of their own class name.
-     *   Each is optional, because the two modules compile different ones — but **at least one
-     *   must resolve**, or this would silently compare an empty set of top-level functions and
-     *   pass, which is the same failure `OkHttpCaptureKt` is listed above to prevent.
+     *   the surface being compared. File facades belong in this list like anything else — dumping
+     *   them under a shared label instead is what hid the `Platform_jvmKt`/`StreamSinkKt` split
+     *   for eleven releases, because a label both modules agreed on erased the one fact that
+     *   differed.
      */
     fun dump(
         classes: List<String> = CONTRACT_CLASSES,
-        facades: List<String> = emptyList(),
-        facadeLabel: String = FACADE_LABEL,
         skipKtorTyped: Boolean = false,
-    ): List<String> {
-        val named = classes.flatMap { name ->
-            val klass = Class.forName(name).kotlin
-            signaturesOf(klass, skipKtorTyped).map { "$name: $it" }
+    ): List<String> = classes.flatMap { name ->
+        val klass = runCatching { Class.forName(name).kotlin }.getOrElse {
+            fail(
+                "Contract class $name is not on this module's classpath, so its members would " +
+                    "not be compared at all.\nIf it is a file facade (a name ending Kt), the " +
+                    "file declaring those top-level functions was renamed or moved: the facade " +
+                    "name is part of the ABI, so pin it with @file:JvmName rather than updating " +
+                    "this list — a twin pair must compile top-level declarations into the same " +
+                    "JVM class or a release swap breaks at runtime."
+            )
         }
-
-        val resolved = facades.mapNotNull { runCatching { Class.forName(it).kotlin }.getOrNull() }
-        if (facades.isNotEmpty() && resolved.isEmpty()) {
-            fail("None of the file facades $facades is on this module's classpath, so no top-level function would be compared.")
-        }
-        val topLevel = resolved.flatMap { klass ->
-            signaturesOf(klass, skipKtorTyped).map { "$facadeLabel: $it" }
-        }
-
-        return (named + topLevel).distinct().sorted()
-    }
+        signaturesOf(klass, skipKtorTyped).map { "$name: $it" }
+    }.distinct().sorted()
 
     private fun signaturesOf(klass: KClass<*>, skipKtorTyped: Boolean): List<String> {
         // staticFunctions is what surfaces top-level declarations on a file facade class such as

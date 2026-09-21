@@ -1,3 +1,22 @@
+// This file's NAME is part of the published ABI. Renaming it is a breaking change.
+//
+// `defaultDaemonHost` and `defaultClientInfo` are top-level, so they compile into a JVM facade
+// named for this file: `StreamSinkKt`. `:inspector-stream` declares its actuals in
+// `Platform.jvm.kt`/`Platform.android.kt` and so produced `Platform_jvmKt`/`Platform_androidKt`
+// instead — identical Kotlin API, different JVM class, which breaks at runtime rather than at
+// compile time. It now pins `@file:JvmName("StreamSinkKt")` to match this file. See the note
+// there.
+//
+// This side cannot pin the same way, and that is a Kotlin limitation rather than an oversight:
+// `kotlin.jvm.JvmName` does not resolve in a common source set shared with Native, so
+// `@file:JvmName` here fails `compileKotlinIosArm64` with "Unresolved reference 'JvmName'".
+// Splitting the declarations into a jvmMain file to carry the annotation would reintroduce the
+// very split it is meant to close.
+//
+// So the guard carries it instead: `StreamSinkKt` is named in `ApiSurface.STREAM_CONTRACT_CLASSES`
+// and this module's own `StreamApiParityTest` fails, with the reason, if renaming this file moves
+// the facade. Do not rename it without reading that test.
+
 package dev.inspector.stream
 
 import dev.inspector.InspectorSink
