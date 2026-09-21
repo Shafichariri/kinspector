@@ -18,14 +18,14 @@ repositories { mavenCentral() }
 ```
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.1")
-implementation("io.github.shafichariri:inspector-ui:1.0.1")
+implementation("io.github.shafichariri:inspector-core:1.0.2")
+implementation("io.github.shafichariri:inspector-ui:1.0.2")
 ```
 
 No token, no account, no repository block. Maven Central serves anonymously, and `mavenCentral()`
 is already in most builds.
 
-**If you were on 1.0.1 from GitHub Packages, the version does not change.** Delete the
+**If you were already on GitHub Packages, moving to Central does not change your version.** Delete the
 `maven { url = "https://maven.pkg.github.com/…" }` block and the credentials with it: the same
 coordinate now resolves from Central. Nothing else about the dependency moves.
 
