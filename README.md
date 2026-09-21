@@ -55,6 +55,14 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.0.2 fixes an ABI mismatch between the real and noop stream modules.** `inspector-stream` and
+`inspector-noop-stream` compiled `defaultDaemonHost()` and `defaultClientInfo(...)` into
+differently named JVM classes — Kotlin names a file facade after the file, and the real module
+declares them as `actual`s in `Platform.jvm.kt`/`Platform.android.kt`. Identical public API,
+incompatible bytecode, so a build that compiled against one and linked against the other failed
+at runtime rather than at compile time. Android and JVM only; Kotlin/Native has no file facades.
+Bump the version, change nothing else. `docs/INTEGRATION.md` §14 v52 has the full account.
+
 **1.0.1 signs the artifacts.** Every jar, klib, aar, POM and module file now ships with a
 detached PGP signature and a javadoc jar beside it. No library source differs from 1.0.0 —
 nothing under any `src/` directory — so there is nothing to do but bump the version if you want
@@ -159,9 +167,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.1")
-implementation("io.github.shafichariri:inspector-ui:1.0.1")
-implementation("io.github.shafichariri:inspector-stream:1.0.1")
+implementation("io.github.shafichariri:inspector-core:1.0.2")
+implementation("io.github.shafichariri:inspector-ui:1.0.2")
+implementation("io.github.shafichariri:inspector-stream:1.0.2")
 ```
 
 Three lines of code:
