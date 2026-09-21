@@ -377,6 +377,31 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   recorded in `AGENTS.md`; none of them changed the `core` golden file by a byte, which is how they
   were confirmed to be fixes to the guard rather than to the surface.
 
+- ~~**The twin pair's JVM file facades had different names.**~~ **Done, 2026-09-22.** The bullet
+  above records "facades with different names in the two modules" as one of four ways the
+  *reflection* could look right while checking nothing. That reading was wrong, and the guard was
+  built on it: the differing names were not a nuisance to normalise away, they were an **ABI
+  break**. `defaultDaemonHost`/`defaultClientInfo` compiled into `Platform_jvmKt` and
+  `Platform_androidKt` in the real module and `StreamSinkKt` in the noop, so a consumer compiled
+  against one and linked against the other got a `NoSuchMethodError` on a class not in the
+  artifact — identical public API, incompatible bytecode. Reported from a consuming app; Android
+  and JVM only, because Kotlin/Native has no facades.
+
+  The guard could not have caught it, and not by accident: it dumped both facades under the shared
+  label `dev.inspector.stream (top-level)` *so that* the names would stop differing. A guard built
+  to normalise away the symptom of a bug reports clean forever. Both actuals now pin
+  `@file:JvmName("StreamSinkKt")`, `StreamSinkKt` is named in `STREAM_CONTRACT_CLASSES` like any
+  other type, and the golden file records it. Proven both ways on both modules.
+
+  The noop side cannot pin: `kotlin.jvm.JvmName` does not resolve in a common source set shared
+  with Native. So `inspector-noop-stream/.../StreamSink.kt`'s **file name is load-bearing** and the
+  guard is the only thing holding it. Recorded in the file itself and in `AGENTS.md`.
+
+  A raw public-class-set diff across each pair — the obvious generalisation, and what the report
+  suggested — was built, measured and rejected: 19 spurious entries for `core`, 19 for `ui`, 4 for
+  `stream`, because Kotlin `internal` is JVM-public and the canary is real-only by design. The
+  reasoning is in `AGENTS.md`; do not rebuild it without reading that.
+
 - **`:inspector-noop-ui` still has no golden file, and already diverges.** Found while writing the
   stream guard, not fixed with it. `:inspector-ui` publicly exposes `InspectorTheme`,
   `InspectorColors` and `LocalInspectorColors`; the noop exposes `InspectorOverlay` alone, so a
@@ -391,6 +416,13 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   than a tidy-up. The guard itself is also harder here than for stream: `@Composable` functions
   carry synthetic `Composer` and `changed` parameters into their JVM signatures, which reflection
   reports and nobody wants in a golden file.
+
+  The facade fix above adds a second thing that guard will have to assert. `InspectorOverlay` is
+  top-level, so its JVM class is named for whichever file declares it in each module — the same
+  defect the `stream` pair shipped. **Measured, and this pair is currently fine:** both modules
+  put it in `InspectorOverlayKt`, on JVM and on Android. But they agree because both files happen
+  to be called `InspectorOverlay.kt`, not because anything checks, and renaming either one is a
+  silent runtime break with nothing to catch it.
 
 ### Open questions
 
