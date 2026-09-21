@@ -1,0 +1,98 @@
+name: Central
+
+# Uploads a deployment bundle to the Maven Central Portal. Manual only.
+#
+# Not folded into the tag-triggered release, and not automatic. Releasing to Central is the one
+# irreversible act in this project -- a coordinate there can never be replaced or deleted -- so it
+# does not hang off a tag push. This job only *stages*: the Portal validates the bundle and waits
+# for a person to press Publish, because `publishToCentralPortal` defaults to USER_MANAGED.
+#
+# It runs here rather than on a laptop for the same reason the release's library job does: the iOS
+# klibs can only be produced on a Mac, and a publication missing its iOS variants resolves on JVM
+# and Android and then fails on device, at the point furthest from the cause. A bundle built
+# anywhere else is that machine's idea of the artifacts rather than the tag's.
+#
+#   gh workflow run central.yml -f ref=v1.0.1 -f version=1.0.1
+#
+# `ref` is checked out, and this file is read from the branch the workflow is dispatched on -- so
+# a tag cut before this workflow existed can still be uploaded, which a `workflow_dispatch` run
+# *on* that tag could not do.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to build the bundle from (a tag, e.g. v1.0.1)'
+        required: true
+        type: string
+      version:
+        description: 'Version to stamp on the artifacts, without the leading v (e.g. 1.0.1)'
+        required: true
+        type: string
+      publishingType:
+        description: 'USER_MANAGED stages and waits. AUTOMATIC releases immediately and CANNOT be undone.'
+        required: true
+        default: USER_MANAGED
+        type: choice
+        options:
+          - USER_MANAGED
+          - AUTOMATIC
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The version is stamped by -Pinspector.version and the ref is checked out separately, so
+      # nothing stops someone stamping 1.0.2 onto 1.0.1's code. Central would accept it and never
+      # let it be corrected, so the two are compared before anything is built.
+      - name: Refuse a version that does not match the ref
+        run: |
+          if [ "${{ inputs.ref }}" != "v${{ inputs.version }}" ]; then
+            echo "ref '${{ inputs.ref }}' does not match version '${{ inputs.version }}'."
+            echo "Expected ref 'v${{ inputs.version }}'. A coordinate on Central is permanent;"
+            echo "stamping one version onto another release's code cannot be undone."
+            exit 1
+          fi
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Point at the Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      # SIGNING_* are the same secrets the release job uses. CENTRAL_* are the Portal user token,
+      # which is a third distinct credential -- not the GitHub token, not the signing passphrase.
+      # The build refuses to stage anything at all when the signing key is missing or blank.
+      - name: Stage and upload the bundle
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          ./gradlew publishToCentralPortal \
+            -Pinspector.version="${{ inputs.version }}" \
+            -PcentralPublishingType="${{ inputs.publishingType }}"
+
+      # Kept whatever the outcome: if the Portal rejects the deployment, the bundle is the only
+      # thing that explains why.
+      - name: Keep the bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: central-bundle-${{ inputs.version }}
+          path: build/central/*.zip
+          if-no-files-found: warn
