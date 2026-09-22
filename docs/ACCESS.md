@@ -18,8 +18,8 @@ repositories { mavenCentral() }
 ```
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.2")
-implementation("io.github.shafichariri:inspector-ui:1.0.2")
+implementation("io.github.shafichariri:inspector-core:1.0.3")
+implementation("io.github.shafichariri:inspector-ui:1.0.3")
 ```
 
 No token, no account, no repository block. Maven Central serves anonymously, and `mavenCentral()`

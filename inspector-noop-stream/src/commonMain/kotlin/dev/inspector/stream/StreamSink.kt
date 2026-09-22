@@ -56,6 +56,28 @@ class StreamSink(
     private val client: ClientInfo,
     private val host: String = defaultDaemonHost(),
     private val port: Int = 8099,
+    /**
+     * Positional stand-in for the real sink's `engineFactory: () -> HttpClient`. Never called.
+     *
+     * **The type is `() -> Any?` and that is not laziness.** A constructor's parameter list is
+     * part of the ABI, and this one is fourth, so omitting it — which is what every release up to
+     * and including 1.0.2 did — leaves the two modules with different JVM descriptors for the same
+     * Kotlin call. A consumer that compiled against the noop and linked the real module then died
+     * on `NoSuchMethodError <init>` at the first `StreamSink(...)`.
+     *
+     * The noop cannot name `HttpClient`: that is a Ktor type, and a release build must not carry
+     * Ktor. It does not have to. Kotlin erases function-type arguments on the JVM, so `() ->
+     * HttpClient` and `() -> Any?` are both `Lkotlin/jvm/functions/Function0;` in the descriptor —
+     * identical bytes, no Ktor named. Source compatibility comes free in the same direction:
+     * a return type is covariant, so any `() -> HttpClient` a consumer writes is already a
+     * `() -> Any?`.
+     *
+     * Keep it fourth. Its position is the contract, not its name.
+     */
+    @Suppress("UNUSED_PARAMETER") engineFactory: () -> Any? = { null },
+    /**
+     * Optional, and last, matching the real module. See the note there.
+     */
     @Suppress("UNUSED_PARAMETER") signer: ReplaySigner? = null,
 ) : InspectorSink {
 

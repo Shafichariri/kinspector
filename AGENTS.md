@@ -918,6 +918,46 @@ unresolvable contract class fails with the reason rather than a bare `ClassNotFo
 Proven in both directions and on both modules: removing the pin fails `:inspector-stream:jvmTest`,
 renaming the noop's file fails `:inspector-noop-stream:jvmTest`.
 
+**A matching Kotlin signature is not a matching ABI either: the constructor descriptor is the
+contract.** The facade fix above was the first half of this lesson; the constructor was the second,
+and it had been shipping since well before either. `StreamSink`'s real constructor takes
+`engineFactory: () -> HttpClient` **fourth**; the noop's took no such parameter. Same Kotlin call
+site, different JVM descriptor, so a consumer compiling against the noop and linking the real
+module died on `NoSuchMethodError <init>` at their first `StreamSink(...)`. Reproduced exactly:
+compiling that call against the published `inspector-noop-stream:1.0.2` and running it against
+`inspector-stream:1.0.2` throws; against the fix it constructs.
+
+**It was not introduced in 1.0.2, and the report that arrived said it was.** 1.0.1's artifacts
+carry the identical divergence — checked by `javap` on both published aars. What changed is that
+the facade bug was crashing *one line earlier in the same function*, on `defaultClientInfo`, so
+fixing the facade in 1.0.2 moved the crash from the call to the constructor and made a
+long-standing break newly reachable. Worth remembering when a report blames the release it first
+became visible in.
+
+**The noop's parameter is `() -> Any?`, and that is the whole trick.** It must never name
+`HttpClient`, or a release build carries Ktor — but it does not have to, because Kotlin erases
+function-type arguments on the JVM: `() -> HttpClient` and `() -> Any?` are both
+`Lkotlin/jvm/functions/Function0;`. Identical descriptor, no Ktor named, and source compatibility
+comes free in the same direction because a return type is covariant. **Its position is the
+contract, not its name** — keep it fourth.
+
+The guard's own documentation was the bug's cover: `StreamApiParityTest` said in as many words that
+"constructors are outside this guard", so nothing looked. `ApiSurface.jvmDescriptors` now dumps
+public constructor and method descriptors beside the Kotlin signatures. Two things it must keep
+doing. It asks `Method.kotlinFunction` for visibility, because a top-level `internal` function is
+**not** name-mangled and `connectionHelp`, `base64Encode` and `isUtf8` otherwise arrive looking
+exactly like public API — found by reading the generated golden file, not from a failing test. And
+it skips the synthetic default-args constructor, which is the descriptor the crash actually named,
+because it is derived mechanically from the primary: two matching primaries cannot yield differing
+synthetics, and dumping synthetics would drag every `$default` bridge into the golden file.
+
+**A constructor-only descriptor diff is the low-noise form of the rejected class-set diff, and it
+is worth running by hand after a release.** Restricting the comparison to classes present in *both*
+artifacts is what removes the noise measured below — every `dev.inspector.internal` class exists in
+one module only, so it never enters the comparison. Run across all three pairs it answers "did this
+diverge anywhere else" in one line each; it confirmed `StreamSink` was the only constructor
+divergence in the tree.
+
 **A raw class-set diff between twins was measured and rejected — it is noise, not a guard.**
 The obvious generalisation is to diff every public class of each pair and fail on asymmetry. It
 was built and run: **19** entries for the `core` pair, **19** for `ui`, **4** for `stream`, and

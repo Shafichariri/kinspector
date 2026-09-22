@@ -402,6 +402,24 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   `stream`, because Kotlin `internal` is JVM-public and the canary is real-only by design. The
   reasoning is in `AGENTS.md`; do not rebuild it without reading that.
 
+- ~~**The twin pair's constructor descriptors differed.**~~ **Done, 2026-09-22.** The entry above
+  fixed the *facade* half of "matching API is not matching ABI" and stopped there. `StreamSink`'s
+  real constructor takes `engineFactory: () -> HttpClient` fourth; the noop's took no such
+  parameter — so a consumer compiling against the noop and linking the real module crashed on
+  `NoSuchMethodError <init>`, one line past the crash the facade fix had just removed.
+
+  Two things worth keeping. It was **not** introduced by the facade release, though the report said
+  it was: 1.0.1's aars carry the identical divergence, and fixing the earlier crash is what made
+  this one reachable. And the guard's own documentation was the cover — `StreamApiParityTest` said
+  constructors were out of scope, so nothing looked.
+
+  `ApiSurface.jvmDescriptors` now compares public constructor and method **JVM descriptors**. The
+  noop's parameter is `() -> Any?`: erasure makes it the same descriptor as `() -> HttpClient`
+  without naming Ktor, which is also what keeps the Ktor filter honest — the erased parameter is
+  compared, while `defaultStreamClient()Lio/ktor/client/HttpClient;` still carries Ktor and is
+  still skipped. Proven both ways; a constructor-only descriptor audit across all three pairs
+  confirms `StreamSink` was the only divergence.
+
 - **`:inspector-noop-ui` still has no golden file, and already diverges.** Found while writing the
   stream guard, not fixed with it. `:inspector-ui` publicly exposes `InspectorTheme`,
   `InspectorColors` and `LocalInspectorColors`; the noop exposes `InspectorOverlay` alone, so a
