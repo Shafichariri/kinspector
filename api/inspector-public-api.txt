@@ -15,6 +15,25 @@ dev.inspector.Inspector: fun signal(tag: String, name: String, data: kotlinx.ser
 dev.inspector.Inspector: fun signal(tag: String, name: String, text: String): Unit
 dev.inspector.Inspector: fun signalProviders(): List<SignalKey>
 dev.inspector.Inspector: fun unregisterProvider(tag: String, name: String): Unit
+dev.inspector.Inspector: jvm addSink(Ldev/inspector/InspectorSink;)V
+dev.inspector.Inspector: jvm answerSignalRequest(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev.inspector.Inspector: jvm clear()V
+dev.inspector.Inspector: jvm getCanary()Ljava/lang/String;
+dev.inspector.Inspector: jvm getLatest()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.Inspector: jvm getMarkers()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.Inspector: jvm getSignals()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.Inspector: jvm getTransactions()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.Inspector: jvm init(Ldev/inspector/InspectorConfig;)V
+dev.inspector.Inspector: jvm install(Lio/ktor/client/HttpClientConfig;)V
+dev.inspector.Inspector: jvm mark(Ljava/lang/String;)V
+dev.inspector.Inspector: jvm pullSignal(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+dev.inspector.Inspector: jvm registerProvider(Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;)V
+dev.inspector.Inspector: jvm requestBody(Ldev/inspector/model/NetworkTransaction;)[B
+dev.inspector.Inspector: jvm responseBody(Ldev/inspector/model/NetworkTransaction;)[B
+dev.inspector.Inspector: jvm signal(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+dev.inspector.Inspector: jvm signal(Ljava/lang/String;Ljava/lang/String;Lkotlinx/serialization/json/JsonElement;)V
+dev.inspector.Inspector: jvm signalProviders()Ljava/util/List;
+dev.inspector.Inspector: jvm unregisterProvider(Ljava/lang/String;Ljava/lang/String;)V
 dev.inspector.Inspector: val latest: StateFlow<NetworkTransaction?>
 dev.inspector.Inspector: val markers: StateFlow<List<Marker>>
 dev.inspector.Inspector: val signals: StateFlow<List<Signal>>
@@ -30,6 +49,24 @@ dev.inspector.InspectorConfig: fun copy(ringBufferMaxBytes: Long = ..., bodyCapt
 dev.inspector.InspectorConfig: fun equals(other: Any?): Boolean
 dev.inspector.InspectorConfig: fun hashCode(): Int
 dev.inspector.InspectorConfig: fun toString(): String
+dev.inspector.InspectorConfig: jvm <init>()V
+dev.inspector.InspectorConfig: jvm <init>(JILjava/util/List;ZLdev/inspector/Redaction;Ldev/inspector/SignalPolicy;)V
+dev.inspector.InspectorConfig: jvm component1()J
+dev.inspector.InspectorConfig: jvm component2()I
+dev.inspector.InspectorConfig: jvm component3()Ljava/util/List;
+dev.inspector.InspectorConfig: jvm component4()Z
+dev.inspector.InspectorConfig: jvm component5()Ldev/inspector/Redaction;
+dev.inspector.InspectorConfig: jvm component6()Ldev/inspector/SignalPolicy;
+dev.inspector.InspectorConfig: jvm copy(JILjava/util/List;ZLdev/inspector/Redaction;Ldev/inspector/SignalPolicy;)Ldev/inspector/InspectorConfig;
+dev.inspector.InspectorConfig: jvm equals(Ljava/lang/Object;)Z
+dev.inspector.InspectorConfig: jvm getBodyCaptureMaxBytes()I
+dev.inspector.InspectorConfig: jvm getCaptureAllBodies()Z
+dev.inspector.InspectorConfig: jvm getCaptureContentTypes()Ljava/util/List;
+dev.inspector.InspectorConfig: jvm getRedaction()Ldev/inspector/Redaction;
+dev.inspector.InspectorConfig: jvm getRingBufferMaxBytes()J
+dev.inspector.InspectorConfig: jvm getSignals()Ldev/inspector/SignalPolicy;
+dev.inspector.InspectorConfig: jvm hashCode()I
+dev.inspector.InspectorConfig: jvm toString()Ljava/lang/String;
 dev.inspector.InspectorConfig: val bodyCaptureMaxBytes: Int
 dev.inspector.InspectorConfig: val captureAllBodies: Boolean
 dev.inspector.InspectorConfig: val captureContentTypes: List<String>
@@ -39,7 +76,12 @@ dev.inspector.InspectorConfig: val signals: dev.inspector.SignalPolicy
 dev.inspector.InspectorSink: fun onMarker(marker: Marker): Unit
 dev.inspector.InspectorSink: fun onSignal(signal: Signal, data: ByteArray?): Unit
 dev.inspector.InspectorSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
+dev.inspector.InspectorSink: jvm onMarker(Ldev/inspector/model/Marker;)V
+dev.inspector.InspectorSink: jvm onSignal(Ldev/inspector/model/Signal;[B)V
+dev.inspector.InspectorSink: jvm onTransaction(Ldev/inspector/model/NetworkTransaction;[B[B)V
 dev.inspector.OkHttpCaptureKt: fun okHttpInterceptor(dev.inspector.Inspector): okhttp3.Interceptor
+dev.inspector.OkHttpCaptureKt: jvm okHttpInterceptor(Ldev/inspector/Inspector;)Lokhttp3/Interceptor;
+dev.inspector.Redaction$Companion: jvm getDEFAULT_HEADERS()Ljava/util/List;
 dev.inspector.Redaction$Companion: val DEFAULT_BODY_KEY_PATTERN: String
 dev.inspector.Redaction$Companion: val DEFAULT_HEADERS: List<String>
 dev.inspector.Redaction$Companion: val DEFAULT_QUERY_KEY_PATTERN: String
@@ -47,6 +89,9 @@ dev.inspector.Redaction$Companion: val PLACEHOLDER: String
 dev.inspector.Redaction$Off: fun equals(other: Any?): Boolean
 dev.inspector.Redaction$Off: fun hashCode(): Int
 dev.inspector.Redaction$Off: fun toString(): String
+dev.inspector.Redaction$Off: jvm equals(Ljava/lang/Object;)Z
+dev.inspector.Redaction$Off: jvm hashCode()I
+dev.inspector.Redaction$Off: jvm toString()Ljava/lang/String;
 dev.inspector.Redaction$On: fun component1(): List<String>
 dev.inspector.Redaction$On: fun component2(): String
 dev.inspector.Redaction$On: fun component3(): String
@@ -54,6 +99,20 @@ dev.inspector.Redaction$On: fun copy(headers: List<String> = ..., bodyKeyPattern
 dev.inspector.Redaction$On: fun equals(other: Any?): Boolean
 dev.inspector.Redaction$On: fun hashCode(): Int
 dev.inspector.Redaction$On: fun toString(): String
+dev.inspector.Redaction$On: jvm <init>()V
+dev.inspector.Redaction$On: jvm <init>(Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)V
+dev.inspector.Redaction$On: jvm component1()Ljava/util/List;
+dev.inspector.Redaction$On: jvm component2()Ljava/lang/String;
+dev.inspector.Redaction$On: jvm component3()Ljava/lang/String;
+dev.inspector.Redaction$On: jvm copy(Ljava/util/List;Ljava/lang/String;Ljava/lang/String;)Ldev/inspector/Redaction$On;
+dev.inspector.Redaction$On: jvm equals(Ljava/lang/Object;)Z
+dev.inspector.Redaction$On: jvm getBodyKeyPattern()Ljava/lang/String;
+dev.inspector.Redaction$On: jvm getBodyKeys()Lkotlin/text/Regex;
+dev.inspector.Redaction$On: jvm getHeaders()Ljava/util/List;
+dev.inspector.Redaction$On: jvm getQueryKeyPattern()Ljava/lang/String;
+dev.inspector.Redaction$On: jvm getQueryKeys()Lkotlin/text/Regex;
+dev.inspector.Redaction$On: jvm hashCode()I
+dev.inspector.Redaction$On: jvm toString()Ljava/lang/String;
 dev.inspector.Redaction$On: val bodyKeyPattern: String
 dev.inspector.Redaction$On: val bodyKeys: Regex
 dev.inspector.Redaction$On: val headers: List<String>
@@ -67,6 +126,20 @@ dev.inspector.SignalPolicy: fun copy(minIntervalMs: Long = ..., dropUnchanged: B
 dev.inspector.SignalPolicy: fun equals(other: Any?): Boolean
 dev.inspector.SignalPolicy: fun hashCode(): Int
 dev.inspector.SignalPolicy: fun toString(): String
+dev.inspector.SignalPolicy: jvm <init>()V
+dev.inspector.SignalPolicy: jvm <init>(JZIJ)V
+dev.inspector.SignalPolicy: jvm component1()J
+dev.inspector.SignalPolicy: jvm component2()Z
+dev.inspector.SignalPolicy: jvm component3()I
+dev.inspector.SignalPolicy: jvm component4()J
+dev.inspector.SignalPolicy: jvm copy(JZIJ)Ldev/inspector/SignalPolicy;
+dev.inspector.SignalPolicy: jvm equals(Ljava/lang/Object;)Z
+dev.inspector.SignalPolicy: jvm getDropUnchanged()Z
+dev.inspector.SignalPolicy: jvm getMaxPayloadBytes()I
+dev.inspector.SignalPolicy: jvm getMinIntervalMs()J
+dev.inspector.SignalPolicy: jvm getRingBufferMaxBytes()J
+dev.inspector.SignalPolicy: jvm hashCode()I
+dev.inspector.SignalPolicy: jvm toString()Ljava/lang/String;
 dev.inspector.SignalPolicy: val dropUnchanged: Boolean
 dev.inspector.SignalPolicy: val maxPayloadBytes: Int
 dev.inspector.SignalPolicy: val minIntervalMs: Long

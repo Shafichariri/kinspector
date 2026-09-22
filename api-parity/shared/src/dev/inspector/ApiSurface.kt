@@ -121,11 +121,11 @@ object ApiSurface {
         val constants = (klass.java.enumConstants ?: emptyArray<Any>())
             .map { "enum constant ${(it as Enum<*>).name}" }
 
-        return (functions + properties + constants + staticJavaSignatures(klass))
+        return (functions + properties + constants + staticJavaSignatures(klass) + jvmDescriptors(klass))
             // Applied to the *raw* signature, before [render] strips package prefixes and takes
             // `io.ktor.client.HttpClient` down to `HttpClient`. Filtering after rendering would
             // silently match nothing, which is the passing-guard-that-checks-nothing failure.
-            .filterNot { skipKtorTyped && it.contains(KTOR_PACKAGE) }
+            .filterNot { skipKtorTyped && (it.contains(KTOR_PACKAGE) || it.contains(KTOR_PACKAGE_JVM)) }
             .map(::render)
             .distinct()
             .sorted()
@@ -162,6 +162,79 @@ object ApiSurface {
             }
 
     /**
+     * Public **JVM descriptors** for constructors and methods — the bytes a call site binds to.
+     *
+     * Everything above this compares *Kotlin* signatures, and that is not the same contract. A
+     * twin pair can agree on every Kotlin signature and still be binary-incompatible, because the
+     * JVM descriptor carries things Kotlin's does not: parameter *position*, the synthetic
+     * default-args overload and its `DefaultConstructorMarker`, and erasure.
+     *
+     * This exists because that gap shipped. `StreamSink`'s real constructor takes
+     * `engineFactory: () -> HttpClient` fourth and the noop's did not take it at all, so a
+     * consumer compiling against the noop and linking the real module died on
+     * `NoSuchMethodError <init>` at their first `StreamSink(...)`. Constructors were explicitly
+     * out of scope for this guard — `ApiSurface` reflected functions and properties only, and
+     * `StreamApiParityTest` said so in as many words — so nothing looked. Reported from a
+     * consuming app, twice: the facade split fixed in 1.0.2 was crashing one line earlier in the
+     * same function and masking this.
+     *
+     * **Erasure is what makes the Ktor filter correct here rather than a hole.** `() ->
+     * HttpClient` erases to `Lkotlin/jvm/functions/Function0;`, which names no Ktor type, so this
+     * comparison sees the parameter and the twin must match it. A member that genuinely cannot be
+     * mirrored — `defaultStreamClient()Lio/ktor/client/HttpClient;` — still carries Ktor in its
+     * descriptor and is still filtered. The filter therefore drops exactly what a release build
+     * cannot name and keeps exactly what it can.
+     */
+    private fun jvmDescriptors(klass: KClass<*>): List<String> {
+        // The *primary* constructors only. Kotlin marks the default-args overload
+        // `(params…, int, DefaultConstructorMarker)` synthetic, and that is the descriptor the
+        // reported crash actually named — but it is derived mechanically from this one, so two
+        // matching primaries cannot produce differing synthetics. Checking the primary is
+        // therefore sufficient, and skipping synthetics keeps every `$default` bridge in the
+        // codebase out of the golden file.
+        val ctors = klass.java.declaredConstructors
+            .filter { Modifier.isPublic(it.modifiers) }
+            .filterNot { it.isSynthetic }
+            .map { "jvm <init>${descriptorOf(it.parameterTypes, "V")}" }
+
+        val methods = klass.java.declaredMethods
+            .filter { Modifier.isPublic(it.modifiers) }
+            .filterNot { it.isSynthetic }
+            // Kotlin mangles `internal` members of a class as `name$module`; those are not API.
+            .filterNot { it.name.contains('$') }
+            // ...but a top-level `internal` function is NOT mangled, so the name cannot tell.
+            // `connectionHelp`, `base64Encode` and `isUtf8` arrived here looking exactly like
+            // public API and would have failed the noop, which rightly does not have them. Ask
+            // Kotlin, keeping the member when Kotlin reflection cannot answer — the same rule and
+            // the same reason as [staticJavaSignatures].
+            .filterNot { method ->
+                val asKotlin = runCatching { method.kotlinFunction }.getOrNull()
+                asKotlin != null && asKotlin.visibility != KVisibility.PUBLIC
+            }
+            .filterNot { klass.java.isEnum && it.name in ENUM_SYNTHETICS }
+            .map { "jvm ${it.name}${descriptorOf(it.parameterTypes, jvmType(it.returnType))}" }
+
+        return ctors + methods
+    }
+
+    private fun descriptorOf(params: Array<Class<*>>, ret: String): String =
+        params.joinToString("", prefix = "(", postfix = ")$ret") { jvmType(it) }
+
+    private fun jvmType(c: Class<*>): String = when {
+        c == Void.TYPE -> "V"
+        c == Integer.TYPE -> "I"
+        c == java.lang.Long.TYPE -> "J"
+        c == java.lang.Boolean.TYPE -> "Z"
+        c == java.lang.Byte.TYPE -> "B"
+        c == Character.TYPE -> "C"
+        c == java.lang.Short.TYPE -> "S"
+        c == java.lang.Float.TYPE -> "F"
+        c == java.lang.Double.TYPE -> "D"
+        c.isArray -> "[" + jvmType(c.componentType)
+        else -> "L" + c.name.replace('.', '/') + ";"
+    }
+
+    /**
      * Normalises type strings so the two modules produce identical text. Kotlin renders some
      * types with platform-specific nullability markers that are noise for this comparison.
      */
@@ -176,6 +249,9 @@ object ApiSurface {
     private val ENUM_SYNTHETICS = setOf("values", "valueOf", "getEntries")
 
     private const val KTOR_PACKAGE = "io.ktor."
+
+    /** The same package as a JVM descriptor spells it. See [jvmDescriptors] on why this matters. */
+    private const val KTOR_PACKAGE_JVM = "io/ktor/"
 
     private val STRIPPED_PREFIXES = listOf(
         "kotlin.collections.",
