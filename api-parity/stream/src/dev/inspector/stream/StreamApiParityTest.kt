@@ -36,8 +36,21 @@ import kotlin.test.Test
  * it with `@file:JvmName`, and renaming either file fails this test with an explanation rather
  * than shipping.
  *
- * Constructors are outside this guard, as they are for the core pair — `ApiSurface` reflects
- * functions and properties only.
+ * **Constructors are inside this guard now, and they were not, which is the third drift.** The
+ * real `StreamSink` takes `engineFactory: () -> HttpClient` fourth; the noop's constructor did not
+ * take it at all. Identical Kotlin call, different JVM descriptor, so a consumer compiling against
+ * the noop and linking the real module died on `NoSuchMethodError <init>` at their first
+ * `StreamSink(...)`. This file used to say constructors were out of scope; that sentence was the
+ * bug's cover. `ApiSurface.jvmDescriptors` now dumps public constructor and method descriptors
+ * beside the Kotlin signatures, because a matching Kotlin signature is not a matching ABI and only
+ * the descriptor says what a call site actually binds to.
+ *
+ * The noop's parameter is typed `() -> Any?`, not `() -> HttpClient`: it must not name a Ktor type,
+ * and it does not have to, because Kotlin erases function-type arguments to
+ * `Lkotlin/jvm/functions/Function0;` on the JVM. That erasure is also what keeps the Ktor filter
+ * honest here — the erased parameter names no Ktor and so is *compared*, while a genuinely
+ * unmirrorable member like `defaultStreamClient()Lio/ktor/client/HttpClient;` still carries Ktor
+ * in its descriptor and is still skipped.
  *
  * To change the API deliberately: update both modules, then regenerate with
  * `./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true`.
