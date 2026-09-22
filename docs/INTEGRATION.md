@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v53 — 2026-09-22.**
+**Document version: v54 — 2026-09-22.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.0.2")
-implementation("io.github.shafichariri:inspector-ui:1.0.2")
+implementation("io.github.shafichariri:inspector-core:1.0.3")
+implementation("io.github.shafichariri:inspector-ui:1.0.3")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.0.2")
-            implementation("io.github.shafichariri:inspector-ui:1.0.2")
+            implementation("io.github.shafichariri:inspector-core:1.0.3")
+            implementation("io.github.shafichariri:inspector-ui:1.0.3")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.0.2")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.0.2")
+                implementation("io.github.shafichariri:inspector-noop:1.0.3")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.0.3")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.0.2")
-                implementation("io.github.shafichariri:inspector-ui:1.0.2")
+                implementation("io.github.shafichariri:inspector-core:1.0.3")
+                implementation("io.github.shafichariri:inspector-ui:1.0.3")
             }
         }
     }
@@ -406,13 +406,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.0.2")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.0.2")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.0.2")
+    implementation("io.github.shafichariri:inspector-noop:1.0.3")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.0.3")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.0.3")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.0.2")
-    implementation("io.github.shafichariri:inspector-ui:1.0.2")
-    implementation("io.github.shafichariri:inspector-stream:1.0.2")
+    implementation("io.github.shafichariri:inspector-core:1.0.3")
+    implementation("io.github.shafichariri:inspector-ui:1.0.3")
+    implementation("io.github.shafichariri:inspector-stream:1.0.3")
 }
 ```
 
@@ -1229,7 +1229,51 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v53 — 2026-09-22 (this document)
+### v54 — 2026-09-22 (this document)
+
+**If your app crashes at launch with `NoSuchMethodError` on `StreamSink.<init>`, this is it.
+Upgrade to 1.0.3. Your code does not change.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-stream:1.0.2")
++implementation("io.github.shafichariri:inspector-stream:1.0.3")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included.
+
+`inspector-stream`'s `StreamSink` takes `engineFactory: () -> HttpClient` as its **fourth**
+constructor parameter. `inspector-noop-stream`'s did not take it at all. Same Kotlin call, two
+different JVM constructor descriptors — so a build that compiled the call against the no-op and
+ran it against the real module crashed the moment `StreamSink(...)` was constructed.
+
+**This was not new in 1.0.2, though it first became visible there.** 1.0.1 has the identical
+divergence. What changed is that the v52 facade bug was crashing one line earlier in the same
+function, on `defaultClientInfo` — so fixing that moved the crash onto the constructor and made a
+long-standing break newly reachable. If you upgraded to 1.0.2 for v52 and started crashing on
+`<init>`, you did not hit a regression; you reached the next mismatch behind the one you fixed.
+
+**Who this affects:** anyone whose build compiles a `StreamSink` call site against
+`inspector-noop-stream` and puts `inspector-stream` on the runtime classpath. That happens when
+the §3 swap is applied per variant or per module rather than to the whole graph — a library module
+declaring the no-op while the app module substitutes the real one, for instance. If every module
+that compiles against Inspector also runs against the same half, you were never exposed.
+
+**The workaround, if you cannot upgrade today:** make the compile and runtime halves agree, by
+applying the substitution to the module that owns the `StreamSink` call site as well.
+
+**What changed in the library:** the no-op's constructor gained the same fourth parameter, typed
+`() -> Any?`. It is ignored. It is not typed `() -> HttpClient` because a release build must not
+carry Ktor — and it does not need to be, since Kotlin erases function-type arguments to the same
+JVM descriptor either way. Your call sites are unaffected in both directions: a `() -> HttpClient`
+is already a `() -> Any?`.
+
+**The guard that missed it now covers it.** The parity check compared Kotlin signatures and said,
+in its own documentation, that constructors were out of scope. It now compares public constructor
+and method **JVM descriptors** across the pair, which is the level at which this class of bug
+exists. A constructor-only descriptor audit across all three module pairs confirms `StreamSink`
+was the only divergence.
+
+### v53 — 2026-09-22
 
 **Released as 1.0.2. This is the fix described in v52. Bump the version; nothing else changes.**
 

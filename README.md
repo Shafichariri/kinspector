@@ -55,6 +55,14 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.0.3 fixes a second ABI mismatch in the same pair — a constructor this time.**
+`StreamSink`'s real constructor takes `engineFactory: () -> HttpClient` fourth and the no-op's took
+no such parameter, so a build that compiled the call against one half and ran it against the other
+crashed on `NoSuchMethodError <init>`. It had been that way since before 1.0.2; the facade bug
+below was crashing one line earlier and hiding it. The no-op now takes the parameter, typed
+`() -> Any?` so it names no Ktor type while erasing to the same JVM descriptor. Bump the version,
+change nothing else.
+
 **1.0.2 fixes an ABI mismatch between the real and noop stream modules.** `inspector-stream` and
 `inspector-noop-stream` compiled `defaultDaemonHost()` and `defaultClientInfo(...)` into
 differently named JVM classes — Kotlin names a file facade after the file, and the real module
@@ -167,9 +175,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.2")
-implementation("io.github.shafichariri:inspector-ui:1.0.2")
-implementation("io.github.shafichariri:inspector-stream:1.0.2")
+implementation("io.github.shafichariri:inspector-core:1.0.3")
+implementation("io.github.shafichariri:inspector-ui:1.0.3")
+implementation("io.github.shafichariri:inspector-stream:1.0.3")
 ```
 
 Three lines of code:

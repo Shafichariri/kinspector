@@ -4,16 +4,28 @@
 # Regenerate: ./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true
 
 dev.inspector.stream.ReplaySigner: fun headersFor(method: String, url: String): Map<String, String>
+dev.inspector.stream.ReplaySigner: jvm headersFor(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 dev.inspector.stream.StreamSink: fun onMarker(marker: Marker): Unit
 dev.inspector.stream.StreamSink: fun onSignal(signal: Signal, data: ByteArray?): Unit
 dev.inspector.stream.StreamSink: fun onTransaction(txn: NetworkTransaction, reqBody: ByteArray?, resBody: ByteArray?): Unit
 dev.inspector.stream.StreamSink: fun start(): Unit
 dev.inspector.stream.StreamSink: fun stop(): Unit
+dev.inspector.stream.StreamSink: jvm <init>(Ldev/inspector/model/ClientInfo;Ljava/lang/String;ILkotlin/jvm/functions/Function0;Ldev/inspector/stream/ReplaySigner;)V
+dev.inspector.stream.StreamSink: jvm getDropped()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.stream.StreamSink: jvm getLastError()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.stream.StreamSink: jvm getState()Lkotlinx/coroutines/flow/StateFlow;
+dev.inspector.stream.StreamSink: jvm onMarker(Ldev/inspector/model/Marker;)V
+dev.inspector.stream.StreamSink: jvm onSignal(Ldev/inspector/model/Signal;[B)V
+dev.inspector.stream.StreamSink: jvm onTransaction(Ldev/inspector/model/NetworkTransaction;[B[B)V
+dev.inspector.stream.StreamSink: jvm start()V
+dev.inspector.stream.StreamSink: jvm stop()V
 dev.inspector.stream.StreamSink: val dropped: StateFlow<Long>
 dev.inspector.stream.StreamSink: val lastError: StateFlow<String?>
 dev.inspector.stream.StreamSink: val state: StateFlow<dev.inspector.stream.StreamState>
 dev.inspector.stream.StreamSinkKt: fun defaultClientInfo(java.lang.String, java.lang.String, java.lang.String): ClientInfo
 dev.inspector.stream.StreamSinkKt: fun defaultDaemonHost(): java.lang.String
+dev.inspector.stream.StreamSinkKt: jvm defaultClientInfo(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ldev/inspector/model/ClientInfo;
+dev.inspector.stream.StreamSinkKt: jvm defaultDaemonHost()Ljava/lang/String;
 dev.inspector.stream.StreamState: enum constant Connected
 dev.inspector.stream.StreamState: enum constant Connecting
 dev.inspector.stream.StreamState: enum constant Disconnected
