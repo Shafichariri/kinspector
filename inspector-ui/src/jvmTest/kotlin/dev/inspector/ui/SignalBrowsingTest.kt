@@ -1,5 +1,6 @@
 package dev.inspector.ui
 
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -58,6 +59,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(
@@ -93,6 +95,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call, txn("b", "/v1/broken", 300).copy(status = 500)),
                     markers = emptyList(),
                     signals = listOf(signal("cache", "profile", 150)),
@@ -119,6 +122,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(target, signal("screen", "Dashboard", 200)),
@@ -219,6 +223,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(
@@ -254,6 +259,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(
@@ -284,6 +290,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(signal("cache", "profile", 100), latest),
@@ -306,6 +313,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(signal("cache", "profile", 100)),
@@ -326,6 +334,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
@@ -345,6 +354,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(observed),
@@ -444,6 +454,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(signal("cache", "profile", 100)),
@@ -472,6 +483,7 @@ class SignalBrowsingTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(call),
                     markers = emptyList(),
                     signals = listOf(signal("state", "Checkout", 100)),
