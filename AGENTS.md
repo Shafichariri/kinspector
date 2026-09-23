@@ -571,6 +571,23 @@ web page. A custom header forces a CORS preflight, and this server answers none,
 page gets through. Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the
 MCP tools post markers without it, and a marker is not a weapon.
 
+**A stopped daemon's banner offers no restart, and the page keeps redialling.** The design pass
+proposed a `restart daemon` button on the banner; the process that would receive it is the one that
+just exited, so it could only ever fail. The banner says to run `inspector serve` instead, and that
+is enough because `ws.onclose` still redials every 3 s while stopped — it used to return early,
+which left a page that had stopped a daemon unable to notice it coming back without a reload.
+`render-web-ui.js` stubs the stop request (never the real daemon), checks one click only arms,
+and replays the page's own `onopen` to prove the banner, the dimming and the disabled controls all
+clear. "Last capture" names a row this page watched arrive from any session; failing that it says
+"newest row in this session", because the newest row of an old session is not the daemon's last
+capture and must not be presented as one.
+
+**The top bar has two dots and they mean different things.** `live` is whether the *list* follows
+new rows; the dot in the daemon group is whether the *page is connected*. They were one checkbox
+and one dot, which read as "the daemon is up" whichever it was describing. Pausing drops live rows
+rather than queueing them, so resuming re-reads the session — without that, a list resumed after a
+burst is missing the burst with nothing on screen to say so. The probe watches for the re-read.
+
 **`endedAt` and "is anything connected" are different questions, and `GET /api/recording` is the
 second one.** A session whose daemon was killed, or whose app vanished without a clean close, has
 no `endedAt` and no open connection either — so anything gating on `endedAt` offers a control that

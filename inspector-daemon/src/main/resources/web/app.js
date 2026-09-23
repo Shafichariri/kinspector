@@ -19,6 +19,9 @@
     // 'running' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem to
     // reconnect from or the outcome the user asked for.
     serverState: 'running',
+    // The newest capture this page has seen arrive, from any session: what the stopped banner
+    // means by "last capture". Null until the live socket delivers a row.
+    lastCaptureTs: null,
     // false = oldest first (causal reading order), true = newest first (tail-a-log order).
     // Remembered across reloads because it is a reading preference, not session state.
     newestFirst: localStorage.getItem('inspector.newestFirst') === '1',
@@ -208,19 +211,48 @@
 
   async function loadSessions() {
     state.sessions = await api('/api/sessions');
+    state.recording = await api('/api/recording').catch(() => state.recording);
     const picker = $('session-picker');
     picker.innerHTML = '';
     for (const s of state.sessions) {
-      // `?? 0`, not `||`: kotlinx omits a field equal to its default, so a session with no
-      // traffic arrives with `txnCount` missing rather than zero, and reads as "(undefined)".
-      const option = el('option', null, `${s.sessionId}  (${s.txnCount ?? 0})`);
+      const option = el('option', null, sessionLabel(s));
       option.value = s.sessionId;
+      // The id is what the CLI, the MCP tools and the archive folder use, so it stays reachable.
+      option.title = s.sessionId;
       picker.appendChild(option);
     }
     if (!state.sessionId && state.sessions.length) state.sessionId = state.sessions[0].sessionId;
     if (state.sessionId) picker.value = state.sessionId;
 
     showSessionLabel();
+  }
+
+  /**
+   * `● app · device · 09:41 today · 12 calls`.
+   *
+   * The option used to be the session id, which is a timestamp and three slugs run together — the
+   * facts were in it, but in the order a folder name needs rather than the one a reader asks in.
+   * The dot marks a session an app is attached to right now, asked of `/api/recording` rather than
+   * inferred from `endedAt`: a session whose app vanished has no `endedAt` and no app either.
+   */
+  function sessionLabel(meta) {
+    const started = new Date(meta.startedAt);
+    let when = '';
+    if (!Number.isNaN(started.getTime())) {
+      const pad = (n) => String(n).padStart(2, '0');
+      const today = new Date();
+      const sameDay = started.toDateString() === today.toDateString();
+      const day = sameDay
+        ? 'today'
+        : started.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      when = `${pad(started.getHours())}:${pad(started.getMinutes())} ${day}`;
+    }
+    // `?? 0`, not `||`: kotlinx omits a field equal to its default, so a session with no traffic
+    // arrives with `txnCount` missing rather than zero.
+    const count = meta.txnCount ?? 0;
+    const parts = [meta.appId, meta.device, when, `${count} ${count === 1 ? 'call' : 'calls'}`];
+    const recording = (state.recording || []).includes(meta.sessionId);
+    return `${recording ? '● ' : ''}${parts.filter(Boolean).join(' · ')}`;
   }
 
   /**
@@ -236,13 +268,17 @@
       $('counts').textContent = '';
       return;
     }
-    $('counts').textContent = `${visibleTransactions().length}/${total}`;
+    // With its noun: a bare `12/12` beside a session picker could be a count of anything.
+    $('counts').textContent = `${visibleTransactions().length} of ${total} ${total === 1 ? 'call' : 'calls'}`;
   }
 
-  /** Which app and device the rows belong to. Also runs on switch, or it would name the old one. */
+  /**
+   * Which app the page is showing, in the window title — the picker already names it in the bar.
+   * Also runs on switch, or it would name the old one.
+   */
   function showSessionLabel() {
     const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
-    $('session-app').textContent = meta ? `${meta.appId} · ${meta.device}` : 'no sessions';
+    document.title = meta ? `${meta.appId} · inspector` : 'inspector';
   }
 
   async function loadTransactions() {
@@ -2886,15 +2922,77 @@
     node.hidden = !text;
     node.textContent = text || '';
     node.classList.toggle('pending', !!pending);
+    node.classList.remove('big');
+    document.body.classList.remove('stopped');
+  }
+
+  /**
+   * The daemon was stopped on purpose, and every number below it is now history.
+   *
+   * A stopped daemon otherwise looks exactly like an idle one: the rows are still there, the
+   * counts still add up, and nothing says none of it will move again. So the banner says when the
+   * last capture was — with an age that ticks, because "4m ago" becoming "40m ago" is the point —
+   * and the page dims under it.
+   *
+   * There is no restart button, and that is not an omission: the process that would receive the
+   * request is the one that just exited. The page redials on its own, so running `inspector
+   * serve` is the whole of the fix and the banner clears itself when the daemon is back.
+   */
+  function showStoppedBanner() {
+    const node = $('server-banner');
+    node.replaceChildren();
+    node.hidden = false;
+    node.classList.remove('pending');
+    node.classList.add('big');
+    document.body.classList.add('stopped');
+
+    node.appendChild(el('span', 'banner-title', 'daemon stopped'));
+    const text = el('span', 'banner-text');
+    text.append('nothing is being recorded');
+    const last = lastCapture();
+    if (last) {
+      text.append(` — ${last.what} ${fmtClock(last.ts).slice(0, 8)}, `);
+      text.appendChild(ageNode(last.ts, 'banner-age'));
+    }
+    text.append('. Everything below is stale.');
+    node.appendChild(text);
+    node.appendChild(el('span', 'spacer'));
+    const hint = el('span', 'banner-hint muted');
+    hint.append('run ');
+    hint.appendChild(el('code', null, 'inspector serve'));
+    hint.append(' to start it again — this page reconnects on its own');
+    node.appendChild(hint);
+  }
+
+  /**
+   * What "last capture" can honestly name. A row this page watched arrive is a capture from any
+   * session, so it wins. Failing that, the newest row of the session on screen is still true, but
+   * only of that session — and it is labelled as such rather than passed off as the daemon's.
+   */
+  function lastCapture() {
+    if (state.lastCaptureTs) return { ts: state.lastCaptureTs, what: 'last capture' };
+    const newest = [...state.transactions, ...state.signals]
+      .map((r) => r.ts)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    return newest ? { ts: newest, what: 'newest row in this session' } : null;
+  }
+
+  /** The page's own connection to the daemon, which is what the dot beside its controls means. */
+  function setConn(kind) {
+    const node = $('conn');
+    node.dataset.state = kind;
+    node.querySelector('.conn-label').textContent = kind;
   }
 
   async function requestStop() {
-    if (!confirm('Stop the daemon? Traffic will stop being recorded until you start it again.')) return;
     setControlsEnabled(false);
     try {
       await control('stop');
       state.serverState = 'stopped';
-      showServerBanner('Daemon stopped. Run `inspector serve` to start it again.', false);
+      setConn('stopped');
+      showStoppedBanner();
     } catch (e) {
       setControlsEnabled(true);
       showServerBanner(`Could not stop the daemon: ${e.message}`, false);
@@ -3377,6 +3475,26 @@
     } catch { /* the banner already covers an unreachable daemon */ }
   }
 
+  /**
+   * Follow new traffic, or hold the list where it is.
+   *
+   * Paused drops live rows rather than queueing them, so resuming re-reads the session: a list
+   * that picked up from wherever the next message happened to land would be missing everything
+   * that arrived while it was paused, with nothing on screen to say so.
+   */
+  function setLiveTail(on) {
+    state.liveTail = on;
+    const button = $('live-btn');
+    button.classList.toggle('on', on);
+    button.classList.toggle('paused', !on);
+    button.setAttribute('aria-pressed', String(on));
+    button.querySelector('.live-label').textContent = on ? 'live' : 'paused';
+    button.title = on
+      ? 'Following new traffic as it arrives. Click to pause.'
+      : 'Paused: new traffic is not added to the list. Click to catch up and follow again.';
+    if (on) loadTransactions();
+  }
+
   function connectLive() {
     const ws = new WebSocket(`ws://${location.host}/api/live`);
     ws.onmessage = (event) => {
@@ -3387,6 +3505,8 @@
         return;
       }
       if (message.type === 'sessionEnded') { loadSessions(); return; }
+      const captured = message.txn?.ts || message.signal?.ts;
+      if (captured && (!state.lastCaptureTs || captured > state.lastCaptureTs)) state.lastCaptureTs = captured;
       if (message.sessionId !== state.sessionId) return;
       if (!state.liveTail) return;
 
@@ -3415,17 +3535,21 @@
       }
     };
     ws.onclose = () => {
-      $('live-dot').classList.remove('on');
-      // A deliberate stop is not a connection problem, so do not keep dialling — and do not
-      // overwrite the banner that says the daemon is gone on purpose.
-      if (state.serverState === 'stopped') return;
+      // A deliberate stop is not a connection problem, so the banner saying the daemon is gone on
+      // purpose stays. The page still redials, slowly: `inspector serve` in a terminal is how the
+      // daemon comes back, and a page that had stopped listening would need a reload to notice.
+      if (state.serverState === 'stopped') {
+        setTimeout(connectLive, 3000);
+        return;
+      }
+      setConn('reconnecting');
       if (state.serverState === 'running') {
         showServerBanner('Lost the daemon — reconnecting…', true);
       }
       setTimeout(connectLive, 1000);
     };
     ws.onopen = () => {
-      $('live-dot').classList.add('on');
+      setConn('connected');
       const wasAway = state.serverState !== 'running';
       state.serverState = 'running';
       showServerBanner(null, false);
@@ -3619,7 +3743,7 @@
     showSessionLabel();
     loadTransactions();
   });
-  $('live-tail').addEventListener('change', (e) => { state.liveTail = e.target.checked; });
+  $('live-btn').addEventListener('click', () => setLiveTail(!state.liveTail));
   // Scoped to the filter rail, not every `.chip` on the page. Order chips and facet chips are
   // chips too, and they carry no `data-filter` — a blanket handler set the filter box to
   // `undefined`, which parses as a bad filter and empties the whole list.
@@ -3631,7 +3755,11 @@
     });
   }
 
-  $('server-stop').addEventListener('click', requestStop);
+  // Two clicks, like deleting a session: stopping ends recording for every app on this machine.
+  // It replaces a `confirm()` dialog, which blocks the whole page and is easy to dismiss by reflex.
+  $('server-stop').addEventListener('click', () => {
+    confirmThen($('server-stop'), 'stop', 'stop daemon?', requestStop);
+  });
   $('server-restart').addEventListener('click', requestRestart);
   $('order-oldest').addEventListener('click', () => setSortOrder(false));
   $('order-newest').addEventListener('click', () => setSortOrder(true));
@@ -3643,7 +3771,9 @@
   });
 
   $('session-delete').addEventListener('click', () => {
-    if (state.sessionId) confirmThen($('session-delete'), '✕', 'delete?', () => deleteSession(state.sessionId));
+    if (state.sessionId) {
+      confirmThen($('session-delete'), '✕', 'delete session?', () => deleteSession(state.sessionId));
+    }
   });
   $('sessions-clear').addEventListener('click', () => {
     confirmThen($('sessions-clear'), 'clear all', 'delete every session?', clearSessions);

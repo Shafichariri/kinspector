@@ -98,14 +98,37 @@ body { display: flex; flex-direction: column; }
   max-width: 380px;
 }
 
-.live-toggle {
+/* Whether the list follows new rows. Names its state; the dot is green only while following. */
+.live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: none;
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 3px 9px 3px 7px;
+  cursor: pointer;
+}
+.live-btn:hover { background: var(--bg-hover); }
+.live-btn.on .dot { background: var(--ok); }
+.live-btn.paused { color: var(--fg-muted); }
+.live-btn.paused .dot { background: var(--fg-muted); }
+
+/* The daemon process, set apart: its connection first, then the controls that act on it. */
+.daemon-group {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--fg-muted);
-  cursor: pointer;
-  user-select: none;
+  padding-left: 10px;
+  border-left: 1px solid var(--divider);
 }
+.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-muted); margin-right: 2px; }
+.conn[data-state="connected"] .dot { background: var(--ok); }
+.conn[data-state="reconnecting"] .dot { background: var(--warn); }
+.conn[data-state="stopped"] .dot { background: var(--err); }
 
 .dot {
   width: 8px;
@@ -633,6 +656,34 @@ kbd {
   color: var(--err);
 }
 .server-banner.pending { border-bottom-color: var(--warn); color: var(--warn); }
+
+/* A daemon stopped on purpose. Its own tint token rather than a literal, shared with armed
+   buttons, because both say "one step from something that stops". Declared here rather than in the
+   main token block so the two can move together. */
+:root { --stop-bg: rgb(229 72 77 / 0.10); }
+@media (prefers-color-scheme: light) {
+  :root { --stop-bg: rgb(198 42 47 / 0.08); }
+}
+.server-banner.big {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--stop-bg);
+  border-bottom: 1px solid var(--err);
+}
+.server-banner[hidden] { display: none; }
+.server-banner.big .banner-title { font-weight: 600; color: var(--err); }
+.server-banner.big .banner-hint { font-size: 12px; }
+.server-banner.big code { font-family: var(--mono); color: var(--fg); }
+/* Everything under the banner is history now; dimmed so it cannot be mistaken for live. */
+body.stopped #panes,
+body.stopped .toolbar,
+body.stopped .axis,
+body.stopped .tabs { opacity: 0.6; }
 
 .section-title {
   font-size: 11px;
@@ -1392,5 +1443,5 @@ pre.body {
 .btn.armed {
   border-color: var(--err);
   color: var(--err);
-  background: rgb(229 72 77 / 0.12);
+  background: var(--stop-bg);
 }
