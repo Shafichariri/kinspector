@@ -3,6 +3,7 @@ package dev.inspector.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,14 @@ fun InspectorOverlay(
     var collapsed by remember { mutableStateOf(false) }
     var markCounter by remember { mutableStateOf(0) }
 
+    // Above the screen switch, so the list's arrangement outlives the list: closing the inspector
+    // and reopening it, or reading a body and coming back, finds the filter where it was left.
+    val listState = rememberListViewState()
+    val hidden = screen == Screen.Hidden
+    LaunchedEffect(hidden) {
+        if (hidden) listState.onClosed()
+    }
+
     // Compose's own clipboard works on Android, iOS and desktop, so copying needs no platform
     // code and — more importantly — nothing for the consuming app to wire up.
     val clipboard = LocalClipboardManager.current
@@ -104,6 +113,7 @@ fun InspectorOverlay(
                     modifier = Modifier.fillMaxSize(),
                     providers = providers,
                     onPull = { key -> Inspector.pullSignal(key.tag, key.name) },
+                    state = listState,
                 )
 
                 is Screen.SignalDetail -> {
