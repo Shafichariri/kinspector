@@ -550,11 +550,10 @@ kbd {
   color: var(--accent);
   border: 1px solid rgb(var(--accent-rgb) / 0.35);
   background: rgb(var(--accent-rgb) / 0.12);
-  /* The front of a host identifies it, so this truncates the opposite way round from the rows
-     below: `direction: rtl` moves the ellipsis to the start, and the isolate keeps the text
-     itself in logical order. */
-  direction: rtl;
-  unicode-bidi: isolate;
+  /* Left to right, clipping at the end. This was `direction: rtl`, under a comment saying the front
+     of a host identifies it — which is the part rtl clips. The label is `host · prefix` now, so the
+     end that goes first on a narrow bar is the least specific part of the prefix, and the whole
+     label is in the tooltip. */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -573,7 +572,6 @@ kbd {
 .row:hover { background: var(--bg-hover); }
 .row.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
 
-.row .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
 /* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
    the path column lines up across rows whose verbs differ in length. */
 .row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
@@ -582,6 +580,8 @@ kbd {
    row in a session that went somewhere else. */
 .row .host { font-size: 11px; flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .status { font-family: var(--mono); font-weight: 600; width: 40px; text-align: right; }
+/* First column: left-aligned so the codes line up where the eye starts, not where the row ends. */
+.row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
 .row .attempt { font-size: 10px; color: var(--warn); }
 

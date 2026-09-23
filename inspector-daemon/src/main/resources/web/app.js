@@ -765,7 +765,9 @@
   }
 
   async function loadTransactions() {
-    if (!state.sessionId) return;
+    // With no session there is nothing to load, and the empty list is the only thing that can
+    // say what the page is waiting for.
+    if (!state.sessionId) { renderListEmpty(); return; }
     const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
     try {
       const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
@@ -1138,10 +1140,46 @@
     bar.hidden = !scope;
     if (!scope) return;
     bar.innerHTML = '';
-    const label = el('span', 'scope-label mono', scope.label);
-    label.title = 'Shared by most of this session, and lifted out of the rows below';
+    // Host and prefix as two parts, so a narrow bar clips the end of the prefix rather than the
+    // front of the host. The full text is in the tooltip either way.
+    const label = el('span', 'scope-label mono', `${scope.host} · ${scope.prefix.replace(/\/$/, '')}`);
+    label.title = `${scope.label} — shared by most of this session, and lifted out of the rows below`;
     bar.appendChild(label);
     bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
+  }
+
+  /**
+   * Why the list is empty, and what would fix it.
+   *
+   * Four different things empty this list and each has a different fix, so a single "no
+   * transactions" sent people looking in the wrong place — most often at the app, when the cause
+   * was a filter they had forgotten. The filter case gets a button, because clearing it is the
+   * whole of the fix. "Waiting for an app" is said only where it is true: with no session at all.
+   * A session an app is attached to but has not called anything from, and an archived session that
+   * recorded no calls, are both different claims and are worded as such.
+   */
+  function renderListEmpty() {
+    const node = $('list-empty');
+    node.replaceChildren();
+    const inSession = state.allSessionId === state.sessionId ? state.allTransactions.length : null;
+    if (state.timeRange && state.transactions.length) {
+      node.textContent = 'no calls in the selected stretch';
+    } else if (state.filter && inSession !== 0) {
+      node.append('no calls match — ');
+      const clear = el('button', 'btn btn-sm', 'clear filter');
+      clear.type = 'button';
+      clear.addEventListener('click', () => {
+        $('filter').value = '';
+        applyFilter();
+      });
+      node.appendChild(clear);
+    } else if (!state.sessionId) {
+      node.textContent = 'waiting for an app with inspector-stream to connect';
+    } else if ((state.recording || []).includes(state.sessionId)) {
+      node.textContent = 'the app is connected — no calls yet';
+    } else {
+      node.textContent = 'no calls were recorded in this session';
+    }
   }
 
   function renderList() {
@@ -1162,11 +1200,7 @@
 
     const rows = orderedRows();
     $('list-empty').hidden = rows.length > 0;
-    // Two things can empty this list and they have different fixes. Saying which one did it is
-    // the difference between "widen the selection" and "the app sent nothing".
-    $('list-empty').textContent = state.timeRange && state.transactions.length
-      ? 'no calls in the selected stretch'
-      : 'no transactions';
+    renderListEmpty();
 
     // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the
     // only arrangement that makes causal sense, then reverse the whole thing. Reversing after
@@ -2003,7 +2037,10 @@
         'same method, URL, status and byte counts';
     }
 
-    row.appendChild(el('span', `status-dot b${cls}`));
+    // The status leads. It is the column scanned for — "which of these failed" — and it used to be
+    // a 7px dot at the start plus a number near the end, so reading the actual code meant crossing
+    // the whole row. The number is the colour and the fact at once.
+    row.appendChild(el('span', `status lead s${cls}`, txn.status === null || txn.status === undefined ? 'ERR' : txn.status));
     // The start time is what makes a duplicate legible: two rows 1.9s apart is the whole finding.
     row.appendChild(el('span', 'clock mono muted', fmtClock(txn.ts)));
     row.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
@@ -2029,7 +2066,6 @@
     }
     row.appendChild(path);
 
-    row.appendChild(el('span', `status s${cls}`, txn.status === null || txn.status === undefined ? 'ERR' : txn.status));
     row.appendChild(el('span', 'ms', fmtMs(txn.ms)));
     row.appendChild(el('span', 'size', fmtBytes(Math.max(txn.reqBytes || 0, txn.resBytes || 0))));
 

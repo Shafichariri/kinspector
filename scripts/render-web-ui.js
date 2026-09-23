@@ -298,7 +298,82 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     };
   }
 
+
+  /**
+   * The list's rows and its empty states.
+   *
+   * The empty-state check drives a filter that matches nothing through the real input, so it
+   * covers the listener, the daemon's 0-row answer and the re-render together — and then presses
+   * the button, because "offers to clear the filter" is only true if pressing it brings the rows
+   * back. Asserted on the rows returning, not on the input being blank.
+   */
+  async function probeList() {
+    const result = {};
+    const rows = [...doc.querySelectorAll('#list .row')];
+    const leads = rows.filter((r) => r.firstElementChild?.classList.contains('lead')
+      && r.firstElementChild.classList.contains('status'));
+    result.statusFirst = !rows.length ? 'n/a (no rows)' : leads.length === rows.length && !doc.querySelector('#list .status-dot')
+      && rows.every((r) => r.querySelectorAll('.status').length === 1)
+      ? `yes (${rows.length} rows lead with their code, no dots)`
+      : `NO - ${leads.length} of ${rows.length} lead with the status`;
+
+    const pill = doc.querySelector('#scope-bar .scope-label');
+    // Comments stripped first: the rule's own comment explains why `direction: rtl` is gone, and a
+    // check reading prose would fail on the explanation of its own fix.
+    const pillRule = (css.replace(/\/\*[\s\S]*?\*\//g, '').match(/\.scope-label\s*\{[^}]*\}/) || [''])[0];
+    result.scopePill = pill
+      ? !/direction:\s*rtl/.test(pillRule) && pill.textContent.includes(' · ') && pill.title.length > pill.textContent.length
+        ? `yes ("${pill.textContent}", full label in the tooltip)`
+        : `NO - "${pill.textContent}", rtl ${/direction:\s*rtl/.test(pillRule)}`
+      : 'n/a (no scope bar in this session)';
+
+    // Only reachable on a session with no calls, or an archive with none; reported, and checked
+    // against the one claim each case is allowed to make.
+    if (!rows.length) {
+      const text = doc.getElementById('list-empty').textContent;
+      const expected = !doc.querySelector('#session-picker option')
+        ? 'waiting for an app with inspector-stream to connect'
+        : null;
+      result.emptySession = expected === null
+        ? /^(no calls were recorded in this session|the app is connected — no calls yet)$/.test(text)
+          ? `yes ("${text}")`
+          : `NO - "${text}"`
+        : text === expected ? `yes ("${text}")` : `NO - "${text}", expected "${expected}"`;
+      return result;
+    }
+
+    const input = doc.getElementById('filter');
+    const before = rows.length;
+    input.value = 'path:/__inspector_probe_matches_nothing__';
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    await settle();
+    const empty = doc.getElementById('list-empty');
+    const clear = [...empty.querySelectorAll('button')].find((b) => b.textContent === 'clear filter');
+    result.noMatch = !empty.hidden && /^no calls match/.test(empty.textContent) && clear
+      ? `yes ("${empty.textContent}")`
+      : `NO - hidden ${empty.hidden}, "${empty.textContent}"`;
+    if (clear) {
+      clear.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      await settle();
+    } else {
+      input.value = '';
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 300));
+      await settle();
+    }
+    const after = doc.querySelectorAll('#list .row').length;
+    result.clearFilter = clear && input.value === '' && after === before && empty.hidden
+      ? `yes (${after} rows back, no chip left active)`
+      : `NO - ${after} of ${before} rows back`;
+    result.noActiveChip = !doc.querySelector('#chips .chip.active, #endpoint-chips .chip.active')
+      ? 'yes' : 'NO - a chip still claims a filter that is gone';
+    return result;
+  }
+
   const scopeProbe = await probeScopeBar();
+  const listProbe = await probeList();
 
   // Asked of the daemon directly rather than read out of the page's own state, so the check is
   // against the truth the endpoint reports and not against whatever the page believes.
@@ -1795,6 +1870,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     afterSequence === [...beforeSequence].reverse().join('') ? '(exact mirror)' : '(NOT a mirror)',
   );
   console.error('method classes     :', methodClasses.join(', ') || 'none');
+  console.error('--- list ---');
+  for (const [name, value] of Object.entries(listProbe)) {
+    console.error(`${name.padEnd(19)}:`, value);
+  }
   console.error('marker dividers    :', doc.querySelectorAll('.marker-divider').length);
   console.error('session options    :', doc.querySelectorAll('#session-picker option').length);
   console.error('counts             :', doc.getElementById('counts').textContent);
