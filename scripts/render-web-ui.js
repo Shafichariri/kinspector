@@ -291,7 +291,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       // The value alone, not `name: value` — what gets pasted into a terminal is the value.
       labelled: buttons.length > 0 && buttons.every((b) => b.getAttribute('aria-label')?.startsWith('Copy ')),
       focusWithinInCss: /\.copyable:focus-within\s+\.copy-field/.test(css),
-      bodyButton: Boolean(pane?.querySelector('.body-wrap .copy-field')),
+      // A JSON body carries its copy in the tree's toolbar; anything else keeps the overlay button.
+      bodyButton: Boolean(pane?.querySelector('.body-wrap .copy-field, .jt-view .jt-copy')),
     };
   }
 
@@ -449,7 +450,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     if (withPayload) {
       await click(withPayload);
       await new Promise((r) => setTimeout(r, 600));
-      const pre = doc.querySelector('#detail pre.body');
+      const pre = doc.querySelector('#detail pre.body, #detail .jt');
       const text = pre ? pre.textContent : '';
       result.payloadShown =
         text && text !== 'loading...' && !text.startsWith('could not read')
@@ -617,7 +618,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     for (const key of keys) {
       await click(key);
       await new Promise((r) => setTimeout(r, 250));
-      const body = doc.querySelector('#browser-detail .bvalue-body');
+      const body = doc.querySelector('#browser-detail .bvalue-body, #browser-detail .jt-view');
       if (body && body.textContent.trim()) {
         result.anyValueRendered = `yes (${key.querySelector('.bkey-name').textContent})`;
         break;
@@ -628,10 +629,13 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     result.detailRendered = Boolean(doc.querySelector('#browser-detail .bdetail-key'));
     const pre = doc.querySelector('#browser-detail .bvalue-body');
+    const tree = doc.querySelector('#browser-detail .jt');
     const none = doc.querySelector('#browser-detail .bvalue-none');
     // A pretty-printed payload is the point of the detail panel — a one-line blob is what the
     // flat table already did badly, so the assertion is on the newlines, not on the presence.
-    result.valueShown = pre
+    result.valueShown = tree
+      ? `yes (tree, ${tree.querySelectorAll('.jt-row').length} rows)`
+      : pre
       ? `yes (${pre.textContent.length} chars, ${pre.textContent.split('\n').length} lines)`
       : none
         ? `no value: "${none.textContent.trim().slice(0, 48)}"`
@@ -963,7 +967,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       // `.body-wrap` is the body plus its copy button; `.muted` is the branch that explains an
       // absent one. Both are "the body slot", and the claim is about where that slot sits.
       const body = kids.findIndex(
-        (k) => k.tagName === 'PRE' || k.classList.contains('body-wrap') || k.classList.contains('muted'),
+        (k) => k.tagName === 'PRE' || k.classList.contains('body-wrap') || k.classList.contains('jt-view')
+          || k.classList.contains('muted'),
       );
       const headers = kids.findIndex((k) => k.classList.contains('headers'));
       return body !== -1 && headers !== -1 && body < headers
@@ -1437,7 +1442,181 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const replayButtonProbe = await probeReplayButton();
   const replayEditorProbe = await probeReplayEditor();
 
+
+  /**
+   * The JSON tree, on a real captured body.
+   *
+   * Every control is pressed and judged by what the rows do, never by a label or a class flipping:
+   * a fold that toggled an arrow and left the rows alone would pass an assertion about the arrow.
+   * The two claims with teeth are that hiding is view-only — the copy after hiding a field is the
+   * copy from before — and that the tree's keys win over the page's inside it, since `f` also
+   * means "focus the filter box" and the arrows also mean something to the list.
+   */
+  async function probeJsonTree() {
+    const result = { found: 'NO - no row in this session has a JSON object or array body' };
+    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
+    if (network) { await click(network); await settle(); }
+    const resTab = () => [...doc.querySelectorAll('#detail .dtab')].find((t) => t.dataset.dtab === 'res');
+
+    const rows = [...doc.querySelectorAll('#list .row')];
+    let chosen = null;
+    let best = 0;
+    for (const row of rows.slice(0, 60)) {
+      await click(row);
+      await new Promise((r) => setTimeout(r, 200));
+      if (resTab()) { await click(resTab()); await new Promise((r) => setTimeout(r, 60)); }
+      const opens = doc.querySelectorAll('#detail .jt-view .jt-row[data-kind="open"]').length;
+      // The richest body in reach, so focus has a branch to keep and siblings to fold.
+      if (opens > best) { best = opens; chosen = row; }
+      if (opens >= 4) break;
+    }
+    if (!chosen) return result;
+    await click(chosen);
+    await new Promise((r) => setTimeout(r, 300));
+    if (resTab()) { await click(resTab()); await new Promise((r) => setTimeout(r, 60)); }
+
+    const view = () => doc.querySelector('#detail .jt-view');
+    const treeRows = () => [...(view()?.querySelectorAll('.jt-row') || [])];
+    const tool = (label) => [...view().querySelectorAll('.jt-tools button')].find((b) => b.textContent === label);
+    const press = async (node) => { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 30)); };
+    const key = async (node, k) => {
+      node.dispatchEvent(new window.KeyboardEvent('keydown', { key: k, bubbles: true }));
+      await new Promise((r) => setTimeout(r, 30));
+    };
+
+    const open = treeRows().length;
+    result.found = `yes (${open} rows, ${best} containers open)`;
+
+    await press(tool('⧉ copy'));
+    const fullCopy = lastCopied;
+
+    await press(tool('collapse all'));
+    const folded = treeRows();
+    result.collapseAll = folded.length < open && folded[0].dataset.kind === 'open'
+      && folded.slice(1, -1).every((r) => r.dataset.kind !== 'open')
+      ? `yes (${open} -> ${folded.length}, root stays open)`
+      : `NO - ${open} -> ${folded.length}`;
+
+    // Folding survives the pane being rebuilt: leave the row and come back.
+    const other = rows.find((r) => r !== chosen);
+    if (other) {
+      await click(other);
+      await new Promise((r) => setTimeout(r, 200));
+      await click(chosen);
+      await new Promise((r) => setTimeout(r, 300));
+      if (resTab()) { await click(resTab()); await new Promise((r) => setTimeout(r, 60)); }
+      result.remembered = treeRows().length === folded.length
+        ? 'yes (still folded after selecting another row and coming back)'
+        : `NO - ${folded.length} rows before leaving, ${treeRows().length} after`;
+    }
+
+    await press(tool('expand all'));
+    result.expandAll = treeRows().length === open ? 'yes' : `NO - ${treeRows().length} of ${open}`;
+
+    // A branch with something unrelated beside it, so focus has something to fold — a container
+    // whose only other containers are its own ancestors would pass without folding anything.
+    const within = (outer, inner) => outer === '' || inner === outer || inner.startsWith(`${outer}/`);
+    const opens = treeRows().filter((r) => r.dataset.kind === 'open' && r.dataset.path !== '').map((r) => r.dataset.path);
+    const path = opens.find((p) => opens.some((q) => !within(p, q) && !within(q, p))) || opens[0];
+    if (path !== undefined) {
+      // A summary row expands on click, and the twisty folds it back.
+      await press(treeRows().find((r) => r.dataset.path === path).querySelector('.jt-tw'));
+      const summary = treeRows().find((r) => r.dataset.path === path);
+      const folds = summary?.dataset.kind === 'summary' && /\{ \d+ fields? \}|\[ \d+ items? \]/.test(summary.textContent);
+      await press(summary.querySelector('.jt-sum'));
+      result.foldOne = folds && treeRows().length === open ? 'yes (twisty folds, summary unfolds)' : 'NO';
+
+      // Keyboard: left folds, right unfolds, and `f` stays in the tree rather than jumping to the
+      // filter box.
+      let row = treeRows().find((r) => r.dataset.path === path);
+      row.focus();
+      await key(row, 'ArrowLeft');
+      row = treeRows().find((r) => r.dataset.path === path);
+      const leftFolds = row.dataset.kind === 'summary' && doc.activeElement === row;
+      await key(row, 'ArrowRight');
+      row = treeRows().find((r) => r.dataset.path === path);
+      const rightOpens = row.dataset.kind === 'open';
+      await key(row, 'f');
+      const stayed = doc.activeElement !== doc.getElementById('filter');
+      const focused = view().querySelector('.jt-row.focus')?.dataset.path === path;
+      result.keyboard = leftFolds && rightOpens && stayed && focused
+        ? 'yes (← folds, → opens, f focuses the branch and not the filter box)'
+        : `NO - left ${leftFolds}, right ${rightOpens}, f stayed ${stayed}, focused ${focused}`;
+
+      // Focus keeps exactly the branch, its ancestors and its descendants open, and folds every
+      // other container. Judged row by row, so a focus that folded too much or too little fails.
+      const related = (p) => within(p, path) || within(path, p);
+      const drawn = treeRows().filter((r) => r.dataset.kind === 'open' || r.dataset.kind === 'summary');
+      const wrongOpen = drawn.filter((r) => r.dataset.kind === 'open' && !related(r.dataset.path));
+      const wrongFolded = drawn.filter((r) => r.dataset.kind === 'summary' && related(r.dataset.path));
+      const foldedOutside = drawn.filter((r) => r.dataset.kind === 'summary').length;
+      result.focus = !wrongOpen.length && !wrongFolded.length && foldedOutside > 0
+        ? `yes (${foldedOutside} unrelated branches folded, the branch and its ancestors open)`
+        : `NO - ${wrongOpen.length} unrelated open, ${wrongFolded.length} related folded, ${foldedOutside} folded`;
+      const unfocus = [...view().querySelector('.jt-row.focus .jt-act').children].find((b) => b.textContent === 'unfocus');
+      await press(unfocus);
+      result.unfocus = treeRows().length === open && !view().querySelector('.jt-row.focus') ? 'yes' : 'NO';
+    }
+
+    // Hiding is a view: a stub stands in, the footer lists it, and the copy is unchanged.
+    const target = treeRows().find((r) => r.dataset.path !== '' && r.dataset.kind !== 'close');
+    const hidePath = target.dataset.path;
+    await press([...target.querySelector('.jt-act').children].find((b) => b.textContent === 'hide'));
+    const stub = treeRows().find((r) => r.dataset.path === hidePath);
+    const foot = view().querySelector('.jt-foot');
+    await press(tool('⧉ copy'));
+    result.hide = stub?.dataset.kind === 'stub' && foot && /^1 hidden/.test(foot.textContent)
+      ? 'yes (stub + footer)'
+      : 'NO';
+    result.hideIsViewOnly = lastCopied === fullCopy
+      ? 'yes (copy after hiding is byte-identical to copy before)'
+      : 'NO - hiding changed what copy produces';
+    await press([...foot.querySelectorAll('button')].find((b) => b.textContent === 'show all'));
+    result.showAll = treeRows().length === open && !view().querySelector('.jt-foot') ? 'yes' : 'NO';
+
+    // Raw is the same text copy produces, and switching back restores the tree.
+    await press(tool('raw'));
+    const raw = view().querySelector('pre.body');
+    result.raw = raw && !view().querySelector('.jt') && raw.textContent === fullCopy
+      ? 'yes (pre, identical to the copy)'
+      : 'NO';
+    await press(tool('raw'));
+    result.rawOff = view().querySelector('.jt') ? 'yes' : 'NO';
+    return result;
+  }
+
+  /**
+   * The parser under the tree, which exists because `JSON.parse` rewrites what the app received:
+   * doubles for every number, integer-like keys hoisted, duplicate keys dropped. Lifted out of the
+   * real app.js by its markers, so this checks the shipped code rather than a copy of it.
+   */
+  function probeJsonParser() {
+    const from = js.indexOf('  const JSON_NUMBER');
+    const to = js.indexOf('  // --- JSON tree');
+    if (from < 0 || to < from) return { ok: 'NO - the parser markers moved; this check has to follow them' };
+    const { parseJsonTree, printJsonTree } =
+      new Function(`${js.slice(from, to)}\nreturn { parseJsonTree, printJsonTree };`)();
+    const pretty = (t) => printJsonTree(parseJsonTree(t));
+    const failures = [];
+    const expect = (name, got, want) => { if (got !== want) failures.push(name); };
+    expect('big id', pretty('{"id":1234567890123456789}'), '{\n  "id": 1234567890123456789\n}');
+    expect('key order', pretty('{"b":1,"2":2}'), '{\n  "b": 1,\n  "2": 2\n}');
+    expect('duplicate keys', pretty('{"a":1,"a":2}'), '{\n  "a": 1,\n  "a": 2\n}');
+    expect('escapes', pretty('["\\u00e9"]'), '[\n  "\\u00e9"\n]');
+    for (const t of ['{}', '[]', '{"a":{"b":[1,{"c":"d"}],"e":[]},"f":{}}', ' [ 1 , "x" ] ']) {
+      expect(`layout ${t}`, pretty(t), JSON.stringify(JSON.parse(t), null, 2));
+    }
+    for (const bad of ['{"a":1', '{"a":1,}', '[01]', '{a:1}', '[1] x', '', '"\\q"']) {
+      let threw = false;
+      try { parseJsonTree(bad); } catch { threw = true; }
+      if (!threw) failures.push(`accepted ${JSON.stringify(bad)}`);
+    }
+    return { ok: failures.length ? `NO - ${failures.join(', ')}` : 'yes (ids, key order, duplicates, escapes, layout, rejection)' };
+  }
+
   const detailTabProbe = await probeDetailTabs();
+  const jsonTreeProbe = await probeJsonTree();
+  const jsonParserProbe = probeJsonParser();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
   const drawerProbe = await probeDrawer();
@@ -1675,6 +1854,12 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     console.error('key filter         :', probe.keyFilterWorks);
     console.error('facet filter       :', probe.facetFilterWorks);
     console.error('pull button        :', probe.pullButton);
+  }
+
+  console.error('--- json tree ---');
+  console.error('parser             :', jsonParserProbe.ok);
+  for (const [name, value] of Object.entries(jsonTreeProbe)) {
+    console.error(`${name.padEnd(19)}:`, value);
   }
 
   console.error('--- ages ---');
