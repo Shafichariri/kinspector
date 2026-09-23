@@ -1394,3 +1394,102 @@ pre.body {
   color: var(--err);
   background: rgb(229 72 77 / 0.12);
 }
+
+/* --- JSON tree -----------------------------------------------------------------------------
+
+   A body that parses as a JSON object or array. Value colours avoid the accent blue and the error
+   red on purpose, so nothing inside a body competes with selection or a failing status. Numbers,
+   booleans and null share the PUT hue: they are the scalars that are not text. */
+.jt-tools { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.jt-label { font-size: 11px; font-weight: 600; color: var(--fg-muted); }
+.jt-raw.on { background: var(--bg-hover); color: var(--fg); }
+.jt {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 6px 0;
+  max-height: 460px;
+  overflow: auto;   /* wide bodies scroll here, never the page */
+}
+.jt-row {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 4px;
+  white-space: pre;
+  outline: none;
+}
+.jt-row:hover { background: var(--bg-hover); }
+.jt-row:focus-visible { box-shadow: inset 2px 0 0 var(--accent); background: var(--bg-hover); }
+.jt-row.focus { background: rgb(var(--accent-rgb) / 0.08); }
+.jt-tw {
+  flex: 0 0 16px;
+  width: 16px;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  color: var(--fg-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.jt-tw.leaf { visibility: hidden; cursor: default; }
+.jt-key { color: var(--fg); }
+.jt-p { color: var(--fg-muted); }
+.jt-str { color: var(--ok); }
+.jt-num { color: rgb(var(--m-put)); }
+.jt-sum, .jt-hidden-stub { color: var(--fg-muted); font-style: italic; cursor: pointer; }
+.jt-sum:hover, .jt-hidden-stub:hover { color: var(--fg); }
+.jt-act { margin-left: auto; padding-left: 12px; display: flex; gap: 2px; opacity: 0; }
+.jt-row:hover .jt-act, .jt-row:focus-within .jt-act { opacity: 1; }
+.jt-act button {
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.jt-act button:hover { color: var(--accent); }
+.jt-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 8px 0;
+  margin-top: 4px;
+  border-top: 1px solid var(--divider);
+  font-size: 11px;
+  color: var(--fg-muted);
+  position: sticky;
+  bottom: -6px;
+  background: var(--bg-elevated);
+}
+.jt-hidden-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.jt-hidden-list button {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px dashed var(--divider);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.jt-hidden-list button:hover { color: var(--fg); border-style: solid; }
+.jt-foot .btn-link {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .jt-act { transition: opacity 0.12s ease; }
+}
