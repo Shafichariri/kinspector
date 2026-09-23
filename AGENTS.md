@@ -550,6 +550,26 @@ not is reported absent with the reason, because `postData.text` is a string with
 — and `String(bytes)` would not fail, it would substitute U+FFFD and present a page of replacement
 characters as the captured body. The strict decoder exists to reach that branch.
 
+**The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
+turns every number into a double, so a 64-bit id `1234567890123456789` came back as
+`…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to
+the front of their object and keeps only the last of a duplicated key. `prettyJson` did exactly
+that round trip for as long as it existed. `parseJsonTree` keeps each scalar's source text and each
+object's entries in order, and `printJsonTree` reproduces `JSON.stringify(x, null, 2)`'s layout
+from it, so the tree, raw and copy are the captured bytes re-indented and nothing else. It is
+strict on purpose: anything `JSON.parse` rejects falls back to the text as it arrived.
+`render-web-ui.js` lifts both functions out of the real `app.js` by their markers and checks the
+ids, the order, the duplicates and the rejection cases.
+
+**The JSON tree's hidden fields are a view, never an edit.** Copy, raw and every export read the
+body, not the rows — a field that silently went missing from a copied body would be the viewer
+editing the evidence. Two more rules: the tree is never drawn for a **truncated** body, because a
+prefix that happens to parse would be presented as the whole; and its key handler stops `f`, `h`
+and the arrows from bubbling, because `f` also means "focus the filter box" to the page. The
+view-only copy and the key handling each have a check in `render-web-ui.js` that was proven to
+fail when the rule was broken; the truncation rule has none yet, because the script drives whatever
+session is on the machine and a truncated JSON body is rare there.
+
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
 Revisit on upgrade.
