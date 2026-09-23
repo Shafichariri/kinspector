@@ -1,5 +1,6 @@
 package dev.inspector.ui
 
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -55,21 +56,22 @@ class ListControlsTest {
                 )
             }
         }
+        // Newest first by default: the overlay is opened to see what the app just sent.
         // Names the state, not the effect. A phone has no tooltip, so a control labelled with what
         // a tap would do leaves the reader unable to tell which way round the list already is.
-        assertTrue(topOf("/v1/alpha") < topOf("/v1/beta"), "oldest first should put alpha above beta")
-
-        chip("oldest first").performClick()
-        waitForIdle()
-        chip("newest first").assertExists()
-        // The label flipping is not the claim worth testing — the rows moving is. A toggle wired
-        // to nothing at all would pass an assertion about its own text.
         assertTrue(topOf("/v1/beta") < topOf("/v1/alpha"), "newest first should put beta above alpha")
 
         chip("newest first").performClick()
         waitForIdle()
         chip("oldest first").assertExists()
-        assertTrue(topOf("/v1/alpha") < topOf("/v1/beta"), "the order should restore")
+        // The label flipping is not the claim worth testing — the rows moving is. A toggle wired
+        // to nothing at all would pass an assertion about its own text.
+        assertTrue(topOf("/v1/alpha") < topOf("/v1/beta"), "oldest first should put alpha above beta")
+
+        chip("oldest first").performClick()
+        waitForIdle()
+        chip("newest first").assertExists()
+        assertTrue(topOf("/v1/beta") < topOf("/v1/alpha"), "the order should restore")
     }
 
     /** Where a row is drawn, so "above" can be asserted rather than assumed from a label. */
@@ -185,7 +187,7 @@ class ListControlsTest {
     )
 
     @Test
-    fun `signals are on when a session has them and one tap hides them`() = runComposeUiTest {
+    fun `signals are hidden by default and one tap shows them`() = runComposeUiTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
@@ -196,18 +198,102 @@ class ListControlsTest {
                 )
             }
         }
-        // On by default, mirroring the web opening a session with signals on its merged view.
-        onNodeWithText("dashboard").assertExists()
-
-        chip("signals 1").performClick()
-        waitForIdle()
+        // Off by default: the overlay is opened for the traffic far more often than for app state.
+        // The toggle still says how many there are, so hidden is never mistaken for none.
         assertEquals(0, onAllNodesWithText("dashboard").fetchSemanticsNodes().size)
-        // The traffic is untouched — hiding signals is not a filter on the calls.
         onNodeWithText("/v1/alpha").assertExists()
 
         chip("signals off").performClick()
         waitForIdle()
         onNodeWithText("dashboard").assertExists()
+        // The traffic is untouched — showing signals is not a filter on the calls.
+        onNodeWithText("/v1/alpha").assertExists()
+
+        chip("signals 1").performClick()
+        waitForIdle()
+        assertEquals(0, onAllNodesWithText("dashboard").fetchSemanticsNodes().size)
+    }
+
+    /**
+     * The arrangement belongs to whoever owns the state, not to the list composable.
+     *
+     * The list leaves the composition on every close and every tap into a detail screen. While the
+     * arrangement lived inside it, each of those reset the filter, the order and the signals
+     * toggle — so the reader set the same filter again on every visit.
+     */
+    @Test
+    fun `the arrangement survives the list leaving the screen`() = runComposeUiTest {
+        val failing = txn("c", "/v1/broken", 300).copy(status = 500)
+        val state = ListViewState()
+        val shown = mutableStateOf(true)
+        setContent {
+            InspectorTheme(dark = true) {
+                if (shown.value) {
+                    InspectorList(
+                        transactions = listOf(first, failing),
+                        markers = emptyList(),
+                        signals = listOf(signal("screen", "dashboard", 150)),
+                        onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                        state = state,
+                    )
+                }
+            }
+        }
+        chip("5xx").performClick()
+        chip("newest first").performClick()
+        chip("signals off").performClick()
+        waitForIdle()
+
+        shown.value = false
+        waitForIdle()
+        shown.value = true
+        waitForIdle()
+
+        // Asserted by what is on screen, not by reading `state` back: a list that ignored the
+        // state it was handed would pass an assertion about the holder.
+        assertEquals(0, onAllNodesWithText("/v1/alpha").fetchSemanticsNodes().size)
+        onNodeWithText("/v1/broken").assertExists()
+        chip("oldest first").assertExists()
+        // The toggle's label rather than the signal row: `5xx` is a traffic term, and traffic terms
+        // exclude every signal by design, so the row is hidden by the filter either way.
+        chip("signals 1").assertExists()
+    }
+
+    /**
+     * Closing keeps the arrangement and drops the freeze.
+     *
+     * A snapshot still held when the reader comes back later would present stale rows as what the
+     * app is doing now, and nothing on reopening would say the list had been frozen before.
+     */
+    @Test
+    fun `closing thaws a frozen list but keeps its filter`() = runComposeUiTest {
+        val live = mutableStateOf(listOf(first))
+        val state = ListViewState()
+        val shown = mutableStateOf(true)
+        setContent {
+            InspectorTheme(dark = true) {
+                if (shown.value) {
+                    InspectorList(
+                        transactions = live.value,
+                        markers = emptyList(),
+                        onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                        state = state,
+                    )
+                }
+            }
+        }
+        chip("live").performClick()
+        waitForIdle()
+        live.value = listOf(first, second)
+
+        shown.value = false
+        state.onClosed()
+        waitForIdle()
+        shown.value = true
+        waitForIdle()
+
+        chip("live").assertExists()
+        onNodeWithText("/v1/beta").assertExists()
     }
 
     @Test
@@ -239,6 +325,7 @@ class ListControlsTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = listOf(
@@ -270,6 +357,7 @@ class ListControlsTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = listOf(signal("state", "form", 200), signal("state", "form", 210)),
@@ -287,6 +375,7 @@ class ListControlsTest {
         setContent {
             InspectorTheme(dark = true) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = listOf(first),
                     markers = emptyList(),
                     signals = live.value,

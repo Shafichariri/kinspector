@@ -97,25 +97,19 @@ internal fun InspectorList(
     providers: List<SignalKey> = emptyList(),
     /** Reads one provider now, returning null on success or a message to show. */
     onPull: (suspend (SignalKey) -> String?)? = null,
+    /**
+     * The reader's arrangement. The overlay passes one it owns so the arrangement outlives this
+     * composable; the default is for tests and previews that only ever show one screen.
+     */
+    state: ListViewState = remember { ListViewState() },
 ) {
     val colors = LocalInspectorColors.current
-    var filterText by remember { mutableStateOf("") }
-    var newestFirst by remember { mutableStateOf(false) }
-
-    // On when the session has any, mirroring the web UI opening a session with signals on its
-    // merged view: app state beside the traffic is the point of signals, not a sub-mode of them.
-    // Off is one tap away for anyone who only wants the calls.
-    var showSignals by remember { mutableStateOf(true) }
-    var expandedRuns by remember { mutableStateOf(emptySet<String>()) }
-
-    // Collapsed by default. The strip is worth a line as a summary and worth several only when
-    // somebody asks, and on a phone the several are taken from the traffic below it.
-    var nowExpanded by remember { mutableStateOf(false) }
-
-    // Non-null while the list is held still. Holding the snapshot rather than a boolean is what
-    // makes freezing mean anything: capture keeps running and the ring keeps evicting, so a flag
-    // that merely stopped redrawing would still lose rows out from under the reader.
-    var frozen by remember { mutableStateOf<Frozen?>(null) }
+    var filterText by state::filterText
+    var newestFirst by state::newestFirst
+    var showSignals by state::showSignals
+    var expandedRuns by state::expandedRuns
+    var nowExpanded by state::nowExpanded
+    var frozen by state::frozen
 
     // Everything below reads these, never the parameters. A frozen list that filtered against live
     // markers, or counted live rows in its header, would be frozen in the one way nobody wants.
@@ -318,7 +312,7 @@ internal fun InspectorList(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
             }
 
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = state.scroll) {
                 // Keyed by index as well as content: two markers can carry the same label at the
                 // same millisecond, and a duplicate key is a crash rather than a rendering glitch.
                 itemsIndexed(runs, key = { index, run -> "$index:${run.id}" }) { _, run ->
@@ -503,13 +497,6 @@ private fun MarkerDivider(marker: Marker) {
         Box(Modifier.weight(1f).height(1.dp).background(colors.divider))
     }
 }
-
-/** The rows and markers a frozen list holds, so capture can carry on without moving them. */
-private data class Frozen(
-    val transactions: List<NetworkTransaction>,
-    val markers: List<Marker>,
-    val signals: List<Signal>,
-)
 
 /**
  * One scrollable strip above the list, holding everything that is not the filter field itself.

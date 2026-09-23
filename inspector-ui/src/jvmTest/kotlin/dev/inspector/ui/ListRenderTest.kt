@@ -1,5 +1,6 @@
 package dev.inspector.ui
 
+import androidx.compose.runtime.remember
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import dev.inspector.model.Marker
@@ -147,6 +148,7 @@ class ListRenderTest {
         val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
             InspectorTheme(dark = dark) {
                 InspectorList(
+                    state = remember { mergedOldestFirst() },
                     transactions = session(),
                     markers = markers(),
                     signals = signals(),

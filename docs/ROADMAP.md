@@ -91,7 +91,10 @@ In dependency order, because each stage makes the next one cheap:
 1. ~~**Collect `Inspector.signals`** and show a merged timeline~~ — **done, shipped in 0.8.0.** Traffic,
    signals and markers on one clock, in the list that was already there rather than behind a tab:
    a phone has no room for a second view of the same session, and the merged reading *is* the
-   feature. On by default when the session has any, one tap off.
+   feature. On by default when the session has any, one tap off. *(Overturned: the overlay now
+   opens newest first with signals hidden, and remembers whatever the reader last chose — see
+   `ListViewState`. Opening it is almost always to see what the app just sent, and a reader who
+   hid the signals had to hide them again on every visit.)*
 
    `timeline()` grew a `signals` parameter and a third `TimelineEntry` kind, which broke every
    exhaustive `when` in the repository — the sealed type doing its job. `timelineRuns()` collapses
