@@ -9,24 +9,33 @@
 <body>
   <header id="topbar">
     <span class="brand">inspector</span>
-    <span class="sep">·</span>
-    <span id="session-app" class="muted">loading…</span>
+    <!-- Each option names the app, device, start and size; the session id is its tooltip. -->
     <select id="session-picker" title="Session"></select>
     <button id="session-delete" class="btn btn-sm btn-quiet"
-            title="Delete this session from ~/.inspector. Permanent.">✕</button>
+            title="Delete this session from ~/.inspector. Permanent — click twice.">✕</button>
     <span id="counts" class="muted mono"></span>
     <span class="spacer"></span>
-    <label class="live-toggle" title="Follow new traffic as it arrives">
-      <input type="checkbox" id="live-tail" checked>
-      <span id="live-dot" class="dot"></span> live
-    </label>
-    <span class="sep">·</span>
-    <button id="open-settings" class="btn btn-sm"
-            title="Settings: other inspector processes on this machine">settings</button>
-    <button id="server-restart" class="btn btn-sm"
-            title="Relaunch the daemon. The page reconnects on its own.">restart</button>
-    <button id="server-stop" class="btn btn-sm btn-danger"
-            title="Stop the daemon. Nothing is recorded until you start it again.">stop</button>
+    <!--
+      Whether the list follows new rows. A button that names its state, not a checkbox: "live"
+      beside a dot read as "the daemon is up", which is a different fact and now has its own
+      indicator in the daemon group.
+    -->
+    <button id="live-btn" class="live-btn on" type="button" aria-pressed="true"
+            title="Following new traffic as it arrives. Click to pause.">
+      <span class="dot"></span><span class="live-label">live</span>
+    </button>
+    <!-- Everything about the daemon process, and only that: its connection and its controls. -->
+    <div class="daemon-group">
+      <span id="conn" class="conn" title="The page's live connection to the daemon">
+        <span class="dot"></span><span class="conn-label">connecting…</span>
+      </span>
+      <button id="open-settings" class="btn btn-sm"
+              title="Settings: other inspector processes on this machine">settings</button>
+      <button id="server-restart" class="btn btn-sm"
+              title="Relaunch the daemon. The page reconnects on its own.">restart</button>
+      <button id="server-stop" class="btn btn-sm btn-danger"
+              title="Stop the daemon. Nothing is recorded until you start it again. Click twice.">stop</button>
+    </div>
   </header>
 
   <!-- A stopped daemon otherwise looks exactly like an idle one. -->

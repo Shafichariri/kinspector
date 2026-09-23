@@ -61,8 +61,10 @@ window.fetch = (path, init) =>
   fetch(path.startsWith('http') ? path : ORIGIN + path, init);
 
 // The live socket is irrelevant to a static snapshot.
+// Kept, so a probe can play the daemon coming back by firing the page's own `onopen`.
+let lastSocket = null;
 window.WebSocket = class {
-  constructor() { setTimeout(() => this.onopen && this.onopen(), 0); }
+  constructor() { lastSocket = this; setTimeout(() => this.onopen && this.onopen(), 0); }
   close() {}
 };
 // Captured rather than discarded: the "for AI" buttons put their whole payload here, and what
@@ -1505,7 +1507,105 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     .filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill'))
     .length;
   // Only reachable once the dialog is open, which is also the only place the session list lives.
+
+  /**
+   * The top bar's controls, pressed.
+   *
+   * `stop` is the dangerous one, and per the rule in AGENTS.md this probe stubs the request itself
+   * rather than trusting the confirm step it is testing — the run where that step is broken is
+   * the run that would otherwise stop the daemon this script is reading. The stub also counts
+   * calls, so "one click did not stop it" is observed rather than assumed.
+   */
+  async function probeTopBar() {
+    const result = {};
+    const option = doc.querySelector('#session-picker option');
+    result.sessionOption = option && option.title && option.textContent !== option.title
+      && / · \d+ calls?$/.test(option.textContent)
+      ? `yes ("${option.textContent}", id in the tooltip)`
+      : `NO - "${option?.textContent}"`;
+    result.countsNoun = / of \d+ calls?$/.test(doc.getElementById('counts').textContent)
+      ? `yes ("${doc.getElementById('counts').textContent}")`
+      : `NO - "${doc.getElementById('counts').textContent}"`;
+    result.conn = doc.getElementById('conn').dataset.state === 'connected' ? 'yes (connected)' : `NO - ${doc.getElementById('conn').dataset.state}`;
+
+    // Live: the button names its state, and resuming re-reads the session.
+    const live = doc.getElementById('live-btn');
+    const press = async (node) => {
+      node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 80));
+    };
+    await press(live);
+    const paused = live.textContent.trim() === 'paused' && live.getAttribute('aria-pressed') === 'false';
+    let reread = false;
+    const realFetch = window.fetch;
+    window.fetch = (path, init) => {
+      if (String(path).includes('/transactions')) reread = true;
+      return realFetch(path, init);
+    };
+    await press(live);
+    await settle();
+    window.fetch = realFetch;
+    result.liveToggle = paused && live.textContent.trim() === 'live' && reread
+      ? 'yes (live -> paused -> live, and resuming re-read the session)'
+      : `NO - paused ${paused}, back to "${live.textContent.trim()}", re-read ${reread}`;
+
+    // The header delete arms and names what it deletes; it must not send anything on one click.
+    const del = doc.getElementById('session-delete');
+    let deletes = 0;
+    window.fetch = (path, init) => {
+      if ((init?.method || 'GET') === 'DELETE') { deletes++; return Promise.resolve(new Response('{}')); }
+      return realFetch(path, init);
+    };
+    await press(del);
+    const delArmed = del.textContent === 'delete session?' && del.classList.contains('armed') && deletes === 0;
+    window.fetch = realFetch;
+    del.dataset.armed = '0';
+    del.textContent = '✕';
+    del.classList.remove('armed');
+    result.deleteArms = delArmed ? 'yes ("delete session?", nothing sent)' : `NO - "${del.textContent}", ${deletes} sent`;
+
+    // Stop: one click arms, the second stops, and the page says so in a way it cannot miss.
+    const stop = doc.getElementById('server-stop');
+    let stops = 0;
+    window.fetch = (path, init) => {
+      if (String(path).includes('/api/server/stop')) { stops++; return Promise.resolve(new Response('{}')); }
+      return realFetch(path, init);
+    };
+    await press(stop);
+    const armedOnly = stop.textContent === 'stop daemon?' && stop.classList.contains('armed') && stops === 0;
+    await press(stop);
+    await new Promise((r) => setTimeout(r, 80));
+    window.fetch = realFetch;
+    const banner = doc.getElementById('server-banner');
+    result.stopArms = armedOnly ? 'yes (one click armed it, nothing sent)' : `NO - "${stop.textContent}", ${stops} sent`;
+    result.stopped = stops === 1 && !banner.hidden && banner.classList.contains('big')
+      && banner.querySelector('.banner-title')?.textContent === 'daemon stopped'
+      && doc.body.classList.contains('stopped')
+      && doc.getElementById('conn').dataset.state === 'stopped'
+      ? 'yes (banner, page dimmed, connection reads stopped)'
+      : `NO - ${stops} stop requests, banner "${banner.textContent.slice(0, 40)}"`;
+    // The banner must not offer a restart: the process that would receive it has exited.
+    result.noRestartOffered = [...banner.querySelectorAll('button')].length === 0
+      && /inspector serve/.test(banner.textContent)
+      ? 'yes (says to run `inspector serve`, no button)'
+      : 'NO - the banner offers a control nothing can answer';
+    result.lastCapture = banner.querySelector('.banner-age')
+      ? `yes ("${banner.querySelector('.banner-text').textContent}")`
+      : 'n/a (no row to date it by)';
+
+    // The daemon comes back: the page's own onopen must clear all of it.
+    if (lastSocket && lastSocket.onopen) lastSocket.onopen();
+    await new Promise((r) => setTimeout(r, 150));
+    await settle();
+    result.recovers = banner.hidden && !doc.body.classList.contains('stopped')
+      && doc.getElementById('conn').dataset.state === 'connected' && !stop.disabled
+      ? 'yes (banner gone, page undimmed, controls back)'
+      : 'NO - the page stayed stopped after the daemon came back';
+    return result;
+  }
+
   const sessionProbe = await probeSessions();
+  const topBarProbe = await probeTopBar();
 
   console.error('--- render report ---');
   console.error('rows rendered      :', doc.querySelectorAll('#list .row').length);
@@ -1519,7 +1619,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('marker dividers    :', doc.querySelectorAll('.marker-divider').length);
   console.error('session options    :', doc.querySelectorAll('#session-picker option').length);
   console.error('counts             :', doc.getElementById('counts').textContent);
-  console.error('session label      :', doc.getElementById('session-app').textContent);
+  console.error('session option     :', doc.querySelector('#session-picker option')?.textContent ?? 'none');
   console.error('markers listed     :', doc.querySelectorAll('#markers li').length);
   console.error('detail visible     :', !doc.getElementById('detail').hidden);
   console.error(
@@ -1582,6 +1682,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('deletes disabled   :', sessionProbe.disabledDeletes, '(sessions still recording)');
   console.error('clear all arms     :', sessionProbe.clearArms);
   console.error('header delete      :', sessionProbe.headerDelete);
+  console.error('--- top bar ---');
+  for (const [name, value] of Object.entries(topBarProbe)) {
+    console.error(`${name.padEnd(19)}:`, value);
+  }
 
   console.error('--- tabs ---');
   console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
