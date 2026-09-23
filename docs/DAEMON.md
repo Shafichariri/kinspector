@@ -164,9 +164,13 @@ Three ways, in order of preference.
 
 ### From the web UI
 
-The **stop** button in the top bar. It confirms first, then the page tells you the daemon is gone
-rather than silently looking idle. This is the easiest option when you have lost track of which
-terminal launched it.
+The **stop** button in the top bar. Click it twice: the first click changes it to `stop daemon?`
+and the second stops the daemon (it disarms on its own after a few seconds). The page then shows a
+`daemon stopped` banner with the time of the last capture, dims everything below it, and keeps
+trying to reconnect — so running `inspector serve` again is enough, and the banner clears itself
+when the daemon is back. There is no restart button on the banner, because there is no process
+left to receive one. This is the easiest option when you have lost track of which terminal
+launched it.
 
 ### From the terminal that started it
 
