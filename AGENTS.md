@@ -369,6 +369,16 @@ merely unhelpful — it names an endpoint nobody called. The host appears on a r
 not the one the bar claims: repeating it everywhere is noise when it never changes, and
 load-bearing on the one row where it does.
 
+**The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
+a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are
+separated so a narrow bar loses the least specific part of the prefix, and the full label is the
+tooltip.
+
+**The web list's empty state says which of four things emptied it.** A time selection, a filter
+(with a `clear filter` button, because clearing it is the whole fix), a session with no calls,
+and no session at all. "Waiting for an app with inspector-stream to connect" is said only in the
+last case: on an archived session it sent people to check the app when the app had come and gone.
+
 **`querySelector` searches the whole subtree, and the replay panel anchored on that for two
 releases.** `runReplay` inserted its result with
 `pane.insertBefore(title, pane.querySelector('.section-title'))`. On a row with a redaction banner
