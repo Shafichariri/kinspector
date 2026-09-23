@@ -593,9 +593,26 @@ all.
 
 **Method colours avoid the status hue family.** Green/amber/red belong to 2xx/4xx/5xx. An amber
 PUT next to an amber 404 reads as "this row failed", which is the one thing a traffic list must
-not get wrong. So reads are blue, POST green (it is not a status), PUT purple, PATCH amber only
-because it is rare, DELETE red because destructive is what red should mean. The web UI's `--m-*`
-tokens and `InspectorColors.forMethod` are the same palette on purpose — keep them in step.
+not get wrong. So GET is neutral grey, POST green (it is not a status), PUT purple, PATCH teal,
+DELETE red because destructive is what red should mean.
+
+GET was the accent blue until the palette pass. It is most of the rows, so blue meant "a read"
+nearly everywhere and could no longer mean selection, a link or the active tab. PATCH was amber
+"only because it is rare", and it moved anyway so that amber means 4xx and stale and nothing else;
+the duplicate-row tint left amber for the same reason and now takes the PUT hue. Light-theme PATCH
+is `#0f766e`, darker than the design proposal's `#0d9488`, which measured 2.9:1 on its own badge
+tint.
+
+**A transport failure is red, not grey.** 3xx moved to grey in the same pass, and grey was what
+`.sx` and `transportError` used — so a call that never got a response would have looked exactly
+like a routine redirect. Both surfaces draw it in the error red now. The overlay pill therefore
+colours its dot muted when there is no call yet rather than asking `forStatus(null)`, or an app
+that has made no request would show a failure.
+
+The web UI's tokens and `InspectorColors` are one palette, and **`PaletteParityTest` enforces it**:
+it reads `style.css` and fails naming the token when either side drifts, proven in both
+directions. It replaced a "keep them in step" comment that held only as long as every change
+remembered both files.
 
 The method renders as a **tinted badge**, not coloured text: `MethodBadge` in the overlay, `.method`
 plus `.m-*` on the web. Both tint at 0.18 alpha of the text colour rather than filling solid with
@@ -744,9 +761,12 @@ data. One line, a lane stripe, and the clock — the only column it shares with 
 only one that makes the two comparable. Payloads are not drawn: a row cannot show a JSON object
 usefully at 360dp and a truncated one is worse than none.
 
-`InspectorColors.forTag` reuses the *method* palette, matching `app.js`'s `.lane-*` rules exactly.
-That does not contradict the method-colour rule above, which is about avoiding the *status* hues: a
-3dp stripe down a row with no status cannot be confused with a tinted badge in a fixed column.
+`InspectorColors.forTag` borrows existing tokens for its lanes, in the same hues as the `.lane-*`
+rules in `style.css` (which are literals, and not identical shades). Screen reads `accent` and
+session reads `clientError`: they read GET and PATCH until those moved to grey and teal, and a grey
+screen lane would be indistinguishable from an unknown tag. Borrowing hues does not contradict the
+method-colour rule above, which is about avoiding the *status* hues: a 3dp stripe down a row with
+no status cannot be confused with a tinted badge in a fixed column.
 
 **The overlay's controls are one scrollable strip, not a row each.** A phone is 360dp by about
 720; the header, the filter field and the scope bar already spend four lines before any traffic

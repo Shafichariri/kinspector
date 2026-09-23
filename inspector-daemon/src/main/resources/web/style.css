@@ -13,18 +13,28 @@
      one colour; change both together. */
   --accent-rgb: 106 169 255;
   --ok: #4cc38a;
-  --redirect: #5b9bd5;
+  /* Grey, not blue: blue is the accent, and a 3xx is routine enough not to need a hue at all. */
+  --redirect: #8a8f98;
   --warn: #e0a030;
-  --err: #e5484d;
+  /* Lifted from #e5484d, which was 3.7:1 on --bg-hover; this is 5.2:1. */
+  --err: #ff6b6f;
   --neutral: #8a8f98;
   /* Method hues, as bare RGB components so one token yields both the text colour and the badge
      tint via rgb(var(--x) / alpha). Kept out of the status family above (green/amber/red) on
-     purpose — see the .m-* rules for why. */
-  --m-get: 106 169 255;
+     purpose — see the .m-* rules for why.
+     GET is neutral because it is most of the rows: while it was the accent blue, blue meant "a
+     read" nearly everywhere and could no longer mean selection or a link. PATCH is teal rather than
+     amber so that amber means 4xx and stale and nothing else. */
+  --m-get: 154 161 172;
   --m-post: 76 195 138;
   --m-put: 217 155 255;
-  --m-patch: 224 160 48;
-  --m-delete: 229 72 77;
+  --m-patch: 62 199 199;
+  --m-delete: 255 107 111;
+  /* Row backgrounds. Selection is its own tint rather than --bg-hover, so a selected row still
+     reads as selected under the pointer. Duplicates are tinted from the PUT hue — not amber, which
+     would read as a 4xx row. */
+  --sel-bg: rgb(var(--accent-rgb) / 0.10);
+  --dup-bg: rgb(var(--m-put) / 0.08);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -40,15 +50,18 @@
     --accent: #2563eb;
     --accent-rgb: 37 99 235;
     --ok: #13875b;
-    --redirect: #2563eb;
+    --redirect: #6b7280;
     --warn: #b45309;
     --err: #c62a2f;
     --neutral: #6b7280;
-    --m-get: 37 99 235;
+    --m-get: 95 102 114;
     --m-post: 19 135 91;
     --m-put: 124 58 237;
-    --m-patch: 180 83 9;
+    /* #0f766e, darker than the proposed #0d9488, which was 2.9:1 on its own badge tint. */
+    --m-patch: 15 118 110;
     --m-delete: 198 42 47;
+    --sel-bg: rgb(37 99 235 / 0.08);
+    --dup-bg: rgb(124 58 237 / 0.07);
   }
 }
 
@@ -247,7 +260,7 @@ body { display: flex; flex-direction: column; }
   border-left: 2px solid transparent;
 }
 .wf-row:hover { background: var(--bg-hover); }
-.wf-row.selected { background: var(--bg-hover); border-left-color: var(--accent); }
+.wf-row.selected { background: var(--sel-bg); border-left-color: var(--accent); }
 .wf-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 .wf-path {
@@ -535,7 +548,7 @@ kbd {
   cursor: pointer;
 }
 .row:hover { background: var(--bg-hover); }
-.row.selected { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent); }
+.row.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
 
 .row .status-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
 /* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
@@ -553,7 +566,9 @@ kbd {
 .s3 { color: var(--redirect); } .b3 { background: var(--redirect); }
 .s4 { color: var(--warn); } .b4 { background: var(--warn); }
 .s5 { color: var(--err); } .b5 { background: var(--err); }
-.sx { color: var(--neutral); } .bx { background: var(--neutral); }
+/* A transport failure is red. It was --neutral, which is now also the 3xx grey, and a call that
+   never got a response must not read as a routine redirect. The waterfall already drew it red. */
+.sx { color: var(--err); } .bx { background: var(--err); }
 
 /* Method colours.
  *
@@ -934,11 +949,11 @@ pre.body {
 /* A tint, not a status colour: the row's own status chip still owns the foreground, so this reads
    as a second channel rather than as "this row is a 4xx". Selection stays distinguishable because
    it is an inset bar plus a different background. */
-.row.duplicate { background: rgb(var(--m-patch) / 0.13); }
-.row.duplicate.selected { background: var(--bg-hover); box-shadow: inset 2px 0 0 var(--accent); }
+.row.duplicate { background: var(--dup-bg); }
+.row.duplicate.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
 
 .dup-badge {
-  color: rgb(var(--m-patch));
+  color: var(--fg-muted);
   font-size: 11px;
 }
 
@@ -1264,7 +1279,7 @@ pre.body {
   border-left: 2px solid transparent;
 }
 .bkey:hover { background: var(--bg-hover); }
-.bkey.sel { background: var(--bg-hover); border-left-color: var(--accent); }
+.bkey.sel { background: var(--sel-bg); border-left-color: var(--accent); }
 
 /* Freshness before you read the row. Hollow means the app said nothing about it, which is not
    the same as saying it is live — see the tri-state in cacheFieldsOf. */
