@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
@@ -142,7 +143,7 @@ private fun CollapsedDot(latest: NetworkTransaction?, inFlight: Int) {
         } else {
             Box(
                 Modifier.size(10.dp).clip(CircleShape)
-                    .background(colors.forStatus(latest?.status)),
+                    .background(pillDotColor(colors, latest)),
             )
         }
     }
@@ -161,7 +162,7 @@ private fun ExpandedPill(latest: NetworkTransaction?, inFlight: Int) {
     ) {
         Box(
             Modifier.size(8.dp).clip(CircleShape)
-                .background(colors.forStatus(latest?.status)),
+                .background(pillDotColor(colors, latest)),
         )
 
         if (latest == null) {
@@ -198,3 +199,12 @@ private fun ExpandedPill(latest: NetworkTransaction?, inFlight: Int) {
         }
     }
 }
+
+/**
+ * The pill's dot: the latest call's status, or muted when there is none yet.
+ *
+ * Not `forStatus(latest?.status)`. A null status means a transport failure, which is red — and an
+ * app that has not made a call yet has not failed one, so an idle pill must not look like it did.
+ */
+private fun pillDotColor(colors: InspectorColors, latest: NetworkTransaction?): Color =
+    if (latest == null) colors.onSurfaceMuted else colors.forStatus(latest.status)
