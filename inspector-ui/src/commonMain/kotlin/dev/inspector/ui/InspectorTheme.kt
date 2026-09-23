@@ -42,11 +42,11 @@ data class InspectorColors(
     /**
      * Row tint for a request that was sent more than once, close together, by separate calls.
      *
-     * Amber, and used at a low alpha as a *background* rather than as text. The status chip already
-     * owns the foreground colour on that row, so a tint is a second channel that cannot be misread
-     * as "this row is a 4xx". Added last, so an app constructing its own palette is unaffected.
+     * The PUT hue, used at a low alpha as a *background* rather than as text. It was amber, and an
+     * amber-tinted row beside amber 4xx statuses read as "this row failed" — the one thing the
+     * list must not get wrong. Added last, so an app constructing its own palette is unaffected.
      */
-    val duplicate: Color = Color(0xFFE0A030),
+    val duplicate: Color = Color(0xFFD99BFF),
 ) {
     /** Status-class colour used by the pill dot and the list chips. */
     fun forStatus(status: Int?): Color = when {
@@ -62,18 +62,24 @@ data class InspectorColors(
      * surfaces.
      *
      * Kept out of the status hue family: an amber PUT beside an amber 404 reads as "this row is a
-     * 4xx", which is the one thing the list must not get wrong. DELETE keeps red because
-     * destructive is what red should mean here. Unrecognised verbs stay muted rather than
-     * borrowing a colour that already means something.
+     * 4xx", which is the one thing the list must not get wrong — which is also why PATCH is teal
+     * now rather than amber. GET is neutral because it is most rows, and while it was the accent
+     * blue, blue could not mean anything else. DELETE keeps red because destructive is what red
+     * should mean here. Unrecognised verbs stay muted rather than borrowing a colour that already
+     * means something.
      */
     /**
-     * The lane colour for a signal tag, matching the web UI's `.lane-*` rules exactly.
+     * The lane colour for a signal tag, in the same hues as the web UI's `.lane-*` rules.
      *
-     * Reuses the method palette rather than introducing a second one. That is not an oversight
-     * about the rule above — method colours avoid the *status* hues, and this reuses the method
-     * hues, which is a different collision. A signal row and a method badge are never confusable:
-     * one is a tinted badge in a fixed column and the other is a 3dp stripe down the margin of a
-     * row with no status, no duration and no bytes.
+     * Borrows existing tokens rather than introducing a second palette. That is not an oversight
+     * about the rule above — method colours avoid the *status* hues, and a signal row and a method
+     * badge are never confusable: one is a tinted badge in a fixed column and the other is a 3dp
+     * stripe down the margin of a row with no status, no duration and no bytes.
+     *
+     * Screen and session read [accent] and [clientError] rather than GET and PATCH. They used to
+     * read the method tokens, and those moved to grey and teal — a grey screen lane would be
+     * indistinguishable from an unknown tag, and the web's lanes, which are literals, did not
+     * move. These are the exact values the method tokens had, so no lane changed colour.
      *
      * Unknown tags get the muted colour and a generic lane, which is the whole point of `tag`
      * being an open string — an app emitting `featureflags` renders, it does not fall through.
@@ -82,10 +88,10 @@ data class InspectorColors(
      * and there is no reason to widen that.
      */
     internal fun forTag(tag: String): Color = when (tag.lowercase()) {
-        SignalTags.SCREEN -> methodGet
+        SignalTags.SCREEN -> accent
         SignalTags.STATE -> methodPut
         SignalTags.CACHE -> methodPost
-        SignalTags.SESSION -> methodPatch
+        SignalTags.SESSION -> clientError
         else -> onSurfaceMuted
     }
 
@@ -99,7 +105,7 @@ data class InspectorColors(
     }
 }
 
-private val DarkColors = InspectorColors(
+internal val DarkColors = InspectorColors(
     surface = Color(0xFF14161A),
     surfaceElevated = Color(0xFF1E2127),
     onSurface = Color(0xFFE6E8EB),
@@ -107,19 +113,21 @@ private val DarkColors = InspectorColors(
     divider = Color(0xFF2C3038),
     accent = Color(0xFF6AA9FF),
     success = Color(0xFF4CC38A),
-    redirect = Color(0xFF5B9BD5),
+    redirect = Color(0xFF8A8F98),
     clientError = Color(0xFFE0A030),
-    serverError = Color(0xFFE5484D),
-    transportError = Color(0xFF8A8F98),
-    methodGet = Color(0xFF6AA9FF),
+    serverError = Color(0xFFFF6B6F),
+    // Red, like a 5xx. It was the grey that 3xx now uses, and a call that never got a response
+    // must not look like a routine redirect.
+    transportError = Color(0xFFFF6B6F),
+    methodGet = Color(0xFF9AA1AC),
     methodPost = Color(0xFF4CC38A),
     methodPut = Color(0xFFD99BFF),
-    methodPatch = Color(0xFFE0A030),
-    methodDelete = Color(0xFFE5484D),
-    duplicate = Color(0xFFE0A030),
+    methodPatch = Color(0xFF3EC7C7),
+    methodDelete = Color(0xFFFF6B6F),
+    duplicate = Color(0xFFD99BFF),
 )
 
-private val LightColors = InspectorColors(
+internal val LightColors = InspectorColors(
     surface = Color(0xFFFAFAFB),
     surfaceElevated = Color(0xFFFFFFFF),
     onSurface = Color(0xFF14161A),
@@ -127,16 +135,17 @@ private val LightColors = InspectorColors(
     divider = Color(0xFFE1E4E8),
     accent = Color(0xFF2563EB),
     success = Color(0xFF13875B),
-    redirect = Color(0xFF2563EB),
+    redirect = Color(0xFF6B7280),
     clientError = Color(0xFFB45309),
     serverError = Color(0xFFC62A2F),
-    transportError = Color(0xFF6B7280),
-    methodGet = Color(0xFF2563EB),
+    transportError = Color(0xFFC62A2F),
+    methodGet = Color(0xFF5F6672),
     methodPost = Color(0xFF13875B),
     methodPut = Color(0xFF7C3AED),
-    methodPatch = Color(0xFFB45309),
+    // Darker than the web proposal's #0D9488, which was 2.9:1 on its own badge tint.
+    methodPatch = Color(0xFF0F766E),
     methodDelete = Color(0xFFC62A2F),
-    duplicate = Color(0xFFB45309),
+    duplicate = Color(0xFF7C3AED),
 )
 
 val LocalInspectorColors = staticCompositionLocalOf { DarkColors }

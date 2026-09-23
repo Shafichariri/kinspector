@@ -949,7 +949,7 @@ internal fun ToolbarButton(label: String, onClick: () -> Unit, prominent: Boolea
 }
 
 /** Low enough to read as a tint rather than as a status colour. */
-private const val DUPLICATE_TINT_ALPHA = 0.14f
+private const val DUPLICATE_TINT_ALPHA = 0.08f
 
 /** Wide enough to catch the eye down the margin, narrow enough not to read as a second column. */
 private val STRIPE_WIDTH = 3.dp
