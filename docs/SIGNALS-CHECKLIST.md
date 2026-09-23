@@ -86,7 +86,10 @@ The build order above stops at the host. These are the overlay's, numbered on fr
 restarting: `ROADMAP.md` counts the overlay work 1–4 and the collision has already been confusing
 once.
 
-- [x] Signals merge into the traffic list on one clock, on by default, one tap off *(0.8.0)*
+- [x] Signals merge into the traffic list on one clock, one tap away *(0.8.0)*
+- [x] The overlay opens newest first with signals **hidden**, and keeps the filter, order and
+      signals toggle across closing and reopening it and across a trip into a detail screen. A
+      freeze does not survive closing.
 - [x] Adjacent identical observations collapse, and expanding one loses nothing *(0.8.0)*
 - [x] **Signals go through the same filter as the traffic.** They did not until stage 2: the
       overlay filtered the rows and let every observation through
