@@ -95,7 +95,7 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 - **The web UI renders.** `scripts/render-web-ui.js` runs the real `app.js` against the real
   `index.html` with fetch proxied to a live daemon and reports what actually rendered: rows,
   marker dividers, session picker, detail pane, attempt chain, method classes, console errors. It
-  drives the order chips and asserts the rendered order reverses, restores, that exactly one chip
+  drives the order control and asserts the rendered order reverses, restores, that exactly one half
   reads as selected, and that the row/divider sequence is an exact mirror. It clicks an endpoint
   chip and asserts three things: the row count narrows, the chip list *survives* (proving chips
   come from the unfiltered session), and exactly one chip goes active. It then drives the settings
@@ -378,6 +378,18 @@ tooltip.
 (with a `clear filter` button, because clearing it is the whole fix), a session with no calls,
 and no session at all. "Waiting for an app with inspector-stream to connect" is said only in the
 last case: on an archived session it sent people to check the app when the app had come and gone.
+
+**Nothing in the web UI is under 11px except a named list, and `render-web-ui.js` reads the
+stylesheet to hold it.** The method badge, `kbd` key caps and the three fold glyphs (`.jt-tw`,
+`.now-caret`, `.tl-twisty`) are the exceptions — shapes, or a badge sized to a fixed column —
+and each is named in `auditMinTextSize` rather than matched by pattern, so a new 10px caption fails
+the audit until someone decides it belongs on the list. The design pass named four selectors to
+raise; nine more were at 10px, and fixing only the four would have left the rule false on day one.
+
+**The tab bar is always drawn.** It used to hide when a session had only the traffic view, which
+made the bar appear and disappear between sessions and moved everything under it. The order control
+is a segmented pair rather than two more chips, because it arranges the list where the chips beside
+it filter it; `aria-pressed` on each half is checked against the visible state.
 
 **`querySelector` searches the whole subtree, and the replay panel anchored on that for two
 releases.** `runReplay` inserted its result with

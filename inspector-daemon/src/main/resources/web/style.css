@@ -267,7 +267,7 @@ body { display: flex; flex-direction: column; }
 .wf-stats { flex: 1 1 auto; font-size: 11px; }
 .wf-failed {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--err);
   border: 1px solid currentColor;
   border-radius: 8px;
@@ -357,7 +357,7 @@ body { display: flex; flex-direction: column; }
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.6;
 }
 .axis-time { flex: 0 0 auto; }
@@ -405,14 +405,46 @@ body { display: flex; flex-direction: column; }
   cursor: pointer;
 }
 .chip:hover { background: var(--bg-hover); color: var(--fg); }
-.chip.active { border-color: var(--accent); color: var(--accent); }
+.chip.active { border-color: var(--accent); background: rgb(var(--accent-rgb) / 0.16); color: var(--fg); }
 /* `on` is a chip acting as a toggle — an order or a facet — where `active` is a chip that set the
    text filter. They look the same on purpose; they are told apart by what clicking again does. */
 .chip.on {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgb(106 169 255 / 0.12);
+  background: rgb(var(--accent-rgb) / 0.12);
 }
+
+/* Names a row of chips. Uppercase and muted so it reads as a caption, never as a chip. */
+.row-label {
+  font-size: 11px;
+  color: var(--fg-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  align-self: center;
+  margin-right: 4px;
+}
+
+/* Two mutually exclusive options that arrange the list. Joined, so it reads as one control with a
+   state rather than as two more filter chips. */
+.seg2 {
+  display: inline-flex;
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.seg2 button {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  background: none;
+  border: 0;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.seg2 button + button { border-left: 1px solid var(--divider); }
+.seg2 button:hover { color: var(--fg); }
+.seg2 button.on { background: var(--bg-hover); color: var(--fg); }
 
 /* Endpoint chips carry a call count. Monospaced and dimmer than the label so the segment stays
    the thing you read, and tabular figures so the counts do not jitter as they tick up. */
@@ -583,7 +615,7 @@ kbd {
 /* First column: left-aligned so the codes line up where the eye starts, not where the row ends. */
 .row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
-.row .attempt { font-size: 10px; color: var(--warn); }
+.row .attempt { font-size: 11px; color: var(--warn); }
 
 .s2 { color: var(--ok); } .b2 { background: var(--ok); }
 .s3 { color: var(--redirect); } .b3 { background: var(--redirect); }
@@ -971,7 +1003,7 @@ pre.body {
 /* Says the result below is not the captured request. A 200 under a row captured as a 500 means
    something different depending on whether anything was changed. */
 .replay-edited {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 999px;
   color: var(--warn);
@@ -1126,7 +1158,7 @@ pre.body {
    failure `trigger` exists to prevent. */
 .tl-trigger {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 5px;
   border-radius: 3px;
   text-transform: lowercase;
@@ -1196,7 +1228,10 @@ pre.body {
 }
 .tab:hover { color: var(--fg); background: var(--bg-hover); }
 .tab.active { color: var(--fg); border-bottom-color: var(--accent); }
-.tab-count { font-size: 10px; font-variant-numeric: tabular-nums; }
+.tab-label { font-size: 13px; font-weight: 600; }
+.tab-count { font-size: 11px; font-variant-numeric: tabular-nums; }
+/* The first signal tab: the line that separates arrangements of the traffic from single tags. */
+.tab.tab-signal-first { margin-left: 6px; padding-left: 14px; border-left: 1px solid var(--divider); }
 
 /* --- the glance (what an empty pane says) -------------------------------- */
 
@@ -1263,7 +1298,7 @@ pre.body {
 }
 .dtab:hover { color: var(--fg); background: var(--bg-hover); }
 .dtab.active { color: var(--fg); border-bottom-color: var(--accent); }
-.dtab-hint { font-size: 10px; font-variant-numeric: tabular-nums; }
+.dtab-hint { font-size: 11px; font-variant-numeric: tabular-nums; }
 
 /* The panel's own first section title would otherwise sit hard against the tab bar. */
 .dtab-panel > .section-title:first-child { margin-top: 12px; }
@@ -1293,7 +1328,7 @@ pre.body {
 }
 .browser-facets { margin-top: 0; align-items: center; }
 .facet { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
-.facet-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.facet-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
 .browser-status { font-size: 11px; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-status-error, .cache-status-error { color: #ff8f8f; }
 
@@ -1355,12 +1390,12 @@ pre.body {
 }
 .bkey-meta {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bkey-age { font-size: 10px; white-space: nowrap; }
+.bkey-age { font-size: 11px; white-space: nowrap; }
 .bkey-age.stale, .current-age.stale { color: var(--warn); }
 
 .browser-detail { overflow-y: auto; padding: 12px 14px; min-height: 0; }
@@ -1512,7 +1547,7 @@ pre.body {
 .jt-row:hover .jt-act, .jt-row:focus-within .jt-act { opacity: 1; }
 .jt-act button {
   font: inherit;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.4;
   padding: 1px 6px;
   color: var(--fg-muted);
@@ -1539,7 +1574,7 @@ pre.body {
 .jt-hidden-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .jt-hidden-list button {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   color: var(--fg-muted);
   background: none;
