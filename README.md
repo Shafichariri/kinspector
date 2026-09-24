@@ -55,6 +55,13 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.1.0 is a design pass over both surfaces, and changes no code of yours.** The overlay now
+opens newest first with signals hidden and remembers your filter across closing it; its filters
+moved into a sheet and the list starts higher; long paths keep their end on iOS, which they had
+not. The web UI gains a foldable JSON tree — and copying a body no longer rounds 64-bit ids — a
+clearer top bar with a stopped-daemon banner, and one palette shared with the overlay. Bump the
+version; `INTEGRATION.md` v55 lists what people will notice.
+
 **1.0.3 fixes a second ABI mismatch in the same pair — a constructor this time.**
 `StreamSink`'s real constructor takes `engineFactory: () -> HttpClient` fourth and the no-op's took
 no such parameter, so a build that compiled the call against one half and ran it against the other
@@ -175,9 +182,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.0.3")
-implementation("io.github.shafichariri:inspector-ui:1.0.3")
-implementation("io.github.shafichariri:inspector-stream:1.0.3")
+implementation("io.github.shafichariri:inspector-core:1.1.0")
+implementation("io.github.shafichariri:inspector-ui:1.1.0")
+implementation("io.github.shafichariri:inspector-stream:1.1.0")
 ```
 
 Three lines of code:
