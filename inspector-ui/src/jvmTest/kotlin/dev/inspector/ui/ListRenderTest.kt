@@ -1,5 +1,8 @@
 package dev.inspector.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
+import dev.inspector.model.matches
+
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
@@ -209,15 +212,13 @@ class ListRenderTest {
         )
         val scene = ImageComposeScene(width = 360, height = 250, density = Density(1f)) {
             InspectorTheme(dark = dark) {
-                NowStrip(
+                NowPanel(
                     signals = observations,
                     // 2026-09-15T10:03:10Z — fixed, so the shot does not change every time it is
                     // taken, and about three minutes after the newest observation in the fixture.
                     // The spread is the point: a `now` far enough out that every row rounds to the
                     // same age photographs an age column that could be a constant.
                     nowMs = 1_789_466_590_000L,
-                    expanded = true,
-                    onToggle = {},
                     onSelectSignal = {},
                     // One registered and observed, one registered and never answered. The second
                     // is the row worth photographing: it exists nowhere else in the UI, and the
@@ -239,6 +240,65 @@ class ListRenderTest {
         }
         assertTrue(out.length() > 0, "no image written to $out")
     }
+
+    /**
+     * The filters sheet and the overflow menu, drawn over the list the way they open on a phone.
+     *
+     * Rendered as the list plus the overlay, not the overlay alone: the scrim and the sheet's
+     * height only mean anything against what they cover. The sheet is given a live filter so the
+     * shot shows a chip that is on, the `filters` count and a `Show n calls` that is not the total.
+     */
+    private fun shootOverlay(name: String, dark: Boolean, menu: Boolean) {
+        val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
+        val rows = session()
+        val marks = markers()
+        val observations = signals()
+        val filter = "has:error"
+        val matching = rows.count { dev.inspector.model.FilterParser.parse(filter).getOrThrow().matches(it) }
+        val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
+            InspectorTheme(dark = dark) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+                    InspectorList(
+                        state = remember { mergedOldestFirst().also { it.filterText = filter } },
+                        transactions = rows, markers = marks, signals = observations,
+                        onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                        providers = listOf(SignalKey("state", "CheckoutRepository")), onPull = { null },
+                    )
+                    if (menu) {
+                        OverflowMenu(
+                            rowCount = rows.size,
+                            providers = listOf(SignalKey("state", "CheckoutRepository")),
+                            onPull = { null }, onClear = {}, onDismiss = {},
+                        )
+                    } else {
+                        FiltersSheet(
+                            sections = sheetSections(rows, marks, observations, dev.inspector.model.FilterContext(marks)),
+                            filterText = filter, onFilterText = {},
+                            signalCount = observations.size, showSignals = true, onShowSignals = {},
+                            matching = matching, onDismiss = {},
+                        )
+                    }
+                }
+            }
+        }
+        try {
+            val bytes = scene.render().encodeToData(EncodedImageFormat.PNG)?.bytes
+            assertTrue(bytes != null && bytes.isNotEmpty(), "the overlay rendered nothing")
+            out.writeBytes(bytes)
+        } finally {
+            scene.close()
+        }
+        assertTrue(out.length() > 0, "no image written to $out")
+    }
+
+    @Test
+    fun renders_the_filters_sheet_dark() = shootOverlay("sheet-dark", dark = true, menu = false)
+
+    @Test
+    fun renders_the_filters_sheet_light() = shootOverlay("sheet-light", dark = false, menu = false)
+
+    @Test
+    fun renders_the_overflow_menu_dark() = shootOverlay("menu-dark", dark = true, menu = true)
 
     @Test
     fun renders_the_now_strip_dark() = shootNow("now-dark", dark = true)
