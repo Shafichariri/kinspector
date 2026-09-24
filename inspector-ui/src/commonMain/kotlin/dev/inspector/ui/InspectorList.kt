@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -196,6 +197,9 @@ internal fun InspectorList(
                 onClose = onClose,
             )
             FilterRow(
+                // Dimmed while there is nothing to filter, and kept rather than hidden, so the
+                // layout does not jump when the first call arrives.
+                modifier = Modifier.alpha(if (rows.isEmpty() && observations.isEmpty()) EMPTY_CHROME_ALPHA else 1f),
                 filterText = filterText,
                 onFilterText = { filterText = it },
                 parseError = parseError,
@@ -244,12 +248,35 @@ internal fun InspectorList(
             val runs = remember(entries) { timelineRuns(entries) }
 
             if (runs.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (rows.isEmpty()) "no traffic captured yet" else "no rows match this filter",
-                        color = colors.onSurfaceMuted,
-                        fontSize = 13.sp,
+                // No calls is "nothing yet" whether or not the filter is set — unless signals are
+                // showing and the filter hid them, which is the case the clear button is for.
+                if (rows.isEmpty() && (observations.isEmpty() || !showSignals)) {
+                    NothingYet(
+                        providers = providers,
+                        onPull = onPull,
+                        hiddenSignals = if (showSignals) 0 else observations.size,
+                        onShowSignals = { showSignals = true },
                     )
+                } else {
+                    // Rows exist and the filter hid them. Clearing it is the whole fix, so it is
+                    // offered here rather than left to finding the field and deleting by hand.
+                    Column(
+                        Modifier.fillMaxSize().padding(horizontal = 32.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("No calls match this filter", color = colors.onSurfaceMuted, fontSize = 13.sp)
+                        Box(
+                            Modifier.padding(top = 12.dp).height(40.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, colors.divider, RoundedCornerShape(6.dp))
+                                .clickable { filterText = "" }
+                                .padding(horizontal = 16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Clear filter", color = colors.onSurface, fontSize = 13.sp)
+                        }
+                    }
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), state = state.scroll) {
@@ -707,6 +734,9 @@ internal fun ToolbarButton(label: String, onClick: () -> Unit, prominent: Boolea
             .padding(horizontal = 8.dp, vertical = 6.dp),
     )
 }
+
+/** The filter row while there is nothing to filter: present, so nothing moves later, but quiet. */
+private const val EMPTY_CHROME_ALPHA = 0.6f
 
 /** Low enough to read as a tint rather than as a status colour. */
 private const val DUPLICATE_TINT_ALPHA = 0.08f
