@@ -530,4 +530,76 @@ class ListControlsTest {
             .single { it.endsWith("/accounts/balance") }
         assertTrue(drawn.startsWith("…"), "the path was not clipped at the front: $drawn")
     }
+
+    // --- the empty state ---------------------------------------------------------------------
+
+    @Test
+    fun `an empty inspector says nothing has happened and what would make it`() = runComposeUiTest {
+        var pulled = 0
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = emptyList(), markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                    providers = listOf(dev.inspector.model.SignalKey("cache", "a"), dev.inspector.model.SignalKey("state", "b")),
+                    onPull = { pulled++; null },
+                )
+            }
+        }
+        onNodeWithText("No calls yet").assertExists()
+        onNodeWithText("OkHttpClient", substring = true).assertExists()
+        onNode(hasText("Pull signals now") and hasClickAction()).performClick()
+        waitForIdle()
+        // Every registered provider, not the first one.
+        assertEquals(2, pulled)
+    }
+
+    @Test
+    fun `no providers means no pull button`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = emptyList(), markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        // A button that can only fail is worse than none.
+        assertEquals(0, onAllNodesWithText("Pull signals now").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `a filter that hides every call offers to clear itself`() = runComposeUiTest {
+        val state = ListViewState(filterText = "status>=500")
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    state = state, transactions = listOf(first, second), markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNodeWithText("No calls match this filter").assertExists()
+        onNode(hasText("Clear filter") and hasClickAction()).performClick()
+        waitForIdle()
+        // The rows coming back is the claim, not the field emptying.
+        onNodeWithText("/v1/alpha").assertExists()
+        assertEquals("", state.filterText)
+    }
+
+    @Test
+    fun `signals hidden with no calls are not reported as nothing`() = runComposeUiTest {
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = emptyList(), markers = emptyList(),
+                    signals = listOf(signal("screen", "dashboard", 150)),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNode(hasText("Show 1 hidden signal") and hasClickAction()).performClick()
+        waitForIdle()
+        onNodeWithText("dashboard").assertExists()
+    }
 }
