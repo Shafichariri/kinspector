@@ -67,7 +67,7 @@ window.WebSocket = class {
   constructor() { lastSocket = this; setTimeout(() => this.onopen && this.onopen(), 0); }
   close() {}
 };
-// Captured rather than discarded: the "for AI" buttons put their whole payload here, and what
+// Captured rather than discarded: the "copy for agent" buttons put their whole payload here, and what
 // they put there is the feature.
 let lastCopied = null;
 window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; } };
@@ -417,6 +417,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const orderNewest = doc.getElementById('order-newest');
   const orderOldest = doc.getElementById('order-oldest');
   const rowIds = () => [...doc.querySelectorAll('#list .row')].map((r) => r.dataset.id);
+  /** The replay menu's item by label, opening the menu first — the items live behind `replay ▾`. */
+  const replayItem = async (label) => {
+    const trigger = [...doc.querySelectorAll('#detail .detail-head .btn')].find((b) => b.textContent === 'replay ▾');
+    if (!trigger) return null;
+    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 40));
+    return [...doc.querySelectorAll('#detail .menu-item')].find((b) => b.textContent === label) || null;
+  };
+
   const click = async (node) => {
     node.dispatchEvent(new window.Event('click', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 100));
@@ -1333,9 +1342,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await click(row);
       await new Promise((r) => setTimeout(r, 700));
       const button = [...doc.querySelectorAll('#detail .detail-head button')]
-        .find((b) => b.textContent === 'for AI');
+        .find((b) => b.textContent === 'copy for agent');
       if (!button) {
-        result.txnButton = 'NO - no "for AI" button on a transaction';
+        result.txnButton = 'NO - no "copy for agent" button on a transaction';
       } else {
         lastCopied = null;
         await click(button);
@@ -1373,9 +1382,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await new Promise((r) => setTimeout(r, 400));
     const sessionButton = [...doc.querySelectorAll('#detail-empty button')]
-      .find((b) => b.textContent === 'for AI');
+      .find((b) => b.textContent === 'copy for agent');
     if (!sessionButton) {
-      result.sessionButton = 'NO - no "for AI" button on the session panel';
+      result.sessionButton = 'NO - no "copy for agent" button on the session panel';
     } else {
       lastCopied = null;
       await click(sessionButton);
@@ -1417,8 +1426,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await click(rows[0]);
     await new Promise((r) => setTimeout(r, 400));
 
-    const button = [...doc.querySelectorAll('#detail .btn')]
-      .find((b) => b.textContent === 'edit & replay');
+    const button = await replayItem('edit & replay');
     if (!button) return { ...result, reason: 'no edit button' };
 
     button.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -1488,7 +1496,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await new Promise((r) => setTimeout(r, 400));
 
     const pane = doc.getElementById('detail');
-    const button = [...pane.querySelectorAll('.btn')].find((b) => b.textContent === 'replay');
+    const button = await replayItem('replay');
     if (!button) return { pressed: false, reason: 'no replay button' };
 
     const realFetch = window.fetch;
@@ -1516,6 +1524,53 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     };
   }
 
+
+  /**
+   * The detail header: what is in it, in what order, and whether the replay menu behaves as one.
+   *
+   * The menu is driven the way a person would — open, Escape, open, click elsewhere — and judged
+   * by `hidden` and `aria-expanded` agreeing, because a menu that closed visually while still
+   * announcing itself as expanded is one a screen reader user cannot leave. Nothing in the menu
+   * is pressed here: the replay probes above do that with the request stubbed.
+   */
+  async function probeDetailHeader() {
+    const rows = [...doc.querySelectorAll('#list .row')];
+    if (!rows.length) return { actions: 'n/a (no rows)' };
+    await click(rows[0]);
+    await new Promise((r) => setTimeout(r, 400));
+    const head = doc.querySelector('#detail .detail-head');
+    const labels = [...head.querySelectorAll('.detail-actions > .btn, .detail-actions > .menu-wrap > .btn')].map((b) => b.textContent);
+    const result = {
+      actions: labels.join(' · ') === 'copy cURL · copy for agent · replay ▾'
+        ? `yes (${labels.join(' · ')}, right-aligned)`
+        : `NO - ${labels.join(' · ')}`,
+      noForAi: !doc.body.textContent.includes('for AI') ? 'yes' : 'NO - "for AI" is still on the page',
+    };
+    const trigger = [...head.querySelectorAll('.btn')].find((b) => b.textContent === 'replay ▾');
+    const menu = head.querySelector('.menu');
+    const agrees = () => menu.hidden === (trigger.getAttribute('aria-expanded') === 'false');
+    const press = async (node) => { node.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); await new Promise((r) => setTimeout(r, 40)); };
+    await press(trigger);
+    const opened = !menu.hidden && agrees()
+      && [...menu.querySelectorAll('.menu-item')].map((i) => i.textContent).join(',') === 'replay,edit & replay'
+      && doc.activeElement === menu.querySelector('.menu-item');
+    menu.querySelector('.menu-item').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 40));
+    const escapes = menu.hidden && agrees() && !doc.getElementById('detail').hidden;
+    await press(trigger);
+    await press(doc.querySelector('#detail .dtabs'));
+    const outside = menu.hidden && agrees();
+    result.replayMenu = opened && escapes && outside
+      ? 'yes (opens on its first item, Escape and an outside click close it, detail stays open)'
+      : `NO - opened ${opened}, Escape ${escapes}, outside click ${outside}`;
+    const dtabRule = (css.match(/\.dtab\s*\{[^}]*\}/) || [''])[0];
+    result.dtabWeight = /border-bottom:\s*1px/.test(dtabRule) && /font-size:\s*12px/.test(dtabRule)
+      ? 'yes (1px underline, 12px)'
+      : 'NO';
+    return result;
+  }
+
+  const detailHeaderProbe = await probeDetailHeader();
   const replayButtonProbe = await probeReplayButton();
   const replayEditorProbe = await probeReplayEditor();
 
@@ -2039,6 +2094,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     console.error('pull button        :', probe.pullButton);
   }
 
+  console.error('--- detail header ---');
+  for (const [name, value] of Object.entries(detailHeaderProbe)) {
+    console.error(`${name.padEnd(19)}:`, value);
+  }
   console.error('--- json tree ---');
   console.error('parser             :', jsonParserProbe.ok);
   for (const [name, value] of Object.entries(jsonTreeProbe)) {
@@ -2059,8 +2118,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
    * snapshot is the only thing anyone *looks* at. Done here, after every assertion, so it cannot
    * affect one.
    */
-  const snapshotEditor = [...doc.querySelectorAll('#detail .btn')]
-    .find((b) => b.textContent === 'edit & replay');
+  const snapshotEditor = await replayItem('edit & replay');
   if (snapshotEditor && !doc.querySelector('.replay-editor')) {
     snapshotEditor.dispatchEvent(new window.Event('click', { bubbles: true }));
     await settle();

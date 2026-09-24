@@ -642,7 +642,41 @@ kbd {
 
 #detail { padding: 14px; }
 
-.detail-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+/* Pushed right, and kept together when a long path wraps the header. */
+.detail-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.btn.btn-outline { background: none; border-color: var(--divider); color: var(--fg); }
+.btn.btn-outline:hover:not(:disabled) { border-color: var(--accent); }
+
+/* A small menu under the button that opened it. */
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.menu[hidden] { display: none; }
+.menu-item {
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 10px;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
 .detail-head .path { font-family: var(--mono); font-size: 14px; word-break: break-all; }
 .detail-head .method { font-size: 11px; flex: 0 0 auto; }
 
@@ -1251,11 +1285,12 @@ pre.body {
 .dtab {
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-bottom: 1px solid transparent;
+  margin-bottom: -1px;
   color: var(--fg-muted);
   font: inherit;
-  font-size: 11px;
-  padding: 5px 10px 4px;
+  font-size: 12px;
+  padding: 5px 10px 5px;
   cursor: pointer;
   display: flex;
   align-items: center;
