@@ -70,6 +70,8 @@ fun InspectorOverlay(
     // The detail tab, held here for the same reason as the list's arrangement: moving between
     // rows, or out to the list and back, should not reset which face you were comparing.
     var detailTab by remember { mutableStateOf(DetailTab.Response) }
+    // Folding per body, for the same reason: fold a body, look at another call, come back.
+    val treeStates = remember { JsonTreeStates() }
     val hidden = screen == Screen.Hidden
     LaunchedEffect(hidden) {
         if (hidden) listState.onClosed()
@@ -135,6 +137,7 @@ fun InspectorOverlay(
                             onBack = { screen = Screen.List },
                             onClose = { screen = Screen.Hidden },
                             modifier = Modifier.fillMaxSize(),
+                            treeStates = treeStates,
                             // Only when this key actually has one, so the button appearing is the
                             // same fact as the button working.
                             onPull = if (key in providers) {
@@ -177,6 +180,7 @@ fun InspectorOverlay(
                             modifier = Modifier.fillMaxSize(),
                             tab = detailTab,
                             onTab = { detailTab = it },
+                            treeStates = treeStates,
                         )
                     }
                 }

@@ -64,6 +64,8 @@ internal fun InspectorSignalDetail(
      * contract as `Inspector.pullSignal`, passed through rather than re-interpreted.
      */
     onPull: (suspend () -> String?)? = null,
+    /** Folding per payload, held by the overlay so it survives leaving the screen. */
+    treeStates: JsonTreeStates = remember { JsonTreeStates() },
 ) {
     val colors = LocalInspectorColors.current
     val scope = rememberCoroutineScope()
@@ -76,12 +78,14 @@ internal fun InspectorSignalDetail(
     val payload = remember(signal) { formatSignalPayload(signal) }
 
     Column(modifier.inspectorScreen(colors.surface)) {
+        // The same header as a call's detail — back, what it is, the actions, the filled close — so
+        // the two detail screens do not need learning separately.
         Row(
-            Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(12.dp),
+            Modifier.fillMaxWidth().height(48.dp).background(colors.surfaceElevated).padding(start = 4.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ToolbarButton("‹ back", onBack)
+            IconBox("‹", "back to the list", onBack)
             TagBadge(signal.tag)
             StartEllipsisText(
                 signal.name,
@@ -115,7 +119,7 @@ internal fun InspectorSignalDetail(
                     },
                 )
             }
-            ToolbarButton("✕", onClose, prominent = true)
+            CloseButton(onClose)
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
 
@@ -174,8 +178,22 @@ internal fun InspectorSignalDetail(
                 signal.dataTruncated -> " — ${formatBytes(signal.bytes)}, truncated at capture"
                 else -> " — ${formatBytes(signal.bytes)}"
             }
-            SectionTitle("Payload$size", onCopy = payload?.let { { onCopy(it) } })
+            // A tree for a whole object or array payload. A truncated one is a string prefix and not
+            // JSON, and a text payload has nothing to fold; both keep the text block below.
+            val tree = remember(signal) {
+                (signal.data as? kotlinx.serialization.json.JsonObject ?: signal.data as? kotlinx.serialization.json.JsonArray)
+                    ?.takeIf { !signal.dataTruncated }
+            }
+            if (tree == null) SectionTitle("Payload$size", onCopy = payload?.let { { onCopy(it) } })
             when {
+                tree != null && payload != null -> JsonTree(
+                    root = tree,
+                    label = "Payload${if (signal.bytes > 0) " · ${formatBytes(signal.bytes)}" else ""}",
+                    text = payload,
+                    state = treeStates.get("sig:${signal.id}") ?: remember(tree) { initialTreeState(tree) },
+                    onState = { treeStates.set("sig:${signal.id}", it) },
+                    onCopy = onCopy,
+                )
                 payload == null && signal.bytes > 0 -> Text(
                     // The ring evicts payloads with their rows, and a pulled row whose provider
                     // returned nothing has none either. Saying which is beyond this screen; saying
