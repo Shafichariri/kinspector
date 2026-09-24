@@ -860,6 +860,19 @@ in the field. The menu and the sheet are drawn in the overlay's own tree, not as
 `ModalBottomSheet` windows, for the same reason `InspectorBackHandler` is hand-rolled; they sit
 outside the inset padding so the scrim covers the status bar and the sheet reaches the bottom edge.
 
+**The overlay's detail screen opens on the response, and remembers the tab across rows.** Tabs
+read Response · Request · Overview; the choice is held by `InspectorOverlay`, like the list's
+arrangement, because comparing one field down a list means picking the same tab on every row
+otherwise — the web does the same. Within a tab the body comes before the headers, as on the web.
+A header named in `redacted` reads `redacted at capture` in the warning colour rather than showing
+the placeholder as though it were the value sent. Copy cURL and Copy URL moved into the header's
+`⋮` menu, and each says `Copied` before closing, because iOS and desktop show nothing on a copy.
+
+**The empty list says which of three things is true.** Nothing has arrived (instructions, naming
+both the Ktor plugin and the OkHttp interceptor, and `Pull signals now` only where a provider
+exists); a filter hid every call (`Clear filter`); or there are no calls but signals are hidden —
+which used to read as nothing at all, and now offers to show them.
+
 **`TextOverflow.StartEllipsis` does not work on iOS, and `StartEllipsisText` exists because of it.**
 On the skiko renderer — desktop *and iOS* — Start and Middle ellipsis fall back to an end
 ellipsis. Measured: `/v3/some-service/accounts/balance` at 150dp renders `/v3/some-service/ac…`

@@ -291,6 +291,58 @@ class ListRenderTest {
         assertTrue(out.length() > 0, "no image written to $out")
     }
 
+    /** The detail screen on a face, and the empty list — the other two screens the design pass changed. */
+    private fun shootScreen(name: String, dark: Boolean, content: @androidx.compose.runtime.Composable () -> Unit) {
+        val out = File("build/screenshots").apply { mkdirs() }.resolve("$name.png")
+        val scene = ImageComposeScene(width = 360, height = 720, density = Density(1f)) {
+            InspectorTheme(dark = dark) { content() }
+        }
+        try {
+            val bytes = scene.render().encodeToData(EncodedImageFormat.PNG)?.bytes
+            assertTrue(bytes != null && bytes.isNotEmpty(), "$name rendered nothing")
+            out.writeBytes(bytes)
+        } finally {
+            scene.close()
+        }
+        assertTrue(out.length() > 0, "no image written to $out")
+    }
+
+    private fun detailFixture() = session().first().copy(
+        path = "/v3/some-service/customers/profile/accounts/balance",
+        reqHeaders = mapOf("Authorization" to listOf("‹redacted›"), "Accept" to listOf("application/json")),
+        resHeaders = mapOf("Content-Type" to listOf("application/json")),
+        redacted = listOf("header:authorization"),
+    )
+
+    @Test
+    fun renders_the_detail_response_dark() = shootScreen("detail-dark", dark = true) {
+        val txn = detailFixture()
+        InspectorDetail(
+            txn = txn, siblings = listOf(txn), requestBody = null,
+            responseBody = """{"id":1234567890123456789,"items":[{"sku":"A-1","qty":2}],"cursor":null}""".encodeToByteArray(),
+            onSelectSibling = {}, onCopy = {}, onBack = {}, onClose = {},
+        )
+    }
+
+    @Test
+    fun renders_the_detail_request_light() = shootScreen("detail-request-light", dark = false) {
+        val txn = detailFixture()
+        InspectorDetail(
+            txn = txn, siblings = listOf(txn), requestBody = null, responseBody = null,
+            onSelectSibling = {}, onCopy = {}, onBack = {}, onClose = {},
+            tab = DetailTab.Request,
+        )
+    }
+
+    @Test
+    fun renders_the_empty_list_dark() = shootScreen("empty-dark", dark = true) {
+        InspectorList(
+            transactions = emptyList(), markers = emptyList(),
+            onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+            providers = listOf(SignalKey("cache", "a")), onPull = { null },
+        )
+    }
+
     @Test
     fun renders_the_filters_sheet_dark() = shootOverlay("sheet-dark", dark = true, menu = false)
 
