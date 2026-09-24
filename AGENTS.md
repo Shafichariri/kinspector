@@ -780,13 +780,11 @@ The exclusion rule then does the interesting half, and it is the feature rather 
 `TransactionTerm` so it drops every signal. That is what makes a tag chip a browser for one tag
 rather than a highlight over an unchanged list. Anyone wanting both writes the `|` form by hand.
 
-**Tag chips are built from the session, never from `SignalTags`, and they come before the markers.**
-The tag set is open by design, so a chip list built from the constants would be a list of the tags
-*this build* knows about — which is not a fact about the app being debugged. The position is
-arithmetic rather than taste: there are at most four tags and no limit at all on markers, so the
-unbounded list going first pushes the bounded one off a 360dp strip by however many markers
-somebody dropped. That was not reasoned, it was seen — `list-dark.png` showed the strip ending
-mid-marker with no tag chip on screen.
+**Tag chips are built from the session, never from `SignalTags`.** The tag set is open by design,
+so a chip list built from the constants would be a list of the tags *this build* knows about —
+which is not a fact about the app being debugged. The same goes for every section of the filters
+sheet: endpoints, methods and markers are whatever this session holds. *(The ordering argument that
+used to follow — tags before markers on a 360dp strip — went with the strip; see below.)*
 
 **A signal's payload is rendered from `Signal.data`, and the truncated case is not the element.**
 `Recorder.emit` cuts the *encoded* payload at `maxPayloadBytes` and keeps the prefix as a
@@ -834,7 +832,10 @@ screen lane would be indistinguishable from an unknown tag. Borrowing hues does 
 method-colour rule above, which is about avoiding the *status* hues: a 3dp stripe down a row with
 no status cannot be confused with a tinted badge in a fixed column.
 
-**The overlay's controls are one scrollable strip, not a row each.** A phone is 360dp by about
+**The overlay's controls are one scrollable strip, not a row each.** *(Overturned by the design
+pass: the list's chrome is now three bars — header, filter row, scope-and-now line — and everything
+the strip held moved into the filter row or a filters sheet. The reasoning below is kept because it
+is still why nothing got a row of its own.)* A phone is 360dp by about
 720; the header, the filter field and the scope bar already spend four lines before any traffic
 appears. The order toggle, the freeze control, the quick filters, the marker chips and the endpoint
 chips each getting a row would have spent four more. One horizontally scrollable strip trades
@@ -844,6 +845,31 @@ marker exists only because somebody dropped one, so it has earned the forward po
 four presets, then endpoints. The toggles are muted and the filter chips are accent-tinted, because
 one changes how the list is *arranged* and the other changes what it *contains*, and a strip that
 made them look alike would invite tapping `newest first` expecting fewer rows.
+
+**The list's chrome is three bars, and the filters sheet types into the field.** Header (title,
+count, `Mark`, `⋮`, a filled `✕`), filter row (field, `filters`, an order arrow, `live`/`frozen`),
+and one line carrying the scope and the now glance. The first row moved from about 230dp down to
+about 130dp. Freeze stayed in the filter row rather than the sheet: it is reached for while rows
+arrive, and a control behind a sheet is one the rows you meant to hold scroll past.
+
+The sheet edits the *same* filter text, one term at a time (`hasTerm`, `replaceTerm`,
+`removeTerm`), and leaves anything typed by hand alone. **One choice per section, sections ANDed** —
+that is the grammar's own shape: whitespace ANDs, `|` binds loosest, and there are no parentheses,
+so an OR inside a section would need a rewrite into disjunctive form that no reader could check
+in the field. The menu and the sheet are drawn in the overlay's own tree, not as `Popup` or
+`ModalBottomSheet` windows, for the same reason `InspectorBackHandler` is hand-rolled; they sit
+outside the inset padding so the scrim covers the status bar and the sheet reaches the bottom edge.
+
+**`TextOverflow.StartEllipsis` does not work on iOS, and `StartEllipsisText` exists because of it.**
+On the skiko renderer — desktop *and iOS* — Start and Middle ellipsis fall back to an end
+ellipsis. Measured: `/v3/some-service/accounts/balance` at 150dp renders `/v3/some-service/ac…`
+under all three modes. Every path, signal name and scope in the overlay was written against
+StartEllipsis because the tail names the endpoint, so on an iPhone every one of them had been
+cutting off exactly that. Android's platform text honours it, which is why nobody saw it.
+`StartEllipsisText` fits the longest tail by measurement (`fitTail`), so the string drawn is the
+string in the semantics tree; `a long path keeps the endpoint and loses the front` runs on the
+renderer that got it wrong and fails with the built-in overflow put back. Do not "simplify" a call
+site back to `overflow = StartEllipsis`.
 
 **Freezing holds a snapshot, not a flag.** Capture keeps running while the list is held and the
 ring keeps evicting, so a freeze that only stopped redrawing would let the reader's rows be
@@ -855,9 +881,12 @@ their eviction can no longer fetch a body, which is honest and visible rather th
 **`:inspector-ui` has interaction tests, and `compose.uiTest` is jvmTest-only.** A toggle's whole
 behaviour is the transition between two states: `ListRenderTest` photographs one and can never
 show the step, and the state lives inside the composable where no unit test reaches it.
-`ListControlsTest` taps the chips instead. Two rules learned writing it. Select a chip by
-`hasText(…) and hasClickAction()`, never by text alone — a marker named `checkout` is on screen
-twice by design, as a chip and as the rule across the list, and matching on text finds both. And
+`ListControlsTest` taps the chips instead. Two rules learned writing it. Select a sheet chip with
+`sheetChip(label)` — `hasText(…) and isToggleable()` — never by text alone, and not by
+`hasClickAction()` either: a marker named `checkout` is on screen twice by design, and a tag chip
+named `cache` shares its text with every cache signal row, which is clickable too. The chips are
+`toggleable` with a checkbox role, which is also what makes a screen reader say whether one is on.
+The order control is an arrow, found by `orderControl(newestFirst)` through its description. And
 assert the *rows move*, not that the label flipped: a toggle wired to nothing would pass an
 assertion about its own text.
 Like `compose.desktop.currentOs`, this dependency must never reach a main source set.

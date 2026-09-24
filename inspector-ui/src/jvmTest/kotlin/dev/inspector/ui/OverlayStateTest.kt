@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
@@ -39,17 +40,17 @@ class OverlayStateTest {
 
         openFromPill()
         onNode(hasSetTextAction()).performTextInput("path:/v2")
-        control("newest first").performClick()
+        orderControl(newestFirst = true).performClick()
         control("live").performClick()
         waitForIdle()
         control("frozen").assertExists()
 
-        control("✕ close").performClick()
+        onNode(hasContentDescription("close inspector")).performClick()
         waitForIdle()
         openFromPill()
 
         onNode(hasSetTextAction()).assert(hasText("path:/v2"))
-        control("oldest first").assertExists()
+        orderControl(newestFirst = false).assertExists()
         control("live").assertExists()
     }
 }

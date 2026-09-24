@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -158,203 +159,204 @@ internal fun InspectorList(
         observations.filter { filter.matches(it, context) }
     }
 
-    Column(modifier.inspectorScreen(colors.surface)) {
-        Row(
-            Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                "Inspector",
-                color = colors.onSurface,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                "${visible.size}/${rows.size}",
-                color = colors.onSurfaceMuted,
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.weight(1f),
-            )
-            ToolbarButton("mark", onMark)
-            ToolbarButton("clear", onClear)
-            // The way back to the app. Prominent because on a phone this is the only exit that
-            // is always present — system back also works, but nothing on screen says so.
-            ToolbarButton("✕ close", onClose, prominent = true)
-        }
+    // Transient, and deliberately not in [ListViewState]: a sheet still open when the inspector is
+    // reopened would be a list you cannot see until you find the way out of something.
+    var sheetOpen by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    // Back closes whichever is open before it leaves the list. Registered after the overlay's own
+    // handler, so it is the one asked first.
+    InspectorBackHandler(enabled = sheetOpen || menuOpen) {
+        sheetOpen = false
+        menuOpen = false
+    }
 
-        Column(Modifier.fillMaxWidth().background(colors.surfaceElevated).padding(horizontal = 12.dp, vertical = 8.dp)) {
-            BasicTextField(
-                value = filterText,
-                onValueChange = { filterText = it },
-                singleLine = true,
-                textStyle = TextStyle(
-                    color = colors.onSurface,
-                    fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace,
-                ),
-                cursorBrush = SolidColor(colors.accent),
-                decorationBox = { inner ->
-                    Box(
-                        Modifier.fillMaxWidth()
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                            .background(colors.surface)
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                    ) {
-                        if (filterText.isEmpty()) {
-                            Text(
-                                "filter — e.g. status>=400  path:/v2  slower:500ms",
-                                color = colors.onSurfaceMuted,
-                                fontSize = 13.sp,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                        inner()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
+    // Computed over *all* transactions, not the filtered view: a duplicate whose twin is filtered
+    // out is still a duplicate, and hiding that would make the highlight depend on what you
+    // happened to be searching for. The scope shares the rule — see [pathScope].
+    val duplicates = remember(rows) { duplicatesById(rows) }
+    val scope = remember(rows) { pathScope(rows) }
+    // Shown only while something on screen is actually under it. A filter that leaves only the odd
+    // rows out would otherwise leave a claim describing nothing visible.
+    val activeScope = scope?.takeIf { s -> visible.any(s::covers) }
+
+    val sections = remember(rows, marks, observations, context) { sheetSections(rows, marks, observations, context) }
+    val glance = remember(observations, providers, nowMs) {
+        nowGlance(currentObservations(observations), nowMs, unreadProviders(observations, providers).size)
+    }
+
+    // The menu and the sheet sit outside the inset padding, so the scrim dims the whole screen —
+    // status bar and home indicator included — and the sheet runs under the home indicator the
+    // way a system sheet does. Inside it, they left undimmed strips at both edges.
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.inspectorScreen(colors.surface)) {
+            ListHeader(
+                total = rows.size,
+                onMark = onMark,
+                onMenu = { menuOpen = !menuOpen },
+                onClose = onClose,
             )
-            if (parseError != null) {
-                // Parser messages are written to be shown verbatim; they name the fix.
-                Text(
-                    parseError,
-                    color = colors.clientError,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-
-            // Only labels the grammar can actually express — a chip that sets a filter the parser
-            // rejects is worse than no chip. The divider for such a marker is still drawn; it is
-            // the chip that cannot work. Asked of the parser rather than guessed at, so this
-            // follows the grammar if the grammar moves.
-            val labels = remember(marks) {
-                markerLabels(marks).filter { FilterParser.parse(markerFilterTerm(it)).isSuccess }
-            }
-            val endpoints = remember(rows) { endpointShortcuts(rows, ENDPOINT_CHIP_LIMIT) }
-            // Built from the session's own tags, never from `SignalTags`: the tag set is open, so
-            // a fixed list would be the tags this build knows about rather than the ones the app
-            // emits. Off the *unfiltered* observations, like the endpoint chips and for the same
-            // reason — chips built from the filtered view collapse to the one you just tapped.
-            val tags = remember(observations) { signalTagShortcuts(observations, TAG_CHIP_LIMIT) }
-
-            ControlStrip(
+            FilterRow(
+                filterText = filterText,
+                onFilterText = { filterText = it },
+                parseError = parseError,
+                activeFilters = activeSheetTerms(filterText, sections),
+                onOpenFilters = { sheetOpen = true },
                 newestFirst = newestFirst,
                 onOrder = { newestFirst = it },
                 frozen = frozen != null,
-                onFreeze = { hold ->
-                    frozen = if (hold) Frozen(transactions, markers, signals) else null
-                },
-                signalCount = observations.size,
-                showSignals = showSignals,
-                onShowSignals = { showSignals = it },
-                filterText = filterText,
-                onFilter = { filterText = it },
-                markerLabels = labels,
-                tags = tags,
-                endpoints = endpoints,
+                onFreeze = { hold -> frozen = if (hold) Frozen(transactions, markers, signals) else null },
             )
-        }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
-
-        // Above the list, and fed the *unfiltered* observations: "what the app holds" is a fact
-        // about the session, not about what you happened to type. Same rule as the endpoint chips
-        // and the duplicate highlighting.
-        if (showSignals) {
-            NowStrip(
-                signals = observations,
-                nowMs = nowMs,
+            // The now half follows the signals toggle: "signals off" with a signal panel still on
+            // screen would be the toggle not meaning what it says.
+            ScopeNowLine(
+                shown = visible.size,
+                total = rows.size,
+                scopeLabel = activeScope?.label,
+                glance = if (showSignals) glance else null,
                 expanded = nowExpanded,
-                onToggle = { nowExpanded = !nowExpanded },
-                onSelectSignal = onSelectSignal,
-                providers = providers,
-                onPull = onPull,
+                onToggleNow = { nowExpanded = !nowExpanded },
             )
-            if (observations.isNotEmpty() || providers.isNotEmpty()) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
-            }
-        }
-
-        // Markers are not filtered with the rows. The filter grammar describes traffic, and a
-        // divider still says where in the session you are looking — which is most of its job when
-        // a filter has thinned the rows around it. The web UI does the same.
-        val shown = if (showSignals) visibleSignals else emptyList()
-        val entries = remember(visible, marks, shown, newestFirst) {
-            timeline(visible, marks, shown, newestFirst)
-        }
-        // A chatty state holder emits dozens of adjacent rows differing only in a payload the row
-        // cannot show, and on a phone that is the whole screen. Collapsing is what keeps the
-        // traffic this view exists to correlate on screen at all.
-        val runs = remember(entries) { timelineRuns(entries) }
-
-        if (runs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    if (rows.isEmpty()) "no traffic captured yet" else "no rows match this filter",
-                    color = colors.onSurfaceMuted,
-                    fontSize = 13.sp,
+            // Above the list, and fed the *unfiltered* observations: "what the app holds" is a fact
+            // about the session, not about what you happened to type.
+            if (showSignals && nowExpanded && glance != null) {
+                NowPanel(
+                    signals = observations,
+                    nowMs = nowMs,
+                    onSelectSignal = onSelectSignal,
+                    providers = providers,
+                    onPull = onPull,
                 )
             }
-        } else {
-            // Computed over *all* transactions, not the filtered view: a duplicate whose twin is
-            // filtered out is still a duplicate, and hiding that would make the highlight depend
-            // on what you happened to be searching for. The scope shares the rule — see [pathScope].
-            val duplicates = remember(rows) { duplicatesById(rows) }
-            val scope = remember(rows) { pathScope(rows) }
+            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
 
-            // Shown only while something on screen is actually under it. A filter that leaves only
-            // the odd rows out would otherwise leave a bar describing nothing visible.
-            val activeScope = scope?.takeIf { s -> visible.any(s::covers) }
-            if (activeScope != null) {
-                ScopeBar(activeScope, rows.size)
-                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+            // Markers are not filtered with the rows. The filter grammar describes traffic, and a
+            // divider still says where in the session you are looking — which is most of its job
+            // when a filter has thinned the rows around it. The web UI does the same.
+            val shown = if (showSignals) visibleSignals else emptyList()
+            val entries = remember(visible, marks, shown, newestFirst) {
+                timeline(visible, marks, shown, newestFirst)
             }
+            // A chatty state holder emits dozens of adjacent rows differing only in a payload the
+            // row cannot show, and on a phone that is the whole screen. Collapsing is what keeps the
+            // traffic this view exists to correlate on screen at all.
+            val runs = remember(entries) { timelineRuns(entries) }
 
-            LazyColumn(Modifier.fillMaxSize(), state = state.scroll) {
-                // Keyed by index as well as content: two markers can carry the same label at the
-                // same millisecond, and a duplicate key is a crash rather than a rendering glitch.
-                itemsIndexed(runs, key = { index, run -> "$index:${run.id}" }) { _, run ->
-                    val collapsible = run.entries.size >= RUN_COLLAPSE_THRESHOLD
-                    val expanded = run.id in expandedRuns
-                    if (collapsible) {
-                        RunHeader(
-                            run = run,
-                            expanded = expanded,
-                            onToggle = {
-                                expandedRuns = if (expanded) {
-                                    expandedRuns - run.id
-                                } else {
-                                    expandedRuns + run.id
-                                }
-                            },
-                        )
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
-                    }
-                    if (!collapsible || expanded) {
-                        for (entry in run.entries) {
-                            when (entry) {
-                                is TimelineEntry.Call -> TransactionRow(
-                                    txn = entry.txn,
-                                    scope = activeScope,
-                                    duplicate = duplicates[entry.txn.id],
-                                    onClick = { onSelect(entry.txn) },
-                                )
-                                is TimelineEntry.Mark -> MarkerDivider(entry.marker)
-                                is TimelineEntry.Observation -> SignalRow(
-                                    signal = entry.signal,
-                                    indented = collapsible,
-                                    onClick = { onSelectSignal(entry.signal) },
-                                )
-                            }
+            if (runs.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (rows.isEmpty()) "no traffic captured yet" else "no rows match this filter",
+                        color = colors.onSurfaceMuted,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), state = state.scroll) {
+                    // Keyed by index as well as content: two markers can carry the same label at the
+                    // same millisecond, and a duplicate key is a crash rather than a rendering glitch.
+                    itemsIndexed(runs, key = { index, run -> "$index:${run.id}" }) { _, run ->
+                        val collapsible = run.entries.size >= RUN_COLLAPSE_THRESHOLD
+                        val expanded = run.id in expandedRuns
+                        if (collapsible) {
+                            RunHeader(
+                                run = run,
+                                expanded = expanded,
+                                onToggle = {
+                                    expandedRuns = if (expanded) expandedRuns - run.id else expandedRuns + run.id
+                                },
+                            )
                             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+                        }
+                        if (!collapsible || expanded) {
+                            for (entry in run.entries) {
+                                when (entry) {
+                                    is TimelineEntry.Call -> TransactionRow(
+                                        txn = entry.txn,
+                                        scope = activeScope,
+                                        duplicate = duplicates[entry.txn.id],
+                                        onClick = { onSelect(entry.txn) },
+                                    )
+                                    is TimelineEntry.Mark -> MarkerDivider(entry.marker)
+                                    is TimelineEntry.Observation -> SignalRow(
+                                        signal = entry.signal,
+                                        indented = collapsible,
+                                        onClick = { onSelectSignal(entry.signal) },
+                                    )
+                                }
+                                Box(Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+                            }
                         }
                     }
                 }
             }
         }
+
+        if (menuOpen) {
+            OverflowMenu(
+                rowCount = rows.size,
+                providers = providers,
+                onPull = onPull,
+                onClear = onClear,
+                onDismiss = { menuOpen = false },
+            )
+        }
+        if (sheetOpen) {
+            FiltersSheet(
+                sections = sections,
+                filterText = filterText,
+                onFilterText = { filterText = it },
+                signalCount = observations.size,
+                showSignals = showSignals,
+                onShowSignals = { showSignals = it },
+                matching = visible.size,
+                onDismiss = { sheetOpen = false },
+            )
+        }
     }
+}
+
+/**
+ * The sheet's sections, built from the session rather than from constants.
+ *
+ * Endpoints, markers, methods and tags are all whatever this session actually holds — a list of
+ * the tags this *build* knows about is not a fact about the app being debugged. Built off the
+ * unfiltered rows, like the duplicate highlight and for the same reason: chips built from the
+ * filtered view collapse to the one you just tapped.
+ *
+ * Counts are what each term alone would keep, asked of the parser, so a count and the rows a tap
+ * then shows cannot disagree. Markers the grammar cannot express are left out; their dividers are
+ * still drawn, it is only the chip that could not work.
+ */
+internal fun sheetSections(
+    rows: List<NetworkTransaction>,
+    marks: List<Marker>,
+    observations: List<Signal>,
+    context: FilterContext,
+): List<SheetSection> {
+    fun count(term: String): Int? {
+        val filter = FilterParser.parse(term).getOrNull() ?: return null
+        return rows.count { filter.matches(it, context) }
+    }
+    val status = QUICK_FILTERS.map { (label, term) -> SheetChip(label, term, count(term)) }
+    val methods = rows.groupingBy { it.method.uppercase() }.eachCount().entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .take(METHOD_CHIP_LIMIT)
+        .map { (method, n) -> SheetChip(method, "method:$method", n) }
+    val endpoints = endpointShortcuts(rows, ENDPOINT_CHIP_LIMIT)
+        .map { SheetChip(it.segment, endpointFilterTerm(it.segment), it.count) }
+    val markers = markerLabels(marks)
+        .filter { FilterParser.parse(markerFilterTerm(it)).isSuccess }
+        .map { SheetChip(it, markerFilterTerm(it), count(markerFilterTerm(it))) }
+    val tags = signalTagShortcuts(observations, TAG_CHIP_LIMIT)
+        .map { SheetChip(it.tag, tagFilterTerm(it.tag), it.count) }
+    return listOf(
+        SheetSection("Status", status),
+        SheetSection("Method", methods),
+        SheetSection("Endpoint", endpoints),
+        SheetSection("Since marker", markers),
+        SheetSection("Signal tag", tags),
+    )
 }
 
 /**
@@ -376,44 +378,41 @@ private fun SignalRow(signal: Signal, indented: Boolean, onClick: () -> Unit) {
     val tagColor = colors.forTag(signal.tag)
     Row(
         Modifier.fillMaxWidth()
+            .heightIn(min = 40.dp)
             .clickable(onClick = onClick)
             // Drawn rather than laid out, like the failure stripe on a transaction row, so the
-            // lane costs the row no width and cannot pull the clock out of line with the traffic.
+            // lane costs the row no width and cannot pull the columns out of line with the traffic.
             .drawBehind { drawRect(tagColor, size = Size(STRIPE_WIDTH.toPx(), size.height)) }
             .padding(start = if (indented) 24.dp else 12.dp, end = 12.dp)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            formatClock(signal.ts),
-            color = colors.onSurfaceMuted,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-        )
+        // In the method badge's column, so a tag and a verb line up down the list.
         Text(
             signal.tag,
             color = tagColor,
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(BADGE_COLUMN),
         )
-        Text(
+        StartEllipsisText(
             signal.name,
             color = colors.onSurface,
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
-            maxLines = 1,
             // The tail identifies it, same as a path.
-            overflow = TextOverflow.StartEllipsis,
             modifier = Modifier.weight(1f),
         )
         // Provenance, because a snapshot with none reads as the current state of the app. "pulled"
         // means the host asked and a provider answered; the default is the app pushing it.
         if (signal.trigger == SignalTrigger.Request) {
-            Text("pulled", color = colors.onSurfaceMuted, fontSize = 10.sp, maxLines = 1)
+            Text("pulled", color = colors.onSurfaceMuted, fontSize = 11.sp, maxLines = 1)
         }
+        Text(formatClock(signal.ts), color = colors.onSurfaceMuted, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
     }
 }
 
@@ -444,13 +443,11 @@ private fun RunHeader(run: TimelineRun, expanded: Boolean, onToggle: () -> Unit)
             fontSize = 11.sp,
         )
         Text(signal.tag, color = tagColor, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
-        Text(
+        StartEllipsisText(
             signal.name,
             color = colors.onSurface,
             fontSize = 13.sp,
             fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-            overflow = TextOverflow.StartEllipsis,
             modifier = Modifier.weight(1f),
         )
         Text(
@@ -499,196 +496,12 @@ private fun MarkerDivider(marker: Marker) {
 }
 
 /**
- * One scrollable strip above the list, holding everything that is not the filter field itself.
- *
- * **One strip and not three rows.** The phone is 360dp wide and around 720 tall; the header, the
- * filter field and the scope bar already spend four lines before any traffic, and giving the order
- * control, the quick filters, the markers and the endpoints a row each would spend four more. A
- * horizontally scrollable strip trades vertical space, which is the scarce one, for horizontal
- * space, which is not.
- *
- * Order is by how often a thumb wants them and by how stable they are. The two view toggles never
- * move and never grow, so they lead and are always reachable without scrolling. The quick filters
- * are a fixed four. Markers come before endpoints because a marker is something the reader
- * deliberately dropped, and endpoints are merely what the session happened to contain.
- *
- * The toggles are tinted differently from the filter chips on purpose: one changes what the list
- * *shows* and the other changes how it is *arranged*, and a strip that made them look alike would
- * invite tapping `newest` expecting fewer rows.
- */
-@Composable
-private fun ControlStrip(
-    newestFirst: Boolean,
-    onOrder: (Boolean) -> Unit,
-    frozen: Boolean,
-    onFreeze: (Boolean) -> Unit,
-    signalCount: Int,
-    showSignals: Boolean,
-    onShowSignals: (Boolean) -> Unit,
-    filterText: String,
-    onFilter: (String) -> Unit,
-    markerLabels: List<String>,
-    tags: List<TagShortcut>,
-    endpoints: List<EndpointShortcut>,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Labelled with the order it is *currently* in, not the one a tap would produce. A phone
-        // has no hover and no tooltip, so a control that names its effect rather than its state
-        // leaves the reader unable to tell which way round the list is.
-        StateChip(
-            label = if (newestFirst) "newest first" else "oldest first",
-            active = newestFirst,
-            onClick = { onOrder(!newestFirst) },
-        )
-        // Mobile is live by construction, which sounds better than it is: there is no way to hold
-        // still and read while traffic keeps arriving and the ring keeps evicting.
-        StateChip(
-            label = if (frozen) "frozen" else "live",
-            active = frozen,
-            onClick = { onFreeze(!frozen) },
-        )
-        // Only when the app emits any. A toggle for something a session does not contain is a
-        // control that can only disappoint, and this strip has no room for one.
-        if (signalCount > 0) {
-            StateChip(
-                label = if (showSignals) "signals $signalCount" else "signals off",
-                active = showSignals,
-                onClick = { onShowSignals(!showSignals) },
-            )
-        }
-
-        // Tags before the markers, and the reason is arithmetic rather than taste: there are at
-        // most four tags and there is no limit at all on markers. Putting the unbounded list first
-        // pushes the bounded one off the right-hand edge by however many markers somebody happened
-        // to drop, and this strip is 360dp wide. The reverse costs the markers a fixed four chips.
-        //
-        // Measured, not reasoned: with the tags after the markers, `list-dark.png` showed the
-        // strip ending mid-marker with no tag chip on screen at all — so the one route from
-        // "something changed" to "this is what it changed to" was the hardest chip to reach.
-        if (tags.isNotEmpty()) {
-            StripDivider()
-            for (tag in tags) {
-                FilterChip(
-                    label = "${tag.tag} ${tag.count}",
-                    term = tagFilterTerm(tag.tag),
-                    filterText = filterText,
-                    onFilter = onFilter,
-                )
-            }
-        }
-
-        // Markers ahead of the quick filters, because a marker only exists because somebody
-        // deliberately dropped one — so when there are any, they are what the reader came to the
-        // strip for. The quick filters and the endpoints are always there and lose nothing by
-        // being a swipe further along. A session with no markers pays nothing.
-        if (markerLabels.isNotEmpty()) {
-            StripDivider()
-            for (label in markerLabels) {
-                FilterChip(
-                    label = label,
-                    term = markerFilterTerm(label),
-                    filterText = filterText,
-                    onFilter = onFilter,
-                )
-            }
-        }
-
-        StripDivider()
-
-        for ((label, term) in QUICK_FILTERS) {
-            FilterChip(label = label, term = term, filterText = filterText, onFilter = onFilter)
-        }
-
-        if (endpoints.isNotEmpty()) {
-            StripDivider()
-            for (endpoint in endpoints) {
-                FilterChip(
-                    label = "${endpoint.segment} ${endpoint.count}",
-                    term = endpointFilterTerm(endpoint.segment),
-                    filterText = filterText,
-                    onFilter = onFilter,
-                )
-            }
-        }
-    }
-}
-
-/**
- * Separates groups that do different things, so the strip does not read as one long list.
- *
- * Drawn from `onSurfaceMuted` rather than `divider`: `divider` is tuned to separate full-width
- * rows against a flat background, and a 1dp by 16dp mark of it between two chips disappears.
- */
-@Composable
-private fun StripDivider() {
-    val colors = LocalInspectorColors.current
-    Box(
-        Modifier.padding(horizontal = 2.dp)
-            .width(1.dp)
-            .height(16.dp)
-            .background(colors.onSurfaceMuted.copy(alpha = STRIP_DIVIDER_ALPHA)),
-    )
-}
-
-/**
- * A chip that changes how the list is arranged rather than what it contains.
- *
- * Muted rather than accent-tinted: the accent chips below it all filter, and two controls that
- * look alike and do different things is the mistake worth designing out.
- */
-@Composable
-private fun StateChip(label: String, active: Boolean, onClick: () -> Unit) {
-    val colors = LocalInspectorColors.current
-    Text(
-        label,
-        color = if (active) colors.surface else colors.onSurfaceMuted,
-        fontSize = 11.sp,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(PILL_RADIUS))
-            .background(if (active) colors.onSurfaceMuted else Color.Transparent)
-            .border(1.dp, colors.divider, RoundedCornerShape(PILL_RADIUS))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    )
-}
-
-/**
- * A chip that applies one filter term, and clears it when tapped again.
- *
- * Tapping an active chip clears rather than re-applying. A chip that can only be turned on is a
- * trap on a surface with no obvious way to select and delete text.
- */
-@Composable
-private fun FilterChip(label: String, term: String, filterText: String, onFilter: (String) -> Unit) {
-    val colors = LocalInspectorColors.current
-    val active = filterText.trim() == term
-    Text(
-        label,
-        color = if (active) colors.surface else colors.accent,
-        fontSize = 11.sp,
-        fontFamily = FontFamily.Monospace,
-        maxLines = 1,
-        modifier = Modifier
-            .clip(RoundedCornerShape(PILL_RADIUS))
-            .background(if (active) colors.accent else colors.accent.copy(alpha = SCOPE_FILL_ALPHA))
-            .border(1.dp, colors.accent.copy(alpha = SCOPE_BORDER_ALPHA), RoundedCornerShape(PILL_RADIUS))
-            .clickable { onFilter(if (active) "" else term) }
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    )
-}
-
-/**
- * The four presets, as label to filter term.
+ * The status presets, as label to filter term.
  *
  * The same grammar the field above takes, so a chip is a shortcut and never a second mechanism —
- * tap one and the field shows what it did, which is how anybody learns the grammar at all. Four
- * and not the web's six: `4xx` and `POST` are a tap of typing away, and every chip here is a chip
- * the markers and endpoints have to be scrolled past.
+ * tap one and the field shows what it did, which is how anybody learns the grammar at all. `4xx`
+ * is back now that these live in a sheet rather than a strip every other chip had to be scrolled
+ * past; `POST` is in the sheet's method section instead.
  *
  * `QuickFiltersTest` parses every one of these, so a term cannot rot into a chip that shows an
  * error message when tapped.
@@ -696,21 +509,24 @@ private fun FilterChip(label: String, term: String, filterText: String, onFilter
 internal val QUICK_FILTERS: List<Pair<String, String>> = listOf(
     "errors" to "has:error",
     "5xx" to "status>=500",
+    "4xx" to "status>=400 status<500",
     "slow" to "slower:500ms",
     "retries" to "attempt>1",
 )
 
 /**
- * How many endpoint chips the strip offers.
+ * How many endpoint chips the sheet offers.
  *
- * The web defaults to ten and makes it a setting. Here it is fixed and smaller: every extra chip
- * is one more thing between a thumb and the marker chips, and a phone has no settings pane to put
- * the knob in.
+ * The web defaults to ten and makes it a setting. Here it is fixed and smaller: a phone has no
+ * settings pane to put the knob in, and past six the section is taller than the sheet.
  */
 private const val ENDPOINT_CHIP_LIMIT = 6
 
+/** GET, POST and a few more cover every app; beyond that it is a list nobody taps. */
+private const val METHOD_CHIP_LIMIT = 5
+
 /**
- * How many tag chips the strip offers.
+ * How many tag chips the sheet offers.
  *
  * Fewer than the endpoints, because a session has few tags and many endpoints: the four
  * conventional ones plus whatever the app invented is the realistic ceiling, and a session with
@@ -726,9 +542,6 @@ private const val TAG_CHIP_LIMIT = 4
  */
 private const val RUN_COLLAPSE_THRESHOLD = 3
 
-/** Enough to read as a separator between chips, not enough to read as a chip of its own. */
-private const val STRIP_DIVIDER_ALPHA = 0.45f
-
 /**
  * The filter a marker chip applies.
  *
@@ -740,55 +553,15 @@ private const val STRIP_DIVIDER_ALPHA = 0.45f
 internal fun markerFilterTerm(label: String): String = "since:marker(\"$label\")"
 
 /**
- * The shared prefix, lifted above the list it describes.
+ * One call over two lines: what was called, then everything else about it.
  *
- * Deliberately not scrolled away with the rows: it is a standing claim about what every path
- * beneath it is missing, and a row read after the bar had scrolled off would be read wrong.
- */
-@Composable
-private fun ScopeBar(scope: PathScope, total: Int) {
-    val colors = LocalInspectorColors.current
-    Row(
-        Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            scope.label,
-            color = colors.onSurface,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-            // The front of a host is what identifies it, so this truncates the opposite way round
-            // from the rows below.
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f, fill = false)
-                .padding(end = 8.dp)
-                .clip(RoundedCornerShape(PILL_RADIUS))
-                .background(colors.accent.copy(alpha = SCOPE_FILL_ALPHA))
-                .border(1.dp, colors.accent.copy(alpha = SCOPE_BORDER_ALPHA), RoundedCornerShape(PILL_RADIUS))
-                .padding(horizontal = 8.dp, vertical = 3.dp),
-        )
-        Text(
-            "${scope.covered} of $total",
-            color = colors.onSurfaceMuted,
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-        )
-    }
-}
-
-/**
- * One call over two lines: what happened, then what was called.
+ * **Path first.** The path is the only part that tells one row from another, and the status is
+ * the part scanned for, so the two share the top line with the method badge as its anchor. The
+ * clock, duration, size and flags go underneath, indented to start under the path.
  *
- * The path is the only part that tells one row from another, and it used to share a line with the
- * method badge, the status and the timings — about 22 characters on a 360dp phone, which clips
- * mid-segment and leaves two different endpoints reading alike. Here it has a line of its own and
- * shares it only with the duration, which is nearer 37.
- *
- * Metadata first, path second, which is the less obvious half. The method and status stay in a
- * fixed column you can run an eye down; the line underneath is what you stop for.
+ * **The path still loses its front, never its end.** The design pass drew it end-ellipsised, and
+ * that is the one part of it not taken: `…/accounts/balance` names an endpoint and
+ * `/v2/some-service/acc…` does not, and two rows that clip to the same front read alike.
  */
 @Composable
 private fun TransactionRow(
@@ -804,6 +577,7 @@ private fun TransactionRow(
 
     Column(
         Modifier.fillMaxWidth()
+            .heightIn(min = 52.dp)
             .clickable(onClick = onClick)
             // Background before padding, so the tint fills the row rather than insetting with it.
             .background(if (duplicate != null) colors.duplicate.copy(alpha = DUPLICATE_TINT_ALPHA) else Color.Transparent)
@@ -813,79 +587,65 @@ private fun TransactionRow(
                 if (failed) drawRect(statusColor, size = Size(STRIPE_WIDTH.toPx(), size.height))
             }
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
+        // Centred rather than baseline-aligned: the fitted path is drawn inside a measuring box,
+        // which does not report a baseline to line up with.
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor))
-
-            // Before the method, which is where the web UI puts it — one event should not need
-            // reading twice. On the metadata line rather than beside the path, because the path
-            // line is the one the 0.7.0 layout exists to protect and this column is fixed width.
-            Text(
-                formatClock(txn.ts),
-                color = colors.onSurfaceMuted,
-                fontSize = 11.sp,
+            MethodBadge(txn.method, minWidth = BADGE_COLUMN)
+            StartEllipsisText(
+                if (scope?.covers(txn) == true) scope.strip(txn.path) else txn.path,
+                color = colors.onSurface,
+                fontSize = 14.sp,
                 fontFamily = FontFamily.Monospace,
-                maxLines = 1,
-            )
-
-            MethodBadge(txn.method, minWidth = 52.dp)
-
-            // Everything unusual about this row, in the space the fixed columns leave over. Empty
-            // on an ordinary call, which is most of them — so anything here is worth the glance.
-            Text(
-                rowFlags(txn, scope, duplicate),
-                color = colors.onSurfaceMuted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
-            )
-
-            Text(
-                formatBytes(maxOf(txn.reqBytes, txn.resBytes)),
-                color = colors.onSurfaceMuted,
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
             )
             Text(
                 statusLabel(txn),
                 color = statusColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
+                maxLines = 1,
             )
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = BADGE_COLUMN + 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // The clock is what lines a row up against logcat or a backend log, and what makes a
+            // repeat legible: two rows 1.9s apart is the whole finding.
+            Text(formatClock(txn.ts), color = colors.onSurfaceMuted, fontSize = 12.sp, fontFamily = FontFamily.Monospace, maxLines = 1)
             Text(
                 formatDuration(txn.ms),
                 // The one number on the row with a natural bad state, so the list diagnoses as it
                 // scrolls instead of only once a row is opened.
                 color = if (slow) colors.clientError else colors.onSurfaceMuted,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
-                textAlign = TextAlign.End,
                 maxLines = 1,
-                // Fixed width, so every path below starts at the same x. Durations run 3 to 6
-                // characters, and a ragged left edge costs more in scanning than the column costs
-                // in space.
-                modifier = Modifier.width(DURATION_COLUMN).alignByBaseline(),
             )
             Text(
-                if (scope?.covers(txn) == true) scope.strip(txn.path) else txn.path,
-                color = colors.onSurface,
-                fontSize = 13.sp,
+                formatBytes(maxOf(txn.reqBytes, txn.resBytes)),
+                color = colors.onSurfaceMuted,
+                fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
-                // The tail identifies the endpoint; the front is boilerplate the scope bar has
-                // usually already said. Clipping the end leaves two rows reading alike.
-                overflow = TextOverflow.StartEllipsis,
-                modifier = Modifier.weight(1f).alignByBaseline(),
+            )
+            // Everything unusual about this row, in whatever width is left. Empty on an ordinary
+            // call, which is most of them — so anything here is worth the glance.
+            Text(
+                rowFlags(txn, scope, duplicate),
+                color = if (txn.error != null) colors.serverError else colors.onSurfaceMuted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -962,9 +722,7 @@ private val STRIPE_WIDTH = 3.dp
  */
 private const val SLOW_MS = 1_000L
 
-/** Fits `1234ms` at 11sp monospace, which is the widest [formatDuration] produces. */
-private val DURATION_COLUMN = 42.dp
+/** The method badge's column, which the second line indents past so it starts under the path. */
+private val BADGE_COLUMN = 52.dp
 
 internal val PILL_RADIUS = 999.dp
-private const val SCOPE_FILL_ALPHA = 0.13f
-private const val SCOPE_BORDER_ALPHA = 0.26f
