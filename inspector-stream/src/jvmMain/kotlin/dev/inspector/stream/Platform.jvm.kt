@@ -38,6 +38,9 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
 
 actual fun defaultDaemonHost(): String = "127.0.0.1"
 
+/** A desktop app shares the host's loopback; there is nothing to bridge. */
+internal actual fun listensForUsb(host: String): Boolean = false
+
 /** Same machine, so there is exactly one thing it can be. */
 internal actual fun connectionHelp(host: String, port: Int): String =
     "is `inspector serve` running? Nothing is listening on $host:$port."
