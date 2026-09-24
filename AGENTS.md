@@ -873,6 +873,16 @@ both the Ktor plugin and the OkHttp interceptor, and `Pull signals now` only whe
 exists); a filter hid every call (`Clear filter`); or there are no calls but signals are hidden —
 which used to read as nothing at all, and now offers to show them.
 
+**The overlay's JSON tree is a `Column`, and copy never reads it.** It sits inside the detail
+screen's own vertical scroll, where a `LazyColumn` gets unbounded height and throws — and a
+fixed-height one would be a scroll inside a scroll, the gesture nobody can aim on a phone. So every
+row is composed, and a body over 400 rows opens folded below depth 2 (the web's rule, at a lower
+threshold). Copy and raw are handed the text the screen already showed, from the hand-rolled
+`prettyJson` that keeps the body byte for byte; the tree is parsed with kotlinx.serialization,
+which keeps number literals and key order but only the last of a duplicated key, which is why it
+is never the source of a copy. Collapse and raw only — the web's focus and hide need a hover.
+Folding is held per body by the overlay (`JsonTreeStates`), and a truncated body is never a tree.
+
 **`TextOverflow.StartEllipsis` does not work on iOS, and `StartEllipsisText` exists because of it.**
 On the skiko renderer — desktop *and iOS* — Start and Middle ellipsis fall back to an end
 ellipsis. Measured: `/v3/some-service/accounts/balance` at 150dp renders `/v3/some-service/ac…`
