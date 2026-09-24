@@ -614,7 +614,71 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
         ? 'yes'
         : `NO - first tab is '${ids[0]}'`,
       labels: tabs.map((t) => t.querySelector('.tab-label')?.textContent).join(', '),
+      // Drawn whatever the session holds; it used to vanish with a single view and move the page.
+      alwaysShown: !doc.getElementById('tabs').hidden ? 'yes' : 'NO - the tab bar is hidden',
+      // Exactly one separator, on the first tab that is a tag rather than a traffic view.
+      signalSeparator: (() => {
+        const marked = tabs.filter((t) => t.classList.contains('tab-signal-first'));
+        const first = tabs.find((t) => !BUILT_IN_VIEWS.includes(t.dataset.view));
+        if (!first) return marked.length === 0 ? 'n/a (no signal tabs)' : 'NO - a separator with no signal tab';
+        return marked.length === 1 && marked[0] === first
+          ? `yes (before '${first.dataset.view}')`
+          : `NO - ${marked.length} marked, first signal tab is '${first.dataset.view}'`;
+      })(),
     };
+  }
+
+  /**
+   * The toolbar's labels and controls, as a reader meets them.
+   *
+   * The order control is judged by `aria-pressed` agreeing with the visible `on` state, because
+   * the segmented control's whole claim is that it states which order the list is in — a
+   * control whose two halves disagree about that says nothing.
+   */
+  function probeToolbarLabels() {
+    const toolbar = doc.getElementById('toolbar');
+    const labels = [...toolbar.querySelectorAll('.row-label')].map((n) => n.textContent);
+    const endpoints = doc.getElementById('endpoint-chips');
+    const oldest = doc.getElementById('order-oldest');
+    const newest = doc.getElementById('order-newest');
+    const pressedAgrees = [oldest, newest].every(
+      (b) => b.getAttribute('aria-pressed') === String(b.classList.contains('on')),
+    );
+    const markerLabels = new Set([...doc.querySelectorAll('#markers li')].filter((li) => !li.classList.contains('muted')).map((li) => li.textContent)).size;
+    const markersText = doc.getElementById('markers-button').textContent;
+    return {
+      rowLabels: labels.includes('filters') && (endpoints.hidden || labels.includes('endpoints'))
+        ? `yes (${labels.join(', ')})`
+        : `NO - ${labels.join(', ') || 'none'}`,
+      orderSegmented: oldest.parentElement.classList.contains('seg2') && pressedAgrees
+        && [oldest, newest].filter((b) => b.classList.contains('on')).length === 1
+        ? `yes (${oldest.classList.contains('on') ? 'oldest' : 'newest'} first pressed)`
+        : 'NO - the order control does not state one order',
+      markersCount: markerLabels ? (markersText === `markers · ${markerLabels}` ? `yes ("${markersText}")` : `NO - "${markersText}" for ${markerLabels}`)
+        : markersText === 'markers' ? 'yes ("markers", none in this session)' : `NO - "${markersText}"`,
+      shortcuts: doc.getElementById('keys-button').textContent === 'shortcuts' ? 'yes' : 'NO',
+    };
+  }
+
+  /**
+   * Nothing under 11px except the method badge, the key caps and the fold glyphs.
+   *
+   * Read from the stylesheet source: jsdom computes no font sizes worth trusting. Each exception is
+   * named rather than matched by pattern, so a new 10px rule fails here until someone decides it
+   * belongs on the list.
+   */
+  function auditMinTextSize(cssText) {
+    // The method badge, key caps, and the three fold glyphs (▸ ▾), which are shapes, not text.
+    const allowed = ['.row .method', 'kbd', '.jt-tw', '.now-caret', '.tl-twisty'];
+    const offenders = [];
+    const source = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const size = body.match(/font-size:\s*(\d+(?:\.\d+)?)px/);
+      if (!size || Number(size[1]) >= 11) continue;
+      const name = selector.trim();
+      if (!allowed.includes(name)) offenders.push(`${name} ${size[1]}px`);
+    }
+    return offenders.length ? `NO - ${offenders.join(', ')}` : `yes (only ${allowed.join(', ')} below 11px)`;
   }
 
   /**
@@ -1700,6 +1764,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const toolbarProbe = await probeToolbar();
   const nowProbe = await probeNowStrip();
   const tabProbe = probeTabs();
+  const toolbarLabelProbe = probeToolbarLabels();
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
   const ageProbe = await probeAges();
@@ -1987,6 +2052,13 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
   console.error('drawer on tab swap :', drawerProbe.tabSwitch);
   console.error('tab labels         :', tabProbe.labels);
+  console.error('tab bar shown      :', tabProbe.alwaysShown);
+  console.error('signal separator   :', tabProbe.signalSeparator);
+  console.error('--- toolbar labels ---');
+  for (const [name, value] of Object.entries(toolbarLabelProbe)) {
+    console.error(`${name.padEnd(19)}:`, value);
+  }
+  console.error('min text size      :', auditMinTextSize(css));
   console.error('--- scope bar ---');
   console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);
   console.error('sticky in css      :', scopeProbe.stickyInCss, '(a bar that scrolls away makes the rows below it wrong)');

@@ -851,15 +851,22 @@
     return views;
   }
 
+  /** The views that arrange the traffic, as opposed to browsing one signal tag. */
+  const TRAFFIC_VIEWS = ['network', 'all', 'waterfall'];
+
   function renderTabs() {
     const bar = $('tabs');
     const views = availableViews();
-    // A single tab is a label, not a choice. Sessions with no signals therefore look exactly as
-    // they did before tabs existed.
-    bar.hidden = views.length < 2;
+    // Always drawn, even with one tab. Hiding it when a session had no signals made the bar appear
+    // and disappear between sessions — and moved everything under it — for no change in what the
+    // page could do. A lone `traffic` tab also says, correctly, that nothing else was recorded.
+    bar.hidden = false;
     bar.innerHTML = '';
+    // Signal tabs are set apart from the traffic views, because they read differently: the
+    // traffic views are three arrangements of one session, the rest are one tag each.
+    const firstSignal = views.find((v) => !TRAFFIC_VIEWS.includes(v.id));
     for (const view of views) {
-      const tab = el('button', 'tab');
+      const tab = el('button', view === firstSignal ? 'tab tab-signal-first' : 'tab');
       tab.dataset.view = view.id;
       tab.title = view.title;
       tab.appendChild(el('span', 'tab-label', view.label));
@@ -954,6 +961,8 @@
     const list = $('markers');
     list.innerHTML = '';
     const labels = [...new Set(state.markers.map((m) => m.label))];
+    // The count on the button, so a session with markers says so without opening anything.
+    $('markers-button').textContent = labels.length ? `markers · ${labels.length}` : 'markers';
     if (!labels.length) {
       list.appendChild(el('li', 'muted', 'none'));
       return;
@@ -1887,6 +1896,8 @@
     localStorage.setItem('inspector.newestFirst', newestFirst ? '1' : '0');
     $('order-oldest').classList.toggle('on', !newestFirst);
     $('order-newest').classList.toggle('on', newestFirst);
+    $('order-oldest').setAttribute('aria-pressed', String(!newestFirst));
+    $('order-newest').setAttribute('aria-pressed', String(newestFirst));
     renderList();
     renderTimeline();
     // Order is a reading preference, not a view: it applies to the key list and to every
@@ -1963,6 +1974,9 @@
     const shortcuts = endpointShortcuts(state.allTransactions, state.endpointLimit);
     box.innerHTML = '';
     box.hidden = shortcuts.length === 0;
+    // Named, like the row above it: two rows of identical chips otherwise read as one list that
+    // wrapped, and these are a different kind of thing — the session's own endpoints.
+    if (shortcuts.length) box.appendChild(el('span', 'row-label', 'endpoints'));
 
     for (const { segment, count } of shortcuts) {
       const value = endpointFilter(segment);

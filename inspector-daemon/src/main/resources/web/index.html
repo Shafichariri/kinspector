@@ -70,6 +70,7 @@
       <input id="filter" type="text" spellcheck="false" autocomplete="off"
              placeholder="status&gt;=400  path:/v2  slower:500ms">
 
+      <span class="row-label">filters</span>
       <div class="chips" id="chips">
         <button class="chip" data-filter="has:error">errors</button>
         <button class="chip" data-filter="status&gt;=500">5xx</button>
@@ -81,16 +82,21 @@
 
       <span class="spacer"></span>
 
-      <div class="chips" id="order-chips">
-        <button class="chip" id="order-oldest" data-newest="0" title="Causal reading order">oldest first</button>
-        <button class="chip" id="order-newest" data-newest="1" title="Tail-a-log order">newest first</button>
+      <!--
+        A segmented control, not two chips. The chips beside it change what the list *contains*;
+        this changes how it is *arranged*, and two identical-looking controls invited clicking
+        `newest first` expecting fewer rows.
+      -->
+      <div class="seg2" id="order-seg" role="group" aria-label="Order">
+        <button id="order-oldest" type="button" data-newest="0" aria-pressed="false" title="Causal reading order">oldest first</button>
+        <button id="order-newest" type="button" data-newest="1" aria-pressed="false" title="Tail-a-log order">newest first</button>
       </div>
 
       <!-- Rarely-read reference, one click away rather than occupying the fold. -->
       <button id="markers-button" class="btn btn-sm btn-quiet" aria-expanded="false"
               title="Markers in this session">markers</button>
       <button id="keys-button" class="btn btn-sm btn-quiet" aria-expanded="false"
-              title="Keyboard shortcuts">?</button>
+              title="Keyboard shortcuts">shortcuts</button>
     </div>
 
     <div class="chips" id="endpoint-chips" hidden></div>
