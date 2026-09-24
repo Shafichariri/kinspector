@@ -65,6 +65,8 @@ internal fun InspectorDetail(
      */
     tab: DetailTab = DetailTab.Response,
     onTab: (DetailTab) -> Unit = {},
+    /** Folding per body, held by the overlay so it survives leaving the screen. */
+    treeStates: JsonTreeStates = remember { JsonTreeStates() },
 ) {
     val colors = LocalInspectorColors.current
     var menuOpen by remember { mutableStateOf(false) }
@@ -139,6 +141,8 @@ internal fun InspectorDetail(
                         omitted = txn.reqBodyOmitted,
                         redacted = txn.redacted,
                         onCopy = onCopy,
+                        treeKey = "txn:${txn.id}:req",
+                        treeStates = treeStates,
                     )
                     DetailTab.Response -> BodySection(
                         headers = txn.resHeaders,
@@ -149,6 +153,8 @@ internal fun InspectorDetail(
                         omitted = txn.resBodyOmitted,
                         redacted = txn.redacted,
                         onCopy = onCopy,
+                        treeKey = "txn:${txn.id}:res",
+                        treeStates = treeStates,
                     )
                 }
             }
@@ -248,6 +254,8 @@ private fun BodySection(
     omitted: String?,
     redacted: List<String>,
     onCopy: (String) -> Unit,
+    treeKey: String,
+    treeStates: JsonTreeStates,
 ) {
     val colors = LocalInspectorColors.current
     val redactedHeaders = remember(redacted) {
@@ -262,7 +270,16 @@ private fun BodySection(
         }
     }
 
-    SectionTitle("Body", onCopy = rendered?.let { { onCopy(it) } })
+    // A tree only for a whole body: a truncated prefix that happened to parse would be drawn as
+    // though it were all of it. The raw text is still what copy and raw use.
+    val tree = remember(body, contentType, truncated) {
+        body?.takeIf { !truncated && it.isNotEmpty() }?.decodeToString()
+            ?.takeIf { looksLikeJson(contentType, it) }
+            ?.let(::parseJsonTree)
+    }
+
+    // The tree carries its own label, size and copy, so the plain title would say it twice.
+    if (tree == null) SectionTitle("Body", onCopy = rendered?.let { { onCopy(it) } })
     when {
         // A recorded reason outranks the byte count. A discarded hop reports zero bytes because
         // nothing was ever read from it, and falling through to "empty" here would state as fact
@@ -280,6 +297,15 @@ private fun BodySection(
         )
 
         rendered == null -> Text("empty", color = colors.onSurfaceMuted, fontSize = 12.sp)
+
+        tree != null -> JsonTree(
+            root = tree,
+            label = "Body · ${formatBytes(totalBytes)}",
+            text = rendered,
+            state = treeStates.get(treeKey) ?: remember(tree) { initialTreeState(tree) },
+            onState = { treeStates.set(treeKey, it) },
+            onCopy = onCopy,
+        )
 
         else -> {
             if (truncated) {
