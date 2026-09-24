@@ -67,6 +67,9 @@ fun InspectorOverlay(
     // Above the screen switch, so the list's arrangement outlives the list: closing the inspector
     // and reopening it, or reading a body and coming back, finds the filter where it was left.
     val listState = rememberListViewState()
+    // The detail tab, held here for the same reason as the list's arrangement: moving between
+    // rows, or out to the list and back, should not reset which face you were comparing.
+    var detailTab by remember { mutableStateOf(DetailTab.Response) }
     val hidden = screen == Screen.Hidden
     LaunchedEffect(hidden) {
         if (hidden) listState.onClosed()
@@ -172,6 +175,8 @@ fun InspectorOverlay(
                             onBack = { screen = Screen.List },
                             onClose = { screen = Screen.Hidden },
                             modifier = Modifier.fillMaxSize(),
+                            tab = detailTab,
+                            onTab = { detailTab = it },
                         )
                     }
                 }
