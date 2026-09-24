@@ -74,7 +74,8 @@ class SignalBrowsingTest {
         onNodeWithText("profile").assertExists()
         onNodeWithText("Dashboard").assertExists()
 
-        chip("cache 1").performClick()
+        openFilters()
+        sheetChip("cache").performClick()
         waitForIdle()
 
         onNodeWithText("profile").assertExists()
@@ -84,7 +85,7 @@ class SignalBrowsingTest {
         // over an unchanged list.
         assertEquals(0, onAllNodesWithText("/v1/alpha").fetchSemanticsNodes().size)
 
-        chip("cache 1").performClick()
+        sheetChip("cache").performClick()
         waitForIdle()
         onNodeWithText("/v1/alpha").assertExists()
         onNodeWithText("Dashboard").assertExists()
@@ -105,7 +106,8 @@ class SignalBrowsingTest {
         }
         onNodeWithText("profile").assertExists()
 
-        chip("5xx").performClick()
+        openFilters()
+        sheetChip("5xx").performClick()
         waitForIdle()
 
         // The overlay used to filter the traffic and let every observation through, so a filter
@@ -235,10 +237,11 @@ class SignalBrowsingTest {
                 )
             }
         }
-        // Collapsed it is one line, and that line says how much and how stale — a count alone
-        // dodges the second half, which is the reason to open it.
+        // Collapsed it is half a line, and it says how much and how stale — a count alone dodges
+        // the second half, which is the reason to open it. The per-tag breakdown waits inside.
         onNodeWithText("now").assertExists()
-        onNodeWithText("2 cache · 1 state", substring = true).assertExists()
+        onNodeWithText("3 keys", substring = true).assertExists()
+        assertEquals(0, onAllNodesWithText("2 cache · 1 state", substring = true).fetchSemanticsNodes().size)
 
         // Counted by the provenance word, which only a strip row draws. Counting the *names*
         // was the first attempt and asserted nothing: the list underneath shows every
@@ -247,8 +250,9 @@ class SignalBrowsingTest {
 
         onNode(hasText("now") and hasClickAction()).performClick()
         waitForIdle()
-        // One row per key, and not one per observation.
+        // One row per key, and not one per observation — and now the breakdown.
         assertEquals(3, onAllNodesWithText("pushed").fetchSemanticsNodes().size)
+        onNodeWithText("2 cache · 1 state", substring = true).assertExists()
         // Not `onNodeWithText`: the name is now on screen twice, once in the strip and once in
         // the list, and "exactly one node" would fail for the very reason the strip exists.
         assertTrue(onAllNodesWithText("CartViewModel").fetchSemanticsNodes().size >= 2)
@@ -273,7 +277,7 @@ class SignalBrowsingTest {
         }
         // Three observations of one key, and the summary counts the key once. A panel headed
         // "now" listing the same name three times is a feed, which is what the list below is.
-        onNodeWithText("1 state", substring = true).assertExists()
+        onNodeWithText("1 key", substring = true).assertExists()
         onNode(hasText("now") and hasClickAction()).performClick()
         waitForIdle()
         // Exactly one strip row. Counting the name across the whole screen was the first attempt
@@ -322,7 +326,8 @@ class SignalBrowsingTest {
             }
         }
         onNodeWithText("now").assertExists()
-        chip("signals 1").performClick()
+        openFilters()
+        sheetChip("signals").performClick()
         waitForIdle()
         // "Signals off" that left a signal panel on screen would be the toggle not meaning what
         // it says.
@@ -363,7 +368,7 @@ class SignalBrowsingTest {
                 )
             }
         }
-        onNodeWithText("oldest 1m ago", substring = true).assertExists()
+        onNodeWithText("oldest 1m", substring = true).assertExists()
 
         chip("live").performClick()
         waitForIdle()
@@ -376,14 +381,14 @@ class SignalBrowsingTest {
         // Still 1m. A held list whose ages kept climbing would be describing a snapshot with a
         // clock that had moved on from it — "oldest 6m ago" over rows that stopped updating five
         // minutes ago is a sentence about two different moments.
-        onNodeWithText("oldest 1m ago", substring = true).assertExists()
+        onNodeWithText("oldest 1m", substring = true).assertExists()
 
         chip("frozen").performClick()
         waitForIdle()
         mainClock.advanceTimeBy(2_000)
         waitForIdle()
         // Thawing catches the clock up along with the rows.
-        onNodeWithText("oldest 6m ago", substring = true).assertExists()
+        onNodeWithText("oldest 6m", substring = true).assertExists()
     }
 
     // --- pulling on demand ----------------------------------------------------

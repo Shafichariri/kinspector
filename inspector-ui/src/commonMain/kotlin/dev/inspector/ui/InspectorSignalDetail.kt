@@ -83,15 +83,13 @@ internal fun InspectorSignalDetail(
         ) {
             ToolbarButton("‹ back", onBack)
             TagBadge(signal.tag)
-            Text(
+            StartEllipsisText(
                 signal.name,
                 color = colors.onSurface,
                 fontSize = 14.sp,
                 fontFamily = FontFamily.Monospace,
-                maxLines = 1,
                 // The tail identifies it, the same as a path: a state holder's name is usually a
                 // package-ish prefix and then the part that differs.
-                overflow = TextOverflow.StartEllipsis,
                 modifier = Modifier.weight(1f),
             )
             /*

@@ -49,12 +49,10 @@ import kotlinx.coroutines.launch
  * prevent. Every row carries its age and its provenance for that reason.
  */
 @Composable
-internal fun NowStrip(
+internal fun NowPanel(
     signals: List<Signal>,
     /** Wall-clock now, passed in so a frozen list holds its ages still along with its rows. */
     nowMs: Long,
-    expanded: Boolean,
-    onToggle: () -> Unit,
     onSelectSignal: (Signal) -> Unit,
     /** `(tag, name)` pairs the app registered a provider for. Empty when it registered none. */
     providers: List<SignalKey> = emptyList(),
@@ -70,53 +68,52 @@ internal fun NowStrip(
     val unread = remember(signals, providers) { unreadProviders(signals, providers) }
     if (current.isEmpty() && unread.isEmpty()) return
 
-    Column(Modifier.fillMaxWidth().background(colors.surfaceElevated)) {
-        Row(
-            Modifier.fillMaxWidth()
-                .clickable(onClick = onToggle)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                if (expanded) "▾" else "▸",
-                color = colors.onSurfaceMuted,
-                fontSize = 11.sp,
-            )
-            Text(
-                "now",
-                color = colors.onSurface,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                nowSummary(current, nowMs, unread.size),
-                color = colors.onSurfaceMuted,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+    // Capped and scrollable rather than unbounded: this sits above the list it is meant to sit
+    // above, and an app with forty keys would otherwise push the traffic off the screen entirely —
+    // which is the opposite of what a glance panel is for.
+    Column(
+        Modifier.fillMaxWidth()
+            .background(colors.surfaceElevated)
+            .heightIn(max = NOW_MAX_HEIGHT)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // The per-tag breakdown, which the collapsed line gave up so its three facts would fit.
+        Text(
+            nowSummary(current, nowMs, unread.size),
+            color = colors.onSurfaceMuted,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+        )
+        for (signal in current) {
+            NowRow(signal, nowMs) { onSelectSignal(signal) }
         }
-
-        if (expanded) {
-            // Capped and scrollable rather than unbounded: this sits above the list it is meant to
-            // sit above, and an app with forty keys would otherwise push the traffic off the
-            // screen entirely — which is the opposite of what a glance panel is for.
-            Column(Modifier.fillMaxWidth().heightIn(max = NOW_MAX_HEIGHT).verticalScroll(rememberScrollState())) {
-                for (signal in current) {
-                    NowRow(signal, nowMs) { onSelectSignal(signal) }
-                }
-                // After the observations, because a value the app has actually reported outranks
-                // one it merely could.
-                if (onPull != null) {
-                    for (key in unread) {
-                        UnreadProviderRow(key, onPull)
-                    }
-                }
+        // After the observations, because a value the app has actually reported outranks one it
+        // merely could.
+        if (onPull != null) {
+            for (key in unread) {
+                UnreadProviderRow(key, onPull)
             }
         }
     }
+}
+
+/**
+ * The collapsed line's three facts: how many keys, how stale the oldest, how many never read.
+ *
+ * Fixed three, and the per-tag breakdown moved inside the panel. The old line led with the
+ * breakdown, and at 360dp it clipped — measured — to `…1 never r…`: the unread count, the one
+ * number you can only learn here, was the first thing lost.
+ */
+internal data class NowGlance(val held: String, val unread: Int)
+
+internal fun nowGlance(current: List<Signal>, nowMs: Long, unread: Int): NowGlance? {
+    if (current.isEmpty() && unread == 0) return null
+    if (current.isEmpty()) return NowGlance("", unread)
+    val keys = "${current.size} ${if (current.size == 1) "key" else "keys"}"
+    // Null ages are skipped rather than counted as zero: an unreadable timestamp is not a fresh one.
+    val oldest = current.mapNotNull { ageMsOf(it.ts, nowMs) }.maxOrNull()
+    val held = if (oldest == null) keys else "$keys · oldest ${formatAge(oldest).removeSuffix(" ago")}"
+    return NowGlance(held, unread)
 }
 
 @Composable
@@ -137,13 +134,11 @@ private fun NowRow(signal: Signal, nowMs: Long, onClick: () -> Unit) {
             fontFamily = FontFamily.Monospace,
             maxLines = 1,
         )
-        Text(
+        StartEllipsisText(
             signal.name,
             color = colors.onSurface,
             fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
-            maxLines = 1,
-            overflow = TextOverflow.StartEllipsis,
             modifier = Modifier.weight(1f),
         )
         // Provenance before age, because it changes what the age *means*: two minutes since a
@@ -202,13 +197,11 @@ private fun UnreadProviderRow(key: SignalKey, onPull: suspend (SignalKey) -> Str
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
             )
-            Text(
+            StartEllipsisText(
                 key.name,
                 color = colors.onSurfaceMuted,
                 fontSize = 12.sp,
                 fontFamily = FontFamily.Monospace,
-                maxLines = 1,
-                overflow = TextOverflow.StartEllipsis,
                 modifier = Modifier.weight(1f),
             )
             // "never read" and not "—": the app has something to say here and has not been asked,

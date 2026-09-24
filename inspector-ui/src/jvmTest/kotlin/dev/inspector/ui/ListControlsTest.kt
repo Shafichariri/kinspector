@@ -1,11 +1,15 @@
 package dev.inspector.ui
 
 import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -61,16 +65,16 @@ class ListControlsTest {
         // a tap would do leaves the reader unable to tell which way round the list already is.
         assertTrue(topOf("/v1/beta") < topOf("/v1/alpha"), "newest first should put beta above alpha")
 
-        chip("newest first").performClick()
+        orderControl(newestFirst = true).performClick()
         waitForIdle()
-        chip("oldest first").assertExists()
+        orderControl(newestFirst = false).assertExists()
         // The label flipping is not the claim worth testing — the rows moving is. A toggle wired
         // to nothing at all would pass an assertion about its own text.
         assertTrue(topOf("/v1/alpha") < topOf("/v1/beta"), "oldest first should put alpha above beta")
 
-        chip("oldest first").performClick()
+        orderControl(newestFirst = false).performClick()
         waitForIdle()
-        chip("newest first").assertExists()
+        orderControl(newestFirst = true).assertExists()
         assertTrue(topOf("/v1/beta") < topOf("/v1/alpha"), "the order should restore")
     }
 
@@ -128,14 +132,15 @@ class ListControlsTest {
         }
         onNodeWithText("/v1/alpha").assertExists()
 
-        chip("5xx").performClick()
+        openFilters()
+        sheetChip("5xx").performClick()
         waitForIdle()
         assertEquals(0, onAllNodesWithText("/v1/alpha").fetchSemanticsNodes().size)
         onNodeWithText("/v1/broken").assertExists()
 
         // A chip that can only be turned on is a trap on a surface with no obvious way to select
         // and delete the text it put in the field.
-        chip("5xx").performClick()
+        sheetChip("5xx").performClick()
         waitForIdle()
         onNodeWithText("/v1/alpha").assertExists()
     }
@@ -155,7 +160,8 @@ class ListControlsTest {
         }
         onNodeWithText("/v1/alpha").assertExists()
 
-        chip("checkout").performClick()
+        openFilters()
+        sheetChip("checkout").performClick()
         waitForIdle()
         assertEquals(0, onAllNodesWithText("/v1/alpha").fetchSemanticsNodes().size)
         onNodeWithText("/v1/beta").assertExists()
@@ -175,7 +181,8 @@ class ListControlsTest {
             }
         }
         // `detail` leads the chips: two calls to one, one to the other.
-        chip("beta 1").performClick()
+        openFilters()
+        sheetChip("beta").performClick()
         waitForIdle()
         assertEquals(0, onAllNodesWithText("/v1/beta/detail").fetchSemanticsNodes().size)
         onNodeWithText("/v1/beta").assertExists()
@@ -203,13 +210,14 @@ class ListControlsTest {
         assertEquals(0, onAllNodesWithText("dashboard").fetchSemanticsNodes().size)
         onNodeWithText("/v1/alpha").assertExists()
 
-        chip("signals off").performClick()
+        openFilters()
+        sheetChip("signals").performClick()
         waitForIdle()
         onNodeWithText("dashboard").assertExists()
         // The traffic is untouched — showing signals is not a filter on the calls.
         onNodeWithText("/v1/alpha").assertExists()
 
-        chip("signals 1").performClick()
+        sheetChip("signals").performClick()
         waitForIdle()
         assertEquals(0, onAllNodesWithText("dashboard").fetchSemanticsNodes().size)
     }
@@ -239,9 +247,10 @@ class ListControlsTest {
                 }
             }
         }
-        chip("5xx").performClick()
-        chip("newest first").performClick()
-        chip("signals off").performClick()
+        orderControl(newestFirst = true).performClick()
+        openFilters()
+        sheetChip("5xx").performClick()
+        sheetChip("signals").performClick()
         waitForIdle()
 
         shown.value = false
@@ -253,10 +262,11 @@ class ListControlsTest {
         // state it was handed would pass an assertion about the holder.
         assertEquals(0, onAllNodesWithText("/v1/alpha").fetchSemanticsNodes().size)
         onNodeWithText("/v1/broken").assertExists()
-        chip("oldest first").assertExists()
+        orderControl(newestFirst = false).assertExists()
         // The toggle's label rather than the signal row: `5xx` is a traffic term, and traffic terms
         // exclude every signal by design, so the row is hidden by the filter either way.
-        chip("signals 1").assertExists()
+        openFilters()
+        onNode(hasText("signals") and isToggleable() and hasText("1")).assertExists()
     }
 
     /**
@@ -307,10 +317,10 @@ class ListControlsTest {
                 )
             }
         }
-        // A control for something the session does not contain can only disappoint, and the strip
-        // has no room for one.
-        assertEquals(0, onAllNodesWithText("signals 0").fetchSemanticsNodes().size)
-        assertEquals(0, onAllNodesWithText("signals off").fetchSemanticsNodes().size)
+        // A control for something the session does not contain can only disappoint.
+        openFilters()
+        assertEquals(0, onAllNodes(hasText("signals") and isToggleable()).fetchSemanticsNodes().size)
+        assertEquals(0, onAllNodesWithText("SHOW").fetchSemanticsNodes().size)
     }
 
     /**
@@ -392,4 +402,132 @@ class ListControlsTest {
         assertEquals(0, onAllNodesWithText("settings").fetchSemanticsNodes().size)
     }
 
+
+    // --- the filters sheet and the overflow menu -----------------------------------------------
+
+    /**
+     * One choice per section, typed into the same field, and the field's own text left alone.
+     *
+     * Asserted on the field's text and on the rows, not on which chip looks lit: the sheet's whole
+     * claim is that it is a way of typing into the filter, so what it typed is the thing to check.
+     */
+    @Test
+    fun `the sheet types into the field and keeps one choice per section`() = runComposeUiTest {
+        val failing = txn("c", "/v1/broken", 300).copy(status = 500)
+        val missing = txn("d", "/v1/missing", 400).copy(status = 404)
+        val state = mergedOldestFirst().also { it.filterText = "path:/v1" }
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    state = state,
+                    transactions = listOf(first, failing, missing),
+                    markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                )
+            }
+        }
+        openFilters()
+        sheetChip("errors").performClick()
+        waitForIdle()
+        assertEquals("path:/v1 has:error", state.filterText)
+        onNode(hasText("Show 2 calls") and hasClickAction()).assertExists()
+
+        // Another status replaces the first rather than ANDing with it.
+        sheetChip("5xx").performClick()
+        waitForIdle()
+        assertEquals("path:/v1 status>=500", state.filterText)
+        onNode(hasText("Show 1 call") and hasClickAction()).assertExists()
+        // The button outside says how many sheet terms are on, so a closed sheet is not a mystery.
+        onNode(hasText("filters") and hasText("1") and hasClickAction()).assertExists()
+
+        // Reset clears what the sheet set and only that.
+        onNode(hasText("Reset") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals("path:/v1", state.filterText)
+
+        onNode(hasText("Show 3 calls") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(0, onAllNodesWithText("Filters").fetchSemanticsNodes().size)
+        onNodeWithText("/v1/missing").assertExists()
+    }
+
+    /**
+     * Clear empties the only copy of anything the daemon never received, so it takes two taps and
+     * says what it will do on the first. Watched through the callback, not the label: a menu that
+     * relabelled itself and cleared anyway would pass an assertion about its text.
+     */
+    @Test
+    fun `clear asks once and only clears on the second tap`() = runComposeUiTest {
+        var cleared = 0
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first, second),
+                    markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = { cleared++ }, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNode(hasContentDescription("more actions")).performClick()
+        waitForIdle()
+        onNode(hasText("Clear…") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(0, cleared)
+        onNode(hasText("Clear 2 calls?") and hasClickAction()).performClick()
+        waitForIdle()
+        assertEquals(1, cleared)
+        // And the menu is gone, so the list it cleared is what is on screen.
+        assertEquals(0, onAllNodesWithText("Clear…").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `an armed clear disarms on its own`() = runComposeUiTest {
+        var cleared = 0
+        setContent {
+            InspectorTheme(dark = true) {
+                InspectorList(
+                    transactions = listOf(first),
+                    markers = emptyList(),
+                    onSelect = {}, onSelectSignal = {}, onClear = { cleared++ }, onMark = {}, onClose = {},
+                )
+            }
+        }
+        onNode(hasContentDescription("more actions")).performClick()
+        onNode(hasText("Clear…") and hasClickAction()).performClick()
+        waitForIdle()
+        onNodeWithText("Clear 1 call?").assertExists()
+        mainClock.advanceTimeBy(3_500)
+        waitForIdle()
+        // A tap an hour later must not be the second half of this one.
+        onNode(hasText("Clear…") and hasClickAction()).assertExists()
+        assertEquals(0, cleared)
+    }
+
+    /**
+     * A long path at phone width shows its end.
+     *
+     * The renderer's own `StartEllipsis` clips the *end* on desktop and iOS, which was measured
+     * before this was written — so this runs on exactly the renderer that got it wrong, and reads
+     * the string actually drawn.
+     */
+    @Test
+    fun `a long path keeps the endpoint and loses the front`() = runComposeUiTest {
+        val long = txn("z", "/v3/some-service/customers/profile/accounts/balance", 100)
+        setContent {
+            InspectorTheme(dark = true) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.width(360.dp)) {
+                    InspectorList(
+                        transactions = listOf(long),
+                        markers = emptyList(),
+                        onSelect = {}, onSelectSignal = {}, onClear = {}, onMark = {}, onClose = {},
+                    )
+                }
+            }
+        }
+        val drawn = onAllNodesWithText("/balance", substring = true).fetchSemanticsNodes()
+            .flatMap { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text] }
+            .map { it.text }
+            .single { it.endsWith("/accounts/balance") }
+        assertTrue(drawn.startsWith("…"), "the path was not clipped at the front: $drawn")
+    }
 }
