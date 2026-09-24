@@ -389,6 +389,13 @@ exactly the interesting ones somebody reaches for when testing it by hand. It an
 now, which is a direct child. Nothing caught it because `render-web-ui.js` never pressed the
 button; it does now.
 
+**Replay is behind one `replay ▾` menu, and its Escape handler stops propagation.** The detail
+header ranks its actions: the two copies are quiet because they only read, and replay is the one
+outlined control because it sends. Escape inside the menu must not bubble — the page's own Escape
+clears the selection, so a bubbling Escape closed the menu *and* the whole detail pane. The
+replay probes open the menu before pressing an item, which is also what tests that the items are
+reachable at all.
+
 **A replay's `headers` map replaces the captured set entirely.** `Replayer` uses a sent map
 verbatim and skips `replayableHeaders`, so anything the UI leaves out is simply not sent — and its
 own hop-by-hop filtering never runs either. The edit form therefore seeds from *filtered* captured
