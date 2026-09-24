@@ -24,6 +24,8 @@ kotlin {
             api(project(":inspector-core"))
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
+            // The physical-iPhone route accepts a USB-bridged connection; see UsbListenerTransport.
+            implementation(libs.ktor.network)
             implementation(libs.kotlinx.serialization.json)
         }
         androidMain.dependencies { implementation(libs.ktor.client.okhttp) }
