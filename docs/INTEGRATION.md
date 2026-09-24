@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v54 — 2026-09-22.**
+**Document version: v55 — 2026-09-24.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.0.3")
-implementation("io.github.shafichariri:inspector-ui:1.0.3")
+implementation("io.github.shafichariri:inspector-core:1.1.0")
+implementation("io.github.shafichariri:inspector-ui:1.1.0")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.0.3")
-            implementation("io.github.shafichariri:inspector-ui:1.0.3")
+            implementation("io.github.shafichariri:inspector-core:1.1.0")
+            implementation("io.github.shafichariri:inspector-ui:1.1.0")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.0.3")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.0.3")
+                implementation("io.github.shafichariri:inspector-noop:1.1.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.1.0")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.0.3")
-                implementation("io.github.shafichariri:inspector-ui:1.0.3")
+                implementation("io.github.shafichariri:inspector-core:1.1.0")
+                implementation("io.github.shafichariri:inspector-ui:1.1.0")
             }
         }
     }
@@ -360,26 +360,44 @@ Run your app, trigger a network call, and look for a small pill near the left ed
 - **Tap** it → full inspector list
 - **Drag** it → moves, snapping to the nearest edge
 - **Long-press** it → collapses to a dot; tap the dot to restore
-- In the list, tap a row → Overview / Request / Response tabs
+- In the list, tap a row → Response / Request / Overview tabs
 
-Each row is two lines. The first carries the method, anything unusual about the call, the size and
-the status; the second carries the duration and then the path. A few things you may wonder about:
+The list opens **newest first with signals hidden** — what the app just sent, on top — and keeps
+whatever you change: the filter, the order and the signals toggle survive closing the inspector
+and reopening it, and a trip into a call and back. A freeze does not survive closing.
 
-- **A bar above the list reading something like `api.example.com/v3/some-service/` with `8 of 9`.**
-  Most apps talk to one host under one API version, so that front is the same on every row and the
-  rows below show only the part that differs. It appears only when a session has such a prefix, and
-  rows outside it keep their full path and name their own host.
+Above the list are three bars:
+
+- **The header** — `Inspector`, the call count, `Mark` (drops a marker), `⋮` (Pull signals, and
+  `Clear…`, which asks once before emptying the list), and the filled `✕` that goes back to your
+  app.
+- **The filter row** — the filter field, `filters` (a sheet of ready-made filters: status, method,
+  endpoint, markers, signal tags, and the signals toggle; the button shows how many are on), an
+  arrow for the order, and `live`/`frozen` to hold the list still while you read it.
+- **One line** reading something like `8 of 9 · …/v3/some-service/`. Most apps talk to one host
+  under one API version, so that front is the same on every row and the rows below show only the
+  part that differs; rows outside it keep their full path and name their own host. With signals
+  on, the right-hand side says what the app holds `now` — tap it for the list.
+
+Each row is two lines: the method, the **path** and the status, then the time, duration, size and
+anything unusual. A few things you may wonder about:
+
 - **A coloured stripe down the left edge** of any call that failed.
 - **An amber duration** on anything that took longer than a second.
-- **Words like `repeated` or `attempt 2`** on the first line — a request sent twice by separate
-  calls, or a retry.
+- **A tinted row with `2× / 1.9s`** — a request sent twice by separate calls, and over how long.
+  **`attempt 2`** is a retry.
 
-If a path is still too long to fit, it is truncated from the **front**: the tail is what identifies
-an endpoint, so that is the part kept.
-- **Getting back to your app:** system back, or `✕ close`. Back unwinds one screen at a time and
-  only while the inspector is open, so your app's own back behaviour is untouched.
-- **Copying:** `cURL` in the detail toolbar, plus a `copy` next to the URL, the error, the header
-  block and each body. Each one shows `copied` for a moment to confirm.
+If a path is too long to fit, it is truncated from the **front**: the tail is what identifies an
+endpoint, so that is the part kept. This now holds on iOS too — before 1.1.0, iOS truncated paths
+from the end.
+
+- **In a call:** it opens on the response, with the body first and the headers under it; a JSON
+  body is a tree you can fold. A header removed by `Redaction.On()` reads `redacted at capture`.
+  The tab you pick is kept as you move between calls.
+- **Getting back to your app:** system back, or `✕`. Back unwinds one screen at a time and only
+  while the inspector is open, so your app's own back behaviour is untouched.
+- **Copying:** `Copy cURL` and `Copy URL` in a call's `⋮` menu, plus a `copy` next to the URL, the
+  error, the header block and each body. Each one confirms for a moment.
 
 Try a filter in the list's filter bar:
 
@@ -406,13 +424,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.0.3")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.0.3")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.0.3")
+    implementation("io.github.shafichariri:inspector-noop:1.1.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.1.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.1.0")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.0.3")
-    implementation("io.github.shafichariri:inspector-ui:1.0.3")
-    implementation("io.github.shafichariri:inspector-stream:1.0.3")
+    implementation("io.github.shafichariri:inspector-core:1.1.0")
+    implementation("io.github.shafichariri:inspector-ui:1.1.0")
+    implementation("io.github.shafichariri:inspector-stream:1.1.0")
 }
 ```
 
@@ -468,9 +486,14 @@ Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/
 past 100 sessions or 300 MB.
 
 The top bar has **restart** and **stop**. `restart` relaunches the daemon in place — the page
-reconnects by itself and the archive is untouched. `stop` ends it, and the page says so instead of
-looking idle; start it again with the same command above. Both refuse any request that does not
-come from this page, so another browser tab cannot reach in and kill your daemon.
+reconnects by itself and the archive is untouched. `stop` takes two clicks (`stop daemon?`), then
+ends it: the page shows a **daemon stopped** banner with the time of the last capture and dims
+everything under it. Start it again with the same command above and the page reconnects on its
+own. Both refuse any request that does not come from this page, so another browser tab cannot reach
+in and kill your daemon.
+
+Beside them, `● connected` is the page's link to the daemon, and `live` / `paused` is whether the
+list follows new traffic — resuming catches up on what arrived while paused.
 
 ### 6d. Android: permit cleartext to the daemon
 
@@ -527,13 +550,13 @@ was up and what was cached, whatever tab you are on, with an age counted against
 timestamp.
 
 A tag tab lists one entry per key — the cache key, or the signal name — with its freshness
-and how long ago it was last seen. Selecting one shows its current value pretty-printed, with a copy
-button, and every observation of that key underneath, so you can step back through what it held.
+and how long ago it was last seen. Selecting one shows its current value as a foldable JSON tree
+(or as text, if it is not JSON), with a copy button, and every observation of that key underneath, so you can step back through what it held.
 Filters are a key search plus a chip per facet the payloads actually vary on: a facet with one
 value is not drawn, because a filter you can only leave on is not a filter. Where a provider has
 been seen to answer, a **pull latest** button asks the app for a fresh snapshot.
 
-Reading order — oldest first or newest first — is a rail control, and it applies to the key list
+Reading order — oldest first or newest first — is the toolbar's order control, and it applies to the key list
 and to each key's history as well as to the traffic list.
 
 The columns are filled from your payload — see §12d for the field names the tag browser reads.
@@ -647,9 +670,9 @@ Inspector.mark("tapped checkout")
 
 A marker is visible on **both** surfaces. In the overlay it draws as a labelled rule across the
 list, between the calls before it and the calls after, and every distinct label also appears as a
-chip under the filter field — tapping one applies `since:marker("…")`, tapping it again clears.
-The `mark` button in the overlay toolbar drops one too, so a marker made on a phone is visible on
-that phone without a daemon.
+chip in the `filters` sheet under **Since marker** — tapping one applies `since:marker("…")`,
+tapping it again clears. The `Mark` button in the overlay header drops one too, so a marker made on
+a phone is visible on that phone without a daemon.
 
 Labels are yours to choose and nothing parses them, with one caveat worth knowing: the filter
 grammar quotes labels and has no escape inside the quotes, so a label containing an **odd** number
@@ -1229,7 +1252,55 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v54 — 2026-09-22 (this document)
+### v55 — 2026-09-24 (this document)
+
+**Bump to 1.1.0 and download the 1.1.0 daemon. Your code does not change.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.0.3")
++implementation("io.github.shafichariri:inspector-core:1.1.0")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included. No public API
+changed, so a release build using the no-op artifacts is unaffected.
+
+This release is a design pass over both surfaces. None of it asks anything of your app, but the
+overlay **behaves differently when it opens**, so tell anyone who uses it:
+
+**The overlay**
+
+- **It opens newest first, with signals hidden, and remembers what you change.** The filter, the
+  order and the signals toggle now survive closing the inspector and reopening it — they used to
+  reset every time — and a trip into a call and back no longer loses your filter or your scroll
+  position. Signals are one tap away in `filters`.
+- **Three bars instead of five.** The chip strip is gone: its quick filters, markers, endpoints and
+  signal tags are in a `filters` sheet, and the order arrow and `live`/`frozen` sit beside the
+  filter field. The list starts about 100dp higher.
+- **Rows lead with the path**, beside the method and status; time, duration and size are under it.
+- **Truncated paths now keep their end on iOS.** Compose's start-ellipsis falls back to an end
+  ellipsis on iOS, so every long path, signal name and scope had been losing the part that names
+  the endpoint there. Android was always right.
+- **Calls open on the response**, body first. JSON bodies and signal payloads are a foldable tree.
+  A header removed by `Redaction.On()` reads `redacted at capture` instead of showing the
+  placeholder as though it were the value sent. Copy cURL and Copy URL moved into the call's `⋮`.
+- **An empty list says why**: nothing recorded yet, a filter hiding everything (with a button to
+  clear it), or calls absent and signals hidden.
+
+**The web UI** (in the daemon — download 1.1.0 to get it)
+
+- One palette on both surfaces: GET is neutral grey, PATCH is teal rather than amber, and a call
+  that got no response (`ERR`) is red rather than grey.
+- JSON bodies and cache values are a foldable tree with focus, hide, raw and copy. **Copying a body
+  now keeps 64-bit ids exact** — the page used to round them (`1234567890123456789` became
+  `…800`) and reorder number-like keys.
+- `stop` takes two clicks and a stopped daemon shows a banner; the page reconnects by itself when
+  you start it again. The live toggle is a `live`/`paused` button, and resuming catches up.
+- Rows lead with the status code; the empty list says why it is empty. The tab bar is always
+  shown, the sort order is one control, and nothing is smaller than 11px.
+- In a call, `replay` and `edit & replay` are behind one `replay ▾` menu, and **"for AI" is now
+  "copy for agent"** — same payload.
+
+### v54 — 2026-09-22
 
 **If your app crashes at launch with `NoSuchMethodError` on `StreamSink.<init>`, this is it.
 Upgrade to 1.0.3. Your code does not change.**
