@@ -64,9 +64,15 @@ jobs:
           curl -sf http://127.0.0.1:8123/api/sessions > /dev/null
           curl -sf http://127.0.0.1:8123/ | grep -q '<title>Inspector</title>'
           kill "$DAEMON_PID"
+          # The version the MCP server reports, not merely that it answers: an agent reads
+          # `serverInfo.version` to tell which server it is talking to, and 1.0.0 through 1.1.0
+          # all said "1.0.0" because it was a literal. Parsed, so a reordered object still passes.
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
             | "$BIN" mcp --data "$RUNNER_TEMP/dist/data" \
-            | grep -q '"serverInfo"'
+            | python3 -c 'import json, os, sys
+          info = json.loads(sys.stdin.readline())["result"]["serverInfo"]
+          want = os.environ["VERSION"]
+          sys.exit(0 if info.get("version") == want else "MCP serverInfo.version is %r, expected %r" % (info.get("version"), want))'
 
       - name: Publish the release
         env:
