@@ -1,5 +1,6 @@
 package dev.inspector.daemon.mcp
 
+import dev.inspector.daemon.daemonVersion
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -26,6 +27,16 @@ class McpServer(
     private val input: BufferedReader,
     private val output: PrintStream,
     private val log: PrintStream,
+    /**
+     * What `serverInfo.version` reports: the daemon's own version, read from the jar manifest the
+     * release build stamps — the same source a HAR export's `creator` uses.
+     *
+     * It was a literal `1.0.0`, which 1.1.0 then shipped still saying. An agent reads this field
+     * to tell which server it is talking to, and a number that does not move with the release is
+     * a confident wrong answer to that. Injectable only so a test can prove the value is passed
+     * through rather than spelled out.
+     */
+    private val version: String = daemonVersion(),
 ) {
 
     /** Reads until stdin closes. One JSON-RPC message per line. */
@@ -96,16 +107,18 @@ class McpServer(
         // Echo the client's protocol version when we know it, so a client pinned to an older
         // revision is not forced to renegotiate; otherwise state the newest we speak.
         val requested = params?.get("protocolVersion")?.jsonPrimitive?.contentOrNullSafe
-        val version = if (requested in SUPPORTED_PROTOCOL_VERSIONS) requested!! else PROTOCOL_VERSION
+        // Not `version`: that name is the server's own version, and shadowing it here is exactly how
+        // `serverInfo.version` came out as the protocol date on the first attempt at this fix.
+        val protocol = if (requested in SUPPORTED_PROTOCOL_VERSIONS) requested!! else PROTOCOL_VERSION
 
         return buildJsonObject {
-            put("protocolVersion", version)
+            put("protocolVersion", protocol)
             put("capabilities", buildJsonObject { put("tools", buildJsonObject {}) })
             put(
                 "serverInfo",
                 buildJsonObject {
                     put("name", "inspector")
-                    put("version", SERVER_VERSION)
+                    put("version", version)
                 },
             )
             put(
@@ -173,7 +186,6 @@ class McpServer(
 }
 
 internal const val PROTOCOL_VERSION = "2025-06-18"
-internal const val SERVER_VERSION = "1.0.0"
 
 internal val SUPPORTED_PROTOCOL_VERSIONS = setOf("2024-11-05", "2025-03-26", "2025-06-18")
 
