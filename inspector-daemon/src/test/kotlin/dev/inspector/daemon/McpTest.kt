@@ -140,15 +140,16 @@ class McpTest {
     // --- protocol ----------------------------------------------------------------------------
 
     /** Feeds lines through a real [McpServer] and returns the response frames. */
-    private fun exchange(vararg requests: String): List<JsonObject> {
+    private fun exchange(vararg requests: String, version: String? = null): List<JsonObject> {
         val out = ByteArrayOutputStream()
         val err = ByteArrayOutputStream()
-        McpServer(
-            tools = tools,
-            input = requests.joinToString("\n").reader().buffered(),
-            output = PrintStream(out, true),
-            log = PrintStream(err, true),
-        ).run()
+        val input = requests.joinToString("\n").reader().buffered()
+        val server = if (version == null) {
+            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true))
+        } else {
+            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true), version = version)
+        }
+        server.run()
         return out.toString().lineSequence()
             .filter { it.isNotBlank() }
             .map { Json.parseToJsonElement(it).jsonObject }
@@ -232,6 +233,23 @@ class McpTest {
         assertEquals("2024-11-05", result.getValue("protocolVersion").jsonPrimitive.content)
         assertTrue(result.getValue("capabilities").jsonObject.containsKey("tools"))
         assertEquals("inspector", result.getValue("serverInfo").jsonObject.getValue("name").jsonPrimitive.content)
+    }
+
+    /**
+     * `serverInfo.version` is the version it was built as, not a literal.
+     *
+     * It said `1.0.0` from 1.0.0 onward, 1.1.0 included. Two halves, because each alone passes
+     * with the bug: a value passed in must come out unchanged, and by default the server must
+     * report what [daemonVersion] reads — `unknown` under test, where there is no jar manifest,
+     * and the release number in a built daemon, which the release job's smoke test drives.
+     */
+    @Test
+    fun initialize_reports_the_version_it_was_built_as() {
+        val init = """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}"""
+        fun version(frames: List<JsonObject>) =
+            frames.single().getValue("result").jsonObject.getValue("serverInfo").jsonObject.getValue("version").jsonPrimitive.content
+        assertEquals("9.9.9-test", version(exchange(init, version = "9.9.9-test")))
+        assertEquals(daemonVersion(), version(exchange(init)))
     }
 
     @Test
