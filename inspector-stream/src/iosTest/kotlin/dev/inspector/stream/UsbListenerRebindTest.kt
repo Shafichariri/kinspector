@@ -5,6 +5,7 @@ import io.ktor.network.selector.SelectorManager
 import io.ktor.network.sockets.InetSocketAddress
 import io.ktor.network.sockets.Socket
 import io.ktor.network.sockets.aSocket
+import io.ktor.network.sockets.awaitClosed
 import io.ktor.network.sockets.openReadChannel
 import io.ktor.utils.io.readFully
 import io.ktor.utils.io.readInt
@@ -52,9 +53,13 @@ class UsbListenerRebindTest {
         assertEquals("first", bridge.readFrame())
         linked.await()
         firstSession.cancel()
-        first.close()
         firstSession.join()
-        delay(100)
+        first.close()
+        // Not a sleep: the first version slept 100 ms, which was enough on a laptop and not on a
+        // CI runner, where the listener was still open at the rebind and failed it for a reason
+        // that has nothing to do with TIME_WAIT. A real relaunch cannot race this way — the dead
+        // process's sockets are closed by the kernel — so the test waits for the same state.
+        first.awaitClosed()
 
         // The relaunch. Without reuseAddress this bind throws for as long as TIME_WAIT lasts.
         val second = UsbListenerTransport(port)
@@ -69,8 +74,18 @@ class UsbListenerRebindTest {
         }
     }
 
-    private suspend fun freePort(selector: SelectorManager): Int =
-        aSocket(selector).tcp().bind("127.0.0.1", 0).use { (it.localAddress as InetSocketAddress).port }
+    /**
+     * A port nothing holds. Awaits the close for the reason above: `use` returns before Ktor has
+     * released the socket on Native, and on a CI runner the first listener then lost the race for
+     * its own port — the failure this test first reported was the helper's, not the code's.
+     */
+    private suspend fun freePort(selector: SelectorManager): Int {
+        val probe = aSocket(selector).tcp().bind("127.0.0.1", 0)
+        val port = (probe.localAddress as InetSocketAddress).port
+        probe.close()
+        probe.awaitClosed()
+        return port
+    }
 
     /** Dials until the listener is up, or fails after five seconds — far less than TIME_WAIT. */
     private suspend fun dial(selector: SelectorManager, port: Int): Socket = withTimeout(5_000) {
