@@ -15,6 +15,12 @@
  *
  * The report goes to stderr; a self-contained static snapshot goes to stdout.
  * A healthy run reports non-zero rows and 'errors: none'.
+ *
+ * Against an archive with no sessions it runs a shorter report — the empty state, the top bar, the
+ * parser and the stylesheet audits — and names every session-dependent probe as n/a. That is how
+ * the "waiting for an app" empty state gets checked at all:
+ *   inspector serve --port 8238 --data "$(mktemp -d)" &
+ *   INSPECTOR_UI_ORIGIN=http://127.0.0.1:8238 node scripts/render-web-ui.js > /dev/null
  */
 const fs = require('fs');
 
@@ -370,6 +376,76 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     result.noActiveChip = !doc.querySelector('#chips .chip.active, #endpoint-chips .chip.active')
       ? 'yes' : 'NO - a chip still claims a filter that is gone';
     return result;
+  }
+
+
+  /*
+   * An archive with no sessions: run what still means something, and say n/a for the rest.
+   *
+   * Nearly every probe below clicks a row, a tab or a session, and with none of them the first
+   * `click(null)` threw and took the whole report with it — including the empty-state check, which
+   * is the one thing an empty archive is *for* testing. Guarding each click would have been worse:
+   * a probe that silently clicked nothing would go on to report on a pane it never opened. So the
+   * split is explicit, and every skipped probe is named in the report rather than left out.
+   */
+  if (!doc.querySelector('#session-picker option')) {
+    const listProbe = await probeList();
+    const topBarProbe = await probeTopBar();
+    console.error('--- empty archive ---');
+    console.error('sessions           : 0');
+    console.error('emptySession       :', listProbe.emptySession ?? 'NO - the empty-state check did not run');
+    for (const [name, value] of Object.entries(topBarProbe)) console.error(`${name.padEnd(19)}:`, value);
+    console.error('parser             :', probeJsonParser().ok);
+    console.error('min text size      :', auditMinTextSize(css));
+    console.error('long tokens wrap   :', auditLongTokenWrap(css));
+    console.error('hidden panes hide  :', auditHiddenPanes(css));
+    for (const skipped of [
+      'scope bar', 'endpoint chips', 'order flip', 'signals', 'tag browsers', 'axis & waterfall',
+      'glance', 'handing to an agent', 'replay', 'detail header', 'detail tabs', 'json tree',
+      'copy fields', 'drawer', 'toolbar', 'now strip', 'tabs', 'ages', 'sessions',
+    ]) {
+      console.error(`${skipped.padEnd(19)}: n/a (no sessions)`);
+    }
+    console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
+    writeSnapshot('Static snapshot of the live UI against an empty archive. ');
+    window.close();
+    return;
+  }
+
+  /** Serialises the page as a static, self-contained snapshot on stdout. */
+  function writeSnapshot(lead) {
+    /*
+     * Write every field's value into the markup before serialising.
+     *
+     * `input.value` and `textarea.value` are DOM *properties*; the `value` attribute and a
+     * textarea's text content are what `outerHTML` writes. Anything a page fills in from JavaScript
+     * — which here is the filter box, the settings fields and every box in the replay editor — was
+     * therefore blank in every snapshot this script has ever produced, and a snapshot of a form is
+     * mostly its contents.
+     */
+    for (const input of doc.querySelectorAll('input')) {
+      if (input.type === 'checkbox' || input.type === 'radio') {
+        if (input.checked) input.setAttribute('checked', '');
+        else input.removeAttribute('checked');
+      } else if (input.value) {
+        input.setAttribute('value', input.value);
+      }
+    }
+    for (const area of doc.querySelectorAll('textarea')) {
+      if (area.value) area.textContent = area.value;
+    }
+
+    // Freeze as a static, self-contained page.
+    doc.querySelectorAll('script').forEach((s) => s.remove());
+    const banner = doc.createElement('div');
+    banner.setAttribute(
+      'style',
+      'padding:6px 14px;background:#3a2f10;color:#e0a030;font:12px system-ui;border-bottom:1px solid #2c3038',
+    );
+    banner.textContent = lead + 'The interactive version is at http://127.0.0.1:8099';
+    doc.body.insertBefore(banner, doc.body.firstChild);
+
+    console.log('<!doctype html>\n' + doc.documentElement.outerHTML);
   }
 
   const scopeProbe = await probeScopeBar();
@@ -1893,11 +1969,12 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   async function probeTopBar() {
     const result = {};
     const option = doc.querySelector('#session-picker option');
-    result.sessionOption = option && option.title && option.textContent !== option.title
+    const hasSession = Boolean(option);
+    result.sessionOption = !hasSession ? 'n/a (no sessions)' : option && option.title && option.textContent !== option.title
       && / · \d+ calls?$/.test(option.textContent)
       ? `yes ("${option.textContent}", id in the tooltip)`
       : `NO - "${option?.textContent}"`;
-    result.countsNoun = / of \d+ calls?$/.test(doc.getElementById('counts').textContent)
+    result.countsNoun = !hasSession ? 'n/a (no sessions)' : / of \d+ calls?$/.test(doc.getElementById('counts').textContent)
       ? `yes ("${doc.getElementById('counts').textContent}")`
       : `NO - "${doc.getElementById('counts').textContent}"`;
     result.conn = doc.getElementById('conn').dataset.state === 'connected' ? 'yes (connected)' : `NO - ${doc.getElementById('conn').dataset.state}`;
@@ -1919,8 +1996,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await press(live);
     await settle();
     window.fetch = realFetch;
-    result.liveToggle = paused && live.textContent.trim() === 'live' && reread
-      ? 'yes (live -> paused -> live, and resuming re-read the session)'
+    // Resuming re-reads the session on screen; with none there is nothing to re-read.
+    result.liveToggle = paused && live.textContent.trim() === 'live' && (reread || !hasSession)
+      ? `yes (live -> paused -> live${hasSession ? ', and resuming re-read the session' : '; no session to re-read'})`
       : `NO - paused ${paused}, back to "${live.textContent.trim()}", re-read ${reread}`;
 
     // The header delete arms and names what it deletes; it must not send anything on one click.
@@ -1936,7 +2014,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     del.dataset.armed = '0';
     del.textContent = '✕';
     del.classList.remove('armed');
-    result.deleteArms = delArmed ? 'yes ("delete session?", nothing sent)' : `NO - "${del.textContent}", ${deletes} sent`;
+    result.deleteArms = !hasSession
+      ? (deletes === 0 ? 'n/a (no sessions; and nothing was sent)' : `NO - ${deletes} sent with no session`)
+      : delArmed ? 'yes ("delete session?", nothing sent)' : `NO - "${del.textContent}", ${deletes} sent`;
 
     // Stop: one click arms, the second stops, and the page says so in a way it cannot miss.
     const stop = doc.getElementById('server-stop');
@@ -2196,40 +2276,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await settle();
   }
 
-  /*
-   * Write every field's value into the markup before serialising.
-   *
-   * `input.value` and `textarea.value` are DOM *properties*; the `value` attribute and a
-   * textarea's text content are what `outerHTML` writes. Anything a page fills in from JavaScript
-   * — which here is the filter box, the settings fields and every box in the replay editor — was
-   * therefore blank in every snapshot this script has ever produced, and a snapshot of a form is
-   * mostly its contents.
-   */
-  for (const input of doc.querySelectorAll('input')) {
-    if (input.type === 'checkbox' || input.type === 'radio') {
-      if (input.checked) input.setAttribute('checked', '');
-      else input.removeAttribute('checked');
-    } else if (input.value) {
-      input.setAttribute('value', input.value);
-    }
-  }
-  for (const area of doc.querySelectorAll('textarea')) {
-    if (area.value) area.textContent = area.value;
-  }
-
-  // Freeze as a static, self-contained page.
-  doc.querySelectorAll('script').forEach((s) => s.remove());
-  const banner = doc.createElement('div');
-  banner.setAttribute(
-    'style',
-    'padding:6px 14px;background:#3a2f10;color:#e0a030;font:12px system-ui;border-bottom:1px solid #2c3038',
-  );
-  banner.textContent =
-    'Static snapshot of the live UI (rendered from the real app.js against a real session). ' +
-    'The interactive version is at http://127.0.0.1:8099';
-  doc.body.insertBefore(banner, doc.body.firstChild);
-
-  console.log('<!doctype html>\n' + doc.documentElement.outerHTML);
+  writeSnapshot('Static snapshot of the live UI (rendered from the real app.js against a real session). ');
 
   // The snapshot is written, but jsdom is still running a window: `pretendToBeVisual` drives a
   // requestAnimationFrame loop and app.js sets a 1s interval to repaint ages. Two live timer
