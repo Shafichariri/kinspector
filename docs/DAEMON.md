@@ -95,6 +95,8 @@ Options:
 | `--data DIR` | `~/.inspector` | Archive root |
 | `--max-sessions N` | `100` | Prune oldest beyond this |
 | `--max-mb N` | `300` | Prune oldest beyond this total size |
+| `--usb-port N` | the `--port` | Port a USB-attached iPhone's app listens on — see below |
+| `--no-usb` | bridge on | Do not bridge USB-attached iPhones |
 
 Both retention ceilings apply together: pruning continues until the archive is under *both*.
 
@@ -139,9 +141,39 @@ adb reverse --remove tcp:8099
 The app still needs the cleartext exemption for `127.0.0.1` — see `INTEGRATION.md` §6d. That is a
 separate thing from the tunnel, and forgetting it fails the same silent way.
 
-**iOS hardware has no equivalent** and is not supported. There is no `adb reverse` for an iPhone,
-so the only routes are widening the daemon's bind to the network — which needs authentication
-first, and the daemon has none — or a `usbmuxd` tunnel, which nobody has built.
+### A physical iPhone, over USB
+
+Plug it in and run `serve`. Nothing else: no forward to set up, and no flag.
+
+There is no `adb reverse` on iOS, and the connection runs the other way round instead. On a physical
+iPhone the app **listens** on the phone's own `127.0.0.1:8099`, and `serve` starts a bridge that
+finds the phone through usbmuxd — the service Xcode uses, present on every Mac — and dials that
+port. The daemon still binds your Mac's loopback and nothing else. You will see:
+
+```
+inspector: usb bridge on — a USB-attached iPhone is dialled on port 8099
+inspector: usb — iPhone 00000000-… attached; waiting for an app listening on port 8099
+inspector: usb — connected to 00000000-… on port 8099
+inspector: started session …
+```
+
+The bridge dials again every two seconds, so the order does not matter: start the app first or the
+daemon first, unplug and replug, relaunch the app. A phone with no app running says `attached` once
+and then nothing.
+
+- **The port is one number on both ends.** The bridge dials the daemon's own `--port`. If your app
+  passes a `port` to `StreamSink`, run the daemon on the same one.
+- **`--usb-port N`** dials a different port than the daemon listens on — for a second daemon beside
+  your usual one while the app keeps its default: `serve --port 8231 --usb-port 8099`.
+- **`--no-usb`** turns the bridge off.
+- **Cable only.** A phone paired over Wi-Fi also shows up in usbmuxd, and is skipped: the app's
+  listener is bound to the phone's loopback, which the network route cannot reach. That is what
+  keeps the listener off the phone's network.
+- **Two Inspector apps on one phone** cannot both listen on 8099. The second prints why; give it its
+  own port and run a second daemon on that port.
+
+If nothing connects, the app's log says what the listener saw — `inspector: cannot reach host over
+USB …` names the port and the reason.
 
 ### It refuses to start: "port 8099 is already in use"
 

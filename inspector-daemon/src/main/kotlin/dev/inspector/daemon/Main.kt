@@ -2,6 +2,7 @@ package dev.inspector.daemon
 
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
+import dev.inspector.daemon.usb.UsbBridge
 import kotlin.io.path.Path
 import kotlin.system.exitProcess
 
@@ -9,7 +10,7 @@ private const val USAGE = """
 inspector — host daemon for the Compose Multiplatform network inspector
 
 Usage:
-  inspector serve [--port N] [--data DIR] [--max-sessions N] [--max-mb N]
+  inspector serve [--port N] [--data DIR] [--max-sessions N] [--max-mb N] [--no-usb] [--usb-port N]
   inspector mcp   [--data DIR] [--port N]
   inspector sessions
   inspector summary  [--session ID]
@@ -18,6 +19,11 @@ Usage:
   inspector prune
 
 --session accepts the literal 'latest' (the default).
+
+serve also bridges a USB-attached iPhone when usbmuxd is present (every Mac): the app
+listens on the phone's own 127.0.0.1:<port> and the daemon dials it over the cable.
+--no-usb turns that off. --usb-port dials a port other than the daemon's own — for a
+second daemon beside your usual one, while the app still listens on the default.
 
 Filter grammar:
   status:404  status>=400        method:POST       host:api.example.com
@@ -43,7 +49,14 @@ fun main(args: Array<String>) {
 
     when (args[0]) {
         "serve" -> try {
-            InspectorDaemon(config).start(wait = true)
+            InspectorDaemon(config).start(wait = true) {
+                if (flags["no-usb"] == null) {
+                    UsbBridge.startIfAvailable(
+                        daemonPort = config.port,
+                        devicePort = flags["usb-port"]?.toIntOrNull() ?: config.port,
+                    )
+                }
+            }
         } catch (e: PortUnavailableException) {
             fail(
                 "port ${e.port} is already in use — another daemon is probably still running.\n" +

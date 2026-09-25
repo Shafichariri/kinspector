@@ -55,6 +55,9 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
  */
 actual fun defaultDaemonHost(): String = daemonHostFor(isAndroidEmulator())
 
+/** Android dials out on every route — `adb reverse` points the phone's loopback at the host. */
+internal actual fun listensForUsb(host: String): Boolean = false
+
 /** Split out from [defaultDaemonHost] so the choice can be tested without an Android runtime. */
 internal fun daemonHostFor(emulator: Boolean): String =
     if (emulator) EMULATOR_HOST_ALIAS else DEVICE_LOOPBACK
