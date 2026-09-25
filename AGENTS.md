@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**779 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -125,6 +125,15 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   daemon's own body after it, and was refused again once the forward was removed. `10.0.2.2`
   answered throughout, and `lsof` showed the daemon still bound to `127.0.0.1` alone — so the
   loopback boundary is genuinely untouched rather than assumed to be.
+- **A physical iPhone streams to the daemon over USB** (iPhone 12 Pro, iOS 26.5, 2026-09-24). The
+  real iOS sample, built for `iosArm64` and signed for the device, listened on the phone's
+  `127.0.0.1:8099`; `inspector serve`'s bridge dialled it through usbmuxd and 188 transactions
+  reached the archive as `platform: ios-device`, bodies on disk, retries and redirects intact, while
+  the daemon stayed bound to `127.0.0.1` alone. The other direction too: a replay from the host came
+  back with `resignedHeaders` that only the app's `ReplaySigner` on the phone produces, so a
+  `SignRequest` crossed the cable and its answer returned. Killing a linked app and relaunching it
+  reconnects in about a second — after the TIME_WAIT fix below; before it, 25 seconds of
+  `EADDRINUSE`.
 
 ### Not verified
 
@@ -145,8 +154,16 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   an emulator and an iOS simulator. The list, the clock column, the control strip, marker dividers
   and chips, signals and a collapsed run, on a real screen with a real status bar and a Dynamic
   Island. What that does *not*
-  cover is hardware: a physical cutout, a vendor skin, or `adb reverse` with a cable in it. No
-  Inspector build has ever run on a physical phone of either kind.
+  cover is hardware: a physical cutout, a vendor skin, or `adb reverse` with a cable in it. The one
+  physical phone so far is an iPhone, and it was driven for the USB route above — the overlay was
+  running on it the whole time, but nobody *looked* at it there, so the Dynamic Island and inset
+  fixes are still unverified on hardware. No Android build has run on a physical phone.
+- **The iPhone route's edges.** Verified: kill and relaunch. Not verified: pulling the cable
+  mid-session (expected to look identical — the link sees EOF either way — but not tried); an app
+  put in the background after an ordinary home-screen launch (every run was launched by
+  `devicectl`, which may keep it from being suspended, and in the spike a backgrounded app still
+  answered after 30 s for possibly that reason); two apps on one phone; Wi-Fi-paired devices,
+  which the bridge skips by design.
 - **Nobody has judged how the web UI *looks*.** It provably renders the right elements (see
   above), but no human has assessed spacing, colour or density. The browser pane is blocked from
   localhost by policy in this environment, so only a static snapshot has ever been produced.
@@ -1177,9 +1194,66 @@ forward, answered `HTTP/1.1 200 OK` from the real daemon after it, and was refus
 forward was removed — while `lsof` still showed the daemon bound to `127.0.0.1` alone and the
 `10.0.2.2` path kept working.
 
-iOS hardware has no equivalent and stays unsupported. Do not reach for a wider bind to solve it:
-that is an authentication decision first and a transport one second, and the archive holds
-unredacted credentials by default.
+**A physical iPhone connects over USB through usbmuxd, and the connection runs backwards.** There
+is no `adb reverse` on iOS. There is usbmuxd — the service Xcode uses, on every Mac, nothing to
+install — and it tunnels only one way: from the Mac *into* a port on the phone. So on a physical
+iPhone `StreamSink` **accepts** instead of dialling: `UsbListenerTransport` listens on the phone's
+own `127.0.0.1:<port>`, and `UsbBridge`, started by `inspector serve`, polls usbmuxd and dials that
+port on every USB-attached phone. The daemon's bind did not move, and it does not know the leg
+exists: the bridge hands each message to its ordinary `WS /ingest` on loopback, so a bridged app
+runs through exactly the ingest path every other test covers.
+
+Settled by a spike on hardware before a line of this was written, because the one thing documentation
+could not answer was the thing everything rested on: **a usbmuxd connection does reach a listener
+bound to the phone's loopback**, and arrives from `127.0.0.1`. Over the `Network` route it does not —
+usbmuxd reaches the phone's LAN address there, which a loopback listener never sees — so the bridge
+dials only `USB` entries. That is the right trade rather than a limitation to engineer around: it is
+what keeps the listener unreachable from the phone's network.
+
+The pieces, and why each is shaped the way it is:
+
+- **The wire is the same `WireMsg` JSON, framed by `UsbFraming`** — a 4-byte big-endian length —
+  rather than WebSocket, because no Ktor client engine can run a WebSocket over a socket it
+  *accepted*. The codec lives in `:inspector-model` so the phone and the bridge run one copy.
+  `MAX_FRAME_BYTES` is 64 MiB and a header above it drops the link: an HTTP client that dials the
+  port by mistake sends `GET `, which reads as a 1.2 GB frame.
+- **`listensForUsb(host)` picks the route**, true only on `iosArm64` (via the link-time
+  `IS_IOS_SIMULATOR`) and only while the host is loopback — which `defaultDaemonHost()` returns. An
+  app that names another host has its own route and keeps dialling it. No public API changed, so
+  neither the noop twin nor either golden file did.
+- **`StreamSink.transport` is an `internal var`** purely so `UsbListenerTransportTest` can drive the
+  USB route on the JVM, where `listensForUsb` is never true. Internal members are name-mangled on
+  the JVM, so `ApiSurface` drops it and the parity test is unchanged. Do not make it a constructor
+  parameter: an `internal` constructor is JVM-public, and would land in the golden file.
+- **The port is one number on both ends.** The app listens on `StreamSink`'s `port`, and the bridge
+  dials the daemon's own port unless `--usb-port` says otherwise — the flag exists for running a
+  second daemon beside your usual one, which is exactly how this was verified on hardware.
+- **The bridge is started by `serve`, not by `InspectorDaemon`.** The daemon tests construct
+  `InspectorDaemon` dozens of times; a bridge inside it would have them dialling whatever phone is
+  plugged into the machine running the suite.
+- **`Plist` must not fetch the DTD.** Every usbmuxd reply names Apple's DTD by URL, and a default
+  JDK parser fetches it — a request to apple.com per message, from a daemon whose posture is
+  loopback-only. External DTD loading and entity expansion are both off.
+
+**The phone's loopback is the new trust boundary, and it is wider than the host's in one respect.**
+Any process on the phone that can reach its loopback can connect to the listener — just as any
+process on the Mac can reach the daemon. It would receive captured traffic and could send a
+`SignRequest`, which makes a registered `ReplaySigner` answerable to it. That is the same class of
+exposure the module already carries on every platform, and the module is debug-only by
+construction; but a signer is the sharpest thing in it, and anyone widening this route should read
+this paragraph first.
+
+**`reuseAddress` on the listener is load-bearing, and only a Native test can see it.** Found on
+hardware: kill the app mid-session, relaunch, and the new process got `EADDRINUSE` for about 25
+seconds because the dead link sat in TIME_WAIT on the listening port — and the help message it
+printed blamed "another app", wrong in the commonest case of all. A JVM regression test was written
+first and **passed with the fix deleted**: the JDK enables `SO_REUSEADDR` on server sockets by
+default. Kotlin/Native's sockets are raw POSIX, so `UsbListenerRebindTest` lives in `iosTest`,
+where it fails with the phone's exact error without the fix. Do not move it back to `jvmTest`.
+
+Widening the daemon's bind to reach iPhones is **still** the wrong answer, and now also an
+unnecessary one: that is an authentication decision first and a transport one second, and the
+archive holds unredacted credentials by default.
 
 `defaultDaemonHost()` on Android is therefore `10.0.2.2` on an emulator and `127.0.0.1` on
 hardware. It is the first caller to use the emulator detection for a *decision* rather than a
@@ -1187,6 +1261,8 @@ label, which is why fixing that detection came first: while it was wrong, every 
 have been sent to `127.0.0.1`.
 
 **The connection-failure message is per-platform, and it names the address it actually tried.**
+On a physical iPhone it describes the *listener* instead — nothing reaches `connectionHelp` there
+merely because the cable is out, since the app just waits; what does is a port another app holds.
 `connectionHelp` is `expect`/`actual` rather than one shared constant, because the remedies do not
 travel: `adb reverse` and a cleartext exemption mean nothing on iOS, and on Android the address
 that failed is the only thing separating "you forgot the forward" from "that alias reaches nothing
@@ -1345,6 +1421,11 @@ adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch
 xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp \
   -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build
 xcrun simctl install booted <path>/iosApp.app && xcrun simctl launch booted dev.inspector.sample
+# ... on a physical iPhone over USB: sign it (the project ships unsigned), install, run `inspector serve`
+xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS,id=<udid>' \
+  -allowProvisioningUpdates CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=<team> build
+xcrun devicectl device install app --device <id> <path>/iosApp.app
+inspector serve --port 8231 --usb-port 8099       # a second daemon beside your usual one; the app still listens on 8099
 ./gradlew :inspector-core:jvmTest                 # capture integration tests
 ./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
 ./gradlew :inspector-model:testAndroidHostTest    # Android host
@@ -1497,6 +1578,8 @@ else a scan turns up.
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
+| `inspector-stream/.../Transport.kt` | How `StreamSink` reaches the host: dialling `/ingest`, or — on a physical iPhone — listening on the phone's loopback for the USB bridge. |
+| `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
 | `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
 | `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |

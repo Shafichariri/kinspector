@@ -103,7 +103,12 @@ class InspectorDaemon(
 
     private var server: EmbeddedServer<*, *>? = null
 
-    fun start(wait: Boolean = true) {
+    /**
+     * [beforeServing] runs once the port is known to be free and just before the server starts —
+     * where `serve` starts the USB bridge, so a daemon that is about to fail on a taken port never
+     * announces one.
+     */
+    fun start(wait: Boolean = true, beforeServing: () -> Unit = {}) {
         config.sessionsDir.toFile().mkdirs()
         requirePortAvailable()
 
@@ -127,6 +132,7 @@ class InspectorDaemon(
         println("inspector: archive at ${config.dataDir}")
         println("inspector: listening on http://127.0.0.1:${config.port}")
         println("inspector: retention ${config.maxSessions} sessions / ${config.maxTotalBytes / 1024 / 1024} MB")
+        beforeServing()
         engine.start(wait = wait)
     }
 

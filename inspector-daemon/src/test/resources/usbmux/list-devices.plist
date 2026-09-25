@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>DeviceList</key>
+	<array>
+		<dict>
+			<key>DeviceID</key>
+			<integer>139</integer>
+			<key>MessageType</key>
+			<string>Attached</string>
+			<key>Properties</key>
+			<dict>
+				<key>ConnectionSpeed</key>
+				<integer>480000000</integer>
+				<key>ConnectionType</key>
+				<string>USB</string>
+				<key>DeviceID</key>
+				<integer>139</integer>
+				<key>LocationID</key>
+				<integer>17825792</integer>
+				<key>ProductID</key>
+				<integer>4776</integer>
+				<key>SerialNumber</key>
+				<string>00000000-0000000000000000</string>
+				<key>USBSerialNumber</key>
+				<string>000000000000000000000000</string>
+			</dict>
+		</dict>
+		<dict>
+			<key>DeviceID</key>
+			<integer>138</integer>
+			<key>MessageType</key>
+			<string>Attached</string>
+			<key>Properties</key>
+			<dict>
+				<key>ConnectionType</key>
+				<string>Network</string>
+				<key>DeviceID</key>
+				<integer>138</integer>
+				<key>EscapedFullServiceName</key>
+				<string>00:00:00:00:00:00@fe80::1-supportsRP-24._apple-mobdev2._tcp.local.</string>
+				<key>InterfaceIndex</key>
+				<integer>14</integer>
+				<key>NetworkAddress</key>
+				<data>
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+				AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+				AAAAAAAAAAAAAAAAAAAAAAAAAAA=
+				</data>
+				<key>SerialNumber</key>
+				<string>00000000-0000000000000000</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>

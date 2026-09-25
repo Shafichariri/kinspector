@@ -297,7 +297,56 @@ throughout and the daemon still bound to `127.0.0.1` alone.
 **Not verified on a phone**, because there is still no Android app module to install — see below.
 The tunnel is proven; the app running inside it is not.
 
-### iOS hardware — the one that needs a decision
+### ~~iOS hardware~~ — done over USB, 2026-09-24; not yet released
+
+**Built through usbmuxd, and the authentication question below never had to be answered.** The
+record of how it was decided is kept under the line, because it is still the reason a wider bind
+remains the wrong fix.
+
+**The spike came first**, because the design rested on one fact no documentation settles: whether a
+usbmuxd connection reaches a listener bound only to the *phone's* loopback. Tested on an iPhone 12
+Pro with a throwaway app that listened on `127.0.0.1:8100` and a 40-line usbmuxd client:
+
+| Test | Result |
+|---|---|
+| Host talks to usbmuxd directly — no `iproxy`, no Homebrew | ✅ the phone is listed twice, `USB` and `Network` |
+| USB route → the loopback-only listener | ✅ connects; on the phone the peer is `127.0.0.1` |
+| 8 MB echo through the tunnel | ✅ byte-identical, about 33 MB/s both ways |
+| Network route → the same listener | ❌ refused, though it reaches lockdownd — it dials the LAN address |
+| A closed port | refused cleanly (`Number: 3`), so "app not running" is distinguishable |
+| App backgrounded 30 s | ⚠️ still answered, but launched by `devicectl`, which may prevent suspension |
+
+usbmuxd only dials **into** the phone, so the design inverts the connection: on a physical iPhone
+`StreamSink` listens on its own loopback and `inspector serve` runs a bridge that dials it and
+relays into the daemon's own `/ingest`. The daemon's bind did not move. Design notes and the
+traps are in `AGENTS.md`, under the `adb reverse` decision.
+
+**Verified end to end on the same phone:** the real iOS sample streamed 188 transactions into the
+archive as `platform: ios-device`; a replay was re-signed by the app across the cable; kill and
+relaunch reconnects in about a second. That last one needed a fix found only on hardware — the
+listener lacked `reuseAddress`, so a relaunch sat in `EADDRINUSE` while the killed link was in
+TIME_WAIT — and only a Native test can guard it, because the JVM enables `SO_REUSEADDR` by default.
+
+**Still open:**
+
+- **`INTEGRATION.md` is untouched on purpose.** It is versioned against published coordinates and
+  still says an iPhone is unsupported — which stays true of 1.1.0. The release that carries this
+  must rewrite §6f's closing paragraph, §9 item 7, and add the changelog entry: *bump
+  `inspector-stream` and download the daemon; no code change; attach by cable and run `inspector
+  serve`*.
+- **Edges not tried on hardware:** a cable pulled mid-session, an app backgrounded after an ordinary
+  home-screen launch, two Inspector apps on one phone. Two apps would contend for one port; the
+  second reports it, and each can be given its own `port`, but the bridge dials one port per
+  daemon.
+- **The phone's loopback is now a boundary.** Any process on the phone can reach the listener, the
+  way any process on the Mac reaches the daemon — which includes asking a registered
+  `ReplaySigner` to sign. Same class of exposure as today, debug-only, but the signer is the
+  sharpest thing in it. Worth a paired-secret handshake if this ever leaves debug builds, which it
+  must not.
+
+---
+
+*The record, as it stood before the spike:*
 
 There is no `adb reverse` equivalent. That leaves widening the daemon's bind to a LAN interface,
 and `Server.kt` is explicit about what that costs:
