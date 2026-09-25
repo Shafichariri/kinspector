@@ -6,6 +6,7 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.network.selector.SelectorManager
 import io.ktor.network.sockets.ServerSocket
 import io.ktor.network.sockets.aSocket
+import io.ktor.network.sockets.awaitClosed
 import io.ktor.network.sockets.openReadChannel
 import io.ktor.network.sockets.openWriteChannel
 import io.ktor.utils.io.exhausted
@@ -147,6 +148,16 @@ internal class UsbListenerTransport(private val port: Int) : Transport {
     override fun close() {
         server?.close()
         selector.close()
+    }
+
+    /**
+     * Suspends until the listening socket is really gone. Ktor closes sockets asynchronously on
+     * Native, so [close] returning says nothing about whether the port is free yet — which a test
+     * that rebinds the port has to know, and a relaunched app never does: its predecessor's sockets
+     * were closed by the kernel when the process died.
+     */
+    internal suspend fun awaitClosed() {
+        server?.awaitClosed()
     }
 
     private companion object {
