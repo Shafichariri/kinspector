@@ -59,6 +59,10 @@ data class Exporter(val name: String, val version: String)
  *
  * No defaults on the identifying fields: `InspectorJson` does not encode defaults, and a document
  * that silently dropped its own `format` would be unidentifiable once saved to disk.
+ *
+ * Nor on the collections, for the same reason: a session with no markers exported with no
+ * `markers` key, so a reader of the "complete document" could not tell "none recorded" from
+ * "not exported", and the archive probe crashed on every real session without one.
  */
 @Serializable
 data class SessionExportDocument(
@@ -77,21 +81,21 @@ data class SessionExportDocument(
      * same line the MCP `timeline` tool emits, with no cap. Markers are placed by the shared
      * [dev.inspector.model.timeline] rule, so a marker at a call's `mono` precedes it.
      */
-    val timeline: List<TimelineEntry> = emptyList(),
+    val timeline: List<TimelineEntry>,
     /** By `mono`, ascending. */
-    val transactions: List<ExportedTransaction> = emptyList(),
+    val transactions: List<ExportedTransaction>,
     /** By `mono`, ascending. `data` is null, as in the archive; the payload is in [signalData]. */
-    val signals: List<Signal> = emptyList(),
+    val signals: List<Signal>,
     /**
      * Signal payloads by signal id, as the captured bytes. Kept out of `Signal.data` deliberately:
      * filling that means parsing the payload, and a parse keeps only the last of a duplicated key —
      * the viewers need what the app actually sent.
      */
-    val signalData: Map<String, ExportedBody> = emptyMap(),
+    val signalData: Map<String, ExportedBody>,
     /** Latest observation per `(tag, name)`, newest first — what the app held when it stopped. */
-    val current: List<Signal> = emptyList(),
+    val current: List<Signal>,
     /** By `mono`, ascending. */
-    val markers: List<Marker> = emptyList(),
+    val markers: List<Marker>,
 )
 
 /**
