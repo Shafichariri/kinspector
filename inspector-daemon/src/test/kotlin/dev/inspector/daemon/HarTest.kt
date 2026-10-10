@@ -268,4 +268,17 @@ class HarTest {
         assertEquals(400, response.status.value)
         Unit
     }
+
+    @Test
+    fun `a session over a thousand calls exports every one of them`() = runBlocking {
+        // The route asked for Int.MAX_VALUE rows from a query that clamps to 1000, so every HAR of
+        // a longer session silently stopped there. 1001 is the smallest session that shows it.
+        val id = "2026-08-16T11-00-00_app_dev_debug"
+        writeSession(
+            config, id, "2026-08-16T11:00:00.000Z",
+            transactions = (0 until 1001).map { txn("%08x".format(it), mono = it.toLong()) },
+        )
+        val har = json.parseToJsonElement(http.get(url("/api/sessions/$id/har")).bodyAsText()).jsonObject
+        assertEquals(1001, har.entries().size)
+    }
 }

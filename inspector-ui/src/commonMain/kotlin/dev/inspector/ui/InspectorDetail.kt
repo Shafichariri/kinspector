@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.prettyJson
 import kotlinx.coroutines.delay
 
 /**

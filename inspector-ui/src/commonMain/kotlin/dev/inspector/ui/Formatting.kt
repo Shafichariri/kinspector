@@ -3,6 +3,7 @@ package dev.inspector.ui
 import dev.inspector.model.InspectorJsonPretty
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
+import dev.inspector.model.prettyJson
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -67,48 +68,6 @@ internal fun toCurl(txn: NetworkTransaction, requestBody: ByteArray?): String = 
     requestBody?.decodeToString()?.takeIf { it.isNotEmpty() }?.let { body ->
         append(" \\\n  -d '").append(body.replace("'", "'\\''")).append("'")
     }
-}
-
-/**
- * Minimal JSON pretty-printer.
- *
- * Hand-rolled rather than parse-and-re-serialize so it also formats bodies that are truncated or
- * malformed — exactly the bodies you most want to look at.
- */
-internal fun prettyJson(raw: String, indent: String = "  "): String {
-    val out = StringBuilder(raw.length + raw.length / 4)
-    var depth = 0
-    var inString = false
-    var escaped = false
-
-    for (char in raw) {
-        if (inString) {
-            out.append(char)
-            when {
-                escaped -> escaped = false
-                char == '\\' -> escaped = true
-                char == '"' -> inString = false
-            }
-            continue
-        }
-        when (char) {
-            '"' -> { inString = true; out.append(char) }
-            '{', '[' -> {
-                out.append(char)
-                depth++
-                out.append('\n').append(indent.repeat(depth))
-            }
-            '}', ']' -> {
-                depth--
-                out.append('\n').append(indent.repeat(maxOf(depth, 0))).append(char)
-            }
-            ',' -> out.append(char).append('\n').append(indent.repeat(depth))
-            ':' -> out.append(": ")
-            ' ', '\n', '\t', '\r' -> Unit
-            else -> out.append(char)
-        }
-    }
-    return out.toString()
 }
 
 internal fun looksLikeJson(contentType: String?, body: String?): Boolean {

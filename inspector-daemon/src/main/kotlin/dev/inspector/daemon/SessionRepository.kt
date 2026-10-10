@@ -229,10 +229,8 @@ class SessionRepository(private val config: DaemonConfig) {
         offset: Int = 0,
         limit: Int = 50,
     ): TransactionPage {
-        val filter = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
         val all = readTransactions(sessionDir)
-        val context = FilterContext(readMarkers(sessionDir))
-        val matched = all.filter { filter.matches(it, context) }
+        val matched = matchTransactions(sessionDir, all, filterText)
         // Newest first, ordered by the device's monotonic clock — never by wall clock.
         val ordered = matched.sortedByDescending { it.mono }
         return TransactionPage(
@@ -240,6 +238,28 @@ class SessionRepository(private val config: DaemonConfig) {
             matched = ordered.size,
             items = ordered.drop(offset).take(limit.coerceIn(1, 1000)),
         )
+    }
+
+    /**
+     * Every transaction matching [filterText], in archive order, with **no page cap**.
+     *
+     * This is what an export reads. [queryTransactions] serves a paged UI and clamps its limit to
+     * 1000, so an export routed through it with `limit = Int.MAX_VALUE` silently stopped at 1000
+     * rows — the HAR route did exactly that, under a comment saying a quietly incomplete export
+     * was the thing to avoid. Throws [dev.inspector.model.FilterParseException] on a bad filter.
+     */
+    fun filterTransactions(sessionDir: Path, filterText: String = ""): List<NetworkTransaction> =
+        matchTransactions(sessionDir, readTransactions(sessionDir), filterText)
+
+    private fun matchTransactions(
+        sessionDir: Path,
+        all: List<NetworkTransaction>,
+        filterText: String,
+    ): List<NetworkTransaction> {
+        if (filterText.isBlank()) return all
+        val filter = FilterParser.parseOrThrow(filterText)
+        val context = FilterContext(readMarkers(sessionDir))
+        return all.filter { filter.matches(it, context) }
     }
 
     fun readTransaction(sessionDir: Path, txnId: String): NetworkTransaction? =
