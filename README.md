@@ -55,6 +55,12 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.2.0 brings a physical iPhone to the web UI, and changes no code of yours.** Plug it in and run
+`inspector serve`: on a physical iPhone the app listens on its own loopback and the daemon dials it
+through usbmuxd, so nothing is exposed to the network. A session can also be exported as one file —
+the web UI working offline, a Markdown record, or JSON — and a HAR of a session over 1000 calls is
+no longer cut off at 1000. Bump the version; `INTEGRATION.md` v56 says what to do.
+
 **1.1.0 is a design pass over both surfaces, and changes no code of yours.** The overlay now
 opens newest first with signals hidden and remembers your filter across closing it; its filters
 moved into a sheet and the list starts higher; long paths keep their end on iOS, which they had
@@ -182,9 +188,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.1.0")
-implementation("io.github.shafichariri:inspector-ui:1.1.0")
-implementation("io.github.shafichariri:inspector-stream:1.1.0")
+implementation("io.github.shafichariri:inspector-core:1.2.0")
+implementation("io.github.shafichariri:inspector-ui:1.2.0")
+implementation("io.github.shafichariri:inspector-stream:1.2.0")
 ```
 
 Three lines of code:

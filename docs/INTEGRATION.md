@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v55 — 2026-09-24.**
+**Document version: v56 — 2026-10-11.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.1.0")
-implementation("io.github.shafichariri:inspector-ui:1.1.0")
+implementation("io.github.shafichariri:inspector-core:1.2.0")
+implementation("io.github.shafichariri:inspector-ui:1.2.0")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.1.0")
-            implementation("io.github.shafichariri:inspector-ui:1.1.0")
+            implementation("io.github.shafichariri:inspector-core:1.2.0")
+            implementation("io.github.shafichariri:inspector-ui:1.2.0")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.1.0")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.1.0")
+                implementation("io.github.shafichariri:inspector-noop:1.2.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.1.0")
-                implementation("io.github.shafichariri:inspector-ui:1.1.0")
+                implementation("io.github.shafichariri:inspector-core:1.2.0")
+                implementation("io.github.shafichariri:inspector-ui:1.2.0")
             }
         }
     }
@@ -424,13 +424,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.1.0")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.1.0")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.1.0")
+    implementation("io.github.shafichariri:inspector-noop:1.2.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.2.0")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.1.0")
-    implementation("io.github.shafichariri:inspector-ui:1.1.0")
-    implementation("io.github.shafichariri:inspector-stream:1.1.0")
+    implementation("io.github.shafichariri:inspector-core:1.2.0")
+    implementation("io.github.shafichariri:inspector-ui:1.2.0")
+    implementation("io.github.shafichariri:inspector-stream:1.2.0")
 }
 ```
 
@@ -566,9 +566,17 @@ screen, and Settings → Sessions lists every session with a per-row delete and 
 Both arm on the first click and fire on the second. A session the app is still writing to is never
 deleted — pulling the folder out from under an open writer would lose the traffic on screen.
 
-### 6f. A physical Android device, over USB
+**A session can be exported** from the **export ▾** menu beside the session picker, as one file:
+**HTML** is this web UI working from disk with the session inside it — send it to someone with no
+Inspector and they can open it — **Markdown** is a readable record for a ticket or a chat, **JSON**
+is everything for tools, and **HAR** is the calls alone for DevTools. Each holds the whole session,
+with no filter or page limit. They hold whatever capture recorded, credentials included unless you
+enabled redaction, so read one before you send it anywhere. `docs/DAEMON.md` → "Exporting a whole
+session" has the REST routes.
 
-Works, with one command and no code change. The daemon still binds your Mac's loopback and
+### 6f. A physical device, over USB
+
+**An Android phone** works with one command and no code change. The daemon still binds your Mac's loopback and
 nothing else; what the cable gives you is `adb reverse`, which forwards a port on the *phone's*
 loopback to the same port on the machine running adb:
 
@@ -591,10 +599,20 @@ Two things will each cost you a debugging session:
 If nothing arrives, the app says why — on a device the message names `adb reverse` rather than
 leaving you with a disconnected sink and no reason.
 
-**A physical iPhone is still not supported.** There is no `adb reverse` for iOS, so the routes are
-widening the daemon's bind to your network — which needs authentication the daemon does not have,
-and the archive holds unredacted credentials by default — or a `usbmuxd` tunnel, which nobody has
-built. The overlay works on an iPhone; the web UI and the archive do not.
+**A physical iPhone works too, over the cable, from 1.2.0.** Plug it in and run `inspector serve`;
+there is nothing to set up and no code to change. There is no `adb reverse` on iOS, so the
+connection runs the other way: on a physical iPhone `StreamSink` **listens** on the phone's own
+`127.0.0.1:8099`, and `serve` dials it through usbmuxd — the service Xcode uses, already on every
+Mac. The daemon still binds your Mac's loopback and nothing else. You will see
+`inspector: usb — connected to …` in the daemon's output, then the session.
+
+- **Cable only.** A phone paired over Wi-Fi is skipped: the listener is on the phone's loopback,
+  which the network route cannot reach — that is what keeps it off the phone's network.
+- **The port is one number on both ends.** If you pass a `port` to `StreamSink`, run the daemon on
+  the same one.
+- **Two Inspector apps on one phone** cannot both listen on 8099; the second says so in its log.
+
+`docs/DAEMON.md` → "A physical iPhone, over USB" has the flags (`--usb-port`, `--no-usb`).
 
 ---
 
@@ -755,7 +773,10 @@ Your app never connected. Work through these in order:
 5. `stream.start()` was never called, or `Inspector.addSink(stream)` was missed.
 6. **Android over USB: is the forward still there?** `adb reverse --list`. It does not survive a
    replug or an adb restart, so an empty list is the usual answer. See §6f.
-7. **A physical iPhone.** Not supported — the overlay works, the web UI cannot. See §6f.
+7. **A physical iPhone: is it on the cable, and is the bridge on?** Wi-Fi pairing is skipped by
+   design. The daemon's output should say `usb — iPhone … attached`; if it says `attached` and
+   never `connected`, the app is not listening — check its log for `inspector: cannot reach host
+   over USB …`, which names the port. On 1.1.0 or earlier an iPhone cannot connect at all. See §6f.
 
 **Web UI shows an old session that is not yours**
 You are looking at an archive from a different daemon run. Check which directory it is using —
@@ -780,7 +801,8 @@ straight off disk, so it works on old sessions with no daemon running. It needs 
 the app integration above**.
 
 Tools for traffic: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
-`get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`.
+`get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`, and `export_session`, which
+writes a whole session to `~/.inspector/exports/` as HTML, Markdown or JSON.
 
 `explain(id)` is the one to reach for when the question is **why** rather than **what**. It joins,
 in one call, what the others make you assemble by hand: the screen the app was on when the call
@@ -1252,7 +1274,33 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v55 — 2026-09-24 (this document)
+### v56 — 2026-10-11 (this document)
+
+**Bump to 1.2.0 and download the 1.2.0 daemon. Your code does not change.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.1.0")
++implementation("io.github.shafichariri:inspector-core:1.2.0")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included. No public API
+changed, so a release build using the no-op artifacts is unaffected.
+
+- **A physical iPhone now reaches the web UI and the archive, over the cable.** Bump
+  `inspector-stream`, download the 1.2.0 daemon, plug the phone in and run `inspector serve`. No
+  code change and no setup: on a physical iPhone the app listens on its own loopback and the daemon
+  dials it through usbmuxd. Cable only — Wi-Fi pairing is skipped by design. See §6f. Until now
+  only the overlay worked on an iPhone.
+- **A session can be exported as one file** — HTML (the web UI, working offline with the session
+  inside), Markdown, or JSON — from the web UI's **export ▾** menu, from REST, or by an agent
+  through the new MCP tool `export_session`. See §6e. The files carry whatever capture recorded,
+  credentials included unless you enabled redaction.
+- **A HAR export of a session over 1000 calls is no longer cut off at 1000.** It stopped there
+  silently before. If you handed someone a HAR of a long session, it was incomplete.
+- **The MCP server reports its real version** in `serverInfo.version`. It said `1.0.0` from 1.0.0
+  through 1.1.0.
+
+### v55 — 2026-09-24
 
 **Bump to 1.1.0 and download the 1.1.0 daemon. Your code does not change.**
 
