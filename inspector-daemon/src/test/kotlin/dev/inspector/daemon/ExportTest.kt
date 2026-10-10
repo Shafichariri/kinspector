@@ -145,6 +145,17 @@ class ExportTest {
         assertEquals(1, root.getValue("transactions").jsonArray.size)
     }
 
+    @Test
+    fun `an empty stream is an empty list in the JSON and not a missing key`() {
+        val dir = session { it.append(txn("aaaa1111"), null, null) }
+        val root = json.parseToJsonElement(SessionExport.toJson(build(dir))).jsonObject
+        // A session with no markers is the common case, and every other fixture here has one.
+        for (key in listOf("markers", "signals", "current")) {
+            assertEquals(0, root[key]?.jsonArray?.size, "$key: ${root[key]}")
+        }
+        assertEquals(JsonObject(emptyMap()), root["signalData"])
+    }
+
     // --- Markdown ------------------------------------------------------------------------------
 
     @Test
