@@ -122,6 +122,28 @@ class RestApiTest {
     }
 
     @Test
+    fun the_three_session_exports_download_as_files_named_for_the_session() = runBlocking {
+        for ((ext, type) in listOf("json" to "application/json", "md" to "text/markdown", "html" to "text/html")) {
+            val response = http.get(url("/api/sessions/latest/export.$ext"))
+            assertEquals(200, response.status.value, ext)
+            assertTrue(response.headers["Content-Type"].orEmpty().startsWith(type), "$ext: ${response.headers["Content-Type"]}")
+            // Without the attachment header a browser renders the file instead of saving it.
+            assertTrue(
+                Regex("""attachment; filename="[^"/]+\.$ext"""").matches(response.headers["Content-Disposition"].orEmpty()),
+                "$ext: ${response.headers["Content-Disposition"]}",
+            )
+        }
+        assertContains(http.get(url("/api/sessions/latest/export.json")).bodyAsText(), "bbbb2222")
+        assertContains(http.get(url("/api/sessions/latest/export.html")).bodyAsText(), "window.INSPECTOR_ARCHIVE")
+    }
+
+    @Test
+    fun an_export_of_an_unknown_or_unsafe_session_is_404() = runBlocking {
+        assertEquals(404, http.get(url("/api/sessions/nope/export.json")).status.value)
+        assertEquals(404, http.get(url("/api/sessions/..%2F..%2Fetc/export.html")).status.value)
+    }
+
+    @Test
     fun unknown_and_unsafe_session_ids_return_404_rather_than_escaping_the_archive() = runBlocking {
         assertEquals(404, http.get(url("/api/sessions/nope/summary")).status.value)
         assertEquals(404, http.get(url("/api/sessions/..%2F..%2Fetc/summary")).status.value)

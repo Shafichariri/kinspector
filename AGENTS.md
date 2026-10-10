@@ -596,6 +596,50 @@ not is reported absent with the reason, because `postData.text` is a string with
 — and `String(bytes)` would not fail, it would substitute U+FFFD and present a page of replacement
 characters as the captured body. The strict decoder exists to reach that branch.
 
+**The HTML export is the web UI, not a report, and one seam is what makes that hold.**
+`export.html` inlines the served `index.html`, `style.css` and `app.js` with the session embedded as
+`window.INSPECTOR_ARCHIVE`. A purpose-built report would be a second rendering of every row, and
+every second rendering here has drifted from the first. What makes it work is that `app.js` talks to
+the daemon through one object, `source`: live it is `fetch`; in an export it is `archiveSource`, a
+GET router over the embedded data that mirrors the daemon's reply shapes — transactions as a page,
+signals as a bare array, both newest first — and refuses anything else with a message. **The
+browser's `fetch` is called exactly once in `app.js`**, and `render-web-ui-archive.js` counts it, so
+a new call site cannot reach for the network from inside an export. That probe opens the real file
+under a `file:` URL with `fetch`, `WebSocket` and `XMLHttpRequest` all throwing; one network attempt
+fails it. Each check was proven to fail by breaking a copy of the file.
+
+What an export cannot do, it hides and says. The filter is **disabled, not reimplemented**: the chips
+alone emit seven kinds of term, and a JavaScript evaluator would be a second parser of the shared
+grammar, the drift this repository refuses. `applyFilter` is the single funnel for all six ways of
+setting a filter, which is the only reason one guard in it covers them all; without it a marker click
+empties the list behind a refusal. Controls that send something are hidden by `body.archive` with
+`!important`, because two of them are re-shown by script on every render. `connectLive` is skipped
+outright: from `file://` the socket URL is malformed and its constructor throws inside `init`.
+`localStorage` goes through `prefs`, because storage can throw on an opaque origin before anything
+renders.
+
+Embedding is safe because every `<` in the JSON becomes `\u003c`. A `<` can only occur inside a
+JSON string, where that escape means the same character to both parsers, so one rule disarms
+`</script>` and `<!--`. The two tags the exporter replaces are the same literals
+`render-web-ui.js` replaces, and both sides now refuse to proceed when a replacement misses.
+
+**All three exports read the raw readers, never `queryTransactions` or `SessionRepository.timeline()`.**
+The first clamps any limit to 1000 and the second to 2000 — and the second also sorts calls before a
+marker at the same `mono`, contradicting the shared `timeline()` rule. The HAR route had asked for
+`Int.MAX_VALUE` rows from the first under a comment saying a quietly incomplete export was the thing
+to avoid, so every HAR of a session over 1000 calls was exactly that. It reads
+`filterTransactions` now, and `HarTest` pins it at 1001 rows.
+
+**Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
+payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
+bytes the app sent, so payloads travel in `signalData` with the same utf8/base64 rule bodies use.
+The Markdown re-indents bodies with `prettyJson`, now in `:inspector-model` for the same reason
+`pathScope` moved: the overlay and the daemon both render bodies for people.
+
+**`export_session` writes beside `sessions/`, never inside a session folder.** Retention sizes a
+session by everything under its folder, so an export there would inflate the session it describes
+and be pruned with it.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to
@@ -1415,6 +1459,8 @@ every release build clean:
 npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
 INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
 INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 node scripts/render-web-ui.js   # ... a daemon off 8099
+curl -s http://127.0.0.1:8099/api/sessions/latest/export.html -o /tmp/s.html     # an exported session
+INSPECTOR_UI_ARCHIVE=/tmp/s.html node scripts/render-web-ui-archive.js        # ... works with no network
 ./gradlew :sample:desktop:run                     # runnable reference app
 ./gradlew :sample:android:installDebug            # the same app on a device or emulator
 adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch it
@@ -1582,7 +1628,9 @@ else a scan turns up.
 | `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
 | `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
-| `scripts/render-web-ui.js` | The only check the web UI has; run it after touching `web/`. |
+| `scripts/render-web-ui.js` | The live web UI's check; run it after touching `web/`, along with the archive probe below. |
+| `scripts/render-web-ui-archive.js` | Opens an exported session's HTML with the network forbidden and checks it works offline. Run it after touching `web/`: any new request that bypasses `source` fails it. |
+| `inspector-daemon/.../Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
 | `inspector-ui/.../InspectorSignalDetail.kt` | One observation: payload, provenance and the history of its key. Where stage 1's undrawn payloads went. |
