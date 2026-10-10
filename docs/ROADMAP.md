@@ -297,7 +297,7 @@ throughout and the daemon still bound to `127.0.0.1` alone.
 **Not verified on a phone**, because there is still no Android app module to install — see below.
 The tunnel is proven; the app running inside it is not.
 
-### ~~iOS hardware~~ — done over USB, 2026-09-24; not yet released
+### ~~iOS hardware~~ — done over USB, 2026-09-24; released in 1.2.0
 
 **Built through usbmuxd, and the authentication question below never had to be answered.** The
 record of how it was decided is kept under the line, because it is still the reason a wider bind
@@ -329,11 +329,8 @@ TIME_WAIT — and only a Native test can guard it, because the JVM enables `SO_R
 
 **Still open:**
 
-- **`INTEGRATION.md` is untouched on purpose.** It is versioned against published coordinates and
-  still says an iPhone is unsupported — which stays true of 1.1.0. The release that carries this
-  must rewrite §6f's closing paragraph, §9 item 7, and add the changelog entry: *bump
-  `inspector-stream` and download the daemon; no code change; attach by cable and run `inspector
-  serve`*.
+- ~~**`INTEGRATION.md` is untouched on purpose.**~~ Done in 1.2.0: v56 rewrote §6f's closing
+  paragraph and §9 item 7, and its changelog entry says *bump, download the daemon, plug in*.
 - **Edges not tried on hardware:** a cable pulled mid-session, an app backgrounded after an ordinary
   home-screen launch, two Inspector apps on one phone. Two apps would contend for one port; the
   second reports it, and each can be given its own `port`, but the bridge dials one port per
