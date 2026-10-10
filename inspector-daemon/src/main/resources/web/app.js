@@ -7,6 +7,28 @@
 (() => {
   'use strict';
 
+  /**
+   * A whole session embedded by the daemon's HTML export, or null on the live page.
+   *
+   * When it is set this page is a file on disk with no daemon behind it: every request is answered
+   * from it (`archiveSource`), and the controls that would have to send something are hidden
+   * (`enterArchiveMode`). Everything else is the same code drawing the same rows — that is the
+   * reason the export is this page and not a report written for the purpose.
+   */
+  const ARCHIVE = window.INSPECTOR_ARCHIVE || null;
+
+  /**
+   * `localStorage`, unable to take the page down.
+   *
+   * Storage can throw on access — an opaque origin, a file opened with site data blocked, a
+   * private window — and three reads below run before anything renders. One `SecurityError` there
+   * and the page draws nothing at all. These are reading preferences; losing one is a default.
+   */
+  const prefs = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch { /* a preference, not data */ } },
+  };
+
   const state = {
     sessionId: null,
     sessions: [],
@@ -24,9 +46,9 @@
     lastCaptureTs: null,
     // false = oldest first (causal reading order), true = newest first (tail-a-log order).
     // Remembered across reloads because it is a reading preference, not session state.
-    newestFirst: localStorage.getItem('inspector.newestFirst') === '1',
+    newestFirst: prefs.get('inspector.newestFirst') === '1',
     // Window for duplicate detection, in ms. 0 disables it.
-    duplicateWindowMs: Number(localStorage.getItem('inspector.duplicateWindowMs') ?? 3000),
+    duplicateWindowMs: Number(prefs.get('inspector.duplicateWindowMs') ?? 3000),
     // id -> group ordinal, recomputed whenever the transaction list changes.
     duplicates: new Map(),
     // Every row in the session, ignoring the filter, plus the session it belongs to.
@@ -39,7 +61,7 @@
     allTransactions: [],
     allSessionId: null,
     // How many endpoint chips to show. 0 hides them.
-    endpointLimit: Number(localStorage.getItem('inspector.endpointChipLimit') ?? 10),
+    endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
     // App-state observations for this session, and the latest per (tag, name).
     signals: [],
     current: [],
@@ -681,8 +703,86 @@
 
   // --- api ----------------------------------------------------------------
 
+  /**
+   * Every request this page makes goes through here, and nowhere else.
+   *
+   * The live page asks the daemon; an exported file answers from the session it carries. One
+   * object with one method and two implementations, rather than a mode check at each call site —
+   * which is also why the browser's own fetch is called exactly once in this file, a count `render-web-ui-archive.js`
+   * asserts so a new call site cannot quietly reach for the network from inside an export.
+   */
+  const source = ARCHIVE ? archiveSource(ARCHIVE) : { fetch: (path, init) => fetch(path, init) };
+
+  /**
+   * The daemon's read routes, answered from an exported session.
+   *
+   * It mirrors the routes the page reads, shape for shape: transactions come back as a page and
+   * newest first, signals as a bare array and newest first — the two siblings differ because the
+   * daemon's do. A route it does not know is a 404 naming the path, so a page that grows a new
+   * request fails loudly in an export rather than rendering as if the data were absent.
+   *
+   * Anything that is not a GET is refused: it would be asking a daemon to do something, and there
+   * is none. A filter is refused too — the grammar is evaluated by the daemon and has no copy here.
+   */
+  function archiveSource(archive) {
+    const encoder = new TextEncoder();
+    const bytesOf = (blob) => (blob.encoding === 'base64'
+      ? Uint8Array.from(atob(blob.text), (c) => c.charCodeAt(0))
+      : encoder.encode(blob.text));
+    const reply = (status, value) => {
+      const bytes = value instanceof Uint8Array ? value : encoder.encode(JSON.stringify(value));
+      // Decoded exactly as a live response is, so a binary body looks the same in both modes.
+      const text = () => new TextDecoder().decode(bytes);
+      return {
+        ok: status >= 200 && status < 300,
+        status,
+        text: async () => text(),
+        json: async () => JSON.parse(text()),
+        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      };
+    };
+    const refuse = (status, error) => reply(status, { error });
+    const byMonoDesc = (a, b) => b.mono - a.mono;
+    const rows = archive.transactions.map((t) => t.txn).sort(byMonoDesc);
+    const exported = new Map(archive.transactions.map((t) => [t.txn.id, t]));
+    const signals = archive.signals.slice().sort(byMonoDesc);
+    const meta = archive.meta ? [archive.meta] : [];
+
+    return {
+      fetch: async (path, init) => {
+        if (init && init.method && init.method !== 'GET') {
+          return refuse(409, 'this is an exported session — there is no daemon to send that to');
+        }
+        const url = new URL(path, 'http://archive.invalid');
+        const p = url.pathname;
+        let m;
+        if (p === '/api/sessions') return reply(200, meta);
+        if (p === '/api/recording') return reply(200, []);
+        if (/^\/api\/sessions\/[^/]+\/transactions$/.test(p)) {
+          if (url.searchParams.get('filter')) {
+            return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
+          }
+          return reply(200, { total: rows.length, matched: rows.length, items: rows });
+        }
+        if ((m = p.match(/^\/api\/sessions\/[^/]+\/transactions\/([^/]+)\/body\/(req|res)$/))) {
+          const entry = exported.get(decodeURIComponent(m[1]));
+          const blob = entry && (m[2] === 'req' ? entry.reqBody : entry.resBody);
+          return blob ? reply(200, bytesOf(blob)) : refuse(404, `no ${m[2]} body for ${m[1]}`);
+        }
+        if ((m = p.match(/^\/api\/sessions\/[^/]+\/signals\/([^/]+)\/data$/))) {
+          const blob = (archive.signalData || {})[decodeURIComponent(m[1])];
+          return blob ? reply(200, bytesOf(blob)) : refuse(404, `no payload for signal ${m[1]}`);
+        }
+        if (/^\/api\/sessions\/[^/]+\/signals$/.test(p)) return reply(200, signals);
+        if (/^\/api\/sessions\/[^/]+\/current$/.test(p)) return reply(200, archive.current || []);
+        if (/^\/api\/sessions\/[^/]+\/markers$/.test(p)) return reply(200, archive.markers || []);
+        return refuse(404, `not in this export: ${p}`);
+      },
+    };
+  }
+
   const api = async (path) => {
-    const res = await fetch(path);
+    const res = await source.fetch(path);
     const text = await res.text();
     if (!res.ok) {
       let message = text;
@@ -765,6 +865,8 @@
   }
 
   async function loadTransactions() {
+    // An export of nothing would be a 404 with a filename; offer it only when there is a session.
+    $('export-host').hidden = !!ARCHIVE || !state.sessionId;
     // With no session there is nothing to load, and the empty list is the only thing that can
     // say what the page is waiting for.
     if (!state.sessionId) { renderListEmpty(); return; }
@@ -1033,7 +1135,7 @@
       if (!label) return;
       $('marker-add').disabled = true;
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`, {
+        const res = await source.fetch(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ label, source: 'user' }),
@@ -1503,6 +1605,108 @@
       });
   }
 
+  /**
+   * A button that opens a small menu under itself.
+   *
+   * Shared by the detail pane's replay menu and the top bar's export menu, so both close the same
+   * ways: on a second click, a click outside, choosing an item, or Escape. Escape stops there —
+   * the page's own Escape clears the selection, and a bubbling one closed the menu *and* the
+   * whole detail pane.
+   *
+   * @param onOpen runs before the menu shows, for items whose targets depend on the moment.
+   */
+  function menuButton({ label, className, title, items, onOpen, alignLeft = false }) {
+    const button = el('button', className, label);
+    button.type = 'button';
+    button.title = title;
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    const menu = el('div', alignLeft ? 'menu menu-left' : 'menu');
+    menu.setAttribute('role', 'menu');
+    menu.hidden = true;
+    const close = () => {
+      menu.hidden = true;
+      button.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onOutside, true);
+    };
+    const onOutside = (event) => {
+      if (!menu.contains(event.target) && event.target !== button) close();
+    };
+    for (const item of items) {
+      item.addEventListener('click', close);
+      menu.appendChild(item);
+    }
+    menu.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.stopPropagation(); close(); button.focus(); }
+    });
+    button.onclick = () => {
+      if (!menu.hidden) { close(); return; }
+      if (onOpen) onOpen();
+      menu.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+      menu.querySelector('.menu-item').focus();
+      document.addEventListener('click', onOutside, true);
+    };
+    const wrap = el('span', 'menu-wrap');
+    wrap.appendChild(button);
+    wrap.appendChild(menu);
+    return { wrap, button, menu, close };
+  }
+
+  function menuItem(label, title, run) {
+    const node = el('button', 'menu-item', label);
+    node.type = 'button';
+    node.title = title;
+    node.setAttribute('role', 'menuitem');
+    node.addEventListener('click', run);
+    return node;
+  }
+
+  /**
+   * The session, out of the daemon as one file.
+   *
+   * Links rather than buttons that fetch: the daemon names each file in `Content-Disposition`, so
+   * the browser saves it under the session's name with nothing built in the page. Hrefs are set
+   * as the menu opens, because the selected session changes under a menu built once.
+   */
+  const EXPORTS = [
+    { label: 'HTML — this page, offline', ext: 'html', path: 'export.html',
+      title: 'One file that opens in any browser with no daemon: this UI, with the whole session inside it' },
+    { label: 'Markdown — readable', ext: 'md', path: 'export.md',
+      title: 'The timeline, then every call with its request and response in full — for a ticket, a chat or an agent' },
+    { label: 'JSON — complete', ext: 'json', path: 'export.json',
+      title: 'Every row, body and signal payload in one document' },
+    { label: 'HAR — for DevTools', ext: 'har', path: 'har',
+      title: 'Calls only, in the format DevTools, Charles and Postman import. Fields capture never measured are -1' },
+  ];
+
+  function wireExportMenu() {
+    if (ARCHIVE) return;
+    const links = EXPORTS.map((spec) => {
+      const link = el('a', 'menu-item', spec.label);
+      link.title = spec.title;
+      link.dataset.export = spec.ext;
+      link.setAttribute('role', 'menuitem');
+      link.setAttribute('download', '');
+      return link;
+    });
+    const exportMenu = menuButton({
+      label: 'export ▾',
+      className: 'btn btn-sm btn-quiet',
+      title: 'Save this whole session as a file',
+      items: links,
+      alignLeft: true,
+      onOpen: () => {
+        const id = encodeURIComponent(state.sessionId || '');
+        EXPORTS.forEach((spec, i) => { links[i].href = `/api/sessions/${id}/${spec.path}`; });
+      },
+    });
+    exportMenu.wrap.id = 'export-menu';
+    const host = $('export-host');
+    host.replaceChildren(exportMenu.wrap);
+    host.hidden = false;
+  }
+
   function bundleButton(label, build, title) {
     const button = el('button', 'btn btn-sm', label);
     button.title = title;
@@ -1893,7 +2097,7 @@
 
   function setSortOrder(newestFirst) {
     state.newestFirst = newestFirst;
-    localStorage.setItem('inspector.newestFirst', newestFirst ? '1' : '0');
+    prefs.set('inspector.newestFirst', newestFirst ? '1' : '0');
     $('order-oldest').classList.toggle('on', !newestFirst);
     $('order-newest').classList.toggle('on', newestFirst);
     $('order-oldest').setAttribute('aria-pressed', String(!newestFirst));
@@ -2131,46 +2335,18 @@
     // pane, and neither is — reading the call is. The editor stays a separate item rather than a
     // mode of replay, because a form that opened every time would stand between the reader and
     // the thing they usually want.
-    const replayBtn = el('button', 'btn btn-outline', 'replay ▾');
-    replayBtn.title = 'Re-send this request. Per-request headers are regenerated by the running app.';
-    replayBtn.setAttribute('aria-haspopup', 'menu');
-    replayBtn.setAttribute('aria-expanded', 'false');
-    const menu = el('div', 'menu');
-    menu.setAttribute('role', 'menu');
-    menu.hidden = true;
-    const closeMenu = () => {
-      menu.hidden = true;
-      replayBtn.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('click', onOutside, true);
-    };
-    const onOutside = (event) => {
-      if (!menu.contains(event.target) && event.target !== replayBtn) closeMenu();
-    };
-    const item = (label, title, run) => {
-      const node = el('button', 'menu-item', label);
-      node.type = 'button';
-      node.title = title;
-      node.setAttribute('role', 'menuitem');
-      node.addEventListener('click', () => { closeMenu(); run(); });
-      return node;
-    };
-    menu.appendChild(item('replay', replayBtn.title, () => runReplay(txn, pane, replayBtn)));
-    menu.appendChild(item('edit & replay', 'Change the request before re-sending it',
-      () => toggleReplayEditor(txn, pane, reqBody)));
-    menu.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') { event.stopPropagation(); closeMenu(); replayBtn.focus(); }
+    const replayMenu = menuButton({
+      label: 'replay ▾',
+      className: 'btn btn-outline replay-menu',
+      title: 'Re-send this request. Per-request headers are regenerated by the running app.',
+      items: [
+        menuItem('replay', 'Re-send this request. Per-request headers are regenerated by the running app.',
+          () => runReplay(txn, pane, replayMenu.button)),
+        menuItem('edit & replay', 'Change the request before re-sending it',
+          () => toggleReplayEditor(txn, pane, reqBody)),
+      ],
     });
-    replayBtn.onclick = () => {
-      if (!menu.hidden) { closeMenu(); return; }
-      menu.hidden = false;
-      replayBtn.setAttribute('aria-expanded', 'true');
-      menu.querySelector('.menu-item').focus();
-      document.addEventListener('click', onOutside, true);
-    };
-    const replayWrap = el('span', 'menu-wrap');
-    replayWrap.appendChild(replayBtn);
-    replayWrap.appendChild(menu);
-    actions.appendChild(replayWrap);
+    actions.appendChild(replayMenu.wrap);
 
     // Pinned above the tabs, both of them, because neither is something to go looking for.
     //
@@ -2372,7 +2548,7 @@
     const ref = side === 'req' ? txn.reqBodyRef : txn.resBodyRef;
     if (!ref) return null;
     // Bodies are fetched lazily, only for the selected row — the index stays cheap.
-    const res = await fetch(
+    const res = await source.fetch(
       `/api/sessions/${encodeURIComponent(state.sessionId)}/transactions/${txn.id}/body/${side}`,
     );
     return res.ok ? res.text() : null;
@@ -2521,7 +2697,7 @@
     if (!signal || !signal.dataRef || state.payloads.has(signal.id)) return;
     const id = encodeURIComponent(state.sessionId);
     try {
-      const res = await fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
+      const res = await source.fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
       state.payloads.set(signal.id, JSON.parse(await res.text()));
     } catch {
       // A payload that will not parse is still an observation; it just has nothing to show.
@@ -3108,7 +3284,7 @@
     const failures = [];
     for (const name of names) {
       try {
-        const res = await fetch(
+        const res = await source.fetch(
           `/api/sessions/${encodeURIComponent(state.sessionId || 'latest')}/signals/request`,
           {
             method: 'POST',
@@ -3437,7 +3613,7 @@
       `/api/sessions/${encodeURIComponent(state.sessionId)}` +
       `/signals/${encodeURIComponent(id)}/data`;
     try {
-      const res = await fetch(url);
+      const res = await source.fetch(url);
       const text = await res.text();
       // Payloads are captured verbatim and never redacted; this shows what was recorded.
       const tree = res.ok ? jsonTree(text, `sig:${id}`, `Payload · ${fmtBytes(new TextEncoder().encode(text).length)}`) : null;
@@ -3481,6 +3657,18 @@
 
   let filterTimer = null;
   function applyFilter() {
+    // Every way of setting a filter — typing, a quick chip, an endpoint chip, a marker, a glance
+    // row, "clear filter" — arrives here, which is the only reason one guard covers them all. In
+    // an export the grammar has no evaluator, and letting the request through would empty the
+    // list behind a refusal: a marker click becoming a dead end.
+    if (ARCHIVE) {
+      $('filter').value = '';
+      showFilterError(
+        'Filters are evaluated by the daemon, and this exported session has none behind it. ' +
+        'Drag across the time axis to narrow instead.',
+      );
+      return;
+    }
     clearTimeout(filterTimer);
     filterTimer = setTimeout(() => {
       state.filter = $('filter').value;
@@ -3501,7 +3689,7 @@
    * something is already wrong is just friction.
    */
   async function control(action) {
-    const res = await fetch(`/api/server/${action}`, {
+    const res = await source.fetch(`/api/server/${action}`, {
       method: 'POST',
       // Not decoration: the daemon rejects control requests without it, which is what stops any
       // other page in the browser from reaching a loopback daemon that has no authentication.
@@ -3512,6 +3700,48 @@
       try { message = (await res.json()).error || message; } catch { /* keep the status */ }
       throw new Error(message);
     }
+  }
+
+  /**
+   * This page is an exported file, and it says so in the one place a stopped daemon would.
+   *
+   * Muted rather than the stopped banner's red: a stopped daemon is a problem, an export is the
+   * record working as intended. Both top-bar dots go with the daemon controls instead of being
+   * repurposed — "does the list follow new rows" and "is the page connected" have no answer in a
+   * file, and a dot that meant something else here would mean two things.
+   *
+   * Everything that would have to send something is hidden by `body.archive` in the stylesheet,
+   * including controls built per render (replay, pull), which CSS reaches and an `if` would not.
+   */
+  function enterArchiveMode(archive) {
+    document.body.classList.add('archive');
+    // Nothing will arrive, and "follow the newest row" would scroll a finished record to its end.
+    state.liveTail = false;
+
+    const filter = $('filter');
+    filter.disabled = true;
+    filter.placeholder = 'filters need the daemon — this is an exported session';
+    filter.title = 'The filter grammar is evaluated by the daemon, and an exported file has none. ' +
+      'Drag across the time axis to narrow.';
+
+    const node = $('server-banner');
+    node.replaceChildren();
+    node.hidden = false;
+    node.classList.add('archive');
+    node.appendChild(el('span', 'banner-title', 'exported session'));
+    const meta = archive.meta || {};
+    const exported = new Date(archive.exportedAt);
+    const parts = [
+      meta.sessionId,
+      meta.appId && `${meta.appId} ${meta.appVersion || ''}`.trim(),
+      meta.device && `on ${meta.device}`,
+      Number.isNaN(exported.getTime()) ? null : `exported ${exported.toLocaleString()}`,
+      archive.exporter && `${archive.exporter.name} ${archive.exporter.version}`,
+    ].filter(Boolean);
+    node.appendChild(el('span', 'banner-text', parts.join(' · ')));
+    node.appendChild(el('span', 'spacer'));
+    node.appendChild(el('span', 'banner-hint muted',
+      'read-only: filters, replay, markers and pulls need a running daemon'));
   }
 
   function showServerBanner(text, pending) {
@@ -3814,7 +4044,7 @@
     panel.textContent = '';
 
     try {
-      const res = await fetch('/api/replay', {
+      const res = await source.fetch('/api/replay', {
         method: 'POST',
         headers: { 'X-Inspector-Control': '1', 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3879,7 +4109,7 @@
   function applyDuplicateWindow(valueMs) {
     const ms = Number.isFinite(valueMs) && valueMs >= 0 ? Math.round(valueMs) : 3000;
     state.duplicateWindowMs = ms;
-    localStorage.setItem('inspector.duplicateWindowMs', String(ms));
+    prefs.set('inspector.duplicateWindowMs', String(ms));
     $('dup-window').value = ms;
     // The unfiltered set, matching what the list actually highlights. Counting the filtered rows
     // instead made the summary read 0 while the list showed two tinted rows behind the dialog.
@@ -3894,7 +4124,7 @@
   function applyEndpointLimit(value) {
     const limit = Number.isFinite(value) && value >= 0 ? Math.round(value) : 10;
     state.endpointLimit = limit;
-    localStorage.setItem('inspector.endpointChipLimit', String(limit));
+    prefs.set('inspector.endpointChipLimit', String(limit));
     $('endpoint-limit').value = limit;
 
     const total = new Set(
@@ -3936,7 +4166,7 @@
     status.classList.remove('error');
     status.textContent = 'starting a throwaway server…';
     try {
-      const res = await fetch('/api/mcp/probe', {
+      const res = await source.fetch('/api/mcp/probe', {
         method: 'POST',
         headers: { 'X-Inspector-Control': '1' },
       });
@@ -4038,7 +4268,7 @@
 
     setPeersStatus(`killing ${what}…`);
     try {
-      const res = await fetch(`/api/peers/${peer.pid}/kill${force ? '?force=true' : ''}`, {
+      const res = await source.fetch(`/api/peers/${peer.pid}/kill${force ? '?force=true' : ''}`, {
         method: 'POST',
         headers: { 'X-Inspector-Control': '1' },
       });
@@ -4189,7 +4419,7 @@
   }
 
   async function sessionApi(path, method) {
-    const res = await fetch(path, { method, headers: { 'X-Inspector-Control': '1' } });
+    const res = await source.fetch(path, { method, headers: { 'X-Inspector-Control': '1' } });
     const text = await res.text();
     if (!res.ok) {
       let message = text;
@@ -4424,9 +4654,13 @@
     // are drawn. Only the text of the age nodes changes; nothing re-renders around them.
     setInterval(paintAges, 1000);
 
-    await loadServerInfo();
+    if (ARCHIVE) enterArchiveMode(ARCHIVE);
+    else await loadServerInfo();
+    wireExportMenu();
     await loadSessions();
     await loadTransactions();
-    connectLive();
+    // Not merely pointless in an export: opened from disk, `location.host` is empty and the
+    // socket URL is malformed, so the constructor throws and takes the rest of init with it.
+    if (!ARCHIVE) connectLive();
   })();
 })();

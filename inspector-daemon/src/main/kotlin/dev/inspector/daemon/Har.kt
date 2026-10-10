@@ -204,23 +204,27 @@ object Har {
             )
         }
     }
-
-    /**
-     * Decodes strictly, returning null for anything that is not valid UTF-8.
-     *
-     * `String(bytes)` would never fail: it substitutes U+FFFD, so a PNG would arrive as a page of
-     * replacement characters presented as the response body. The point of failing is to reach the
-     * base64 branch instead.
-     */
-    private fun ByteArray.decodeUtf8OrNull(): String? = runCatching {
-        java.nio.charset.StandardCharsets.UTF_8
-            .newDecoder()
-            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-            .decode(java.nio.ByteBuffer.wrap(this))
-            .toString()
-    }.getOrNull()
 }
+
+/**
+ * Decodes strictly, returning null for anything that is not valid UTF-8.
+ *
+ * `String(bytes)` would never fail: it substitutes U+FFFD, so a PNG would arrive as a page of
+ * replacement characters presented as the response body. The point of failing is to reach the
+ * base64 branch instead.
+ *
+ * Top-level because every export shares it: HAR, the session export's JSON bodies and the HTML
+ * archive all apply the same "text as-is, otherwise base64" rule, and one decoder keeps them
+ * agreeing on which bodies are text.
+ */
+internal fun ByteArray.decodeUtf8OrNull(): String? = runCatching {
+    java.nio.charset.StandardCharsets.UTF_8
+        .newDecoder()
+        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+        .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        .decode(java.nio.ByteBuffer.wrap(this))
+        .toString()
+}.getOrNull()
 
 @Serializable
 data class HarFile(val log: HarLog)

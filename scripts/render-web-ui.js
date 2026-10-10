@@ -44,9 +44,23 @@ const css = fs.readFileSync(`${WEB}/style.css`, 'utf8');
 const js = fs.readFileSync(`${WEB}/app.js`, 'utf8');
 let html = fs.readFileSync(`${WEB}/index.html`, 'utf8');
 
+/*
+ * The same two literal tags `HtmlExport.kt` replaces to build an exported session; change one side
+ * and the other must follow. Checked rather than trusted, because a `replace` that matches nothing
+ * is silent — the snapshot would load the stylesheet from a path that does not exist, and the
+ * export would ship a page with no code in it.
+ */
+const STYLE_TAG = '<link rel="stylesheet" href="/style.css">';
+const SCRIPT_TAG = '<script src="/app.js"></script>';
+for (const tag of [STYLE_TAG, SCRIPT_TAG]) {
+  if (!html.includes(tag)) {
+    console.error(`index.html no longer contains ${tag}; update this script and HtmlExport.kt together`);
+    process.exit(2);
+  }
+}
 html = html
-  .replace('<link rel="stylesheet" href="/style.css">', `<style>\n${css}\n</style>`)
-  .replace('<script src="/app.js"></script>', '');
+  .replace(STYLE_TAG, `<style>\n${css}\n</style>`)
+  .replace(SCRIPT_TAG, '');
 
 const errors = [];
 const virtualConsole = new VirtualConsole();
@@ -1978,6 +1992,27 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       ? `yes ("${doc.getElementById('counts').textContent}")`
       : `NO - "${doc.getElementById('counts').textContent}"`;
     result.conn = doc.getElementById('conn').dataset.state === 'connected' ? 'yes (connected)' : `NO - ${doc.getElementById('conn').dataset.state}`;
+
+    // The export menu: offered only when there is a session, and each link names a route this
+    // daemon actually answers — pressed, not read, because the hrefs are filled in as it opens.
+    const exportHost = doc.getElementById('export-host');
+    const exportButton = exportHost.querySelector('button');
+    if (!hasSession) {
+      result.exportMenu = exportHost.hidden ? 'yes (hidden: nothing to export)' : 'NO - offered with no session';
+    } else if (exportHost.hidden || !exportButton) {
+      result.exportMenu = 'NO - not offered';
+    } else {
+      exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      const id = encodeURIComponent(doc.getElementById('session-picker').value);
+      const expected = ['export.html', 'export.md', 'export.json', 'har'].map((p) => `/api/sessions/${id}/${p}`);
+      const hrefs = [...exportHost.querySelectorAll('a.menu-item')].map((a) => a.getAttribute('href'));
+      const opened = !exportHost.querySelector('.menu').hidden;
+      const statuses = await Promise.all(hrefs.map((h) => fetch(ORIGIN + h).then((r) => r.status).catch(() => 0)));
+      exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+      result.exportMenu = opened && JSON.stringify(hrefs) === JSON.stringify(expected) && statuses.every((c) => c === 200)
+        ? `yes (${hrefs.length} links, all 200)`
+        : `NO - opened ${opened}, hrefs ${hrefs.join(' ')}, statuses ${statuses.join(' ')}`;
+    }
 
     // Live: the button names its state, and resuming re-reads the session.
     const live = doc.getElementById('live-btn');

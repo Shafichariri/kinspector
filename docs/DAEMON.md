@@ -522,6 +522,37 @@ Posting a marker deliberately needs **no** `X-Inspector-Control` header. That he
 any page you have open from POSTing to the daemon's control endpoints, and a marker is not a
 weapon.
 
+### Exporting a whole session
+
+One file holding everything a session recorded — every call with both bodies, every signal and
+payload, every marker — in the form that suits whoever receives it:
+
+```bash
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.html'   # the web UI, offline
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.md'     # a document to read
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.json'   # everything, for tools
+```
+
+The web UI's **export** menu, beside the session picker, offers the same three plus HAR. An agent
+can call the MCP tool `export_session`, which writes the files to `~/.inspector/exports/` (or a
+`dir` it names) and returns the paths.
+
+| File | What it is |
+|---|---|
+| `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane and JSON tree all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), replay, adding markers, pulls, and process control. The time axis still narrows the view. |
+| `.md` | **A readable record.** The session's details, then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
+| `.json` | **The complete document**: session metadata and summary, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
+
+All three are the **whole session** — no filter, no page limit. That differs from the live web
+UI, which lists at most 1000 calls, so the export of a long session holds more than the page shows.
+
+Two things the exports say out loud rather than leave to be inferred: what **redaction** removed,
+in the Markdown header and on each call, and that a row is one **attempt** of a call that
+redirected or retried.
+
+The files carry whatever capture recorded, credentials included unless the app enabled redaction.
+Read one before you send it anywhere.
+
 ### Exporting a session as HAR
 
 For handing a session to somebody who does not have Inspector. HAR 1.2 is what Chrome and Firefox
