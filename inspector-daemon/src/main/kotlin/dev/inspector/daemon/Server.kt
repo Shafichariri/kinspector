@@ -20,6 +20,7 @@ import dev.inspector.model.WireMsg
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.withCharset
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
@@ -488,12 +489,24 @@ class InspectorDaemon(
         get("/style.css") { call.respondResource("style.css", ContentType.Text.CSS) }
     }
 
+    /** Builds the export document once and renders it as an attachment named for the session. */
+    private suspend fun io.ktor.server.application.ApplicationCall.respondExport(
+        extension: String,
+        contentType: ContentType,
+        render: (SessionExportDocument) -> String,
+    ) {
+        val dir = resolveSession() ?: return
+        val document = SessionExport.build(dir, repository, daemonVersion())
+        val name = SessionExport.fileName(document, dir, extension)
+        response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
+        respondText(render(document), contentType)
+    }
+
     private suspend fun io.ktor.server.application.ApplicationCall.respondResource(
         name: String,
         contentType: ContentType,
     ) {
-        val bytes = this@InspectorDaemon.javaClass.classLoader
-            .getResourceAsStream("web/$name")?.readBytes()
+        val bytes = webResource(name)
         if (bytes == null) {
             respondError(HttpStatusCode.NotFound, "missing bundled resource web/$name")
             return
@@ -682,8 +695,9 @@ class InspectorDaemon(
             val filter = call.request.queryParameters["filter"].orEmpty()
             val transactions = try {
                 // The cap is the session, not a page: a HAR missing rows because of an unmentioned
-                // default limit would be a quietly incomplete export.
-                repository.queryTransactions(dir, filter, offset = 0, limit = Int.MAX_VALUE).items
+                // default limit would be a quietly incomplete export. Not `queryTransactions`,
+                // which clamps any limit to 1000 and did exactly that to sessions above it.
+                repository.filterTransactions(dir, filter)
             } catch (e: FilterParseException) {
                 return@get call.respondError(HttpStatusCode.BadRequest, e.message ?: "invalid filter")
             }
@@ -697,6 +711,25 @@ class InspectorDaemon(
             val name = meta?.sessionId ?: dir.fileName.toString()
             call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name.har\"")
             call.respondText(har, ContentType.Application.Json)
+        }
+
+        /*
+         * One whole session as one file: JSON for agents and tools, Markdown for a person or a
+         * ticket, and HTML that is the web UI itself working from disk. See `SessionExport`.
+         *
+         * No `filter`, unlike HAR: the unit here is the session, and "everything that happened"
+         * is the question these answer. Read-only, so no control header.
+         */
+        get("/api/sessions/{id}/export.json") {
+            call.respondExport("json", ContentType.Application.Json) { SessionExport.toJson(it) }
+        }
+        get("/api/sessions/{id}/export.md") {
+            call.respondExport("md", ContentType("text", "markdown").withCharset(Charsets.UTF_8)) {
+                ExportMarkdown.render(it)
+            }
+        }
+        get("/api/sessions/{id}/export.html") {
+            call.respondExport("html", ContentType.Text.Html.withCharset(Charsets.UTF_8)) { HtmlExport.render(it) }
         }
 
         get("/api/sessions/{id}/signals") {
