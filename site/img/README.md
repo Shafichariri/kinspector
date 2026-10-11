@@ -1,16 +1,16 @@
 # Screenshots for the landing page
 
-Each card in `site/index.html` has a drawn stand-in and a comment naming the file that replaces it.
-Drop the PNG here, swap the mock `<div>` for an `<img>`, keep the `alt` text descriptive.
+All of these are real renders, regenerated rather than hand-edited. Retake them after a visible UI
+change.
 
-| File | What to capture | Source |
+| Files | What | How |
 |---|---|---|
-| `overlay.png` | List with a marker, a signal row and a 4xx | `:sample:android` on an emulator, or `inspector-ui/build/screenshots/` from `ListRenderTest` |
-| `overlay-ios.png` | Same, on the iOS simulator (shows the Dynamic Island insets) | `sample/ios` |
-| `web-ui.png` | A row selected with the JSON tree open | Real browser against the sample session |
-| `mcp.png` | An agent answering a question with 2–3 tool calls | Your editor, against the sample session |
-| `daemon.png` | `inspector serve` + the archive folder | Terminal |
-| `demo.mp4` | 10–15 s: tap pill → open call → same call in the browser | Screen recording |
+| `overlay-*.png` | The in-app overlay at 360dp | `./gradlew :inspector-ui:jvmTest --tests '*ListRenderTest*'`, then copy from `inspector-ui/build/screenshots/` |
+| `web-{list,timeline,waterfall}-{dark,light}.png` | The web UI against the desktop sample's scripted session | Scratch daemon on its own port and `--data` dir, sample pointed at it, `-Dinspector.sample.autofire=true`, then headless Chrome at 1440×860 @2x, resized to 2000px wide |
 
-**Only sample-app traffic.** This repository is public: no real app's hosts, paths, tokens or
-names may appear in any image. Redaction is off by default, so check headers before you capture.
+**Never use your everyday daemon or archive for these.** It holds real app traffic, and redaction
+is off by default. This repository is public, so no real app's hosts, paths, tokens or names may
+appear in any image.
+
+Still wanted: the overlay on a real device frame (emulator / simulator / iPhone), an MCP session in
+an editor, and a 10–15 s clip of pill → call → same call in the browser.
