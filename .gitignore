@@ -25,3 +25,6 @@ DerivedData/
 # up in `git status` is not something a failing build would tell you about.
 *.html
 !inspector-daemon/src/main/resources/web/*.html
+# The landing page is hand-written too, and the same reasoning applies: name the one page, not the
+# folder, so a session render saved under site/ by mistake is still caught.
+!site/index.html
