@@ -709,6 +709,44 @@ kbd {
   cursor: pointer;
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+/* The export menu opens from the top bar's left side, where right-aligning would run off screen. */
+.menu.menu-left { left: 0; right: auto; min-width: 210px; }
+/* Export items are links, so the browser saves the file under the name the daemon sends. */
+a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
+
+/*
+ * An exported session, opened from disk. There is no daemon, so nothing that would send something
+ * to one is drawn: process control, the live toggle, deletion, the filter chips (the grammar is
+ * evaluated by the daemon), adding a marker, pulls, replay and export itself.
+ *
+ * `!important` because two of these are toggled by script on every render — `renderBrowser`
+ * un-hides the pull button, and the replay menu is rebuilt with each detail pane — and an author
+ * `display` rule otherwise beats `[hidden]` here.
+ */
+body.archive #live-btn,
+body.archive .daemon-group,
+body.archive #session-delete,
+body.archive #export-host,
+body.archive #chips-label,
+body.archive #chips,
+body.archive #endpoint-chips,
+body.archive #marker-form,
+body.archive #marker-status,
+body.archive #browser-pull,
+body.archive #browser-pull-status,
+body.archive .replay-menu,
+body.archive .replay-menu + .menu { display: none !important; }
+.server-banner.archive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+}
+.server-banner.archive[hidden] { display: none; }
+.server-banner.archive .banner-title { font-weight: 600; color: var(--fg); }
 .detail-head .path { font-family: var(--mono); font-size: 14px; word-break: break-all; }
 .detail-head .method { font-size: 11px; flex: 0 0 auto; }
 

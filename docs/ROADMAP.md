@@ -297,7 +297,53 @@ throughout and the daemon still bound to `127.0.0.1` alone.
 **Not verified on a phone**, because there is still no Android app module to install — see below.
 The tunnel is proven; the app running inside it is not.
 
-### iOS hardware — the one that needs a decision
+### ~~iOS hardware~~ — done over USB, 2026-09-24; released in 1.2.0
+
+**Built through usbmuxd, and the authentication question below never had to be answered.** The
+record of how it was decided is kept under the line, because it is still the reason a wider bind
+remains the wrong fix.
+
+**The spike came first**, because the design rested on one fact no documentation settles: whether a
+usbmuxd connection reaches a listener bound only to the *phone's* loopback. Tested on an iPhone 12
+Pro with a throwaway app that listened on `127.0.0.1:8100` and a 40-line usbmuxd client:
+
+| Test | Result |
+|---|---|
+| Host talks to usbmuxd directly — no `iproxy`, no Homebrew | ✅ the phone is listed twice, `USB` and `Network` |
+| USB route → the loopback-only listener | ✅ connects; on the phone the peer is `127.0.0.1` |
+| 8 MB echo through the tunnel | ✅ byte-identical, about 33 MB/s both ways |
+| Network route → the same listener | ❌ refused, though it reaches lockdownd — it dials the LAN address |
+| A closed port | refused cleanly (`Number: 3`), so "app not running" is distinguishable |
+| App backgrounded 30 s | ⚠️ still answered, but launched by `devicectl`, which may prevent suspension |
+
+usbmuxd only dials **into** the phone, so the design inverts the connection: on a physical iPhone
+`StreamSink` listens on its own loopback and `inspector serve` runs a bridge that dials it and
+relays into the daemon's own `/ingest`. The daemon's bind did not move. Design notes and the
+traps are in `AGENTS.md`, under the `adb reverse` decision.
+
+**Verified end to end on the same phone:** the real iOS sample streamed 188 transactions into the
+archive as `platform: ios-device`; a replay was re-signed by the app across the cable; kill and
+relaunch reconnects in about a second. That last one needed a fix found only on hardware — the
+listener lacked `reuseAddress`, so a relaunch sat in `EADDRINUSE` while the killed link was in
+TIME_WAIT — and only a Native test can guard it, because the JVM enables `SO_REUSEADDR` by default.
+
+**Still open:**
+
+- ~~**`INTEGRATION.md` is untouched on purpose.**~~ Done in 1.2.0: v56 rewrote §6f's closing
+  paragraph and §9 item 7, and its changelog entry says *bump, download the daemon, plug in*.
+- **Edges not tried on hardware:** a cable pulled mid-session, an app backgrounded after an ordinary
+  home-screen launch, two Inspector apps on one phone. Two apps would contend for one port; the
+  second reports it, and each can be given its own `port`, but the bridge dials one port per
+  daemon.
+- **The phone's loopback is now a boundary.** Any process on the phone can reach the listener, the
+  way any process on the Mac reaches the daemon — which includes asking a registered
+  `ReplaySigner` to sign. Same class of exposure as today, debug-only, but the signer is the
+  sharpest thing in it. Worth a paired-secret handshake if this ever leaves debug builds, which it
+  must not.
+
+---
+
+*The record, as it stood before the spike:*
 
 There is no `adb reverse` equivalent. That leaves widening the daemon's bind to a LAN interface,
 and `Server.kt` is explicit about what that costs:
@@ -360,6 +406,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 | 4c — proxy capture | `AGENTS.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
 | 4b — report what we cannot see | `AGENTS.md` | Not designed; flagged there as possibly not worth it |
 | HAR export | `implementation-plan.md` Phase 3 stretch | ~~Unbuilt~~ **Done, 2026-09-18.** `GET /api/sessions/{id}/har`, taking the same `filter` as the transaction list. Everything the format asks for and capture never saw is `-1`; attempts and redaction are disclosed per entry, because HAR has no field for either and silence reads as a claim |
+| Whole-session export | Requested 2026-10-10 | **Done, 2026-10-10.** `export.html`, `export.md` and `export.json` under `/api/sessions/{id}/`, the web UI's export menu, and the `export_session` MCP tool. The HTML is the web UI itself in an archive mode, not a report written for the purpose. Building it found the HAR export silently stopping at 1000 rows |
 | Signal payload redaction | `SIGNALS.md`, `schema.md` | `Signal.redacted` is reserved and always empty; the schema field is already there |
 | Disconnected-transaction backfill | `schema.md` | Explicitly a v2 candidate |
 

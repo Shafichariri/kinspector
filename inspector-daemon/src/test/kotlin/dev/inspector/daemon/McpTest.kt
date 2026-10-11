@@ -140,15 +140,16 @@ class McpTest {
     // --- protocol ----------------------------------------------------------------------------
 
     /** Feeds lines through a real [McpServer] and returns the response frames. */
-    private fun exchange(vararg requests: String): List<JsonObject> {
+    private fun exchange(vararg requests: String, version: String? = null): List<JsonObject> {
         val out = ByteArrayOutputStream()
         val err = ByteArrayOutputStream()
-        McpServer(
-            tools = tools,
-            input = requests.joinToString("\n").reader().buffered(),
-            output = PrintStream(out, true),
-            log = PrintStream(err, true),
-        ).run()
+        val input = requests.joinToString("\n").reader().buffered()
+        val server = if (version == null) {
+            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true))
+        } else {
+            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true), version = version)
+        }
+        server.run()
         return out.toString().lineSequence()
             .filter { it.isNotBlank() }
             .map { Json.parseToJsonElement(it).jsonObject }
@@ -234,6 +235,23 @@ class McpTest {
         assertEquals("inspector", result.getValue("serverInfo").jsonObject.getValue("name").jsonPrimitive.content)
     }
 
+    /**
+     * `serverInfo.version` is the version it was built as, not a literal.
+     *
+     * It said `1.0.0` from 1.0.0 onward, 1.1.0 included. Two halves, because each alone passes
+     * with the bug: a value passed in must come out unchanged, and by default the server must
+     * report what [daemonVersion] reads — `unknown` under test, where there is no jar manifest,
+     * and the release number in a built daemon, which the release job's smoke test drives.
+     */
+    @Test
+    fun initialize_reports_the_version_it_was_built_as() {
+        val init = """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}"""
+        fun version(frames: List<JsonObject>) =
+            frames.single().getValue("result").jsonObject.getValue("serverInfo").jsonObject.getValue("version").jsonPrimitive.content
+        assertEquals("9.9.9-test", version(exchange(init, version = "9.9.9-test")))
+        assertEquals(daemonVersion(), version(exchange(init)))
+    }
+
     @Test
     fun notifications_get_no_reply_at_all() {
         // A response to a notification is a protocol violation; some clients treat it as fatal.
@@ -262,12 +280,39 @@ class McpTest {
                 "list_sessions", "session_summary", "list_transactions",
                 "get_transaction", "explain", "get_body", "add_marker",
                 "timeline", "current", "list_signals", "get_signal", "request_signal",
+                "export_session",
             ),
             listed.toSet(),
         )
     }
 
     // --- tools -------------------------------------------------------------------------------
+
+    @Test
+    fun export_session_writes_every_format_and_names_the_files() {
+        val out = tmp.resolve("handoff")
+        val text = callTool("export_session", """{"dir":"$out"}""")
+        for (ext in listOf("html", "md", "json")) {
+            val file = out.resolve("2026-08-16T10-14-02_app_dev_debug.$ext")
+            assertTrue(Files.isRegularFile(file), "$ext was not written: $text")
+            assertContains(text, file.toAbsolutePath().toString())
+        }
+        assertContains(text, "4 calls")
+        assertContains(Files.readString(out.resolve("2026-08-16T10-14-02_app_dev_debug.md")), "upstream_timeout")
+    }
+
+    @Test
+    fun export_session_defaults_beside_the_sessions_not_inside_one() {
+        callTool("export_session", """{"format":"json"}""")
+        // Inside a session folder it would count towards that session's size and be pruned with it.
+        assertTrue(Files.isRegularFile(tmp.resolve("exports/2026-08-16T10-14-02_app_dev_debug.json")))
+        assertFalse(Files.exists(config.sessionsDir.resolve("2026-08-16T10-14-02_app_dev_debug/exports")))
+    }
+
+    @Test
+    fun export_session_refuses_a_format_it_does_not_write() {
+        assertContains(callToolExpectingError("export_session", """{"format":"pdf"}"""), "Accepted: html, md, json, all")
+    }
 
     @Test
     fun a_bad_filter_comes_back_as_a_readable_tool_error_not_a_transport_failure() {

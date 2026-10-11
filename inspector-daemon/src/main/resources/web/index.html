@@ -13,6 +13,11 @@
     <select id="session-picker" title="Session"></select>
     <button id="session-delete" class="btn btn-sm btn-quiet"
             title="Delete this session from ~/.inspector. Permanent — click twice.">✕</button>
+    <!--
+      The whole session as one file: HTML that is this page working offline, Markdown to read,
+      JSON to process, HAR for DevTools. Filled in by app.js, which builds the menu.
+    -->
+    <span id="export-host" hidden></span>
     <span id="counts" class="muted mono"></span>
     <span class="spacer"></span>
     <!--
@@ -70,7 +75,7 @@
       <input id="filter" type="text" spellcheck="false" autocomplete="off"
              placeholder="status&gt;=400  path:/v2  slower:500ms">
 
-      <span class="row-label">filters</span>
+      <span id="chips-label" class="row-label">filters</span>
       <div class="chips" id="chips">
         <button class="chip" data-filter="has:error">errors</button>
         <button class="chip" data-filter="status&gt;=500">5xx</button>

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
 import dev.inspector.model.NetworkTransaction
+import dev.inspector.model.prettyJson
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -19,11 +19,6 @@ import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Txn
 import dev.inspector.model.WireMsg
 import io.ktor.client.HttpClient
-import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.webSocket
-import io.ktor.websocket.Frame
-import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +68,8 @@ fun interface ReplaySigner {
 }
 
 /**
- * Streams captured transactions to the host daemon over `WS /ingest`.
+ * Streams captured transactions to the host daemon over `WS /ingest` — or, on a physical iPhone,
+ * over USB, where the host dials in instead; see [UsbListenerTransport].
  *
  * The contract, in order of importance:
  * - **The app never waits on this.** [onTransaction] only offers into a bounded DROP_OLDEST
@@ -84,7 +80,8 @@ fun interface ReplaySigner {
  *   continues one session folder instead of fragmenting a debugging run.
  *
  * [host] defaults per platform with no discovery; see [defaultDaemonHost] for what that means
- * on a phone as opposed to an emulator.
+ * on a phone as opposed to an emulator. On a physical iPhone [port] is the one the app listens on,
+ * and it must match the daemon's: the USB bridge dials the port number `inspector serve` runs on.
  */
 class StreamSink(
     private val client: ClientInfo,
@@ -146,7 +143,14 @@ class StreamSink(
 
     private var reportedError: String? = null
     private var resumeSessionId: String? = null
-    private var http: HttpClient? = null
+
+    /**
+     * How the host is reached. A `var` only so this module's tests can drive the USB route on the
+     * JVM, where [listensForUsb] is never true; nothing else assigns it. Internal members are
+     * name-mangled on the JVM, so this stays out of the public API and the parity golden file.
+     */
+    internal var transport: Transport =
+        if (listensForUsb(host)) UsbListenerTransport(port) else WebSocketTransport(host, port, engineFactory)
 
     fun start() {
         scope.launch { runConnectionLoop() }
@@ -154,7 +158,7 @@ class StreamSink(
 
     fun stop() {
         queue.close()
-        http?.close()
+        transport.close()
         scope.cancel()
         _state.value = StreamState.Disconnected
     }
@@ -186,7 +190,7 @@ class StreamSink(
                 // message printed every 250ms is one nobody reads.
                 if (described != reportedError) {
                     reportedError = described
-                    println("inspector: cannot reach daemon at $host:$port — $described")
+                    println("inspector: cannot reach ${transport.description} — $described")
                     println("inspector: ${connectionHelp(host, port)}")
                 }
             } else {
@@ -202,87 +206,84 @@ class StreamSink(
     }
 
     private suspend fun connectAndPump() {
-        val http = this.http ?: engineFactory().also { this.http = it }
+        transport.session { link -> pump(link) }
+    }
 
-        http.webSocket(host = host, port = port, path = "/ingest") {
-            send(Frame.Text(InspectorJson.encodeToString<WireMsg>(Hello(client, resumeSessionId))))
+    private suspend fun pump(link: WireLink) {
+        link.send(InspectorJson.encodeToString<WireMsg>(Hello(client, resumeSessionId)))
 
-            val ack = incoming.receive()
-            if (ack is Frame.Text) {
-                val message = runCatching {
-                    InspectorJson.decodeFromString<WireMsg>(ack.readText())
-                }.getOrNull()
-                if (message is HelloAck) resumeSessionId = message.sessionId
-            }
-            _state.value = StreamState.Connected
-            _lastError.value = null
-            reportedError = null
-            println("inspector: connected to daemon at $host:$port")
+        val ack = link.receive()
+            ?: throw IllegalStateException("the host closed the connection before acknowledging")
+        val message = runCatching { InspectorJson.decodeFromString<WireMsg>(ack) }.getOrNull()
+        if (message is HelloAck) resumeSessionId = message.sessionId
+        _state.value = StreamState.Connected
+        _lastError.value = null
+        reportedError = null
+        println("inspector: connected to ${transport.description}")
 
-            // Two concurrent jobs, each cancelling the other on completion.
-            //
-            // The sender alone is not enough: when the queue is idle it parks in `receive()`, so
-            // a daemon that dies goes unnoticed until the next transaction happens to arrive —
-            // which is exactly the reconnect bug the round-trip test caught. Reading `incoming`
-            // is what actually observes the peer going away.
-            coroutineScope {
-                val sender = launch {
-                    for (item in queue) {
-                        val frame = when (item) {
-                            is Outbound.Transaction -> InspectorJson.encodeToString<WireMsg>(
-                                Txn(
-                                    txn = item.txn,
-                                    reqBody = item.req?.let { encodeBody(it) },
-                                    resBody = item.res?.let { encodeBody(it) },
-                                    reqBodyB64 = item.req?.let { !isUtf8(it) } ?: false,
-                                    resBodyB64 = item.res?.let { !isUtf8(it) } ?: false,
-                                )
+        // Two concurrent jobs, each cancelling the other on completion.
+        //
+        // The sender alone is not enough: when the queue is idle it parks in `receive()`, so
+        // a daemon that dies goes unnoticed until the next transaction happens to arrive —
+        // which is exactly the reconnect bug the round-trip test caught. Reading the link is
+        // what actually observes the peer going away.
+        coroutineScope {
+            val sender = launch {
+                for (item in queue) {
+                    val frame = when (item) {
+                        is Outbound.Transaction -> InspectorJson.encodeToString<WireMsg>(
+                            Txn(
+                                txn = item.txn,
+                                reqBody = item.req?.let { encodeBody(it) },
+                                resBody = item.res?.let { encodeBody(it) },
+                                reqBodyB64 = item.req?.let { !isUtf8(it) } ?: false,
+                                resBodyB64 = item.res?.let { !isUtf8(it) } ?: false,
                             )
-                            is Outbound.MarkerOut ->
-                                InspectorJson.encodeToString<WireMsg>(MarkerMsg(item.marker))
-                            // `data = null` on the row: the payload rides beside it, and the
-                            // daemon is what assigns `dataRef`. Sending both would ship the
-                            // payload twice.
-                            is Outbound.SignalOut -> InspectorJson.encodeToString<WireMsg>(
-                                SignalMsg(
-                                    signal = item.signal.copy(data = null),
-                                    data = item.data?.let { encodeBody(it) },
-                                    dataB64 = item.data?.let { !isUtf8(it) } ?: false,
-                                )
+                        )
+                        is Outbound.MarkerOut ->
+                            InspectorJson.encodeToString<WireMsg>(MarkerMsg(item.marker))
+                        // `data = null` on the row: the payload rides beside it, and the
+                        // daemon is what assigns `dataRef`. Sending both would ship the
+                        // payload twice.
+                        is Outbound.SignalOut -> InspectorJson.encodeToString<WireMsg>(
+                            SignalMsg(
+                                signal = item.signal.copy(data = null),
+                                data = item.data?.let { encodeBody(it) },
+                                dataB64 = item.data?.let { !isUtf8(it) } ?: false,
                             )
-                        }
-                        send(Frame.Text(frame))
+                        )
                     }
-                    // Queue closed means stop() was called: say goodbye if the socket still lives.
-                    runCatching { send(Frame.Text(InspectorJson.encodeToString<WireMsg>(Bye))) }
+                    link.send(frame)
                 }
+                // Queue closed means stop() was called: say goodbye if the socket still lives.
+                runCatching { link.send(InspectorJson.encodeToString<WireMsg>(Bye)) }
+            }
 
-                // Reads to observe the peer going away, and now also to serve the host's sign
-                // requests. The read itself is still what detects a dead daemon, so the liveness
-                // role is unchanged.
-                val watcher = launch {
-                    runCatching {
-                        for (frame in incoming) {
-                            if (frame !is Frame.Text) continue
-                            val message = runCatching {
-                                InspectorJson.decodeFromString<WireMsg>(frame.readText())
-                            }.getOrNull()
-                            // Launched rather than awaited inline: signing can touch a hardware
-                            // key and may prompt for user presence, and a provider may read a
-                            // cache or a database. Blocking here would stall the liveness read
-                            // for as long as either takes.
-                            when (message) {
-                                is SignRequest -> launch { answerSignRequest(message) }
-                                is SignalRequest -> launch { answerSignalRequest(message) }
-                                else -> Unit
-                            }
+            // Reads to observe the peer going away, and now also to serve the host's sign
+            // requests. The read itself is still what detects a dead daemon, so the liveness
+            // role is unchanged.
+            val watcher = launch {
+                runCatching {
+                    while (true) {
+                        val text = link.receive() ?: break
+                        val message = runCatching {
+                            InspectorJson.decodeFromString<WireMsg>(text)
+                        }.getOrNull()
+                        // Launched rather than awaited inline: signing can touch a hardware
+                        // key and may prompt for user presence, and a provider may read a
+                        // cache or a database. Blocking here would stall the liveness read
+                        // for as long as either takes.
+                        when (message) {
+                            is SignRequest -> launch { link.answerSignRequest(message) }
+                            is SignalRequest -> launch { link.answerSignalRequest(message) }
+                            else -> Unit
                         }
                     }
                 }
-
-                watcher.invokeOnCompletion { sender.cancel() }
-                sender.invokeOnCompletion { watcher.cancel() }
             }
+
+            watcher.invokeOnCompletion { sender.cancel() }
+            sender.invokeOnCompletion { watcher.cancel() }
         }
     }
 
@@ -297,7 +298,7 @@ class StreamSink(
      * On failure a [SignalError] goes back instead, so the host reports why rather than waiting
      * out its timeout and calling the app unresponsive.
      */
-    private suspend fun DefaultClientWebSocketSession.answerSignalRequest(request: SignalRequest) {
+    private suspend fun WireLink.answerSignalRequest(request: SignalRequest) {
         val error = runCatching {
             Inspector.answerSignalRequest(request.tag, request.name, request.requestId)
         }.getOrElse { "${it::class.simpleName}: ${it.message}" }
@@ -305,10 +306,8 @@ class StreamSink(
         if (error != null) {
             runCatching {
                 send(
-                    Frame.Text(
-                        InspectorJson.encodeToString<WireMsg>(
-                            SignalError(requestId = request.requestId, error = error)
-                        )
+                    InspectorJson.encodeToString<WireMsg>(
+                        SignalError(requestId = request.requestId, error = error)
                     )
                 )
             }
@@ -322,7 +321,7 @@ class StreamSink(
      * timeout and then reporting something vague; naming the reason here is the difference between
      * "no signer is registered in this build" and "replay didn't work".
      */
-    private suspend fun DefaultClientWebSocketSession.answerSignRequest(request: SignRequest) {
+    private suspend fun WireLink.answerSignRequest(request: SignRequest) {
         val reply = if (signer == null) {
             SignResponse(
                 requestId = request.requestId,
@@ -345,7 +344,7 @@ class StreamSink(
             }
         }
         // The socket may already be gone; the host times out on its side either way.
-        runCatching { send(Frame.Text(InspectorJson.encodeToString<WireMsg>(reply))) }
+        runCatching { send(InspectorJson.encodeToString<WireMsg>(reply)) }
     }
 
     private fun encodeBody(bytes: ByteArray): String =

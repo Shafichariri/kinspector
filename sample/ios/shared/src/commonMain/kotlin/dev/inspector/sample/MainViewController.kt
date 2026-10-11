@@ -54,8 +54,8 @@ fun MainViewController(): UIViewController {
 
     // No host argument, same as Android. On the simulator `defaultDaemonHost()` is 127.0.0.1, and
     // the simulator shares the Mac's loopback, so the daemon is simply there. On a physical iPhone
-    // it is the phone's own loopback and nothing is listening — which is the unsupported case, and
-    // `connectionHelp` says so rather than offering an Android remedy.
+    // it is the phone's own loopback, where the sink *listens*: attach the phone by cable to a Mac
+    // running `inspector serve`, and the daemon's USB bridge dials in.
     val stream = StreamSink(
         client = defaultClientInfo(appId = "dev.inspector.sample", appVersion = "0.1.0"),
         signer = { method, url ->

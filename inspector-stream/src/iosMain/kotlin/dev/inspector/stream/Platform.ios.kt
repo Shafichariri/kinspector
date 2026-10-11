@@ -20,8 +20,10 @@ import io.ktor.client.plugins.websocket.WebSockets
 internal expect val IS_IOS_SIMULATOR: Boolean
 
 actual fun defaultClientInfo(appId: String, appVersion: String, buildType: String): ClientInfo {
-    // Still read for the name it gives — "iPhone 17 Pro" beats UIDevice's name, which on a
-    // simulator is the same string and on hardware is whatever the owner called their phone.
+    // Still read for the name it gives — "iPhone 17 Pro" beats UIDevice's name. On hardware there
+    // is no such variable and UIDevice is all there is, and since iOS 16 it answers the bare
+    // "iPhone" unless the app holds the user-assigned-device-name entitlement — which is what the
+    // first sessions recorded from a physical iPhone were labelled.
     val environment = NSProcessInfo.processInfo.environment
     val simulatorName = environment["SIMULATOR_DEVICE_NAME"] as? String
     return ClientInfo(
@@ -34,23 +36,38 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
     )
 }
 
-/** The iOS simulator shares the host's network stack, so loopback reaches the daemon directly. */
+/**
+ * Loopback on both kinds of iOS target, meaning different things. The simulator shares the host's
+ * network stack, so it reaches the daemon directly. A physical iPhone's loopback is its own, and
+ * there it is where the app *listens* for the daemon's USB bridge — see [listensForUsb].
+ */
 actual fun defaultDaemonHost(): String = "127.0.0.1"
 
 /**
+ * A physical iPhone waits for the host over USB; the simulator dials, like a desktop app. Decided
+ * by [IS_IOS_SIMULATOR], which is fixed at link time, so the two cannot be confused at runtime.
+ */
+internal actual fun listensForUsb(host: String): Boolean = !IS_IOS_SIMULATOR && isLoopback(host)
+
+/**
  * There is no `adb reverse` here and no cleartext exemption to forget, so neither belongs in this
- * message. On a physical iPhone loopback is the phone's own, and nothing is listening on it: that
- * needs the daemon to bind beyond loopback, which needs authentication first. Saying so is more
- * use than a remedy that does not exist.
+ * message. On a physical iPhone the failure is the listener's, not a dial's: nothing reaches this
+ * code merely because the cable is out — the app just waits — so what does arrive is a port
+ * another app on the phone already holds, or a link that broke mid-frame.
  */
 internal actual fun connectionHelp(host: String, port: Int): String =
     if (IS_IOS_SIMULATOR) {
         "is `inspector serve` running? The simulator shares the host's loopback, so $host:$port " +
             "is the same address you would open in a browser."
+    } else if (isLoopback(host)) {
+        "this is a physical iPhone, so the app listens on its own $host:$port and the host dials " +
+            "in over USB: attach it by cable to a Mac running `inspector serve --port $port`. If " +
+            "the port is taken, another app on this phone is probably running Inspector on it — " +
+            "give each app its own port, and run the daemon on the same one."
     } else {
-        "this is a physical device, and it cannot reach $host:$port — that is the phone's own " +
-            "loopback, not the host machine's. Physical iOS devices are not supported yet: the " +
-            "daemon binds loopback only and widening it needs authentication first."
+        "this is a physical iPhone dialling $host:$port directly, which only works if something " +
+            "you set up forwards that address to the daemon. Leave the host at its default to use " +
+            "the USB route instead."
     }
 
 actual fun defaultStreamClient(): HttpClient = HttpClient(Darwin) {

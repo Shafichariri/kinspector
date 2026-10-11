@@ -95,6 +95,8 @@ Options:
 | `--data DIR` | `~/.inspector` | Archive root |
 | `--max-sessions N` | `100` | Prune oldest beyond this |
 | `--max-mb N` | `300` | Prune oldest beyond this total size |
+| `--usb-port N` | the `--port` | Port a USB-attached iPhone's app listens on — see below |
+| `--no-usb` | bridge on | Do not bridge USB-attached iPhones |
 
 Both retention ceilings apply together: pruning continues until the archive is under *both*.
 
@@ -139,9 +141,39 @@ adb reverse --remove tcp:8099
 The app still needs the cleartext exemption for `127.0.0.1` — see `INTEGRATION.md` §6d. That is a
 separate thing from the tunnel, and forgetting it fails the same silent way.
 
-**iOS hardware has no equivalent** and is not supported. There is no `adb reverse` for an iPhone,
-so the only routes are widening the daemon's bind to the network — which needs authentication
-first, and the daemon has none — or a `usbmuxd` tunnel, which nobody has built.
+### A physical iPhone, over USB
+
+Plug it in and run `serve`. Nothing else: no forward to set up, and no flag.
+
+There is no `adb reverse` on iOS, and the connection runs the other way round instead. On a physical
+iPhone the app **listens** on the phone's own `127.0.0.1:8099`, and `serve` starts a bridge that
+finds the phone through usbmuxd — the service Xcode uses, present on every Mac — and dials that
+port. The daemon still binds your Mac's loopback and nothing else. You will see:
+
+```
+inspector: usb bridge on — a USB-attached iPhone is dialled on port 8099
+inspector: usb — iPhone 00000000-… attached; waiting for an app listening on port 8099
+inspector: usb — connected to 00000000-… on port 8099
+inspector: started session …
+```
+
+The bridge dials again every two seconds, so the order does not matter: start the app first or the
+daemon first, unplug and replug, relaunch the app. A phone with no app running says `attached` once
+and then nothing.
+
+- **The port is one number on both ends.** The bridge dials the daemon's own `--port`. If your app
+  passes a `port` to `StreamSink`, run the daemon on the same one.
+- **`--usb-port N`** dials a different port than the daemon listens on — for a second daemon beside
+  your usual one while the app keeps its default: `serve --port 8231 --usb-port 8099`.
+- **`--no-usb`** turns the bridge off.
+- **Cable only.** A phone paired over Wi-Fi also shows up in usbmuxd, and is skipped: the app's
+  listener is bound to the phone's loopback, which the network route cannot reach. That is what
+  keeps the listener off the phone's network.
+- **Two Inspector apps on one phone** cannot both listen on 8099. The second prints why; give it its
+  own port and run a second daemon on that port.
+
+If nothing connects, the app's log says what the listener saw — `inspector: cannot reach host over
+USB …` names the port and the reason.
 
 ### It refuses to start: "port 8099 is already in use"
 
@@ -489,6 +521,37 @@ that reads one.
 Posting a marker deliberately needs **no** `X-Inspector-Control` header. That header exists to stop
 any page you have open from POSTing to the daemon's control endpoints, and a marker is not a
 weapon.
+
+### Exporting a whole session
+
+One file holding everything a session recorded — every call with both bodies, every signal and
+payload, every marker — in the form that suits whoever receives it:
+
+```bash
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.html'   # the web UI, offline
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.md'     # a document to read
+curl -O -J 'http://127.0.0.1:8099/api/sessions/latest/export.json'   # everything, for tools
+```
+
+The web UI's **export** menu, beside the session picker, offers the same three plus HAR. An agent
+can call the MCP tool `export_session`, which writes the files to `~/.inspector/exports/` (or a
+`dir` it names) and returns the paths.
+
+| File | What it is |
+|---|---|
+| `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane and JSON tree all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), replay, adding markers, pulls, and process control. The time axis still narrows the view. |
+| `.md` | **A readable record.** The session's details, then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
+| `.json` | **The complete document**: session metadata and summary, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
+
+All three are the **whole session** — no filter, no page limit. That differs from the live web
+UI, which lists at most 1000 calls, so the export of a long session holds more than the page shows.
+
+Two things the exports say out loud rather than leave to be inferred: what **redaction** removed,
+in the Markdown header and on each call, and that a row is one **attempt** of a call that
+redirected or retried.
+
+The files carry whatever capture recorded, credentials included unless the app enabled redaction.
+Read one before you send it anywhere.
 
 ### Exporting a session as HAR
 
