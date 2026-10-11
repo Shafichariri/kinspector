@@ -1187,8 +1187,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       result.chainPinned = chainAt !== -1 && chainAt < tabsAt
         ? 'above the tabs'
         : 'NO - an attempt chain is tabbed away';
+      // Every chain exercises this: a first attempt is the default, so the archive never writes
+      // its `attempt` field. Read raw it printed "undefined." and sorted out of place, which is
+      // what a strictly ascending run of integers catches.
+      const numbers = [...doc.querySelectorAll('#detail .chain-row')].map((r) => r.textContent.split('.')[0]);
+      const ascending = numbers.every((n, i) => /^\d+$/.test(n) && (i === 0 || +n > +numbers[i - 1]));
+      result.chainOrder = ascending ? `yes (${numbers.join(', ')})` : `NO - read ${numbers.join(', ')}`;
     } else {
       result.chainPinned = 'n/a (no chained call in this session)';
+      result.chainOrder = 'n/a (no chained call in this session)';
     }
 
     const row = rows.find(Boolean);
@@ -2217,6 +2224,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('one panel at a time:', detailTabProbe.onePanel);
   console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a', '- remembered:', detailTabProbe.remembersAcrossRows ?? 'n/a');
   console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
+  console.error('chain numbered     :', detailTabProbe.chainOrder, '(a first attempt has no `attempt` field)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
   console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
   console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);

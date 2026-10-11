@@ -1437,7 +1437,7 @@
       `started ${txn.ts}`,
     ];
     if (txn.error) lines.push(`error ${txn.error}`);
-    if (txn.attempt > 1) lines.push(`attempt ${txn.attempt} of this call`);
+    if (attemptOf(txn) > 1) lines.push(`attempt ${attemptOf(txn)} of this call`);
     if (txn.redacted && txn.redacted.length) {
       // Say it was removed, not that it was absent, or the agent concludes none was sent.
       lines.push(`redacted at capture: ${txn.redacted.join(', ')}`);
@@ -2232,6 +2232,18 @@
     return marks;
   }
 
+  /**
+   * Which attempt of its call a row is, 1-based.
+   *
+   * The archive is written with `encodeDefaults = false`, so a first attempt — the default — has no
+   * `attempt` field at all, on every row of every call. Read raw, the chain sorted on
+   * `undefined - 2`, which is NaN, and printed "undefined. GET /flaky" last, under the attempts it
+   * came before. `> 1` happened to be right, and that is the only reason the list never showed it.
+   */
+  function attemptOf(txn) {
+    return txn.attempt ?? 1;
+  }
+
   /** Wall-clock start of the request, which is what makes a duplicate visible in the list. */
   function fmtClock(ts) {
     if (!ts) return '';
@@ -2274,8 +2286,8 @@
     // Stripped when the bar above already says this front. The bar is what makes that safe: it is
     // on screen, it does not scroll away, and it names the exact prefix that was removed.
     const path = el('span', 'path', scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path);
-    if (txn.attempt > 1) {
-      const badge = el('span', 'attempt', ` ·attempt ${txn.attempt}`);
+    if (attemptOf(txn) > 1) {
+      const badge = el('span', 'attempt', ` ·attempt ${attemptOf(txn)}`);
       path.appendChild(badge);
     }
     if (duplicate) {
@@ -2359,14 +2371,14 @@
       pane.appendChild(el('div', 'banner redacted', txn.redacted.join(', ')));
     }
 
-    const chain = state.transactions.filter((t) => t.callId === txn.callId).sort((a, b) => a.attempt - b.attempt);
+    const chain = state.transactions.filter((t) => t.callId === txn.callId).sort((a, b) => attemptOf(a) - attemptOf(b));
     if (chain.length > 1) {
       pane.appendChild(el('div', 'section-title', 'Attempt chain'));
       for (const attempt of chain) {
         const line = el(
           'div',
           `chain-row${attempt.id === txn.id ? ' current' : ''}`,
-          `${attempt.attempt}. ${attempt.method} ${attempt.path} → ${attempt.status ?? 'ERR'} (${fmtMs(attempt.ms)})`,
+          `${attemptOf(attempt)}. ${attempt.method} ${attempt.path} → ${attempt.status ?? 'ERR'} (${fmtMs(attempt.ms)})`,
         );
         if (attempt.id !== txn.id) line.onclick = () => select(attempt.id);
         pane.appendChild(line);
