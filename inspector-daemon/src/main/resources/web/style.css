@@ -35,6 +35,15 @@
      would read as a 4xx row. */
   --sel-bg: rgb(var(--accent-rgb) / 0.10);
   --dup-bg: rgb(var(--m-put) / 0.08);
+  /* Five hues for an app's own signal tags, handed out in order of first appearance. Chosen by
+     running the dataviz validator against the four lane colours above them: none introduces a
+     pair closer than the blue/purple pair the lanes already have, and every one clears the
+     chroma floor. Words always travel beside them — a station and a log line both name each kind. */
+  --tag-1: #d55181;
+  --tag-2: #199e70;
+  --tag-3: #40e0ff;
+  --tag-4: #d4ff6a;
+  --tag-5: #f08fb0;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -62,6 +71,12 @@
     --m-delete: 198 42 47;
     --sel-bg: rgb(37 99 235 / 0.08);
     --dup-bg: rgb(124 58 237 / 0.07);
+    /* Stepped for a light surface: the dark-theme cyan, lime and pink fell under 3:1 on white. */
+    --tag-1: #b83a73;
+    --tag-2: #13845d;
+    --tag-3: #0a7fa3;
+    --tag-4: #8a7a00;
+    --tag-5: #e0609c;
   }
 }
 

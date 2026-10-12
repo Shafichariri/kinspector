@@ -2090,6 +2090,8 @@
     const lastMono = Math.max(
       ...[...state.allTransactions, ...state.signals, ...state.markers, ...state.screens].map((x) => x.mono),
     );
+    // Tag colours go out in the order tags first happened, not the order they are drawn in.
+    for (const s of [...state.signals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
     const metro = el('div', 'pv-metro');
     metro.setAttribute('role', 'list');
     metro.setAttribute('aria-label', 'Screens visited');
@@ -2143,6 +2145,31 @@
     return segments;
   }
 
+  /** Lane colours the stylesheet already gives these tags; everything else is an app's own. */
+  const LANE_TAGS = ['screen', 'state', 'cache', 'session'];
+  const TAG_SLOTS = 5;
+
+  /**
+   * The colour an app's own tag wears in this session, or null once the five slots are taken.
+   *
+   * Handed out in order of first appearance and **remembered for the session**, so a colour
+   * follows its tag: a filter that hides one tag must not repaint the rest. A sixth tag stays the
+   * generic grey rather than getting a generated hue — past five, colour stops telling tags apart
+   * and the words beside the bar are what do.
+   */
+  function tagColour(tag) {
+    if (LANE_TAGS.includes(tag)) return null;
+    if (state.tagColoursSession !== state.sessionId) {
+      state.tagColoursSession = state.sessionId;
+      state.tagColours = new Map();
+    }
+    if (!state.tagColours.has(tag)) {
+      const used = [...state.tagColours.values()].filter(Boolean).length;
+      state.tagColours.set(tag, used < TAG_SLOTS ? `var(--tag-${used + 1})` : null);
+    }
+    return state.tagColours.get(tag);
+  }
+
   const segmentText = (segments) => segments.map((s) => `${s.count} ${s.key}`).join(' · ');
 
   /** The segments as a thin bar, each kind as wide as its share, in its lane colour. */
@@ -2151,6 +2178,8 @@
     const total = segments.reduce((n, s) => n + s.count, 0);
     for (const s of segments) {
       const part = el('span', `pv-seg ${s.key === 'network' ? 'pv-seg-network' : `lane-${laneFor(s.key)}`}`);
+      const own = s.key === 'network' ? null : tagColour(s.key);
+      if (own) part.style.background = own;
       part.style.flexGrow = String(s.count / Math.max(1, total));
       part.title = `${s.count} ${s.key}`;
       bar.appendChild(part);
@@ -2328,6 +2357,8 @@
       const repeat = visit.screen && tagOf(signal) === 'screen';
       const chip = el('button', `pv-chip pv-chip-sig lane-${laneFor(signal.tag)}`);
       chip.type = 'button';
+      const own = repeat ? null : tagColour(tagOf(signal));
+      if (own) chip.style.borderLeftColor = own;
       chip.dataset.id = signal.id;
       chip.appendChild(el('span', 'pv-chip-tag', repeat ? 'step' : signal.tag));
       chip.appendChild(el('span', null, repeat ? `${signal.name} again` : signal.name));
@@ -2464,6 +2495,8 @@
     const lane = laneFor(signal.tag);
     const isRepeat = previous.has(signal.id) && run.entries.length === 1;
     const node = el('div', `pv-item pv-sig lane-${lane}${isRepeat ? ' pv-repeat' : ''}`);
+    const own = isRepeat ? null : tagColour(tagOf(signal));
+    if (own) node.style.borderLeftColor = own;
     node.dataset.kind = isRepeat ? 'repeat' : run.entries.length > 1 ? 'run' : 'signal';
     node.dataset.id = signal.id;
     node.dataset.tag = signal.tag;
