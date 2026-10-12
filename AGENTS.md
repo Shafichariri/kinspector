@@ -749,6 +749,53 @@ components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from t
 `color-mix(… currentColor …)` was the first attempt and was dropped because a silent failure on an
 older engine drops the whole `background` declaration and the badge with it.
 
+**The path, the waterfall and the axis band are one rule: `visits()` in `:inspector-model`, mirrored
+in `app.js`.** The waterfall had its own segmentation in `app.js` before the path view existed, and
+it was wrong in the way a second copy usually is: it read the *filtered* signals, so typing `path:`
+took every screen away, and it dropped any screen with no matching calls, which draws a route that
+skips a screen the user was on — a navigation nobody made. Three surfaces now take one skeleton.
+`VisitsTest` is the authority; `render-web-ui.js` lifts the mirror out of the real file and runs the
+same cases, so the copy cannot drift without the probe saying so.
+
+Four rules are decisions, and each was argued before it was built:
+
+- **Strictly by start, no grace window.** A visit owns `[from, to)`. A `screen` signal that lands a
+  few ms after the calls its view-model fired puts them on the previous screen, and that is left
+  alone: any window would also move the `POST` that *caused* the navigation onto the screen it
+  navigated to. The fix is in the app — emit at navigation commit — and `INTEGRATION.md` §12c says
+  so. A call that outlives its visit stays put and says where it finished.
+- **A same-millisecond tie goes by capture `seq`.** `onClick { tap; navigate() }` lands both in one
+  millisecond, and a tie handed to the arriving screen put the tap on the screen it led to — seen
+  in the sample's own route on the first look at the map. `seq` is one counter in `Clocks.kt`,
+  taken right after `monoMs()` at every capture site; when either side lacks it the tie still goes
+  to the arrival, so older archives read exactly as before.
+- **The skeleton ignores the filter.** `state.screens` is fetched with `tag:screen` whatever the
+  filter is, and the leading "before first screen" visit is skeleton too, so `visits()` takes
+  `sessionStart`. Without that, a filter matching nothing at launch removed the launch column —
+  found by the probe on its first run, which is why it is a parameter rather than a comment.
+- **Consecutive same-name screens are one visit.** Later ones are `repeats`, drawn in place as a
+  step with what changed in the payload — a double-firing effect is sometimes the bug.
+- **The path ignores the order toggle and hides it**, because reversed it reads as the user walking
+  backwards; and **a failed call is never hidden** — a collapsed log line names every failure as a
+  chip, and an expanded one floats failures above its `+N more`.
+
+The layout is a sticky map of stations over a log with one line per visit. The first build was a
+row of tall side-by-side columns; the user judged it, four alternatives were mocked up, and this
+was the one chosen. The map answers "where did they go" without scrolling, the log reads like the
+story, and live growth is a station appended and a line added rather than another column offscreen.
+
+The order control is hidden on the path with `hidden`, and `.seg2` sets `display`, so it rendered
+anyway — the `[hidden]` trap again, invisible to jsdom and found only by looking in a real browser.
+`.seg2` is now in `auditHiddenPanes`. Live follow and the no-yank pill need layout and so were
+verified in a browser, not by the probe: driven by a script on `WS /ingest`, the first (column)
+layout followed new visits at its end, held still when scrolled back, and announced the new visit
+instead. The map-and-log layout was seen following live; its scrolled-back case was not exercised,
+because the test route was too short to overflow the pane.
+
+`auditDrawerCss` used to read the first `max-width` block in the stylesheet; the path's narrow rule
+landed earlier in the file and the audit failed on CSS that had not changed. It now finds the block
+that lays out `#panes`.
+
 **Signals merge into the overlay's existing list, and a run's head is not its earliest member.**
 `SIGNALS.md` → "Out, deliberately" said the overlay stays traffic-only; that is overturned, and
 the bullet is annotated rather than deleted because the reasoning is still the record. The fact it

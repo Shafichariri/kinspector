@@ -45,5 +45,10 @@ compose.desktop {
         System.getProperty("inspector.sample.autofire")?.let {
             jvmArgs += "-Dinspector.sample.autofire=$it"
         }
+        // ./gradlew :sample:desktop:run -Dinspector.sample.port=8231 — stream to a second daemon,
+        // so a scripted run does not land in the archive of the one you use day to day.
+        System.getProperty("inspector.sample.port")?.let {
+            jvmArgs += "-Dinspector.sample.port=$it"
+        }
     }
 }

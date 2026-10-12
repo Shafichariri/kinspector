@@ -540,8 +540,10 @@ One tab per kind of thing the session recorded, because each kind reads differen
 
 | Tab | What it is |
 |---|---|
-| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL |
-| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12), and the session opens on it |
+| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL. Every session opens here |
+| `path` | The screens the user moved through: a map of stations along the top, and beneath it one line per visit with the calls, signals and markers that started while it was on. Click a station or a line to open it. Needs `screen` signals (§12c); without them it is one line saying so |
+| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12) |
+| `waterfall` | Calls grouped by the screen that was on when each started, with a bar per call showing where the time went |
 | one per tag | A key list beside one key's detail, for `cache`, `screen`, `state`, and any tag Inspector has never heard of |
 
 On `all`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value was
@@ -557,7 +559,14 @@ value is not drawn, because a filter you can only leave on is not a filter. Wher
 been seen to answer, a **pull latest** button asks the app for a fresh snapshot.
 
 Reading order — oldest first or newest first — is the toolbar's order control, and it applies to the key list
-and to each key's history as well as to the traffic list.
+and to each key's history as well as to the traffic list. Not to `path`: a route has one order,
+and the control is hidden there.
+
+On `path` the filter narrows what is *inside* each visit and never removes a visit, so the route
+stays the one the user took; a visit with nothing matching shrinks to a stub. A failed call is
+never hidden: a collapsed line names every failed call, and an expanded one keeps failures above
+its `+N more`. While live, the log follows new visits only if you are already at its end — scroll
+back and a `new visit ↓` pill appears instead.
 
 The columns are filled from your payload — see §12d for the field names the tag browser reads.
 
@@ -1112,6 +1121,23 @@ LaunchedEffect(backStack) {
         }
 }
 ```
+
+**Emit it when navigation commits, not when the new screen has composed.** The web UI's `path`
+view puts every call on the screen that was showing when the call *started*, with no grace window.
+A `screen` signal sent from the destination's own `LaunchedEffect` arrives after its view-model's
+`init` has already fired requests, so those requests land on the *previous* screen. With a
+`NavController`, `addOnDestinationChangedListener` fires at commit, before composition:
+
+```kotlin
+navController.addOnDestinationChangedListener { _, destination, arguments ->
+    Inspector.signal(tag = "screen", name = destination.route.orEmpty())
+}
+```
+
+The collector above is fine too, as long as it lives beside the back stack rather than inside the
+destination. A tap signalled in the same click handler that navigates stays on the screen it was
+made on, even when both land in the same millisecond: capture order breaks the tie. Re-sending the same name — a recomposition, a wizard stepping within one route — is
+drawn as one visit with each later signal as a step inside it, not as a navigation.
 
 ### 12d. Caches, and answering "what is in there *now*"
 

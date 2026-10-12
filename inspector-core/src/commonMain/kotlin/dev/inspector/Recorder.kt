@@ -4,6 +4,7 @@ import dev.inspector.internal.CapturedSignal
 import dev.inspector.internal.CapturedTxn
 import dev.inspector.internal.RingBuffer
 import dev.inspector.internal.monoMs
+import dev.inspector.internal.nextSeq
 import dev.inspector.internal.newId
 import dev.inspector.internal.nowIso
 import dev.inspector.internal.sizeOfCapturedSignal
@@ -81,6 +82,7 @@ internal class Recorder(
             val id: String,
             val ts: String,
             val mono: Long,
+            val seq: Long,
             val tag: String,
             val name: String,
             val payload: JsonElement?,
@@ -150,7 +152,7 @@ internal class Recorder(
     }
 
     fun mark(label: String, source: String = MarkerSource.APP) {
-        val marker = Marker(ts = nowIso(), mono = monoMs(), label = label, source = source)
+        val marker = Marker(ts = nowIso(), mono = monoMs(), seq = nextSeq(), label = label, source = source)
         queue.trySend(Event.Marked(marker))
     }
 
@@ -172,6 +174,7 @@ internal class Recorder(
             id = newId(),
             ts = nowIso(),
             mono = now(),
+            seq = nextSeq(),
             tag = tag,
             name = name,
             payload = payload,
@@ -417,6 +420,7 @@ internal class Recorder(
             id = event.id,
             ts = event.ts,
             mono = event.mono,
+            seq = event.seq,
             tag = event.tag,
             name = event.name,
             data = retained,

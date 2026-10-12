@@ -39,6 +39,7 @@ internal class InspectorOkHttpInterceptor(private val recorder: Recorder) : Inte
         val callId = newId()
         val ts = nowIso()
         val startMono = monoMs()
+        val startSeq = nextSeq()
 
         val reqCapture = captureRequestBody(request.body, config)
 
@@ -48,7 +49,7 @@ internal class InspectorOkHttpInterceptor(private val recorder: Recorder) : Inte
             val hits = mutableListOf<String>()
             recorder.submit(
                 request.toTransaction(
-                    id = id, ts = ts, mono = startMono, callId = callId,
+                    id = id, ts = ts, mono = startMono, seq = startSeq, callId = callId,
                     ms = monoMs() - startMono,
                     status = null,
                     error = cause.describe(),
@@ -69,7 +70,7 @@ internal class InspectorOkHttpInterceptor(private val recorder: Recorder) : Inte
             val hits = mutableListOf<String>()
             recorder.submit(
                 request.toTransaction(
-                    id = id, ts = ts, mono = startMono, callId = callId,
+                    id = id, ts = ts, mono = startMono, seq = startSeq, callId = callId,
                     ms = monoMs() - startMono,
                     status = response.code,
                     reqCapture = reqCapture,
@@ -241,6 +242,7 @@ private fun Request.toTransaction(
     id: String,
     ts: String,
     mono: Long,
+    seq: Long?,
     callId: String,
     ms: Long,
     status: Int?,
@@ -252,6 +254,7 @@ private fun Request.toTransaction(
     id = id,
     ts = ts,
     mono = mono,
+    seq = seq,
     method = method.uppercase(),
     scheme = url.scheme,
     host = url.host,

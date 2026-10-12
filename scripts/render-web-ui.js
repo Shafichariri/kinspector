@@ -194,7 +194,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
    * such tab — at which point all three started asserting tag-browser behaviour against a view
    * that is not one.
    */
-  const BUILT_IN_VIEWS = ['network', 'all', 'waterfall'];
+  const BUILT_IN_VIEWS = ['network', 'path', 'all', 'waterfall'];
   const firstTagBrowserTab = () =>
     [...doc.querySelectorAll('#tabs .tab')].find((t) => !BUILT_IN_VIEWS.includes(t.dataset.view));
 
@@ -1140,8 +1140,11 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
   /** Is the detail pane a drawer at all below the breakpoint? Read from the stylesheet. */
   function auditDrawerCss(cssText) {
-    const block = cssText.match(/@media \(max-width: \d+px\) \{([\s\S]*?)\n\}/);
-    if (!block) return 'NO - no narrow-width media block';
+    // The block that lays out `#panes`, not merely the first narrow block: another view's narrow
+    // rule placed earlier in the file used to make this read the wrong block and fail.
+    const block = [...cssText.matchAll(/@media \(max-width: \d+px\) \{([\s\S]*?)\n\}/g)]
+      .find((m) => /#panes/.test(m[1]));
+    if (!block) return 'NO - no narrow-width media block lays out #panes';
     const body = block[1];
     // Anchored at the end of the declaration: `1fr` alone also prefix-matches `1fr 1fr`, which
     // is the exact two-column layout this is supposed to catch.
@@ -1558,9 +1561,177 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     return result;
   }
 
+
+  /**
+   * The `app.js` mirror of `visits()`, lifted out of the real file and run against the cases
+   * `VisitsTest` pins in `:inspector-model`. A mirror nobody runs drifts silently; this is the
+   * check that it says the same thing as the Kotlin it copies.
+   */
+  function probeVisitsMirror() {
+    const from = js.indexOf('  // --- visits: the rule');
+    const to = js.indexOf('  /**\n   * One colour per screen name');
+    if (from < 0 || to < from) return { ok: 'NO - the visits markers moved; this check has to follow them' };
+    const { visits, visitIndexAt } = new Function(
+      `const tagOf = (s) => String(s.tag).toLowerCase();\n${js.slice(from, to)}\nreturn { visits, visitIndexAt };`,
+    )();
+    let seq = 0;
+    const scr = (name, mono, tag = 'screen') => ({ id: `s${++seq}`, tag, name, mono });
+    const call = (id, mono, ms = 10) => ({ id, mono, ms });
+    const mark = (label, mono) => ({ label, mono });
+    const shape = (list) => list.map((v) => `${v.screen ? v.screen.name : '-'}[${v.entries.map((e) =>
+      e.kind === 'txn' ? e.txn.id : e.kind === 'marker' ? `M:${e.marker.label}` : `S:${e.signal.tag}/${e.signal.name}`,
+    ).join(' ')}]`).join(' ');
+    const failures = [];
+    const expect = (name, got, want) => { if (got !== want) failures.push(`${name}: got ${got}`); };
+
+    expect('start', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('a', 150), call('b', 350)], [], [])), 'Home[a] Cart[b]');
+    expect('tie', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('a', 300)], [], [])), 'Home[] Cart[a]');
+    expect('no grace', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('pay', 299)], [], [])), 'Home[pay] Cart[]');
+    expect('revisit', shape(visits([scr('A', 100), scr('B', 200), scr('A', 300)], [], [], [])), 'A[] B[] A[]');
+    expect('repeats', shape(visits([scr('Checkout', 100), scr('Checkout', 200), scr('Done', 400)], [call('a', 150), call('b', 250)], [], [])),
+      'Checkout[a S:screen/Checkout b] Done[]');
+    expect('leading', shape(visits([scr('Home', 100)], [call('config', 20), call('a', 120)], [], [])), '-[config] Home[a]');
+    expect('no screens', shape(visits([], [call('a', 10), call('b', 20)], [], [])), '-[a b]');
+    expect('empty', shape(visits([], [], [], [])), '');
+    expect('kept empty', shape(visits([scr('Product', 100), scr('Cart', 200), scr('Checkout', 300)], [call('a', 120), call('b', 320)], [], [])),
+      'Product[a] Cart[] Checkout[b]');
+    expect('seq tie', shape(visits(
+      [{ ...scr('Home', 100), seq: 1 }, { ...scr('Cart', 300), seq: 3 }],
+      [{ ...call('init', 300), seq: 4 }], [], [{ ...scr('add_to_cart', 300, 'tap'), seq: 2 }],
+    )), 'Home[S:tap/add_to_cart] Cart[init]');
+    expect('no seq tie', shape(visits(
+      [{ ...scr('Home', 100), seq: 1 }, { ...scr('Cart', 300), seq: 3 }], [], [], [scr('add_to_cart', 300, 'tap')],
+    )), 'Home[] Cart[S:tap/add_to_cart]');
+    expect('leading kept', shape(visits([scr('Home', 100)], [], [], [], 20)), '-[] Home[]');
+    expect('no leading at start', shape(visits([scr('Home', 100)], [], [], [], 100)), 'Home[]');
+    expect('skeleton only', shape(visits([scr('Home', 100)], [], [], [scr('Ghost', 200)])), 'Home[]');
+    expect('in place', shape(visits([scr('Cart', 100)], [call('pay', 200)], [mark('about to pay', 200)], [scr('orders', 250, 'cache')])),
+      'Cart[M:about to pay pay S:cache/orders]');
+    expect('case', shape(visits([scr('Home', 100, 'Screen')], [call('a', 150)], [], [])), 'Home[a]');
+    const spanning = visits([scr('Cart', 100), scr('Confirm', 300)], [call('orders', 250, 120)], [], []);
+    expect('finish', `${visitIndexAt(spanning, 250)} ${visitIndexAt(spanning, 370)} ${visitIndexAt(spanning, 50)}`, '0 1 -1');
+    return { ok: failures.length ? `NO - ${failures.join('; ')}` : 'yes (17 cases from VisitsTest)' };
+  }
+
+  /**
+   * The path tab: a map of stations on top, and a log with one line per visit beneath it.
+   *
+   * The route is checked against the archive independently of `visits()` — consecutive distinct
+   * screen names, plus a leading column when anything came first — because a probe that called the
+   * same function would agree with any bug in it. Then the two rules that are decisions rather
+   * than layout: the filter narrows what is inside a visit and never removes one, and a failed call
+   * is never folded away.
+   */
+  async function probePath() {
+    const tabs = [...doc.querySelectorAll('#tabs .tab')];
+    const tab = tabs.find((t) => t.dataset.view === 'path');
+    const result = { tabShown: Boolean(tab) };
+    if (!tab) return result;
+    result.second = tabs.indexOf(tab) === 1 ? 'yes' : `NO - position ${tabs.indexOf(tab) + 1}`;
+
+    await click(tab);
+    await new Promise((r) => setTimeout(r, 600));
+    const cols = () => [...doc.querySelectorAll('#path .pv-visit')];
+    const stops = () => [...doc.querySelectorAll('#path .pv-stop')];
+    result.columns = cols().length;
+    result.orderHidden = doc.getElementById('order-seg').hidden ? 'yes' : 'NO - the order control is showing';
+
+    const id = encodeURIComponent(doc.getElementById('session-picker').value);
+    const [txns, signals, markers] = await Promise.all([
+      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
+      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+      fetch(`${ORIGIN}/api/sessions/${id}/markers`).then((r) => r.json()).catch(() => []),
+    ]);
+    const all = Array.isArray(signals) ? signals : [];
+    const screens = all.filter((s) => String(s.tag).toLowerCase() === 'screen').sort((a, b) => a.mono - b.mono);
+    const names = [];
+    for (const s of screens) if (names[names.length - 1] !== s.name) names.push(s.name);
+    const others = [...(txns.items || []), ...markers, ...all.filter((s) => String(s.tag).toLowerCase() !== 'screen')];
+    const earliest = others.length ? Math.min(...others.map((x) => x.mono)) : null;
+    const leading = earliest !== null && (!screens.length || earliest < screens[0].mono);
+    const expected = [...(leading ? [''] : []), ...names];
+    const drawn = cols().map((c) => c.dataset.screen);
+    result.route = expected.join(' > ') === drawn.join(' > ')
+      ? `yes (${drawn.length} visits${leading ? ', one before the first screen' : ''})`
+      : `NO - expected ${expected.join(' > ') || 'nothing'}, drew ${drawn.join(' > ') || 'nothing'}`;
+    const stations = stops().map((s) => s.dataset.screen);
+    result.mapMatchesLog = stations.join(' > ') === drawn.join(' > ')
+      ? `yes (${stations.length} stations)`
+      : `NO - map ${stations.join(' > ')}, log ${drawn.join(' > ')}`;
+
+    // Conservation through the card counts, which survive folding: every call on exactly one visit.
+    const counted = cols().reduce((n, c) => n + Number((c.querySelector('.pv-stats')?.textContent.match(/^(\d+) call/) || [0, 0])[1]), 0);
+    const inList = (txns.items || []).length;
+    result.everyCallOnce = counted === inList ? `yes (${counted} calls)` : `NO - cards count ${counted}, session has ${inList}`;
+
+    // Every failure named: a line's "N failed" against the failures its chips account for when
+    // collapsed, or the failed rows drawn when expanded.
+    const failedIn = (c) => Number((c.querySelector('.pv-failed')?.textContent.match(/(\d+) failed/) || [0, 0])[1]);
+    const shownIn = (c) => (c.classList.contains('pv-open')
+      ? [...c.querySelectorAll('.pv-call .pv-status')].filter((n) => /s[45x]/.test(n.className)).length
+      : [...c.querySelectorAll('.pv-chip[data-failed]')].reduce((n, chip) => n + Number(chip.dataset.failed), 0));
+    const hiding = cols().filter((c) => failedIn(c) !== shownIn(c));
+    const summarised = cols().filter((c) => c.querySelector('.pv-chip[title="expand this visit"]')).length;
+    result.errorsUnfolded = hiding.length
+      ? `NO - ${hiding.map((c) => c.dataset.screen || 'leading').join(', ')} hide a failure`
+      : `yes (${summarised} summarised ${summarised === 1 ? 'line' : 'lines'} in this session)`;
+
+    // A station opens its line. Expanded, the same failure rule must still hold.
+    const target = stops()[Math.min(1, stops().length - 1)];
+    if (target) {
+      const index = target.dataset.visit;
+      await click(target);
+      await new Promise((r) => setTimeout(r, 300));
+      const line = doc.querySelector(`#path .pv-visit[data-visit="${index}"]`);
+      result.stationOpensLine = line && line.classList.contains('pv-open') && line.classList.contains('pv-focus')
+        ? `yes (${line.dataset.screen || 'leading'})`
+        : 'NO - the line did not open';
+      const expandedHiding = cols().filter((c) => failedIn(c) !== shownIn(c));
+      result.expandedUnfolded = expandedHiding.length ? 'NO - an expanded line hides a failure' : 'yes';
+    }
+
+    const call = doc.querySelector('#path .pv-chip-call, #path .pv-call');
+    if (call) {
+      await click(call);
+      await new Promise((r) => setTimeout(r, 400));
+      result.callSelects = doc.getElementById('detail').hidden ? 'NO - nothing opened' : 'opens the call';
+    }
+    const card = doc.querySelector('#path .pv-name.pv-sig');
+    if (card) {
+      await click(card);
+      await new Promise((r) => setTimeout(r, 400));
+      const title = doc.querySelector('#detail .detail-title')?.textContent;
+      result.cardSelects = title === card.textContent
+        ? 'opens the screen signal'
+        : `NO - detail shows ${title || 'nothing'}`;
+    }
+
+    // A filter that matches no call: every visit must still be there, as a stub.
+    if (drawn.length) {
+      const input = doc.getElementById('filter');
+      input.value = 'path:/no-such-endpoint-anywhere';
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 1200));
+      const filtered = cols().map((c) => c.dataset.screen);
+      const stubs = cols().filter((c) => c.classList.contains('pv-stub')).length;
+      result.filterKeepsRoute = filtered.join(' > ') === drawn.join(' > ')
+        ? `yes (${stubs} of ${filtered.length} visits are stubs)`
+        : `NO - ${drawn.length} visits became ${filtered.length}`;
+      input.value = '';
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+
+    const network = tabs.find((t) => t.dataset.view === 'network');
+    if (network) await click(network);
+    await settle();
+    return result;
+  }
   const bundleProbe = await probeBundles();
   const axisProbe = await probeAxis();
   const waterfallProbe = await probeWaterfall();
+  const pathProbe = await probePath();
+  const visitsMirrorProbe = probeVisitsMirror();
   const glanceProbe = await probeGlance();
   /**
    * The replay editor, which is `REPLAY.md` step 3.
@@ -1937,7 +2108,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
     const panes = [
       '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
-      '.drawer-scrim', '.axis', '.waterfall',
+      '.drawer-scrim', '.axis', '.waterfall', '.path', '.path-new',
+      // Hidden on the path tab, where order has no meaning; it rendered anyway until this was here.
+      '.seg2',
     ];
     const setsDisplay = new Set();
     const guarded = new Set();
@@ -2215,6 +2388,19 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('trailing calls     :', waterfallProbe.trailingCalls ?? 'n/a');
   console.error('every bar visible  :', waterfallProbe.barsVisible ?? 'n/a');
   console.error('bar selects call   :', waterfallProbe.rowSelects ?? 'n/a');
+  console.error('--- path ---');
+  console.error('visits mirror      :', visitsMirrorProbe.ok);
+  console.error('path tab           :', pathProbe.tabShown, `- second: ${pathProbe.second ?? 'n/a'}, ${pathProbe.columns ?? 0} visits`);
+  console.error('route matches      :', pathProbe.route ?? 'n/a');
+  console.error('map matches log    :', pathProbe.mapMatchesLog ?? 'n/a');
+  console.error('station opens line :', pathProbe.stationOpensLine ?? 'n/a');
+  console.error('expanded unfolded  :', pathProbe.expandedUnfolded ?? 'n/a');
+  console.error('every call once    :', pathProbe.everyCallOnce ?? 'n/a');
+  console.error('failures unfolded  :', pathProbe.errorsUnfolded ?? 'n/a', '(a 500 behind +N more hides what you came for)');
+  console.error('filter keeps route :', pathProbe.filterKeepsRoute ?? 'n/a', '(a route with a hole names a navigation nobody made)');
+  console.error('order control      :', pathProbe.orderHidden ?? 'n/a', '(hidden: a path has one order)');
+  console.error('call opens         :', pathProbe.callSelects ?? 'n/a');
+  console.error('screen card opens  :', pathProbe.cardSelects ?? 'n/a');
   console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
   console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
   console.error('empty pane (tag)   :', glanceProbe.tag);

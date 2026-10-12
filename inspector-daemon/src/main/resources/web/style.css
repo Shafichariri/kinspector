@@ -324,6 +324,235 @@ body { display: flex; flex-direction: column; }
 
 .wf-ms { flex: 0 0 52px; text-align: right; font-size: 11px; }
 
+/* Visits kept for the route's sake but with nothing matching: present, and plainly quiet. */
+.wf-group.wf-dim, .wf-group.wf-stub { opacity: 0.55; }
+.wf-empty { padding: 0 10px 4px 26px; font-size: 11px; }
+
+/* --- the path ----------------------------------------------------------- */
+
+/* A map on top and a log beneath. The map is the route at a glance and stays put while the log
+   scrolls under it; the log is one line per visit, readable top to bottom like the story it is. */
+.path { padding: 0 0 20px; }
+.path[hidden] { display: none !important; }
+
+/* Sticky so it is visible wherever the line you are reading sits. */
+.path-new {
+  position: sticky;
+  top: 6px;
+  z-index: 3;
+  display: block;
+  margin: 6px 12px 0 auto;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.path-new[hidden] { display: none !important; }
+
+.pv-empty { padding: 20px; }
+.pv-dim { opacity: 0.4; }
+
+/* --- the map --- */
+.pv-metro {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  overflow-x: auto;
+  padding: 10px 12px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+}
+.pv-stop {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+/* The line runs through every dot; the first and last stop only draw the half facing inward. */
+.pv-stop::before {
+  content: '';
+  position: absolute;
+  top: 26px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--divider);
+}
+.pv-stop:first-child::before { left: 50%; }
+.pv-stop:last-child::before { right: 50%; }
+.pv-stop-name {
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-stop-leading .pv-stop-name { font-weight: 400; font-style: italic; color: var(--fg-muted); }
+.pv-stop-dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 3px;
+  border-radius: 50%;
+  background: var(--pv-colour, var(--divider));
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--pv-colour, var(--divider));
+}
+.pv-stop-leading .pv-stop-dot { background: var(--bg); box-shadow: 0 0 0 1px var(--fg-muted); }
+.pv-stop-now .pv-stop-dot { box-shadow: 0 0 0 3px var(--pv-colour, var(--divider)); }
+.pv-stop-on .pv-stop-name { color: var(--accent); }
+.pv-stop:hover .pv-stop-name { text-decoration: underline; }
+.pv-stop:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.pv-stop-stat { font-size: 11px; }
+.pv-stop-fail { font-size: 11px; color: var(--err); }
+
+/* --- the log --- */
+.pv-log { padding: 4px 0; }
+.pv-visit {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+  border-left: 3px solid var(--pv-colour, var(--divider));
+  /* Clears the sticky map when a station scrolls its line into view. */
+  scroll-margin-top: 96px;
+}
+.pv-visit.pv-leading { border-left-style: dashed; }
+.pv-visit.pv-focus { background: var(--sel-bg); }
+.pv-head { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pv-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pv-twisty {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  width: 12px;
+}
+.pv-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-name.pv-sig { cursor: pointer; }
+.pv-name.pv-sig:hover { text-decoration: underline; }
+.pv-name.sel { color: var(--accent); }
+.pv-leading .pv-name { font-weight: 400; font-style: italic; color: var(--fg-muted); }
+.pv-times {
+  font-size: 11px;
+  color: var(--fg-muted);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+.pv-when, .pv-stats { font-size: 11px; padding-left: 18px; }
+.pv-now { color: var(--ok); }
+.pv-failed { color: var(--err); }
+.pv-hint { font-size: 11px; padding-left: 18px; margin-top: 2px; }
+.pv-nothing { font-size: 11px; align-self: center; }
+.pv-visit.pv-stub { padding-top: 4px; padding-bottom: 4px; }
+.pv-visit.pv-stub .pv-name { font-weight: 400; color: var(--fg-muted); }
+
+/* Narrow: the name sits above its chips rather than beside them. */
+@media (max-width: 700px) {
+  .pv-visit { grid-template-columns: minmax(0, 1fr); }
+}
+
+.pv-chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; min-width: 0; }
+.pv-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 1px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pv-chip:hover { border-color: var(--fg-muted); }
+.pv-chip.selected, .pv-chip.sel { border-color: var(--accent); background: var(--sel-bg); }
+.pv-chip-method { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); }
+/* The endpoint is at the end of a path: clip the front. See `.wf-path` for why the <bdi>. */
+.pv-chip-path {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.pv-chip-status { font-family: var(--mono); font-size: 11px; color: var(--ok); }
+.pv-chip.pv-fail { border-color: rgb(255 107 111 / 0.5); }
+.pv-chip.pv-fail .pv-chip-status { color: var(--err); font-weight: 600; }
+.pv-chip-sig { border-left-width: 3px; }
+.pv-chip-tag { font-size: 11px; color: var(--fg-muted); }
+.pv-chip-marker {
+  cursor: default;
+  color: var(--warn);
+  border-style: dashed;
+}
+
+.pv-items { display: flex; flex-direction: column; gap: 2px; }
+
+.pv-item {
+  border-left: 2px solid transparent;
+  border-radius: 3px;
+  padding: 3px 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+.pv-item:hover { background: var(--bg-hover); }
+.pv-item:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.pv-item.selected, .pv-item.sel { background: var(--sel-bg); border-left-color: var(--accent); }
+.pv-sig { border-left-color: var(--divider); }
+.pv-floated { box-shadow: inset 0 0 0 1px rgb(255 107 111 / 0.35); }
+.pv-repeat { border-left-style: dashed; }
+
+.pv-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pv-path, .pv-sname {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The endpoint is at the end of a path: clip the front. See `.wf-path` for why the <bdi>. */
+.pv-path { direction: rtl; text-align: left; }
+.pv-status { font-family: var(--mono); font-weight: 600; font-size: 12px; flex: 0 0 auto; }
+.pv-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; padding-top: 1px; }
+.pv-dup { color: rgb(var(--m-put)); }
+.pv-finish { color: var(--fg-muted); font-style: italic; }
+.pv-order { font-size: 11px; display: block; }
+.pv-marker { margin: 2px 0; }
+.pv-more { align-self: flex-start; }
+
 /* --- the time axis ------------------------------------------------------ */
 
 .axis {
@@ -426,6 +655,8 @@ body { display: flex; flex-direction: column; }
 
 /* Two mutually exclusive options that arrange the list. Joined, so it reads as one control with a
    state rather than as two more filter chips. */
+/* Hidden on the path tab, where a path has one order. `display` here outranks `hidden`. */
+.seg2[hidden] { display: none !important; }
 .seg2 {
   display: inline-flex;
   border: 1px solid var(--divider);

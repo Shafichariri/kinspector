@@ -193,6 +193,20 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     note('timeline drawn', 'n/a (no signals, so no timeline tab)');
   }
 
+  // --- the path, whose repeated-screen notes read payloads from signalData ---
+  const pathTab = doc.querySelector('#tabs .tab[data-view="path"]');
+  if (pathTab) {
+    click(pathTab);
+    await settle(() => `${doc.querySelectorAll('#path .pv-visit, #path .pv-chip').length}`);
+    const cols = doc.querySelectorAll('#path .pv-visit').length;
+    const calls = [...doc.querySelectorAll('#path .pv-stats')]
+      .reduce((n, s) => n + Number((s.textContent.match(/^(\d+) call/) || [0, 0])[1]), 0);
+    const rows = archive.transactions.length;
+    check('path drawn', cols > 0 && calls === rows, `${cols} visits, ${calls} of ${rows} calls`);
+  } else {
+    check('path drawn', false, 'no path tab — it is meant to be always shown');
+  }
+
   // --- a browser tab, whose payloads come from signalData ---
   const cacheTab = doc.querySelector('#tabs .tab[data-view="cache"]');
   if (cacheTab) {

@@ -47,6 +47,7 @@ catching usually live in the attempts a "one row per call" view would hide.
 | `reqBodyOmitted` / `resBodyOmitted` | string? | Why a body is absent: `contentType`, `streaming`. Null when the body was captured or there was none. Consumers must render this rather than guessing a reason. |
 | `reqContentType` / `resContentType` | string? | For requests, read from the outgoing body when the header is absent — Ktor keeps it there, not in the builder's headers. |
 | `redacted` | list<string> | e.g. `header:authorization`, `query:token`, `body:$.password`. |
+| `seq` | long? | Capture order on the device — one counter shared by calls, signals and markers, taken beside `mono`. Breaks ties within one millisecond, where a tap and the navigation it triggers routinely land; see [Same-millisecond ties](#same-millisecond-ties). Absent on rows from before it existed. |
 
 ### Redaction is off by default
 
@@ -84,6 +85,19 @@ redacted at capture"). With `Redaction.Off` the list is simply empty.
 Sort by `mono`, display `ts`. Never mix them. The device and host clocks are unrelated; the
 daemon additionally records its own receive time.
 
+### Same-millisecond ties
+
+`mono` is milliseconds, and the commonest navigation in an app — `onClick { signal("tap", …);
+navigate() }` — puts a tap and the screen change it causes in the same one. Sorting by `mono` alone
+cannot say which came first, and attributing the tap to the screen it led to is a confidently wrong
+answer. `seq` is taken from one process-wide counter at every capture site, immediately after
+`mono`, so on one thread it is program order. Across threads, two captures in one millisecond are
+genuinely unordered and `seq` reports whichever reached the counter first.
+
+Use it only to break a `mono` tie between two rows that both carry it. When either lacks it, fall
+back to `mono` and whatever rule the consumer had before — `visits()` gives the tie to the arriving
+screen.
+
 ### Derived helpers
 
 - `isError` — `status >= 400` or `error != null`. Backs `has:error`.
@@ -107,6 +121,7 @@ A named point in the session timeline, from app code, the user, or an agent.
 | `mono` | long | Ordering authority, same clock as transactions. |
 | `label` | string | Free text; may contain spaces. |
 | `source` | string | `app`, `agent`, or `user`. |
+| `seq` | long? | Capture order on the device — one counter shared by calls, signals and markers, taken beside `mono`. Breaks ties within one millisecond, where a tap and the navigation it triggers routinely land; see [Same-millisecond ties](#same-millisecond-ties). Absent on markers posted by the host, which has no place in the device's order, and on older rows. |
 
 Markers are what turn "what happened when I tapped checkout" into a lookup instead of timestamp
 arithmetic, and they back `since:marker("…")`.
@@ -132,6 +147,7 @@ thing, under a category, at a moment, optionally with a payload*.
 | `redacted` | list<string> | Reserved. **Always empty** — see below. |
 | `trigger` | enum | `app` — the app pushed this. `request` — the host pulled it. |
 | `requestId` | string? | Set when `trigger` is `request`, correlating to the pull that caused it. |
+| `seq` | long? | Capture order on the device — one counter shared by calls, signals and markers, taken beside `mono`. Breaks ties within one millisecond, where a tap and the navigation it triggers routinely land; see [Same-millisecond ties](#same-millisecond-ties). Absent on rows from before it existed. |
 
 ### `tag` is an open set
 

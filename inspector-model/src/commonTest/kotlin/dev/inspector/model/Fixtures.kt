@@ -57,7 +57,8 @@ fun signal(
     bytes: Long = 0,
     trigger: SignalTrigger = SignalTrigger.App,
     requestId: String? = null,
+    seq: Long? = null,
 ) = Signal(
     id = id, ts = ts, mono = mono, tag = tag, name = name, data = data, dataRef = dataRef,
-    dataTruncated = dataTruncated, bytes = bytes, trigger = trigger, requestId = requestId,
+    dataTruncated = dataTruncated, bytes = bytes, trigger = trigger, requestId = requestId, seq = seq,
 )

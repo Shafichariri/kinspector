@@ -65,6 +65,24 @@
     // App-state observations for this session, and the latest per (tag, name).
     signals: [],
     current: [],
+    // Every `screen` signal in the session, ignoring the filter: the skeleton `visits()` is built
+    // from. `signals` is filtered by the daemon, and a transaction term such as `path:` drops every
+    // signal — screens included — so a route drawn from it vanished the moment a filter was typed.
+    screens: [],
+    // Screen payloads as the text that was captured, by signal id, for the path view's "same
+    // payload" note on a repeated screen. Text rather than parsed: comparing and summarising the
+    // bytes needs no `JSON.parse`, and that is the parse this page avoids.
+    screenPayloadText: new Map(),
+    // Path view: visits the user has unfolded, how many visits the last render drew, and for which
+    // session — so a new visit arriving while you read an earlier one can say so instead of
+    // yanking the view to it.
+    expandedVisits: new Set(),
+    pathVisitCount: null,
+    pathSessionId: null,
+    // The visit last opened from the map, and whether the next render is the first since the tab
+    // opened — which lands on the newest visit rather than wherever the shared pane was scrolled.
+    pathFocus: null,
+    pathFresh: true,
     // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
     // them — a session can hold thousands — but every field a browser row shows lives in one.
     payloads: new Map(),
@@ -925,6 +943,14 @@
     // what you came for at one row in ten. The merge is a correlation tool you reach for once
     // you know which call you care about, which makes it the second tab, not the first.
     views.push({ id: 'network', label: 'traffic', title: 'HTTP calls', count: state.transactions.length });
+    // Always offered, even with no screen signals: a tab that came and went between sessions moved
+    // everything after it, and a session with no screens still has a path — one honest column
+    // saying so, which is also the only place that tells you how to get more.
+    views.push({
+      id: 'path',
+      label: 'path',
+      title: 'The screens the user moved through, and what happened on each',
+    });
     // Merging is only worth a tab when there is something to merge with the traffic.
     if (state.signals.length) {
       views.push({
@@ -935,7 +961,7 @@
     }
     // Grouping by screen needs both halves. With traffic but no screen signals it would be one
     // unnamed block, which the traffic tab already draws better.
-    if (state.transactions.length && state.signals.some((s) => tagOf(s) === 'screen')) {
+    if (state.transactions.length && state.screens.length) {
       views.push({
         id: 'waterfall',
         label: 'waterfall',
@@ -954,7 +980,7 @@
   }
 
   /** The views that arrange the traffic, as opposed to browsing one signal tag. */
-  const TRAFFIC_VIEWS = ['network', 'all', 'waterfall'];
+  const TRAFFIC_VIEWS = ['network', 'path', 'all', 'waterfall'];
 
   function renderTabs() {
     const bar = $('tabs');
@@ -992,6 +1018,7 @@
     // A cache key only exists inside a payload, so the browser cannot draw its list without
     // them. Fetched on the way in rather than for every session that happens to hold cache rows.
     if (id === 'cache') await loadPayloadsFor('cache');
+    if (id === 'path') await loadScreenPayloads();
     renderTabs();
     applyView();
   }
@@ -1008,6 +1035,16 @@
     const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
     const page = await api(`/api/sessions/${id}/signals?${q}`).catch(() => null);
     state.signals = Array.isArray(page) ? page : [];
+    const isScreen = (s) => tagOf(s) === 'screen';
+    if (!state.filter) {
+      state.screens = state.signals.filter(isScreen);
+    } else {
+      // The skeleton ignores the filter. One more request per filter change, not per live row:
+      // the live socket appends screens as they arrive.
+      const q2 = new URLSearchParams({ filter: 'tag:screen', limit: '2000' });
+      const all = await api(`/api/sessions/${id}/signals?${q2}`).catch(() => null);
+      state.screens = (Array.isArray(all) ? all : state.signals).filter(isScreen);
+    }
     state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
 
     // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
@@ -1389,8 +1426,8 @@
 
   /** The screen that was showing when something happened, and how long it had been showing. */
   function screenAt(mono) {
-    const arrivals = state.signals
-      .filter((s) => tagOf(s) === 'screen' && s.mono <= mono)
+    const arrivals = state.screens
+      .filter((s) => s.mono <= mono)
       .sort((a, b) => b.mono - a.mono);
     return arrivals[0] || null;
   }
@@ -1717,6 +1754,146 @@
     return button;
   }
 
+  // --- visits: the rule the path, the waterfall and the axis band share -----
+
+  /**
+   * Mirror of `visits` in `:inspector-model`'s `Visits.kt`; `VisitsTest` is the authority and this
+   * follows it. Keep them in step.
+   *
+   * A session split into the screens the user was on. Attribution is strictly by start — a visit
+   * owns `[from, to)` — with no grace window for a `screen` signal that lands after the calls its
+   * view-model fired, because any window would also move the call that *caused* a navigation onto
+   * the screen it navigated to. Consecutive same-name signals are one visit, with the later ones
+   * kept as `repeats` and drawn in place. Anything before the first screen is a leading visit whose
+   * `screen` is null: the app was somewhere, and nothing recorded where.
+   *
+   * The skeleton comes from `screens`, never from `signals`. The filter grammar drops every signal
+   * under `path:` and every call under `tag:`, so a skeleton built from the filtered rows lost every
+   * screen the moment a filter was typed — and a visit nothing matched vanished, drawing a route
+   * the user never took. Callers pass `state.screens`, which ignores the filter, and a visit with
+   * no matching entries comes back empty rather than missing. The leading visit is skeleton too,
+   * so `sessionStart` — the earliest `mono` of the unfiltered session — decides whether it exists.
+   * A tie in the same millisecond goes by capture `seq` when both sides carry one, so a tap made
+   * just before the navigation it triggered stays on the screen it was made on.
+   */
+  function visits(screens, transactions, markers, signals, sessionStart = null) {
+    const isScreen = (s) => tagOf(s) === 'screen';
+    const arrivals = screens.filter(isScreen)
+      .sort((a, b) => a.mono - b.mono || (a.seq ?? -Infinity) - (b.seq ?? -Infinity));
+    const others = signals.filter((s) => !isScreen(s));
+
+    const out = [];
+    for (const arrival of arrivals) {
+      const open = out[out.length - 1];
+      if (open && open.screen.name === arrival.name) open.repeats.push(arrival);
+      else out.push({ screen: arrival, repeats: [], from: arrival.mono, fromSeq: arrival.seq ?? null });
+    }
+
+    let earliest = sessionStart;
+    for (const item of [...transactions, ...markers, ...others]) {
+      if (earliest === null || item.mono < earliest) earliest = item.mono;
+    }
+    if (earliest !== null && (!out.length || earliest < out[0].from)) {
+      out.unshift({ screen: null, repeats: [], from: earliest, fromSeq: null });
+    }
+    if (!out.length) return [];
+
+    const starts = out.map((v) => ({ mono: v.from, seq: v.fromSeq }));
+    for (const v of out) { v.txns = []; v.markers = []; v.signals = [...v.repeats]; }
+    for (const txn of transactions) out[ownerOf(starts, txn.mono, txn.seq)].txns.push(txn);
+    for (const marker of markers) out[ownerOf(starts, marker.mono, marker.seq)].markers.push(marker);
+    for (const signal of others) out[ownerOf(starts, signal.mono, signal.seq)].signals.push(signal);
+
+    out.forEach((v, i) => {
+      v.to = i + 1 < out.length ? out[i + 1].from : null;
+      v.entries = timelineEntries(v.txns, v.markers, v.signals);
+    });
+    return out;
+  }
+
+  /** Whether `start` opened at or before an entry: `seq` decides a tie when both have one. */
+  function opensBy(start, mono, seq) {
+    if (start.mono !== mono) return start.mono < mono;
+    if (start.seq == null || seq == null) return true;
+    return start.seq < seq;
+  }
+
+  /** The last start at or before the entry; anything earlier than every start goes to the first. */
+  function ownerOf(starts, mono, seq) {
+    let lo = 0;
+    let hi = starts.length - 1;
+    let found = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (opensBy(starts[mid], mono, seq)) { found = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return found;
+  }
+
+  /** Mirror of `visitIndexAt`: which visit was open at `mono`, or -1 before all of them. */
+  function visitIndexAt(list, mono) {
+    if (!list.length || mono < list[0].from) return -1;
+    return ownerOf(list.map((v) => ({ mono: v.from, seq: null })), mono, null);
+  }
+
+  /**
+   * Mirror of `timeline()` for one visit's contents, oldest first: calls then signals in a stable
+   * sort, with each marker placed before anything at the same `mono` (`<=`).
+   */
+  function timelineEntries(txns, markers, signals) {
+    const body = [
+      ...txns.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
+      ...signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
+    ].sort((a, b) => a.mono - b.mono);
+    const ordered = [...markers].sort((a, b) => a.mono - b.mono);
+    const entries = [];
+    let next = 0;
+    for (const entry of body) {
+      while (next < ordered.length && ordered[next].mono <= entry.mono) {
+        entries.push({ kind: 'marker', mono: ordered[next].mono, marker: ordered[next] });
+        next++;
+      }
+      entries.push(entry);
+    }
+    for (; next < ordered.length; next++) {
+      entries.push({ kind: 'marker', mono: ordered[next].mono, marker: ordered[next] });
+    }
+    return entries;
+  }
+
+  /**
+   * One colour per screen name, in order of first appearance in the session's skeleton.
+   *
+   * Built from `state.screens` alone, so the waterfall, the axis band and the path agree on a
+   * screen's colour whatever each one is showing.
+   */
+  function screenColours() {
+    const colours = new Map();
+    for (const s of [...state.screens].sort((a, b) => a.mono - b.mono)) {
+      if (!colours.has(s.name)) colours.set(s.name, SCREEN_COLOURS[colours.size % SCREEN_COLOURS.length]);
+    }
+    return (name) => (name === null ? 'var(--divider)' : colours.get(name) || 'var(--divider)');
+  }
+
+  /**
+   * The earliest `mono` this page holds for the session, unfiltered as far as it can be: every
+   * call, every marker and every screen. Signals other than screens are only held filtered, so a
+   * session whose launch stretch held nothing but those can still lose its launch column under a
+   * filter; that is the one gap left, and it needs a signal-only launch to show.
+   */
+  function sessionStartMono() {
+    let start = null;
+    for (const item of [...state.allTransactions, ...state.markers, ...state.screens, ...state.signals]) {
+      if (start === null || item.mono < start) start = item.mono;
+    }
+    return start;
+  }
+
+  /** Whether a visit overlaps the brushed stretch. Outside it, a visit dims rather than vanishing. */
+  const visitInRange = (visit) =>
+    !state.timeRange ||
+    (visit.from <= state.timeRange.to && (visit.to === null || visit.to >= state.timeRange.from));
+
   // --- the waterfall ------------------------------------------------------
 
   /**
@@ -1726,51 +1903,43 @@
    * only a clock, and nothing until now put them together. "This screen costs six calls and two
    * seconds" is not in either stream alone.
    *
-   * Attribution is by *start*, not overlap. A call that outlives the screen that began it still
-   * belongs to that screen — it was that navigation that asked for it, and moving it to whatever
-   * came next would blame the wrong screen for the wait.
+   * Grouping is `visits()`, shared with the path view and the axis band. It used to be a private
+   * segmentation here that read the *filtered* signals and dropped any screen with no matching
+   * calls — so typing `path:` took every screen away, and a filter that matched nothing on Cart drew
+   * a route that skipped it. A visit with no matching calls is now a stub.
    */
   function waterfallGroups() {
     const win = sessionWindow();
     if (!win) return [];
-    const rows = visibleTransactions().sort((a, b) => a.mono - b.mono);
+    const rows = visibleTransactions();
     if (!rows.length) return [];
 
-    const segments = screenSegments(win);
-    const groups = [];
-    const openGroup = (segment) => {
-      const group = { segment, rows: [] };
-      groups.push(group);
-      return group;
-    };
-
-    if (!segments.length) {
-      // No screen signals recorded: still worth drawing, just as one unnamed stretch.
-      const group = openGroup({ name: null, from: win.from, to: win.to, colour: 'var(--divider)' });
-      group.rows = rows;
-    } else {
-      for (const segment of segments) {
-        const inSegment = rows.filter((txn) => txn.mono >= segment.from && txn.mono < segment.to);
-        if (inSegment.length) openGroup(segment).rows = inSegment;
+    const colour = screenColours();
+    const lastMono = win.to;
+    return visits(state.screens, rows, [], [], sessionStartMono()).map((visit) => {
+      const name = visit.screen ? visit.screen.name : null;
+      const group = {
+        segment: { name, from: visit.from, to: visit.to ?? lastMono, colour: colour(name) },
+        rows: visit.txns,
+        dim: !visitInRange(visit),
+      };
+      if (group.rows.length) {
+        const starts = group.rows.map((t) => t.mono);
+        const ends = group.rows.map((t) => t.mono + (t.ms ?? 0));
+        group.from = Math.min(...starts);
+        group.to = Math.max(...ends);
+      } else {
+        group.from = group.segment.from;
+        group.to = group.segment.from;
       }
-      const lastSegment = segments[segments.length - 1];
-      const after = rows.filter((txn) => txn.mono >= lastSegment.to);
-      if (after.length) openGroup(lastSegment).rows.push(...after);
-    }
-
-    for (const group of groups) {
-      const starts = group.rows.map((t) => t.mono);
-      const ends = group.rows.map((t) => t.mono + (t.ms ?? 0));
-      group.from = Math.min(...starts);
-      group.to = Math.max(...ends);
       group.span = Math.max(1, group.to - group.from);
       group.bytes = group.rows.reduce((n, t) => n + (t.resBytes || 0), 0);
       group.failed = group.rows.filter((t) => t.error || (t.status ?? 0) >= 400).length;
       // Wall time is not the sum of the durations: calls overlap, and reporting the sum would
       // claim a screen took far longer than the user waited.
       group.wall = group.to - group.from;
-    }
-    return groups;
+      return group;
+    });
   }
 
   function renderWaterfall() {
@@ -1782,7 +1951,7 @@
     if (!groups.length) return;
 
     for (const group of groups) {
-      const block = el('div', 'wf-group');
+      const block = el('div', `wf-group${group.dim ? ' wf-dim' : ''}${group.rows.length ? '' : ' wf-stub'}`);
 
       const head = el('div', 'wf-head');
       const swatch = el('span', 'wf-swatch');
@@ -1794,6 +1963,10 @@
       head.appendChild(stats);
       if (group.failed) head.appendChild(el('span', 'wf-failed', `${group.failed} failed`));
       block.appendChild(head);
+      // Kept rather than dropped: a route with a hole in it names a navigation nobody made.
+      if (!group.rows.length) {
+        block.appendChild(el('div', 'wf-empty muted', state.filter || state.timeRange ? 'no matching calls' : 'no calls'));
+      }
 
       // Each group gets its own scale. A shared one would squeeze a 200 ms screen into a sliver
       // next to a 30 s one, and the question here is "what did *this* screen do", not "which
@@ -1833,6 +2006,470 @@
       }
       root.appendChild(block);
     }
+  }
+
+  // --- the path -----------------------------------------------------------
+
+  /**
+   * How many entries a visit shows before folding.
+   *
+   * A dashboard visit can fire thirty calls, and one tall column would turn the storyboard into a
+   * single list you scroll past the rest of. A collapsed run of identical signals counts as one.
+   */
+  const PATH_FOLD = 15;
+
+  const isFailure = (txn) => Boolean(txn.error) || (txn.status ?? 0) >= 400;
+
+  /** Fetches the captured text of every screen payload not yet held. */
+  async function loadScreenPayloads() {
+    if (!state.sessionId) return;
+    const id = encodeURIComponent(state.sessionId);
+    const missing = state.screens.filter((s) => s.dataRef && !state.screenPayloadText.has(s.id));
+    await Promise.all(missing.map(async (signal) => {
+      try {
+        const res = await source.fetch(`/api/sessions/${id}/signals/${encodeURIComponent(signal.id)}/data`);
+        state.screenPayloadText.set(signal.id, res.ok ? await res.text() : null);
+      } catch {
+        // Nothing to compare is not an error; recording it stops a retry on every render.
+        state.screenPayloadText.set(signal.id, null);
+      }
+    }));
+  }
+
+  /**
+   * How many items a collapsed log row draws as chips before it summarises instead.
+   *
+   * Under it, the row *is* the visit, read left to right. Over it, a chip per call would wrap into a
+   * wall, so calls become one count — but failures still get a chip each, grouped by endpoint.
+   */
+  const LOG_CHIPS = 8;
+
+  /**
+   * The route as a map on top and a log beneath: one station per visit, then one line per visit.
+   *
+   * Built from `visits()`, the rule the waterfall and the axis band also use. The decisions that
+   * are not layout:
+   *
+   * - **The order toggle does not apply.** A path has one true order; reversed, it reads as the
+   *   user walking backwards.
+   * - **The filter narrows what is inside a visit, never which visits there are.** The skeleton is
+   *   `state.screens`, and a visit nothing matched is drawn as a stub — dropping it would draw a
+   *   route the user never took. A brushed time range dims visits for the same reason.
+   * - **A failure is never summarised away.** A collapsed row names every failed call; an expanded
+   *   one floats a failure above the fold.
+   * - **A live view does not move under the reader.** It follows only when the log is already at
+   *   its end; scrolled back to read an earlier visit, a new one is announced instead.
+   */
+  function renderPath() {
+    if (state.view !== 'path') return;
+    const root = $('path');
+    const pane = root.parentElement;
+    if (state.pathSessionId !== state.sessionId) {
+      state.pathSessionId = state.sessionId;
+      state.pathVisitCount = null;
+      state.expandedVisits = new Set();
+      state.pathFocus = null;
+      state.pathFresh = true;
+      $('path-new').hidden = true;
+    }
+    const oldMetro = root.querySelector('.pv-metro');
+    const metroAtEnd = !oldMetro || oldMetro.scrollLeft + oldMetro.clientWidth >= oldMetro.scrollWidth - 8;
+    const metroLeft = oldMetro ? oldMetro.scrollLeft : 0;
+    const logAtEnd = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 8;
+    const top = pane.scrollTop;
+
+    const list = visits(state.screens, state.transactions, state.markers, state.signals, sessionStartMono());
+    root.innerHTML = '';
+    if (!list.length) {
+      root.appendChild(el('div', 'empty muted pv-empty', state.sessionId ? 'nothing recorded in this session yet' : 'no session'));
+      state.pathVisitCount = 0;
+      return;
+    }
+
+    const colour = screenColours();
+    const lastMono = Math.max(
+      ...[...state.allTransactions, ...state.signals, ...state.markers, ...state.screens].map((x) => x.mono),
+    );
+    const metro = el('div', 'pv-metro');
+    metro.setAttribute('role', 'list');
+    metro.setAttribute('aria-label', 'Screens visited');
+    const log = el('div', 'pv-log');
+    list.forEach((visit, index) => {
+      metro.appendChild(pathStop(visit, index, list, colour));
+      log.appendChild(pathRow(visit, index, list, colour, lastMono));
+    });
+    root.appendChild(metro);
+    root.appendChild(log);
+
+    const fresh = state.pathFresh;
+    state.pathFresh = false;
+    const follow = state.liveTail && (fresh || logAtEnd);
+    pane.scrollTop = follow ? pane.scrollHeight : fresh ? 0 : top;
+    metro.scrollLeft = state.liveTail && (fresh || metroAtEnd) ? metro.scrollWidth : metroLeft;
+
+    const grew = state.pathVisitCount !== null && list.length > state.pathVisitCount;
+    state.pathVisitCount = list.length;
+    if (follow) {
+      $('path-new').hidden = true;
+    } else if (grew) {
+      const newest = list[list.length - 1];
+      const pill = $('path-new');
+      pill.textContent = `new visit: ${newest.screen ? newest.screen.name : 'unnamed'} ↓`;
+      pill.hidden = false;
+    }
+  }
+
+  const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');
+
+  function visitName(visit, list) {
+    if (visit.screen) return visit.screen.name;
+    return list.some((v) => v.screen) ? 'before first screen' : 'no screen signals in this session';
+  }
+
+  /** How long a visit lasted, or that it is still going. Returns a node, because "now" ticks. */
+  function visitWhen(visit, lastMono) {
+    const node = el('span', 'pv-when muted mono');
+    if (visit.to !== null) {
+      node.textContent = fmtMs(visit.to - visit.from);
+    } else if (sessionIsLive() && visit.screen) {
+      node.appendChild(el('span', 'pv-now', 'here now · '));
+      node.appendChild(ageNode(visit.screen.ts, 'age'));
+    } else {
+      node.textContent = `${fmtMs(Math.max(0, lastMono - visit.from))} · to the end`;
+    }
+    return node;
+  }
+
+  /** One station on the map: the screen, and how much happened there. Clicking opens its line. */
+  function pathStop(visit, index, list, colour) {
+    const key = visitKey(visit);
+    const stop = el('button', 'pv-stop');
+    stop.type = 'button';
+    stop.dataset.visit = String(index);
+    stop.dataset.screen = visit.screen ? visit.screen.name : '';
+    if (!visit.screen) stop.classList.add('pv-stop-leading');
+    if (!visitInRange(visit)) stop.classList.add('pv-dim');
+    if (state.pathFocus === key) stop.classList.add('pv-stop-on');
+    if (index === list.length - 1 && visit.to === null && sessionIsLive()) stop.classList.add('pv-stop-now');
+    stop.style.setProperty('--pv-colour', colour(visit.screen ? visit.screen.name : null));
+
+    const name = el('span', 'pv-stop-name', visit.screen ? visit.screen.name : 'launch');
+    if (visit.repeats.length) name.appendChild(el('span', 'pv-times mono', ` ×${visit.repeats.length + 1}`));
+    stop.appendChild(name);
+    stop.appendChild(el('span', 'pv-stop-dot'));
+    const calls = visit.txns.length;
+    stop.appendChild(el('span', 'pv-stop-stat muted', `${calls} ${calls === 1 ? 'call' : 'calls'}`));
+    const failed = visit.txns.filter(isFailure).length;
+    if (failed) stop.appendChild(el('span', 'pv-stop-fail', `${failed} failed`));
+    stop.title = `${visitName(visit, list)} — open its line in the log`;
+
+    stop.addEventListener('click', () => {
+      state.pathFocus = key;
+      state.expandedVisits.add(key);
+      renderPath();
+      const row = $('path').querySelector(`.pv-visit[data-visit="${index}"]`);
+      if (row && row.scrollIntoView) row.scrollIntoView({ block: 'start' });
+    });
+    return stop;
+  }
+
+  /** One line of the log: the visit's name and length, then what happened there, in order. */
+  function pathRow(visit, index, list, colour, lastMono) {
+    const key = visitKey(visit);
+    const open = state.expandedVisits.has(key);
+    const row = el('section', 'pv-visit');
+    row.dataset.visit = String(index);
+    row.dataset.screen = visit.screen ? visit.screen.name : '';
+    row.style.setProperty('--pv-colour', colour(visit.screen ? visit.screen.name : null));
+    if (!visit.screen) row.classList.add('pv-leading');
+    if (!visitInRange(visit)) row.classList.add('pv-dim');
+    if (!visit.entries.length) row.classList.add('pv-stub');
+    if (open) row.classList.add('pv-open');
+    if (state.pathFocus === key) row.classList.add('pv-focus');
+
+    const head = el('div', 'pv-head');
+    const title = el('div', 'pv-title');
+    const toggle = el('button', 'pv-twisty', open ? '▾' : '▸');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'collapse this visit' : 'expand this visit');
+    toggle.addEventListener('click', () => {
+      if (state.expandedVisits.has(key)) state.expandedVisits.delete(key);
+      else state.expandedVisits.add(key);
+      renderPath();
+    });
+    title.appendChild(toggle);
+    const name = el('span', 'pv-name', visitName(visit, list));
+    if (visit.screen) {
+      name.classList.add('pv-sig');
+      name.dataset.id = visit.screen.id;
+      name.tabIndex = 0;
+      name.title = 'open this screen signal';
+      name.addEventListener('click', () => selectSignal(visit.screen.id));
+    }
+    title.appendChild(name);
+    if (visit.repeats.length) {
+      const times = el('span', 'pv-times mono', `×${visit.repeats.length + 1}`);
+      times.title = `the app signalled this screen ${visit.repeats.length + 1} times without leaving it`;
+      title.appendChild(times);
+    }
+    head.appendChild(title);
+    head.appendChild(visitWhen(visit, lastMono));
+
+    const calls = visit.txns.length;
+    const failed = visit.txns.filter(isFailure).length;
+    const others = visit.entries.filter((e) => e.kind === 'signal' && !(visit.screen && tagOf(e.signal) === 'screen')).length;
+    const stats = el('span', 'pv-stats muted');
+    const parts = [`${calls} ${calls === 1 ? 'call' : 'calls'}`];
+    if (others) parts.push(`${others} ${others === 1 ? 'signal' : 'signals'}`);
+    stats.textContent = parts.join(' · ');
+    if (failed) stats.appendChild(el('span', 'pv-failed', ` · ${failed} failed`));
+    head.appendChild(stats);
+    if (!list.some((v) => v.screen)) {
+      head.appendChild(el(
+        'span',
+        'pv-hint muted',
+        'Emit a `screen` signal when navigation commits to split this into visits — see INTEGRATION.md.',
+      ));
+    }
+    row.appendChild(head);
+
+    if (!visit.entries.length) {
+      row.appendChild(el('div', 'pv-nothing muted', state.filter ? '0 matching' : 'nothing recorded'));
+      return row;
+    }
+    row.appendChild(open ? visitBody(visit, index, list) : visitChips(visit, index, list));
+    return row;
+  }
+
+  /** Repeated screens in a visit, each mapped to the observation before it, for "what changed". */
+  function previousScreens(visit) {
+    const previous = new Map();
+    if (visit.screen) {
+      let prior = visit.screen;
+      for (const r of visit.repeats) { previous.set(r.id, prior); prior = r; }
+    }
+    return previous;
+  }
+
+  /** A collapsed visit as a line of chips — every one clickable, every failure named. */
+  function visitChips(visit, index, list) {
+    const line = el('div', 'pv-chips');
+    const key = visitKey(visit);
+    const runs = timelineRuns(visit.entries);
+    const expand = () => { state.expandedVisits.add(key); renderPath(); };
+
+    const callChip = (txn) => {
+      const chip = el('button', `pv-chip pv-chip-call${isFailure(txn) ? ' pv-fail' : ''}`);
+      chip.type = 'button';
+      chip.dataset.id = txn.id;
+      if (isFailure(txn)) chip.dataset.failed = '1';
+      chip.appendChild(el('span', 'pv-chip-method', txn.method));
+      const path = el('span', 'pv-chip-path');
+      const isolated = el('bdi', null, txn.path);
+      isolated.dir = 'ltr';
+      path.appendChild(isolated);
+      chip.appendChild(path);
+      chip.appendChild(el('span', 'pv-chip-status', String(txn.status ?? 'ERR')));
+      chip.title = `${txn.method} ${txn.path}${txn.query ? `?${txn.query}` : ''} · ${fmtMs(txn.ms)}`;
+      chip.addEventListener('click', () => select(txn.id));
+      return chip;
+    };
+    const otherChip = (run) => {
+      const entry = run.entries[run.entries.length - 1];
+      if (entry.kind === 'marker') {
+        const chip = el('span', 'pv-chip pv-chip-marker', entry.marker.label);
+        chip.title = 'marker';
+        return chip;
+      }
+      const signal = entry.signal;
+      const repeat = visit.screen && tagOf(signal) === 'screen';
+      const chip = el('button', `pv-chip pv-chip-sig lane-${laneFor(signal.tag)}`);
+      chip.type = 'button';
+      chip.dataset.id = signal.id;
+      chip.appendChild(el('span', 'pv-chip-tag', repeat ? 'step' : signal.tag));
+      chip.appendChild(el('span', null, repeat ? `${signal.name} again` : signal.name));
+      if (run.entries.length > 1) chip.appendChild(el('span', 'mono', ` ×${run.entries.length}`));
+      chip.addEventListener('click', () => selectSignal(signal.id));
+      return chip;
+    };
+
+    if (runs.length <= LOG_CHIPS) {
+      for (const run of runs) {
+        const entry = run.entries[0];
+        line.appendChild(entry.kind === 'txn' && run.entries.length === 1 ? callChip(entry.txn) : otherChip(run));
+      }
+      return line;
+    }
+
+    // Summarised: the calls as one count, every failure by endpoint, then the rest in order.
+    const total = el('button', 'pv-chip', `${visit.txns.length} calls`);
+    total.type = 'button';
+    total.title = 'expand this visit';
+    total.addEventListener('click', expand);
+    line.appendChild(total);
+    const failures = new Map();
+    for (const txn of visit.txns.filter(isFailure)) {
+      const k = `${txn.method} ${txn.path} ${txn.status ?? 'ERR'}`;
+      if (!failures.has(k)) failures.set(k, []);
+      failures.get(k).push(txn);
+    }
+    for (const group of failures.values()) {
+      const chip = callChip(group[0]);
+      chip.dataset.failed = String(group.length);
+      if (group.length > 1) chip.appendChild(el('span', 'mono', ` ×${group.length}`));
+      line.appendChild(chip);
+    }
+    const rest = runs.filter((run) => run.entries[0].kind !== 'txn');
+    for (const run of rest.slice(0, 4)) line.appendChild(otherChip(run));
+    if (rest.length > 4) {
+      const more = el('button', 'pv-chip', `+${rest.length - 4} more`);
+      more.type = 'button';
+      more.addEventListener('click', expand);
+      line.appendChild(more);
+    }
+    return line;
+  }
+
+  /** An expanded visit: every item in order, folded past `PATH_FOLD` with failures floated. */
+  function visitBody(visit, index, list) {
+    const key = visitKey(visit);
+    const previous = previousScreens(visit);
+    const items = timelineRuns(visit.entries).map((run, order) => ({
+      order,
+      failed: run.entries.length === 1 && run.entries[0].kind === 'txn' && isFailure(run.entries[0].txn),
+      node: () => pathItem(run, index, list, previous),
+    }));
+    const unfolded = state.expandedVisits.has(`${key}:all`);
+    const body = el('div', 'pv-items');
+    if (unfolded || items.length <= PATH_FOLD) {
+      for (const item of items) body.appendChild(item.node());
+    } else {
+      const rest = items.slice(PATH_FOLD);
+      for (const item of items.slice(0, PATH_FOLD)) body.appendChild(item.node());
+      // Never folded: a 500 behind "+28 more" hides the one thing somebody came for. Drawn out of
+      // position, and saying so.
+      const floated = rest.filter((item) => item.failed);
+      for (const item of floated) {
+        const node = item.node();
+        node.classList.add('pv-floated');
+        const hint = el('span', 'pv-order muted', `↓ #${item.order + 1} in order`);
+        hint.title = 'shown above the fold because it failed; it happened later in this visit';
+        node.appendChild(hint);
+        body.appendChild(node);
+      }
+      const hidden = rest.length - floated.length;
+      if (hidden > 0) {
+        const more = el('button', 'pv-more btn btn-sm btn-quiet', `+${hidden} more`);
+        more.addEventListener('click', () => { state.expandedVisits.add(`${key}:all`); renderPath(); });
+        body.appendChild(more);
+      }
+    }
+    return body;
+  }
+
+  /** One thing that happened during a visit: a call, a signal, a run of them, or a marker. */
+  function pathItem(run, index, list, previous) {
+    const entry = run.entries[0];
+    if (entry.kind === 'marker') {
+      const node = el('div', 'marker-divider pv-marker', entry.marker.label);
+      node.dataset.kind = 'marker';
+      return node;
+    }
+
+    if (entry.kind === 'txn') {
+      const txn = entry.txn;
+      const node = el('div', `pv-item pv-call${txn.id === state.selectedId ? ' selected' : ''}`);
+      node.dataset.kind = 'txn';
+      node.dataset.id = txn.id;
+      node.tabIndex = 0;
+      const line = el('div', 'pv-line');
+      line.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
+      const path = el('span', 'pv-path');
+      const isolated = el('bdi', null, txn.path);
+      isolated.dir = 'ltr';
+      path.appendChild(isolated);
+      path.title = txn.query ? `${txn.path}?${txn.query}` : txn.path;
+      line.appendChild(path);
+      line.appendChild(el('span', `pv-status st s${statusClass(txn.status)}`, txn.status ?? 'ERR'));
+      node.appendChild(line);
+
+      const meta = el('div', 'pv-meta muted mono');
+      meta.appendChild(el('span', null, fmtMs(txn.ms)));
+      if (state.duplicates.has(txn.id)) {
+        const dup = el('span', 'pv-dup', 'repeat');
+        dup.title = 'the same request was sent again by a separate call close by';
+        meta.appendChild(dup);
+      }
+      if (txn.attempt > 1) meta.appendChild(el('span', null, `attempt ${txn.attempt}`));
+      // A cue, never a reassignment: the call belongs to the visit that asked for it.
+      if (txn.ms != null) {
+        const ended = visitIndexAt(list, txn.mono + txn.ms);
+        if (ended > index) {
+          const later = list[ended].screen;
+          meta.appendChild(el('span', 'pv-finish', `→ finished on ${later ? later.name : 'a later screen'}`));
+        }
+      }
+      node.appendChild(meta);
+      node.addEventListener('click', () => select(txn.id));
+      node.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(txn.id); }
+      });
+      return node;
+    }
+
+    const signal = run.entries[run.entries.length - 1].signal;
+    const lane = laneFor(signal.tag);
+    const isRepeat = previous.has(signal.id) && run.entries.length === 1;
+    const node = el('div', `pv-item pv-sig lane-${lane}${isRepeat ? ' pv-repeat' : ''}`);
+    node.dataset.kind = isRepeat ? 'repeat' : run.entries.length > 1 ? 'run' : 'signal';
+    node.dataset.id = signal.id;
+    node.dataset.tag = signal.tag;
+    node.tabIndex = 0;
+    const line = el('div', 'pv-line');
+    line.appendChild(el('span', 'tl-tag', signal.tag));
+    line.appendChild(el('span', 'pv-sname', isRepeat ? `${signal.name} again` : signal.name));
+    if (run.entries.length > 1) {
+      const count = el('span', 'tl-run-count mono', `×${run.entries.length}`);
+      count.title = `${run.entries.length} adjacent observations — opens the latest`;
+      line.appendChild(count);
+    }
+    node.appendChild(line);
+
+    if (isRepeat) {
+      // What changed, when the payloads are here to say. A re-sent identical payload is a
+      // double-firing effect, which is sometimes the bug; a different one is a step inside the
+      // screen.
+      const now = state.screenPayloadText.get(signal.id);
+      const before = state.screenPayloadText.get(previous.get(signal.id).id);
+      let text = null;
+      if (now !== undefined && before !== undefined) {
+        if (now === before) text = now === null ? 'no payload' : 'same payload';
+        else if (now !== null) text = now.replace(/\s+/g, ' ').slice(0, 80);
+      }
+      if (text) node.appendChild(el('div', 'pv-meta muted mono', text));
+    }
+
+    node.addEventListener('click', () => selectSignal(signal.id));
+    node.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectSignal(signal.id); }
+    });
+    return node;
+  }
+
+  /** Wired once: the pill jumps to the newest visit, and reaching the end yourself dismisses it. */
+  function wirePath() {
+    const pane = $('path').parentElement;
+    const pill = $('path-new');
+    pill.addEventListener('click', () => {
+      pane.scrollTop = pane.scrollHeight;
+      const metro = $('path').querySelector('.pv-metro');
+      if (metro) metro.scrollLeft = metro.scrollWidth;
+      pill.hidden = true;
+    });
+    pane.addEventListener('scroll', () => {
+      if (state.view === 'path' && pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 8) pill.hidden = true;
+    });
   }
 
   // --- the time axis ------------------------------------------------------
@@ -1875,39 +2512,22 @@
   }
 
   /**
-   * Which screen was on at each moment, as segments.
+   * Which screen was on at each moment, as segments, for the axis band.
    *
-   * A screen signal is a point observation — "we arrived here" — so the screen it names is the
-   * one showing from that moment until the next such signal. Calls before the first one are not
-   * attributed to a guess: the app was somewhere, and this build does not know where.
+   * `visits()` over the whole session. With no screen signals at all there is no band: one grey
+   * stretch would say nothing the bars above it do not.
    */
   function screenSegments(win) {
     if (!win) return [];
-    const arrivals = state.signals
-      .filter((s) => tagOf(s) === 'screen')
-      .sort((a, b) => a.mono - b.mono);
-    if (!arrivals.length) return [];
-
-    const colours = new Map();
-    const colourFor = (name) => {
-      if (!colours.has(name)) colours.set(name, SCREEN_COLOURS[colours.size % SCREEN_COLOURS.length]);
-      return colours.get(name);
-    };
-
-    const segments = [];
-    if (arrivals[0].mono > win.from) {
-      segments.push({ name: null, from: win.from, to: arrivals[0].mono, colour: 'var(--divider)' });
-    }
-    for (let i = 0; i < arrivals.length; i++) {
-      const next = arrivals[i + 1];
-      const from = arrivals[i].mono;
-      const to = next ? next.mono : win.to;
-      // Re-arriving at the screen you are already on is a re-render, not a new segment.
-      const open = segments[segments.length - 1];
-      if (open && open.name === arrivals[i].name) open.to = to;
-      else segments.push({ name: arrivals[i].name, from, to, colour: colourFor(arrivals[i].name) });
-    }
-    return segments.filter((s) => s.to > s.from);
+    const list = visits(state.screens, state.allTransactions, state.markers, state.signals);
+    if (!list.some((v) => v.screen)) return [];
+    const colour = screenColours();
+    return list
+      .map((v) => {
+        const name = v.screen ? v.screen.name : null;
+        return { name, from: v.from, to: v.to ?? win.to, colour: colour(name) };
+      })
+      .filter((seg) => seg.to > seg.from);
   }
 
   function renderAxis() {
@@ -1915,7 +2535,7 @@
     const win = sessionWindow();
     // Every view built from transactions on a clock, which the waterfall is: brushing already
     // narrows it, so hiding the control that does the brushing would be the odd choice.
-    const onTimeView = ['all', 'network', 'waterfall'].includes(state.view);
+    const onTimeView = ['all', 'network', 'waterfall', 'path'].includes(state.view);
     host.hidden = !onTimeView || !win || state.allTransactions.length + state.signals.length < 2;
     if (host.hidden) return;
 
@@ -2038,6 +2658,7 @@
       renderList();
       renderTimeline();
       renderWaterfall();
+      renderPath();
     } finally {
       axisPaintSuspended = false;
     }
@@ -2578,7 +3199,8 @@
     const all = state.view === 'all';
     const network = state.view === 'network';
     const waterfall = state.view === 'waterfall';
-    const browsing = !all && !network && !waterfall;
+    const path = state.view === 'path';
+    const browsing = !all && !network && !waterfall && !path;
 
     $('list').hidden = !network;
     $('list-empty').hidden = !network || state.transactions.length > 0;
@@ -2586,6 +3208,12 @@
     $('timeline-empty').hidden = true;
     $('waterfall').hidden = !waterfall;
     $('waterfall-empty').hidden = true;
+    if ($('path').hidden && path) state.pathFresh = true;
+    $('path').hidden = !path;
+    if (!path) $('path-new').hidden = true;
+    // A path has one true order. Newest-first would read "the user went from C to B to A", so the
+    // control is hidden here rather than left on screen doing nothing.
+    $('order-seg').hidden = path;
     $('browser').hidden = !browsing;
     for (const tab of $('tabs').querySelectorAll('.tab')) {
       tab.classList.toggle('active', tab.dataset.view === state.view);
@@ -2613,6 +3241,7 @@
 
     if (all) renderTimeline();
     if (waterfall) renderWaterfall();
+    if (path) renderPath();
     if (browsing) renderBrowser();
   }
 
@@ -3578,12 +4207,15 @@
     state.selectedSignalId = id;
     state.selectedId = null;
     const signal =
-      state.signals.find((s) => s.id === id) || state.current.find((s) => s.id === id);
+      state.signals.find((s) => s.id === id) ||
+      state.screens.find((s) => s.id === id) ||
+      state.current.find((s) => s.id === id);
     if (!signal) return;
 
-    for (const node of document.querySelectorAll('.tl-signal.sel')) node.classList.remove('sel');
-    const row = document.querySelector(`.tl-signal[data-id="${id}"]`);
-    if (row) row.classList.add('sel');
+    for (const node of document.querySelectorAll('.tl-signal.sel, .pv-sig.sel, .pv-chip-sig.sel')) node.classList.remove('sel');
+    for (const row of document.querySelectorAll(`.tl-signal[data-id="${id}"], .pv-sig[data-id="${id}"], .pv-chip-sig[data-id="${id}"]`)) {
+      row.classList.add('sel');
+    }
 
     const detail = $('detail');
     $('detail-empty').hidden = true;
@@ -3650,7 +4282,7 @@
 
   function select(id) {
     state.selectedId = id;
-    for (const row of document.querySelectorAll('.row, .wf-row')) {
+    for (const row of document.querySelectorAll('.row, .wf-row, .pv-call, .pv-chip-call')) {
       row.classList.toggle('selected', row.dataset.id === id);
     }
     const txn = state.transactions.find((t) => t.id === id);
@@ -4353,21 +4985,30 @@
         state.transactions.push(message.txn);
         if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
         renderList();
+        renderWaterfall();
+        renderPath();
       } else if (message.type === 'marker') {
         state.markers.push(message.marker);
         renderMarkers();
         renderList();
         renderTimeline();
+        renderPath();
       } else if (message.type === 'signal') {
         // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
         // received. A viewer handed the received row would see every payload as missing.
         state.signals.push(message.signal);
+        if (tagOf(message.signal) === 'screen') {
+          state.screens.push(message.signal);
+          if (state.view === 'path') loadScreenPayloads().then(renderPath);
+        }
         // A tag's first signal is the moment its tab becomes reachable, and the moment `all`
         // starts having something to merge. Both are decided by what the session holds, so the
         // bar is rebuilt rather than revealed.
         renderTabs();
         refreshCurrent();
         renderTimeline();
+        renderWaterfall();
+        renderPath();
         if (tagOf(message.signal) === state.view) {
           loadPayload(message.signal).then(renderBrowser);
         }
@@ -4627,6 +5268,7 @@
     wirePops();
     wireMarkerForm();
     wireAxis();
+    wirePath();
     $('drawer-close').addEventListener('click', closeDrawer);
     // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
     $('drawer-scrim').addEventListener('click', closeDrawer);

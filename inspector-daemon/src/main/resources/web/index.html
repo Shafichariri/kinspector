@@ -198,6 +198,17 @@
       <div id="waterfall" class="waterfall" hidden></div>
       <div id="waterfall-empty" class="empty muted" hidden>no calls to lay out</div>
 
+      <!--
+        The screens the user moved through, left to right, and what happened on each.
+
+        A list says what was called and the waterfall says what each screen cost; neither reads as
+        the story "they opened Cart, three calls went out, one failed, they went to Checkout".
+        Columns are visits, not screens: a revisit is a new column, because what happened *this
+        time* is the question. Built from the same `visits()` rule as the waterfall and the band.
+      -->
+      <button id="path-new" class="path-new" type="button" hidden></button>
+      <div id="path" class="path" role="list" aria-label="Path through the app" hidden></div>
+
       <div id="browser" class="browser" hidden>
         <div class="browser-toolbar">
           <input id="browser-filter" type="search" spellcheck="false" autocomplete="off"
