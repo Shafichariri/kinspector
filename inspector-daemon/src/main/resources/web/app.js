@@ -1806,6 +1806,9 @@
 
     out.forEach((v, i) => {
       v.to = i + 1 < out.length ? out[i + 1].from : null;
+      // The daemon sends calls newest first. A visit's own list is oldest first, as its entries are,
+      // or the waterfall draws every visit upside down — which it did, until a screenshot showed it.
+      v.txns.sort((a, b) => a.mono - b.mono);
       v.entries = timelineEntries(v.txns, v.markers, v.signals);
     });
     return out;

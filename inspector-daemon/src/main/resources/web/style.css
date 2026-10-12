@@ -347,8 +347,10 @@ body { display: flex; flex-direction: column; }
 
 /* A map on top and a log beneath. The map is the route at a glance and stays put while the log
    scrolls under it; the log is one line per visit, readable top to bottom like the story it is. */
-.path { padding: 0 0 20px; }
-.path[hidden] { display: none !important; }
+/* `path-view`, never `path`: every traffic row already has a `.path` cell, and a container rule
+   under that name padded all of them — invisible to jsdom, found in a screenshot. */
+.path-view { padding: 0 0 20px; }
+.path-view[hidden] { display: none !important; }
 
 /* Sticky so it is visible wherever the line you are reading sits. */
 .path-new {

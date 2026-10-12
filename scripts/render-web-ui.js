@@ -1464,6 +1464,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
         : 'none in this session, so that branch was not exercised here';
     }
 
+    // Oldest first inside each visit. The daemon sends rows newest first, and a grouping that kept
+    // that order drew every visit upside down; only a screenshot noticed.
+    const monoOf = new Map((txns.items || []).map((x) => [x.id, x.mono]));
+    const backwards = [...doc.querySelectorAll('.wf-group')].filter((g) => {
+      const monos = [...g.querySelectorAll('.wf-row')].map((r) => monoOf.get(r.dataset.id));
+      return monos.some((m, i) => i > 0 && m < monos[i - 1]);
+    }).length;
+    result.oldestFirst = backwards ? `NO - ${backwards} groups out of order` : 'yes';
+
     // Every bar has to be visible. A zero-width bar reads as a row that failed to draw.
     const widths = [...doc.querySelectorAll('.wf-bar')].map((b) => parseFloat(b.style.width));
     result.barsVisible = widths.every((w) => w > 0)
@@ -2108,7 +2117,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
     const panes = [
       '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
-      '.drawer-scrim', '.axis', '.waterfall', '.path', '.path-new',
+      '.drawer-scrim', '.axis', '.waterfall', '.path-view', '.path-new',
       // Hidden on the path tab, where order has no meaning; it rendered anyway until this was here.
       '.seg2',
     ];
@@ -2387,6 +2396,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('no call lost       :', waterfallProbe.noneLost ?? 'n/a');
   console.error('trailing calls     :', waterfallProbe.trailingCalls ?? 'n/a');
   console.error('every bar visible  :', waterfallProbe.barsVisible ?? 'n/a');
+  console.error('oldest first       :', waterfallProbe.oldestFirst ?? 'n/a');
   console.error('bar selects call   :', waterfallProbe.rowSelects ?? 'n/a');
   console.error('--- path ---');
   console.error('visits mirror      :', visitsMirrorProbe.ok);
