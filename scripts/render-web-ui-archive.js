@@ -200,7 +200,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     await settle(() => `${doc.querySelectorAll('#path .pv-visit, #path .pv-chip').length}`);
     const cols = doc.querySelectorAll('#path .pv-visit').length;
     const calls = [...doc.querySelectorAll('#path .pv-stats')]
-      .reduce((n, s) => n + Number((s.textContent.match(/^(\d+) call/) || [0, 0])[1]), 0);
+      .reduce((n, s) => n + Number(s.dataset.calls || 0), 0);
     const rows = archive.transactions.length;
     check('path drawn', cols > 0 && calls === rows, `${cols} visits, ${calls} of ${rows} calls`);
   } else {

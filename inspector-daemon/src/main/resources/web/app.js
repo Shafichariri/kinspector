@@ -2121,6 +2121,43 @@
 
   const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');
 
+  /**
+   * What a visit holds, by kind: network calls first, then each signal tag, largest first.
+   *
+   * "11 calls · 29 signals" said how much happened and not what; a visit that is 20 cache writes
+   * and one that is 20 analytics events read the same. A screen re-signalled inside its own visit
+   * is a step, not something it held, so it is not counted. Markers are dividers, not contents.
+   */
+  function visitSegments(visit) {
+    const byTag = new Map();
+    for (const entry of visit.entries) {
+      if (entry.kind !== 'signal') continue;
+      const tag = tagOf(entry.signal);
+      if (visit.screen && tag === 'screen') continue;
+      byTag.set(tag, (byTag.get(tag) || 0) + 1);
+    }
+    const segments = visit.txns.length ? [{ key: 'network', count: visit.txns.length }] : [];
+    for (const [key, count] of [...byTag].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+      segments.push({ key, count });
+    }
+    return segments;
+  }
+
+  const segmentText = (segments) => segments.map((s) => `${s.count} ${s.key}`).join(' · ');
+
+  /** The segments as a thin bar, each kind as wide as its share, in its lane colour. */
+  function segmentBar(segments) {
+    const bar = el('span', 'pv-segbar');
+    const total = segments.reduce((n, s) => n + s.count, 0);
+    for (const s of segments) {
+      const part = el('span', `pv-seg ${s.key === 'network' ? 'pv-seg-network' : `lane-${laneFor(s.key)}`}`);
+      part.style.flexGrow = String(s.count / Math.max(1, total));
+      part.title = `${s.count} ${s.key}`;
+      bar.appendChild(part);
+    }
+    return bar;
+  }
+
   function visitName(visit, list) {
     if (visit.screen) return visit.screen.name;
     return list.some((v) => v.screen) ? 'before first screen' : 'no screen signals in this session';
@@ -2157,11 +2194,19 @@
     if (visit.repeats.length) name.appendChild(el('span', 'pv-times mono', ` ×${visit.repeats.length + 1}`));
     stop.appendChild(name);
     stop.appendChild(el('span', 'pv-stop-dot'));
-    const calls = visit.txns.length;
-    stop.appendChild(el('span', 'pv-stop-stat muted', `${calls} ${calls === 1 ? 'call' : 'calls'}`));
+    // A station is narrow: a bar for the mix, the two biggest kinds in words, the rest on hover.
+    const segments = visitSegments(visit);
+    if (segments.length) {
+      stop.appendChild(segmentBar(segments));
+      const shown = segments.slice(0, 2);
+      const more = segments.length - shown.length;
+      stop.appendChild(el('span', 'pv-stop-stat muted', segmentText(shown) + (more ? ` +${more}` : '')));
+    } else {
+      stop.appendChild(el('span', 'pv-stop-stat muted', 'nothing'));
+    }
     const failed = visit.txns.filter(isFailure).length;
     if (failed) stop.appendChild(el('span', 'pv-stop-fail', `${failed} failed`));
-    stop.title = `${visitName(visit, list)} — open its line in the log`;
+    stop.title = `${visitName(visit, list)}${segments.length ? ` — ${segmentText(segments)}` : ''}\nopen its line in the log`;
 
     stop.addEventListener('click', () => {
       state.pathFocus = key;
@@ -2216,13 +2261,10 @@
     head.appendChild(title);
     head.appendChild(visitWhen(visit, lastMono));
 
-    const calls = visit.txns.length;
     const failed = visit.txns.filter(isFailure).length;
-    const others = visit.entries.filter((e) => e.kind === 'signal' && !(visit.screen && tagOf(e.signal) === 'screen')).length;
     const stats = el('span', 'pv-stats muted');
-    const parts = [`${calls} ${calls === 1 ? 'call' : 'calls'}`];
-    if (others) parts.push(`${others} ${others === 1 ? 'signal' : 'signals'}`);
-    stats.textContent = parts.join(' · ');
+    stats.dataset.calls = String(visit.txns.length);
+    stats.textContent = segmentText(visitSegments(visit)) || 'nothing recorded';
     if (failed) stats.appendChild(el('span', 'pv-failed', ` · ${failed} failed`));
     head.appendChild(stats);
     if (!list.some((v) => v.screen)) {
@@ -2303,7 +2345,7 @@
     }
 
     // Summarised: the calls as one count, every failure by endpoint, then the rest in order.
-    const total = el('button', 'pv-chip', `${visit.txns.length} calls`);
+    const total = el('button', 'pv-chip', `${visit.txns.length} network`);
     total.type = 'button';
     total.title = 'expand this visit';
     total.addEventListener('click', expand);

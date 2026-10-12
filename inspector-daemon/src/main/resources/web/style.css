@@ -419,7 +419,16 @@ body { display: flex; flex-direction: column; }
 .pv-stop-on .pv-stop-name { color: var(--accent); }
 .pv-stop:hover .pv-stop-name { text-decoration: underline; }
 .pv-stop:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
-.pv-stop-stat { font-size: 11px; }
+.pv-stop-stat { font-size: 11px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The mix of a visit at a glance: one segment per kind, as wide as its share. */
+.pv-segbar { display: flex; gap: 1px; width: 64px; height: 4px; margin: 1px 0; border-radius: 2px; overflow: hidden; }
+.pv-seg { min-width: 3px; height: 100%; background: var(--fg-muted); border: 0; }
+.pv-seg-network { background: var(--fg); opacity: 0.55; }
+.pv-seg.lane-screen  { background: #6aa9ff; }
+.pv-seg.lane-state   { background: #c08cff; }
+.pv-seg.lane-cache   { background: #59c98a; }
+.pv-seg.lane-session { background: #ffb454; }
+.pv-seg.lane-other   { background: #7c8798; }
 .pv-stop-fail { font-size: 11px; color: var(--err); }
 
 /* --- the log --- */

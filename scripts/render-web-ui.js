@@ -1660,7 +1660,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       : `NO - map ${stations.join(' > ')}, log ${drawn.join(' > ')}`;
 
     // Conservation through the card counts, which survive folding: every call on exactly one visit.
-    const counted = cols().reduce((n, c) => n + Number((c.querySelector('.pv-stats')?.textContent.match(/^(\d+) call/) || [0, 0])[1]), 0);
+    const counted = cols().reduce((n, c) => n + Number(c.querySelector('.pv-stats')?.dataset.calls || 0), 0);
     const inList = (txns.items || []).length;
     result.everyCallOnce = counted === inList ? `yes (${counted} calls)` : `NO - cards count ${counted}, session has ${inList}`;
 
