@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v56 — 2026-10-11.**
+**Document version: v57 — 2026-10-12.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.2.0")
-implementation("io.github.shafichariri:inspector-ui:1.2.0")
+implementation("io.github.shafichariri:inspector-core:1.3.0")
+implementation("io.github.shafichariri:inspector-ui:1.3.0")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.2.0")
-            implementation("io.github.shafichariri:inspector-ui:1.2.0")
+            implementation("io.github.shafichariri:inspector-core:1.3.0")
+            implementation("io.github.shafichariri:inspector-ui:1.3.0")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.2.0")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
+                implementation("io.github.shafichariri:inspector-noop:1.3.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.2.0")
-                implementation("io.github.shafichariri:inspector-ui:1.2.0")
+                implementation("io.github.shafichariri:inspector-core:1.3.0")
+                implementation("io.github.shafichariri:inspector-ui:1.3.0")
             }
         }
     }
@@ -424,13 +424,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.2.0")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.2.0")
+    implementation("io.github.shafichariri:inspector-noop:1.3.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.3.0")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.2.0")
-    implementation("io.github.shafichariri:inspector-ui:1.2.0")
-    implementation("io.github.shafichariri:inspector-stream:1.2.0")
+    implementation("io.github.shafichariri:inspector-core:1.3.0")
+    implementation("io.github.shafichariri:inspector-ui:1.3.0")
+    implementation("io.github.shafichariri:inspector-stream:1.3.0")
 }
 ```
 
@@ -1300,7 +1300,37 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v56 — 2026-10-11 (this document)
+### v57 — 2026-10-12 (this document)
+
+**Bump to 1.3.0 and download the 1.3.0 daemon. Your code does not have to change.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.2.0")
++implementation("io.github.shafichariri:inspector-core:1.3.0")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included. No public API
+changed, so a release build using the no-op artifacts is unaffected.
+
+- **The web UI has a `path` tab: the screens the user moved through, and what happened on each.**
+  A row of stations along the top, one per visit, and a line per visit beneath it with its calls,
+  signals and markers in order, counted by kind (`11 network · 17 warmup · 11 cache`). It updates
+  live, and follows only when you are already at the end. See §6e.
+- **It is only as good as your `screen` signal's timing — do this one thing.** A call belongs to
+  the screen that was showing when it started. If `screen` is sent from inside the new
+  destination, the calls its view-model fires as it opens land on the *previous* screen. Send it
+  when navigation commits instead — `addOnDestinationChangedListener` does — see §12c. Apps that
+  send no `screen` signal at all see one line saying so.
+- **A tap and the navigation it triggers keep their order, even in the same millisecond.** Every
+  call, signal and marker now carries a capture `seq`, and the path uses it to break ties. It is a
+  new optional field on the archive's rows; anything reading `index.jsonl` sees it and can ignore
+  it. Sessions recorded before 1.3.0 read exactly as before.
+- **Filtering no longer hides screens in the waterfall or on the time axis.** A `path:` filter used
+  to remove every screen from both, and a screen with no matching calls was dropped from the
+  waterfall — drawing a route nobody took. Both keep every screen now, and show the empty ones as
+  such.
+
+### v56 — 2026-10-11
 
 **Bump to 1.2.0 and download the 1.2.0 daemon. Your code does not change.**
 

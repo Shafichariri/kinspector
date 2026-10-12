@@ -55,6 +55,12 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.3.0 shows the path a user took through your app, and changes no code of yours.** The web UI's
+new `path` tab draws each screen visit as a station and, under it, everything that happened while
+that screen was up — calls, cache writes, analytics, taps — counted by kind and updating live. It
+reads your existing `screen` signals; send them when navigation commits and every call lands on
+the screen that made it. Bump the version; `INTEGRATION.md` v57 says what to do.
+
 **1.2.0 brings a physical iPhone to the web UI, and changes no code of yours.** Plug it in and run
 `inspector serve`: on a physical iPhone the app listens on its own loopback and the daemon dials it
 through usbmuxd, so nothing is exposed to the network. A session can also be exported as one file —
@@ -188,9 +194,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.2.0")
-implementation("io.github.shafichariri:inspector-ui:1.2.0")
-implementation("io.github.shafichariri:inspector-stream:1.2.0")
+implementation("io.github.shafichariri:inspector-core:1.3.0")
+implementation("io.github.shafichariri:inspector-ui:1.3.0")
+implementation("io.github.shafichariri:inspector-stream:1.3.0")
 ```
 
 Three lines of code:
