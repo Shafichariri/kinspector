@@ -1,5 +1,8 @@
 package dev.inspector.internal
 
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -15,6 +18,20 @@ import kotlin.time.TimeSource
 private val monoOrigin = TimeSource.Monotonic.markNow()
 
 internal fun monoMs(): Long = monoOrigin.elapsedNow().inWholeMilliseconds
+
+@OptIn(ExperimentalAtomicApi::class)
+private val seqCounter = AtomicLong(0L)
+
+/**
+ * The next capture sequence number: the order calls, signals and markers were captured in.
+ *
+ * Taken immediately after [monoMs] at every capture site, so it breaks the ties a millisecond clock
+ * leaves — a tap and the navigation it triggers routinely share one. Across threads two captures
+ * in one millisecond are genuinely unordered, and this then reports whichever reached the counter
+ * first; on one thread it is program order, which is the case that matters.
+ */
+@OptIn(ExperimentalAtomicApi::class)
+internal fun nextSeq(): Long = seqCounter.incrementAndFetch()
 
 /** ISO-8601 UTC with millis. Display only — never used for ordering. */
 @OptIn(ExperimentalTime::class)

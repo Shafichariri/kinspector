@@ -83,6 +83,15 @@ data class NetworkTransaction(
      * told nothing will otherwise report the request carried no credentials.
      */
     val redacted: List<String> = emptyList(),
+    /**
+     * Capture order on the device: one counter shared by calls, signals and markers, taken beside
+     * [mono]. It exists for one question `mono` cannot answer — which of two things in the **same
+     * millisecond** came first. `onClick { signal("tap", …); navigate() }` puts a tap and a screen
+     * change in one millisecond, and without this the tap is attributed to the screen it left.
+     * Null for rows recorded before it existed and for markers posted by the host, which has no
+     * place in the device's order; consumers fall back to `mono` alone.
+     */
+    val seq: Long? = null,
 ) {
     /** True when this attempt failed outright or returned a 4xx/5xx. Matches `has:error`. */
     val isError: Boolean get() = error != null || (status ?: 0) >= 400
@@ -125,6 +134,15 @@ data class Marker(
     val label: String,
     /** `app`, `agent`, or `user`. */
     val source: String,
+    /**
+     * Capture order on the device: one counter shared by calls, signals and markers, taken beside
+     * `mono`. It exists for one question `mono` cannot answer — which of two things in the **same
+     * millisecond** came first. `onClick { signal("tap", …); navigate() }` puts a tap and a screen
+     * change in one millisecond, and without this the tap is attributed to the screen it left.
+     * Null for rows recorded before it existed and for markers posted by the host, which has no
+     * place in the device's order; consumers fall back to `mono` alone.
+     */
+    val seq: Long? = null,
 )
 
 /**

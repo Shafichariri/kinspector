@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v56 — 2026-10-11.**
+**Document version: v57 — 2026-10-12.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.2.0")
-implementation("io.github.shafichariri:inspector-ui:1.2.0")
+implementation("io.github.shafichariri:inspector-core:1.3.0")
+implementation("io.github.shafichariri:inspector-ui:1.3.0")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.2.0")
-            implementation("io.github.shafichariri:inspector-ui:1.2.0")
+            implementation("io.github.shafichariri:inspector-core:1.3.0")
+            implementation("io.github.shafichariri:inspector-ui:1.3.0")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.2.0")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
+                implementation("io.github.shafichariri:inspector-noop:1.3.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.2.0")
-                implementation("io.github.shafichariri:inspector-ui:1.2.0")
+                implementation("io.github.shafichariri:inspector-core:1.3.0")
+                implementation("io.github.shafichariri:inspector-ui:1.3.0")
             }
         }
     }
@@ -424,13 +424,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.2.0")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.2.0")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.2.0")
+    implementation("io.github.shafichariri:inspector-noop:1.3.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.3.0")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.2.0")
-    implementation("io.github.shafichariri:inspector-ui:1.2.0")
-    implementation("io.github.shafichariri:inspector-stream:1.2.0")
+    implementation("io.github.shafichariri:inspector-core:1.3.0")
+    implementation("io.github.shafichariri:inspector-ui:1.3.0")
+    implementation("io.github.shafichariri:inspector-stream:1.3.0")
 }
 ```
 
@@ -540,8 +540,10 @@ One tab per kind of thing the session recorded, because each kind reads differen
 
 | Tab | What it is |
 |---|---|
-| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL |
-| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12), and the session opens on it |
+| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL. Every session opens here |
+| `path` | The screens the user moved through: a map of stations along the top, and beneath it one line per visit with the calls, signals and markers that started while it was on. Click a station or a line to open it. Needs `screen` signals (§12c); without them it is one line saying so |
+| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12) |
+| `waterfall` | Calls grouped by the screen that was on when each started, with a bar per call showing where the time went |
 | one per tag | A key list beside one key's detail, for `cache`, `screen`, `state`, and any tag Inspector has never heard of |
 
 On `all`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value was
@@ -557,7 +559,14 @@ value is not drawn, because a filter you can only leave on is not a filter. Wher
 been seen to answer, a **pull latest** button asks the app for a fresh snapshot.
 
 Reading order — oldest first or newest first — is the toolbar's order control, and it applies to the key list
-and to each key's history as well as to the traffic list.
+and to each key's history as well as to the traffic list. Not to `path`: a route has one order,
+and the control is hidden there.
+
+On `path` the filter narrows what is *inside* each visit and never removes a visit, so the route
+stays the one the user took; a visit with nothing matching shrinks to a stub. A failed call is
+never hidden: a collapsed line names every failed call, and an expanded one keeps failures above
+its `+N more`. While live, the log follows new visits only if you are already at its end — scroll
+back and a `new visit ↓` pill appears instead.
 
 The columns are filled from your payload — see §12d for the field names the tag browser reads.
 
@@ -1113,6 +1122,23 @@ LaunchedEffect(backStack) {
 }
 ```
 
+**Emit it when navigation commits, not when the new screen has composed.** The web UI's `path`
+view puts every call on the screen that was showing when the call *started*, with no grace window.
+A `screen` signal sent from the destination's own `LaunchedEffect` arrives after its view-model's
+`init` has already fired requests, so those requests land on the *previous* screen. With a
+`NavController`, `addOnDestinationChangedListener` fires at commit, before composition:
+
+```kotlin
+navController.addOnDestinationChangedListener { _, destination, arguments ->
+    Inspector.signal(tag = "screen", name = destination.route.orEmpty())
+}
+```
+
+The collector above is fine too, as long as it lives beside the back stack rather than inside the
+destination. A tap signalled in the same click handler that navigates stays on the screen it was
+made on, even when both land in the same millisecond: capture order breaks the tie. Re-sending the same name — a recomposition, a wizard stepping within one route — is
+drawn as one visit with each later signal as a step inside it, not as a navigation.
+
 ### 12d. Caches, and answering "what is in there *now*"
 
 A push records what was true at a moment. A **provider** lets the host ask what is true now:
@@ -1274,7 +1300,37 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v56 — 2026-10-11 (this document)
+### v57 — 2026-10-12 (this document)
+
+**Bump to 1.3.0 and download the 1.3.0 daemon. Your code does not have to change.**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.2.0")
++implementation("io.github.shafichariri:inspector-core:1.3.0")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included. No public API
+changed, so a release build using the no-op artifacts is unaffected.
+
+- **The web UI has a `path` tab: the screens the user moved through, and what happened on each.**
+  A row of stations along the top, one per visit, and a line per visit beneath it with its calls,
+  signals and markers in order, counted by kind (`11 network · 17 warmup · 11 cache`). It updates
+  live, and follows only when you are already at the end. See §6e.
+- **It is only as good as your `screen` signal's timing — do this one thing.** A call belongs to
+  the screen that was showing when it started. If `screen` is sent from inside the new
+  destination, the calls its view-model fires as it opens land on the *previous* screen. Send it
+  when navigation commits instead — `addOnDestinationChangedListener` does — see §12c. Apps that
+  send no `screen` signal at all see one line saying so.
+- **A tap and the navigation it triggers keep their order, even in the same millisecond.** Every
+  call, signal and marker now carries a capture `seq`, and the path uses it to break ties. It is a
+  new optional field on the archive's rows; anything reading `index.jsonl` sees it and can ignore
+  it. Sessions recorded before 1.3.0 read exactly as before.
+- **Filtering no longer hides screens in the waterfall or on the time axis.** A `path:` filter used
+  to remove every screen from both, and a screen with no matching calls was dropped from the
+  waterfall — drawing a route nobody took. Both keep every screen now, and show the empty ones as
+  such.
+
+### v56 — 2026-10-11
 
 **Bump to 1.2.0 and download the 1.2.0 daemon. Your code does not change.**
 

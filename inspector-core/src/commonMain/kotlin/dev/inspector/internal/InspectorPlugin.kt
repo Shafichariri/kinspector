@@ -74,6 +74,7 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
         val id = newId()
         val ts = nowIso()
         val startMono = monoMs()
+        val startSeq = nextSeq()
 
         val config = recorder.config
         val outgoing = request.body as? OutgoingContent
@@ -97,6 +98,7 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
                         id = id,
                         ts = ts,
                         mono = startMono,
+                        seq = startSeq,
                         callId = callId,
                         attempt = attempt,
                         ms = monoMs() - startMono,
@@ -160,6 +162,7 @@ internal fun inspectorPlugin(recorder: Recorder) = createClientPlugin("Inspector
                     id = id,
                     ts = ts,
                     mono = startMono,
+                    seq = startSeq,
                     callId = callId,
                     attempt = attempt,
                     ms = monoMs() - startMono,
@@ -224,6 +227,7 @@ internal fun RequestSnapshot.toTransaction(
     id: String,
     ts: String,
     mono: Long,
+    seq: Long? = null,
     callId: String,
     attempt: Int,
     ms: Long,
@@ -244,6 +248,7 @@ internal fun RequestSnapshot.toTransaction(
     id = id,
     ts = ts,
     mono = mono,
+    seq = seq,
     method = method,
     scheme = scheme,
     host = host,

@@ -6,7 +6,7 @@ change.
 | Files | What | How |
 |---|---|---|
 | `overlay-*.png` | The in-app overlay at 360dp | `./gradlew :inspector-ui:jvmTest --tests '*ListRenderTest*'`, then copy from `inspector-ui/build/screenshots/` |
-| `web-{list,timeline,waterfall}-{dark,light}.png` | The web UI against the desktop sample's scripted session | Scratch daemon on its own port and `--data` dir, sample pointed at it, `-Dinspector.sample.autofire=true`, then headless Chrome at 1440×860 @2x, resized to 2000px wide |
+| `web-{list,path,timeline,waterfall}-{dark,light}.png` | The web UI against the desktop sample's scripted session, `GET /slow` selected (on `path`, its Cart visit opened from the map) | Scratch daemon on its own port and `--data` dir, sample pointed at it, `-Dinspector.sample.autofire=true`, then headless Chrome at 1440×860 @2x, resized to 2000px wide |
 
 **Never use your everyday daemon or archive for these.** It holds real app traffic, and redaction
 is off by default. This repository is public, so no real app's hosts, paths, tokens or names may

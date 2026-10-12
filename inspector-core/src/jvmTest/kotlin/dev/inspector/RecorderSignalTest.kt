@@ -170,6 +170,28 @@ class RecorderSignalTest {
         }
     }
 
+    /**
+     * The virtual clock never moves here, so every row shares one `mono` — exactly the tie a tap
+     * and its navigation produce on a real millisecond clock. `seq` is what still orders them.
+     */
+    @Test
+    fun capture_order_survives_a_shared_millisecond() {
+        withRecorder(policy()) { recorder, scheduler ->
+            recorder.signal("tap", "add_to_cart", null)
+            recorder.mark("about to navigate")
+            recorder.signal(SignalTags.SCREEN, "Cart", JsonPrimitive("x"))
+            scheduler.advanceUntilIdle()
+
+            val tap = recorder.signals.value.single { it.tag == "tap" }
+            val screen = recorder.signals.value.single { it.tag == SignalTags.SCREEN }
+            val marker = recorder.markers.value.single()
+            assertEquals(tap.mono, screen.mono, "the fixture must actually tie on mono")
+            val order = listOf(tap.seq, marker.seq, screen.seq)
+            assertTrue(order.all { it != null }, "every captured row carries a seq, was $order")
+            assertEquals(order.sortedBy { it }, order, "seq must follow capture order")
+        }
+    }
+
     @Test
     fun conflation_is_per_tag_and_name_not_global() {
         withRecorder(policy()) { recorder, scheduler ->

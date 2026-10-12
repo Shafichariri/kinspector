@@ -61,6 +61,7 @@ fun main() {
             osVersion = System.getProperty("os.version") ?: "?",
             buildType = "debug",
         ),
+        port = System.getProperty("inspector.sample.port")?.toIntOrNull() ?: 8099,
         // The reference implementation of a replay signer.
         //
         // A real app would call into its own request-signing code here — the whole reason this
@@ -112,14 +113,39 @@ fun main() {
                     setBody("""{"hello":"world"}""")
                 }.bodyAsBytes()
             }
-            Inspector.mark("tapped checkout")
 
-            // Signals: app state on the same timeline as the traffic above. `tag` and `name` are
-            // this app's own words — Inspector never learns what they mean.
+            // A short walk through the app, so the path view has a route to draw: a revisit (the
+            // second Product is a new visit), a tap and an analytics event as ordinary signals, and
+            // a screen re-signalled with a new step, which is one visit and not two. Everything
+            // above this point started before the first screen signal, which is the launch column.
+            //
+            // Signals: app state on the same timeline as the traffic. `tag` and `name` are this
+            // app's own words — Inspector never learns what they mean.
+            Inspector.signal(SignalTags.SCREEN, "Home", text = "{}")
+            hit("/json?feed=home")
+            Inspector.signal("analytics", "home_viewed", text = "{\"source\":\"launch\"}")
+            Inspector.signal(SignalTags.SCREEN, "Product", data = buildJsonObject { put("id", 42) })
+            hit("/json?product=42"); hit("/status/404")
+            Inspector.signal("tap", "add_to_cart")
+            Inspector.signal(SignalTags.SCREEN, "Cart", text = "{}")
+            hit("/json?cart"); hit("/slow?ms=300")
+            Inspector.signal(SignalTags.CACHE, "cart", text = "{\"items\":1}")
+            Inspector.signal(SignalTags.CACHE, "catalog", text = "{\"pages\":3}")
+            Inspector.signal(SignalTags.SCREEN, "Product", data = buildJsonObject { put("id", 7) })
+            hit("/json?product=7")
+            Inspector.mark("tapped checkout")
             Inspector.signal(
                 tag = SignalTags.SCREEN,
                 name = "Checkout",
                 data = buildJsonObject { put("step", "review"); put("items", 3) },
+            )
+            // Past the recorder's conflation window, or the two steps would be merged into one
+            // observation before they ever reached the path view.
+            kotlinx.coroutines.delay(400)
+            Inspector.signal(
+                tag = SignalTags.SCREEN,
+                name = "Checkout",
+                data = buildJsonObject { put("step", "pay"); put("items", 3) },
             )
             // Emitted per change, with no throttling here on purpose: conflation is the
             // library's job, so a consuming app never has to reinvent it.
