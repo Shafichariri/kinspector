@@ -101,6 +101,36 @@
       "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"}]
     },
     {
+      "name": "a newest-first run is keyed on its earliest member, not its head",
+      "from": "TimelineTest.a run keeps its id while it grows in either order",
+      "input": {
+        "entries": [
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"}]
+    },
+    {
+      "name": "a newest-first run keeps its id as it grows at the head",
+      "from": "TimelineTest.a run keeps its id when the reading order flips",
+      "input": {
+        "entries": [
+          {"S": {"id": "r4", "tag": "state", "name": "form", "mono": 140}},
+          {"S": {"id": "r3", "tag": "state", "name": "form", "mono": 130}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}
+        ]
+      },
+      "expect": [
+        {
+          "key": "state\u0000form",
+          "entries": ["S:state/form", "S:state/form", "S:state/form", "S:state/form"],
+          "id": "state\u0000form\u0000r1"
+        }
+      ]
+    },
+    {
       "name": "a single observation is a run of one",
       "from": "Timeline.kt timelineRuns",
       "input": {"entries": [{"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}]},

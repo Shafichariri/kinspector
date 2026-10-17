@@ -4097,8 +4097,20 @@
     return runs;
   }
 
-  /** Stable across re-renders: signal ids are, and the first of a run does not move. */
-  const runIdOf = (run) => `${run.key}\u0000${run.entries[0].signal.id}`;
+  /**
+   * Mirror of `TimelineRun.id`: keyed on the run's **earliest** member, never its head.
+   *
+   * A run grows at its newest end, so in newest-first order the head is the newest observation and
+   * changes on every one — an id taken from it re-keyed the run and collapsed an expanded run under
+   * the reader during live tail, which is exactly when somebody is watching it. The earliest member
+   * also survives flipping the order. The first minimum in draw order wins a tie, as `minBy` does.
+   */
+  const runIdOf = (run) => {
+    let earliest = run.entries[0];
+    for (const entry of run.entries) if (entry.mono < earliest.mono) earliest = entry;
+    const token = earliest.kind === 'signal' ? earliest.signal.id : String(earliest.mono);
+    return `${run.key ?? ''}\u0000${token}`;
+  };
   // @mirror-end timelineRuns
 
   function renderTimeline() {
