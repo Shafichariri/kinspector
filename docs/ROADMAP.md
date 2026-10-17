@@ -493,6 +493,8 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   to be called `InspectorOverlay.kt`, not because anything checks, and renaming either one is a
   silent runtime break with nothing to catch it.
 
+  **Decided 2026-10-18: the three become `internal`.** The guard is now §5 → Phase I.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -548,15 +550,410 @@ tag cut before any of this existed.
 
 ---
 
-## 5. Next: the daemon and the web UI — planned 2026-10-17
+## 5. Next: the structure and architecture pass — planned 2026-10-18
+
+**This comes first. Nothing in §6 starts until the items below marked "before §6" have landed.**
+This section was inserted on 2026-10-18 ahead of what had been §5. The daemon and web UI plan is §6
+now. Anything written before that date, including the review recorded inside that section, calls
+it §5.
+
+The reason is in one sentence of §6: "Order is by dependency, not by appeal." §6 adds six screens to
+a page that is one 5,398-line function. It adds bulk control endpoints to an 800-line class where
+the control header is checked by hand at eight call sites. It adds stats, diff and findings services
+to a daemon with no layers. And all of it lands under web UI checks that CI has never run. Building
+§6 on that means building it twice, or building it once and not being able to tell what broke.
+
+**Source.** A read-only audit of the repository by the architect, measured at `b4e7319` on
+2026-10-17. The ten findings are below in the audit's own order, because each item points back to
+one of them:
+
+1. CI never runs the web UI checks: `render-web-ui.js`, the archive probe, and the single-`fetch`,
+   `[hidden]`, 11px and mirror audits. All of them run only when someone remembers to.
+2. Five of the seven model↔`app.js` mirrors have no check: `pathScope`, `endpointShortcuts`,
+   `timelineRuns`, duplicates and `HOP_BY_HOP`. `AGENTS.md` says "keep them in step" for each one,
+   and for these five nothing enforces it.
+3. **A live bug.** `SessionRepository.timeline()` is a second copy of `timeline()`. It sorts by
+   `mono` alone, stably, after adding transactions, then signals, then markers. So at a tie a marker
+   lands *after* the call it marks, where the model's rule puts it *before*, and signal ties ignore
+   `seq`. The MCP `timeline` tool uses it, and so does the context half of the transaction tool.
+4. `app.js` is 5,398 lines in one IIFE, `style.css` is 1,926 and `render-web-ui.js` is 2,530.
+5. The control header is opt-in per route. `Server.kt` is one 800-line class with 30 routes, and
+   eight call sites check the header by hand.
+6. The daemon has no layers: about twenty files in one package, beside a lone `mcp/`. `McpTools.kt`
+   is 938 lines.
+7. `AGENTS.md` is 126 KB, and 92 KB of that is one flat list of decisions. Every agent session and
+   every subagent loads all of it. Its Architecture section is stale.
+8. The module graph is correct, and nothing checks it.
+9. The `noop-ui` twin has no golden file. This is the gap already recorded under §3 → Guards.
+10. Two overlay files are large: `ListChrome.kt` is 703 lines and `InspectorList.kt` is 758.
+
+**The target shape**, as proposed by the architect. The items below carry it out. It is recorded
+here as the goal, and the architect owns the details:
+
+- **Daemon packages:** `http/` (routes and a control gate), `mcp/` (tools split by group),
+  `service/` (stats, diff, findings, export, replay and process control, with no Ktor), and
+  `archive/`, all over `:inspector-model`. Adapters (`http/`, `mcp/`) never import each other.
+  `Main.kt` stays where it is.
+- **Web UI:** ordered classic scripts, `web/js/NN-*.js`, listed in a manifest, `web/scripts.txt`.
+  The export inliner, `index.html` and the probes all read that manifest. There is still no build
+  step. The CSS splits into `tokens.css` plus one file per area.
+- **Docs:** `AGENTS.md` becomes an index under 15 KB. The decisions move word for word into
+  `docs/decisions/*.md`. Each module gets its own `AGENTS.md` with a `CLAUDE.md` symlink. A check
+  enforces that each decision exists in exactly one place.
+
+**Behaviour does not change, except in the phase E item.** Every other item is a move, a split or a
+new check. If one of them changes what a user, an agent or a consuming app sees, it has gone beyond
+its scope. Stop and bring it back here.
+
+**How every check here is accepted.** No new tools: no detekt, no ktlint, no npm dependency in the
+shipped web UI. Each check is **proven to fail when broken**: break a copy of the thing it guards,
+show the red run, then restore it. This is the repository's convention, and it matters most here
+because this whole section is guards. A guard that has only ever been seen passing is not a guard.
+
+### Decided 2026-10-18 — six questions from the handoff, all as recommended
+
+The maintainer answered all six on 2026-10-18, each with the option the architect recommended.
+They are recorded together here because several items depend on more than one of them.
+
+1. **`app.js` becomes ordered classic script files**, `web/js/NN-*.js`, listed in `web/scripts.txt`,
+   with no build step. The other option was one file with enforced sections. Files won because a
+   diff to one area should be reviewable as that area. *Touches recorded decisions; see the phase F
+   item.*
+2. **`noop-ui`: `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`**
+   in `:inspector-ui`. They are not mirrored into the noop. This closes the divergence recorded
+   under §3 → Guards and unblocks the phase I item. **It is a public API removal**; see that item.
+3. **Stats and findings rules live in the daemon's `service/` layer**, not in `:inspector-model`.
+   This matches §6's premise of no model change and no new `app.js` mirror.
+4. **A `:repo-checks` module holds the structural checks, with no detekt or ktlint.** It is a
+   build-only module and is never published. *Touches a recorded decision; see the phase B item.*
+5. **The client-name terms are held as a repository secret for CI**, and are never written into
+   the repository. This keeps the recorded rule that the terms are not listed anywhere in the
+   repo, and moves the check from "before the commit, if remembered" to every push. *Has a trap;
+   see the phase B item.*
+6. **The MCP `timeline` fix is approved as a bug fix.** An agent will see a different order at
+   same-millisecond ties. That is the correction, not a regression.
+
+### Order, and why
+
+Ordered by value per hour of work, not by the audit's lettering. The letters are kept so the
+handoff and the architect's notes still line up. They label items here and are not a numbering
+scheme.
+
+| Order | Item | Size | Must land |
+|---|---|---|---|
+| 1 | Phase E — one `timeline()`, so MCP agrees with the model | S | before §6 — a live bug |
+| 2 | Phase C — every control route refuses without the header, by test | S | before §6 |
+| 3 | Phase A — web checks and shared mirror cases in CI | M | before §6 |
+| 4 | Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks | S | before §6 |
+| 5 | Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides | M | before §6 |
+| 6 | Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check | M | before §6 |
+| 7 | Phase F — `app.js` and CSS split behind the manifest | M | before 1a |
+| 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 |
+| 9 | Phase H — split the two large overlay files | S | later |
+
+E goes first because it is small and it is the only item where something is wrong today: an agent
+asking for a timeline gets an answer that disagrees with both UIs. C is next because it is small and
+it is the security boundary. §6 adds two bulk control endpoints, and today they would be protected
+only if somebody remembered to protect them. A comes before F on purpose. Splitting `app.js` is the
+riskiest change to the web UI in this section, so it should happen with CI already watching
+the mirrors and audits it could break. G comes before D and F because every agent run for every
+later item pays for the 126 KB file, and because D and F each restate decisions. It is cheaper to
+restate them in their new home than to move them twice. H is last because nothing in §6 touches the
+overlay.
+
+### Phase E — one `timeline()`, so MCP agrees with the model
+
+**Audit finding 3. A behaviour-changing bug fix, approved as one (decision 6).**
+
+**For whom.** An agent over MCP. It asks `timeline` what happened around a marker and gets the
+marker placed *after* the call that was made at the same millisecond. Both UIs put it before. The
+recorded rule in `AGENTS.md` ("Markers interleave through `timeline()`") says before, because a
+marker is dropped just before the thing it marks. A tie is exactly what a marker dropped right
+before a request looks like on a millisecond clock. So the wrong answer shows up in the very case
+the rule exists for. Signal ties ignore `seq` in the same way, which is the `onClick { tap;
+navigate() }` case that `visits()` was fixed for.
+
+**Acceptance criteria.**
+
+- `SessionRepository.timeline()` no longer orders anything itself. Both MCP call sites, the
+  `timeline` tool and the transaction tool's before/after context, get their order from the model's
+  `timeline()`.
+- A daemon test builds a session with a marker and a call at the same `mono`, and two signals at
+  the same `mono` with different `seq`. It asserts that the MCP `timeline` output matches the
+  model's `timeline()` for that session, entry by entry. It fails with the old sort put back.
+- The recorded clamp is either kept or deliberately changed, and the item says which. Today
+  `timeline()` clamps to 2,000 entries, and `AGENTS.md` ("All three exports read the raw readers")
+  already records that clamp as a reason the exports do not use it.
+- A note in `docs/DAEMON.md` or the MCP tool description says the tie order changed and in which
+  release, so an agent comparing an old transcript with a new one has an explanation.
+
+**Out of scope.** Changing the tool's arguments, its default limit or its oldest-first order. An MCP
+`path` tool, which §3 already defers.
+
+### Phase C — every control route refuses without the header, by test
+
+**Audit finding 5.**
+
+**For whom.** Anyone with a browser open while the daemon runs. `AGENTS.md` records why
+`X-Inspector-Control` exists: without it, any web page can POST to `127.0.0.1:8099`. Today each route
+opts in by hand, so a new route is unprotected unless its author remembers. §6 is about to add
+`POST /api/peers/kill` and `POST /api/sessions/delete`, which are bulk kill and bulk delete.
+
+**Acceptance criteria.**
+
+- One test lists every route the daemon registers. It asserts that each one that is not `GET`
+  answers **403** without the header. The list comes from the server itself, not from a list kept
+  in the test, so a new route is covered when it is added.
+- The allowlist is **markers**, and the reason is quoted from the recorded decision:
+  `HttpMarkerPoster` and the MCP tools post markers without the header, and "a marker is not a
+  weapon". Any other entry on the allowlist is a decision for this roadmap, not a line in a test.
+- Proven to fail when broken: removing the check from one route fails the test and names the route.
+- After phase D, the check is applied once by the control gate rather than at eight call sites.
+  This item does not have to wait for D; the test is what holds the rule either way.
+
+**Out of scope.** Authentication. The loopback bind is still the boundary. CORS behaviour.
+
+### Phase A — web checks and shared mirror cases in CI
+
+**Audit findings 1 and 2.**
+
+**For whom.** A web UI user on a Mac, and everyone who edits `web/`. Every recorded web UI rule
+(one `fetch`, the `[hidden]` trap, nothing under 11px, the mirrors) is held by a script that CI
+never runs. Two of those rules were each broken for two releases before a person found them. And
+§6 rewrites most of what those scripts anchor on.
+
+**Acceptance criteria.**
+
+- A zero-dependency `scripts/check-web-static.js` runs in CI. It covers the single-`fetch` count,
+  the `[hidden]` override audit, the 11px audit, and the mirror cases. It needs no daemon, no
+  network and no `npm install`.
+- **Shared mirror cases for all seven mirrors.** Each case lives in one place that both sides read:
+  the Kotlin test in `:inspector-model` and the JS check against the function lifted from the real
+  `app.js`. The five that have no check today get one: `pathScope`, `endpointShortcuts`,
+  `timelineRuns`, duplicates and `HOP_BY_HOP` (whose authority is `Replay.kt`, not the model). A
+  case added on one side is run on the other.
+- `render-web-ui.js` and `render-web-ui-archive.js` run in CI against a real daemon holding a
+  known session. The architect chooses how the daemon gets that session. The run states how many
+  checks it made, so a probe that quietly skipped half of them shows up as a smaller number.
+- Proven to fail when broken, one break per check: a second `fetch`, a pane that sets `display`
+  with no `[hidden]` override, a 10px rule, one changed threshold in each mirror, and a network call
+  that bypasses `source` in an export.
+- `jsdom` stays a CI and developer dependency of the probes. It never appears in `web/`.
+
+**Out of scope.** Rewriting the probes for §6's layout, which belongs to 1a and 1b. Splitting
+`render-web-ui.js`.
+
+### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
+
+**Audit finding 8, and several rules that `AGENTS.md` states and nothing enforces.**
+
+**This touches a recorded decision.** `AGENTS.md`: "**Every real module needs a noop twin.**" The
+new `:repo-checks` module (decision 4) has no twin and must not have one. Neither does
+`:inspector-daemon` or either sample. The rule as recorded is about modules *the consuming app
+calls into*, so a check that says "every module" will either fail on day one or grow an unexplained
+allowlist. The check has to encode the recorded meaning: published modules a consumer calls into.
+Its allowlist must give that reason.
+
+**For whom.** A consuming team, whose release build depends on the twins and the module graph
+staying what the docs say. Also the maintainer, who today enforces every rule below from memory.
+
+**Acceptance criteria**, each check proven to fail when broken:
+
+- **Module edges** match an allowlist, and `:inspector-model` depends on kotlinx-serialization only.
+- **Dependency golden files.** A changed resolved dependency fails until it is regenerated on
+  purpose. This matches "Do not bump casually", which today is a sentence and nothing more.
+- **Every published, consumer-facing module has a noop twin**, with the reason above in the
+  allowlist.
+- **No `TODO` markers in source.** This is already a convention, stated at the top of this file.
+- **A file-size ratchet** in `structure/budgets.txt`. A file may shrink and may not grow past its
+  recorded size, so findings 4, 6 and 10 cannot get worse while they wait their turn.
+- **Commit identity and no trailers**, checked in CI over the commits a pull request adds: the
+  maintainer's noreply address, and no `Co-Authored-By:` or `Claude-Session:` lines.
+- **The client-name scan in CI**, reading its terms from a repository secret (decision 5). Two
+  traps, both from the repository's own principles:
+  - **CI logs on a public repository are public.** GitHub masks a secret only where its exact
+    value appears. A single term matched out of a list would be printed in clear. The check must
+    report file and line only, never the matched text.
+  - **Pull requests from forks get no secrets.** "A guard that scans nothing must fail, not pass"
+    is recorded for `check-release-clean.sh`, and it applies here too. When the secret is empty
+    (and an unset secret arrives as empty, not absent; see the signing decision), the step must
+    say "not run" and must not print a pass.
+
+**Out of scope.** detekt and ktlint (decision 4). A build-wide formatter. Scanning history, which is
+already public. As recorded, the check belongs before the commit.
+
+### Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides
+
+**Audit finding 7.**
+
+**For whom.** Every agent working here, including the team in `.claude/agents/`. `CLAUDE.md` is
+loaded into every subagent, so 126 KB is paid on every run, and 92 KB of it is decisions about
+modules the run is not touching. Also a human reading it for the first time, who has to work
+through one flat list to find the rule for the file they are about to edit.
+
+**This touches a recorded decision.** `AGENTS.md` opens by saying it is the one canonical context
+file, with "**exactly one copy to keep current**". Per-module `AGENTS.md` files with `CLAUDE.md`
+symlinks keep the *one copy of each decision* property only if the check that comes with them is
+real. That check is what makes this item compatible with the decision rather than a reversal of it.
+
+**Acceptance criteria.**
+
+- The root `AGENTS.md` is under 15 KB, and a check holds that budget.
+- The decisions move **word for word** into `docs/decisions/*.md`. The move is its own commit, and
+  a diff shows nothing reworded. Editing comes after, in separate commits.
+- A check fails when one decision appears in two places, proven by pasting a copy.
+- Every reference to a moved heading is updated in the same change. That covers `.claude/agents/*`,
+  `docs/TEAM.md`, the closing section of this roadmap ("Non-obvious decisions — do not 'fix'
+  these"), and the `roadmap-cycle` skill. Otherwise the team's own instructions point at headings
+  that no longer exist.
+- The stale Architecture section is corrected against the real module list.
+
+**Out of scope.** Rewriting, merging or dropping any decision during the move. Changing what any of
+them says.
+
+### Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check
+
+**Audit findings 5 and 6.**
+
+**For whom.** Whoever builds §6. Stats, diff and findings are three services that the HTTP API and
+MCP must both serve identically. §6's config item says outright that "an agent and the page
+disagreeing about what counts as a finding is a worse bug than either alone". Services with no Ktor
+in them are what make that structural rather than a matter of care. Decision 3 puts the rules there.
+
+**Acceptance criteria.**
+
+- The packages are as proposed above: `http/`, `mcp/`, `service/` and `archive/`. `Main.kt` does not
+  move.
+- An import scan fails when `service/` or `archive/` imports Ktor, or when `http/` and `mcp/`
+  import each other. It is proven by adding one such import.
+- `Server.kt` and `McpTools.kt` are split along those lines, with routes grouped and tools split by
+  group. Every daemon test passes unchanged, and no MCP tool description or route changes.
+- The peer, MCP-probe and server-control decisions in `AGENTS.md` (identity re-checked at kill
+  time, no "start MCP" endpoint, `ServerControl` as an interface) are still true, and their file
+  references are updated.
+
+**Out of scope.** Any new endpoint or tool. Changing the archive layout.
+
+### Phase F — `app.js` and CSS split behind the manifest
+
+**Audit finding 4. Must land before 1a**, because 1a adds a rail, hash routes and four pages. Adding
+them to one 5,398-line function would be the "building it twice" that §6's ordering argues against.
+
+**This touches recorded decisions** (decision 1). Several are worded around one file:
+
+- "**The browser's `fetch` is called exactly once in `app.js`**." After this item that means once
+  across every file in `web/scripts.txt`, and the count has to read the manifest. If it does not,
+  a second `fetch` in a new file goes uncounted. The same goes for "`fetch` is still called once in
+  `app.js`" in §6's foundation item, which should be read that way after this lands.
+- The mirror checks and `parseJsonTree` checks "lift … out of the real `app.js` by their markers".
+  After the split they lift from whichever file now holds each function.
+- The HTML export "inlines the served `index.html`, `style.css` and `app.js`". After the split it
+  inlines every file in manifest order. The archive probe proves that no file was left out.
+- `source` stays the only network seam. A second one is on the "do not" list below.
+
+**For whom.** A web UI user on a Mac sees nothing change. That is the acceptance bar. The people it
+is for are whoever edits the web UI next, and the reviewer of 1a's diff.
+
+**Acceptance criteria.**
+
+- `web/scripts.txt` lists ordered classic scripts, `web/js/NN-*.js`. `index.html`, the export
+  inliner and both probes all read the manifest, and none of them keeps its own list.
+- The CSS is split into `tokens.css` plus per-area files. `PaletteParityTest` still reads the tokens
+  and fails when one drifts, proven again after the move.
+- There is no build step and no new dependency. The page works served by the daemon and from an
+  exported file opened under `file:`.
+- Both probes report the same check count before and after. The static checks from phase A pass
+  unchanged.
+- A manifest entry pointing at a missing file fails the build, and so does a `web/js/` file the
+  manifest does not list.
+
+**Out of scope.** Any visual or behavioural change. Splitting `render-web-ui.js`. A module system or
+a bundler.
+
+### Phase I — `noop-ui` golden file
+
+**Audit finding 9. Unblocked by decision 2. Does not gate §6.**
+
+**This changes public API for `:inspector-ui`, and needs the noop twin and golden-file treatment
+sized honestly.** `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`.
+Nothing in this repository outside `:inspector-ui` uses them, the samples included, and no document
+has ever told a consumer to. But they have been public in every published version, so a consuming
+app that themed against them stops compiling. A removal can be undone only by a release, and §3 →
+Guards called this "a decision rather than a tidy-up" for that reason. Two follow-ons:
+
+- `docs/INTEGRATION.md` gets a version bump and a changelog entry that says what to *do*: "if you
+  referenced these, copy the colours you need". The recorded rule is that any change affecting a
+  consumer gets one.
+- **Open for the human:** whether a removal from public API ships in a minor release.
+
+**Acceptance criteria.**
+
+- `api/inspector-ui-public-api.txt` (or whatever the architect names it) is asserted for
+  **equality** by both `:inspector-ui` and `:inspector-noop-ui`, as the stream pair is.
+- `InspectorOverlayKt` is recorded as the JVM facade in both. Renaming either `InspectorOverlay.kt`
+  then fails the guard, which closes the gap §3 describes: "they agree because both files happen to
+  be called `InspectorOverlay.kt`, not because anything checks".
+- The constructor and method JVM descriptors are compared, as for the other pairs. Compose's
+  synthetic `Composer` and `changed` parameters are handled by a stated rule and not by an
+  allowlist, and the generated golden file is read by a person before it is trusted.
+- Proven in both directions, on both modules: add a public member to one side, rename one file.
+- `-Pinspector=off` still builds.
+
+**Out of scope.** Mirroring the palette into the noop, which was rejected (decision 2). A class-set
+diff, which is on the "do not" list.
+
+### Phase H — split the two large overlay files
+
+**Audit finding 10. Later.** `ListChrome.kt` (703 lines) and `InspectorList.kt` (758) are the
+overlay's list and its chrome. Nothing in §6 touches the overlay, so the work can wait. The phase B
+ratchet stops them growing in the meantime.
+
+**For whom.** Whoever next changes the overlay's list.
+
+**Acceptance criteria.** Each file is split along a seam the architect names. `ListRenderTest` and
+`ListControlsTest` pass unchanged, and the 360dp screenshots are compared by eye before and after.
+`InspectorOverlay.kt` keeps its name. The ratchet records the new, smaller budgets.
+
+**Out of scope.** Any change to the list's behaviour or look.
+
+### Deliberately not doing, in this pass
+
+Each of these would look like a tidy-up while the code is being moved, and each is a recorded
+decision or a known trap:
+
+- **Moving `Main.kt`.**
+- **Renaming `inspector-noop-stream/.../StreamSink.kt`**, which is load-bearing for the JVM facade
+  name, **or either `InspectorOverlay.kt`**, which holds the same property by coincidence until
+  phase I makes it checked.
+- **Rebuilding a class-set diff between twins.** It was measured at 19, 19 and 4 spurious entries
+  and rejected. The reasoning is in `AGENTS.md`.
+- **Adding a JavaScript filter evaluator to the export.** That would be a second parser of the frozen
+  grammar.
+- **Adding a second network seam beside `source`.**
+- **Splitting out `:inspector-okhttp`.** A separate module cannot see `Recorder` or `Redactor`.
+- **Moving `UsbListenerRebindTest` to the JVM**, where it passes with the fix deleted.
+
+### Open questions only the human can answer
+
+- Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
+  removes public API from every published version up to now (phase I).
+- Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
+  or only in the tool description (phase E).
+
+---
+
+## 6. Next: the daemon and the web UI — planned 2026-10-17
+
+*Numbered §5 until 2026-10-18, when the structure and architecture pass was inserted ahead of it;
+the review below was written under that number.*
 
 Six pieces of work, all host-side. **No SDK change and no `:inspector-model` change**: every new
 rule runs in `:inspector-daemon` and reaches the page through the API, so none of it needs a
 mirror in `app.js` to keep in step — the mirrors above are the drift this plan declines to add.
 `INTEGRATION.md` is untouched, because nothing changes for a consuming app.
 
-**None of §5 starts until the structure and architecture pass that precedes it has landed**; that
-pass is recorded separately.
+**None of §6 starts until the structure and architecture pass that precedes it has landed**; that
+pass is §5, and phase F there must land before 1a in particular.
 
 Order is by dependency, not by appeal: the page shell comes first because every later item adds a
 screen, and building those into the current single page would mean building them twice.
