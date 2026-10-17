@@ -117,6 +117,12 @@ function auditHiddenPanes(cssText) {
  * let `window.fetch(`, `globalThis.fetch(` or `self.fetch(` through, so those are counted
  * separately and must be zero. The other primitives are matched anywhere in the text, comments
  * included: a strict count that a comment can trip is cheaper than one a call can slip past.
+ *
+ * A known limit: these are text patterns, not a parse, so `window['fetch'](`, `fetch (x)` with a
+ * space, or an aliased `const f = fetch` are not counted. They are not uncovered — the archive
+ * probe opens the export with `fetch`, `WebSocket` and `XMLHttpRequest` all made to throw, so any
+ * such call that runs in an export fails "no network attempts" at runtime — but this count alone
+ * would not see them.
  */
 function countNetworkPrimitives(sources) {
   const count = (re) => sources.reduce((n, { text }) => n + (text.match(re) || []).length, 0);

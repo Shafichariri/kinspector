@@ -1,9 +1,15 @@
 /* The web UI's source files, as the checks read them.
  *
- * The one place that knows which files make up the page. Today that is `app.js` and `style.css`;
- * when `app.js` splits into ordered scripts behind `web/scripts.txt`, this is the file that changes
- * and nothing that calls it does. Every check takes the list it returns rather than a path, which is
- * why `liftBlock` and `countNetworkPrimitives` search all of them.
+ * The one place the *checks* learn which files make up the page. Today that is `app.js` and
+ * `style.css`; when `app.js` splits into ordered scripts behind `web/scripts.txt`, this is the file
+ * the checks need changed, and nothing that calls it does. Every check takes the list it returns
+ * rather than a path, which is why `liftBlock` and `countNetworkPrimitives` search all of them.
+ *
+ * It is not the only place that knows the page's shape. Two others replace the literal
+ * `<script src="/app.js"></script>` tag in `index.html` with inlined code, and both must follow a
+ * split: `render-web-ui.js` (its `SCRIPT_TAG`, to build the snapshot) and `HtmlExport.kt` (its
+ * `SCRIPT_TAG`, to build an exported session). Each refuses to proceed when its replacement misses,
+ * so a split that forgets one fails loudly rather than shipping a page with no code.
  *
  * Zero dependencies: `check-web-static.js` must run with nothing installed.
  */
