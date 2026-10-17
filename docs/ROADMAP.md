@@ -555,12 +555,16 @@ rule runs in `:inspector-daemon` and reaches the page through the API, so none o
 mirror in `app.js` to keep in step — the mirrors above are the drift this plan declines to add.
 `INTEGRATION.md` is untouched, because nothing changes for a consuming app.
 
+**None of §5 starts until the structure and architecture pass that precedes it has landed**; that
+pass is recorded separately.
+
 Order is by dependency, not by appeal: the page shell comes first because every later item adds a
 screen, and building those into the current single page would mean building them twice.
 
 | Order | Item | Size | Ships in |
 |---|---|---|---|
-| 1 | Web UI foundation — pages, bulk actions, room for the list | L *(understated: see the probe rewrite)* | 1.4 |
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 |
 | 2 | Endpoint latency stats | M | 1.5 |
 | 3 | Session diff | L | 1.5 |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 |
@@ -568,13 +572,20 @@ screen, and building those into the current single page would mean building them
 | 6 | Web UI polish, against the finished screens | M | 1.7 |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK |
 
-**Review, 2026-10-17: six open decisions, each recorded under the item it affects.** Only one of
-them stops an item from starting: **Endpoint latency stats** waits on *two notions of endpoint*,
-because templates are its first bullet and the diff and the findings reuse them. The rest gate a
-piece *inside* an item, or its acceptance, not its start: *the probe rewrite* resizes the Web UI
-foundation; *truncated bodies* adds an acceptance criterion to the Session diff; *two notions of
-duplicate* gates the Findings row badge; *where the cache lives* gates any on-disk cache for the
-Findings and Sensitive-data items; *regional defaults* gates the shipped Sensitive-data rule set.
+Both halves of the foundation stay in 1.4: the shell is what every later page is built into, and
+room for the list is the half a user notices on the screen they already use, so shipping the shell
+alone would be a release whose visible change is a rail with pages that are mostly empty. The sizes
+are the product owner's estimate; the architect re-sizes both before 1a starts. If 1b runs long it
+can slip to 1.5 without blocking anything — nothing later depends on it.
+
+**Review, 2026-10-17: six open decisions, each recorded under the item it affects. Four were decided
+the same day.** Decided: *the probe rewrite* (split the foundation into 1a and 1b); *two notions of
+endpoint* (keep both, named differently — this unblocks Endpoint latency stats, and with it the diff
+and the findings); *where the cache lives* (a disk cache is acceptable under the stated conditions);
+*regional defaults* (generic rules only). **Nothing in the table is blocked by an open decision
+now**; all of it waits on the structure pass above. Still open, and neither stops an item from
+starting: *truncated bodies* adds an acceptance criterion to the Session diff; *two notions of
+duplicate* gates the Findings row badge.
 
 ### Web UI foundation
 
@@ -584,6 +595,12 @@ error, now strip, axis — before the first row.
 
 **The rule for what moves:** anything about the session being watched stays on the traffic page;
 anything about the machine, the archive or more than one session gets a page of its own.
+
+**It lands as two deliveries** (decided 2026-10-17, see below). **The shell** is the rail and hash
+routes, Sessions and Processes leaving the dialog, bulk selection and the bulk endpoints, and the
+writable `config.json` — the last because Settings and the findings rules need it, and Settings is a
+shell page. **Room for the list** is the divider, the overview line, the one-row toolbar, the `⋮`
+export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 
 - **A left rail**, collapsible to icons, over hash-routed pages: Traffic, Stats, Findings, Diff,
   Sessions, Processes, Settings. Hash routes keep the no-build-step, one-`index.html` shape and make
@@ -615,8 +632,11 @@ What must still hold: the export still works offline (new pages either read the 
 or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
 `display` joins `auditHiddenPanes`; nothing new under 11px.
 
-**Open decision — the probe rewrite is part of this item, and L understates it.** *(Review,
-2026-10-17. Does not block the start; the architect should re-size before it begins.)*
+**Decided 2026-10-17: split into the shell and room for the list, each landing with its probes.**
+The acceptance criteria at the end of this paragraph apply to both halves.
+
+*Was an open decision — the probe rewrite is part of this item, and L understates it.* *(Review,
+2026-10-17. Did not block the start; the architect should re-size before it begins.)*
 `scripts/render-web-ui.js` is about 2,500 lines, and much of it is anchored on exactly the layout
 this item moves. Its settings probe opens `#settings` through `#open-settings` and works through
 `#peers` and the sessions list inside that dialog; the stop probe presses `#server-stop` in the top
@@ -639,7 +659,7 @@ Options: keep the item whole and accept that roughly a third of it is probe work
 **the shell** (rail, hash routes, Sessions and Processes leaving the dialog, bulk endpoints) and
 **room for the list** (divider, overview line, one-row toolbar, density, `#/txn/{id}`), each landing
 with its probes. Recommended: split, because each half then has a probe diff small enough to review.
-Either way, add to the acceptance criteria: every existing probe still runs, moved and not deleted,
+Acceptance criteria for each half: every existing probe still runs, moved and not deleted,
 with the before/after check count stated; every new page has a probe proven to fail when broken;
 the archive probe opens each new page in an export and finds it either working from the embedded
 data or hidden under `body.archive`.
@@ -653,13 +673,23 @@ data or hidden under `body.archive`.
   max, mean bytes. **Below 20 samples p95 and p99 read `n<20`**, not a number — a percentile of
   six values is a confident-looking guess. Latency is per attempt, retried endpoints are marked,
   transport failures are counted and never averaged in.
-- `GET /api/sessions/{id}/stats?filter=` with the shared grammar; MCP `endpoint_stats`; a Stats page
-  whose rows open Traffic filtered to that endpoint; live, throttled to once a second; precomputed
-  into the exports so the offline file has them.
+- `GET /api/sessions/{id}/stats?filter=` with the shared grammar; MCP `route_stats`; a Stats page
+  whose rows open Traffic with the filter term the daemon returned for that row — a superset of the
+  row, and the opened view says so; live, throttled to once a second; precomputed into the exports
+  so the offline file has them.
+- **Naming:** a template is a **route** everywhere it appears — Stats column, API field, MCP tool,
+  docs. "Endpoint" stays with the traffic page's chips, which already carry that label
+  (`endpoints ▾`). The item keeps its title so the table and history still read.
 - Must read the whole session: a test at 1001+ rows, for the reason `HarTest` exists.
 
-**Open decision — two notions of "endpoint".** *(Review, 2026-10-17. **Blocks this item from
-starting**, and through it the diff and the findings, which reuse templates.)* The traffic page
+**Decided 2026-10-17: keep both, named differently, and the superset link is acceptable.** No
+`:inspector-model` change. Chips stay last-segment "endpoints"; daemon-side templates are "routes"
+(see the naming bullet above). Each Stats row carries its route and the filter term it links with,
+and the Traffic view opened from it says it may include paths the route keeps apart. This
+unblocks the item, and through it the diff and the findings.
+
+*Was an open decision — two notions of "endpoint".* *(Review, 2026-10-17. Blocked this item from
+starting, and through it the diff and the findings, which reuse templates.)* The traffic page
 already has one: endpoint chips come from `endpointShortcuts` in `:inspector-model`, keyed on the
 **last path segment** and applied as `endpointFilterTerm` — `path:*/profile`, an anchored glob. The
 overlay and `app.js` both use it. This item adds a second, daemon-side: `{id}` templates over the
@@ -705,8 +735,8 @@ same app; an optional `since:marker("…")` per side to compare one stretch of t
   `BodyOmission`: the diff must not assert what capture could not see.
 - MCP `diff_sessions`, a Markdown form, and the Diff page.
 
-Endpoint identity here follows whatever *two notions of "endpoint"* under Endpoint latency stats
-decides.
+Endpoint identity here is the **route** — the template decided under Endpoint latency stats — so
+"endpoints added and removed" means routes, and the diff says so in its labels.
 
 **Open decision — "unknown" must cover truncated bodies, not only omitted ones.** *(Review,
 2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
@@ -784,8 +814,14 @@ id, which explains the overlap rather than hiding it. Retiring the tag would mak
 web disagree, since the overlay has no findings; folding it in means a model-side rule moving into
 daemon config, which is a larger decision than this item.
 
-**Open decision — where the findings cache lives.** *(Review, 2026-10-17. Does not block the
-start; in-memory is safe by default. Gates any on-disk cache, here and in Sensitive-data detection.)*
+**Decided 2026-10-17: a disk cache is acceptable, under the three conditions at the end of this
+paragraph** — beside `sessions/`, never inside a session folder; masked evidence only; removed on
+every deletion path; and retention's byte budget states whether it counts. Memory-only remains the
+starting point until a measurement on a large real session says recomputing is slow; the disk option
+is no longer ruled out, and building it needs no further decision.
+
+*Was an open decision — where the findings cache lives.* *(Review, 2026-10-17. Did not block the
+start; in-memory is safe by default. Gated any on-disk cache, here and in Sensitive-data detection.)*
 "Cached per session against row count and rule version" says when the cache is valid, not where it
 is. It must not be inside the session folder. The recorded rule is narrower than "nothing in a
 session folder" — the daemon writes `index.jsonl`, `meta.json` and `bodies/` there by design — it is
@@ -808,45 +844,50 @@ Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules
 addable like the payment rules, in two kinds:
 
 - **Value rules**, validated rather than bare regex: card numbers (13–19 digits, **Luhn**; known
-  test PANs drop to `info`), IBAN (country length — KW is 30 — and **mod-97**), Kuwait Civil ID
-  (12 digits with a valid embedded birth date; structural, so marked lower confidence until a
-  check digit rule is supplied), JWTs and `token=`/`password=`/API keys in query strings, and
-  credentials over `http://`. Email and phone exist and default **off** — they are noise in almost
-  every session.
+  test PANs drop to `info`), IBAN (length checked against the full **ISO 13616** country table,
+  and **mod-97**), JWTs and `token=`/`password=`/API keys in query strings, and credentials over
+  `http://`. Email and phone exist and default **off** — they are noise in almost every session.
+  **No national-ID value rule ships by default**; a team whose app handles one adds its own rule in
+  config, like any other.
 - **Field-name rules**, matched on JSON key paths and query parameters whatever the value:
-  `civil_id`, `first_name`, `last_name`, `full_name`, `date_of_birth`, `passport_number`, `iban`,
-  `card_number`, `cvv`, `cvc`, `pin`, `otp`, `password`, and so on — case- and separator-insensitive
-  (`firstName`, `first-name`).
+  `national_id`, `id_number`, `tax_id`, `first_name`, `last_name`, `full_name`, `date_of_birth`,
+  `passport_number`, `iban`, `card_number`, `cvv`, `cvc`, `pin`, `otp`, `password`, and so on —
+  case- and separator-insensitive (`firstName`, `first-name`). The identity names are a neutral
+  spread, not one country's.
 
 Severity rises when the destination is **not** in a configured first-party host list: a card
 number going to an analytics host is the real alarm. Fields listed in `redacted[]` are skipped.
 
 **The detector must not become the leak.** Evidence is stored and shown **masked** —
-`•••• 4242`, `KW81 •••• 0001` — with the location and JSON path; never the value, in the UI, MCP
+`•••• 4242`, `GB82 •••• 5432` (the IBAN registry's own example) — with the location and JSON path; never the value, in the UI, MCP
 or any export. Bodies are scanned when findings are asked for, cached, never on ingest. A finding
 can be dismissed per endpoint and path, with a reason, saved to config.
 
 The cache for this scan follows *where the findings cache lives*, under Findings.
 
-**Open decision — regional defaults.** *(Review, 2026-10-17. Does not block the start of the
-framework; gates the rule set that ships as default.)* The Kuwait Civil ID rule, the KW IBAN length
-called out by name, the `civil_id` field name and the `KW81 •••• 0001` masking example are country
-rules, not a client's name, so they do not break the no-client-names rule. But they would be the
-**only** regional defaults in a public repository, and a single country singled out in the shipped
-rules narrows who the consuming app might be about as well as a name would. The constraint that
-matters — one real consuming app handles a national identity number with a known structure — is
-worth carrying; the country is not.
+**Decided 2026-10-17: generic rules only, no region packs.** The IBAN rule reads the full ISO 13616
+length table; no national-ID value rule ships by default, and a user who needs one adds it through
+config; field-name rules use a neutral spread of identity names. The rule list and masking example
+above have been rewritten to match.
 
-Options: ship as written; ship **generic structure only** (Luhn cards, IBAN with mod-97 and the full
-ISO 13616 country-length table, field names for national identity numbers across many regions, no
-national-ID value rules); or generic structure plus **optional region packs**, off by default, with
-more than one region represented from the first release. Recommended: generic by default, with
-packs. The IBAN rule needs no pack at all once it reads the whole length table — KW at 30 becomes one
-row among several dozen, which is how it should read. National-ID value rules go in packs, each
-marked lower confidence until it carries a check-digit rule, as the Civil ID one already says. The
-field-name list widens from `civil_id` to a neutral spread of national-identity names, and the
-masking example uses a generic IBAN. If no second region can be specified properly, generic-only is
-better than a lone pack.
+*Was an open decision — regional defaults.* *(Review, 2026-10-17. Did not block the start of the
+framework; gated the rule set that ships as default.)* The first draft of this item carried one
+country's national-ID value rule, that country's IBAN length called out by name, its field name for
+the ID, and a masking example in its IBAN format. Those are country rules, not a client's name, so
+they did not break the no-client-names rule. But they would have been the **only** regional
+defaults in a public repository, and a single country singled out in the shipped rules narrows who
+the consuming app might be about as well as a name would. The constraint that matters — one real
+consuming app handles a national identity number with a known structure — is worth carrying; the
+country is not.
+
+Options were: ship as drafted; ship **generic structure only** (Luhn cards, IBAN with mod-97 and the
+full length table, field names for national identity numbers across many regions, no national-ID
+value rules); or generic structure plus **optional region packs**, off by default, with more than
+one region represented from the first release. The review recommended packs, with generic-only as
+the fallback if no second region could be specified properly. The maintainer chose generic-only:
+the IBAN rule needs no pack once it reads the whole table, and a national-ID rule is exactly the
+kind of thing user-editable rules exist for, so a pack would be shipped maintenance for a case the
+config already covers.
 
 ### Web UI polish
 
