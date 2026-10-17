@@ -49,7 +49,7 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**897 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -376,9 +376,12 @@ serializer with unknown keys refused** — the archive's reader ignores unknown 
 can talk to an older daemon, but a fixture has no such excuse, and a misspelt `calId` silently
 falling back to the default would make a case assert something other than what it says. The Kotlin
 runner is `jvmTest` because it reads files from the repository; the commonTest suites stay, since
-they are what runs on iOS and Android. Both Gradle test tasks declare `inputs.dir` on the folder,
-and that is load-bearing: without it, adding a bad case file left `jvmTest` up to date and green,
-which was measured rather than assumed.
+they are what runs on iOS and Android. Both Gradle test tasks receive the folder through a
+`jvmArgumentProviders` entry that declares it an `@InputDirectory` with
+`PathSensitivity.RELATIVE`, and that is load-bearing twice over: without the input declaration,
+adding a bad case file left `jvmTest` up to date and green — measured, with the property marked
+`@Internal` — and with an absolute `systemProperty` instead, the cache entry depended on where the
+checkout lived.
 
 **A lifted block is bounded by `// @mirror-begin <name>` and `// @mirror-end <name>`, never by a
 neighbouring comment.** The `visits` probe used to lift from one section header to the next
@@ -478,14 +481,20 @@ edited request from a smoke test and reported a pass.
 exited 0 whatever it printed, so a run in which every line said NO was green to anything that read
 only the exit code — which is CI. Threading a result through a hundred probes would have been a
 rewrite; instead every line printed while reporting is classified as it goes: a value starting
-`yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped, and anything else is information.
-That makes wording load-bearing, so prose passes were reworded `yes (closes)` and friends, and
-"must be 0" numbers became yes/NO lines. Any failure, any page error or a list that is not an exact
-mirror exits 1. The count is the other half: a probe whose selector stopped matching does not fail,
-it reports `n/a` or nothing, so `INSPECTOR_UI_EXPECT_CHECKS` pins how many must pass and CI sets it
-from `.github/workflows/ci.yml`. A change that adds or removes a check changes that number in the
-same commit. The archive probe does the same. Read the `unclassified` list after editing a probe: a
-pass worded as prose lands there and stops counting.
+`yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped. A line that is information on
+purpose goes through `note()`, with a comment where it is printed saying why; anything else is
+*unclassified*, and an unclassified line fails any run with an expected count. That rule exists
+because the first version let information be the default: seven checks printed their verdict on an
+unclassified line or in the second half of a compound one, so QA set the detail pane's default tab
+to the wrong one and the run stayed green. **One check per line**, and nothing reaches the report
+without either a verdict or a declared reason not to have one. Any failure, any page error or a
+list that is not an exact mirror exits 1. The count is the other half: a probe whose selector
+stopped matching does not fail, it reports `n/a` or nothing, so `INSPECTOR_UI_EXPECT_CHECKS` pins
+how many must pass and CI sets it from `.github/workflows/ci.yml`. A change that adds or removes a
+check changes that number in the same commit. The archive probe does the same. Against a session
+of your own, with no expected count, unclassified lines are reported and not fatal, because probes
+fall into prose branches for data that session lacks. The probes that read a whole session page
+through the routes, which clamp a reply to 1000 rows.
 
 **The CI probe session is written by the daemon's own writer at CI time, and never committed.**
 `ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
@@ -495,7 +504,9 @@ exercising it while every probe goes on passing against the old shape. Its conte
 sampled, because a probe with nothing to look at says `n/a`: a shared prefix and a second host, a
 500, a retry chain, a redirect chain, a repeat that swept up a retry, a marker at exactly a call's
 `mono`, a full tie on chip count and recency, both cache payload shapes and a run of five identical
-observations. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
+observations. A second run replaces the probe session rather than appending to it — `SessionWriter`
+appends, and doubled rows would make every count depend on how often the task had run — and leaves
+anything else in the directory alone. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
 is there, so a fixture edit that loses one fails a unit test rather than turning a CI check into a
 skip. Every host is under `example.invalid`, so a replay that escaped its stub reaches nothing. CI
 serves it on port 8231, never 8099, and pins jsdom by exact version.
@@ -672,7 +683,12 @@ browser's `fetch` is called exactly once in `app.js`**, and it is counted twice:
 push by `check-web-static.js` across every loaded script — `window.fetch(`, `globalThis.fetch(` and
 `self.fetch(` must be zero, so the bare count cannot be dodged — and in the built export by
 `render-web-ui-archive.js`, with the same counter, so a new call site cannot reach for the network
-from inside an export. That probe opens the real file
+from inside an export. The export's embedded session is not code and is not counted: a script is
+skipped as data only when what follows `window.INSPECTOR_ARCHIVE = ` parses as JSON, which nothing
+with a call appended to it does, so a captured body that mentions `fetch(` cannot fail a sound
+export and a call smuggled after the data cannot pass one. The static count is text patterns —
+`window['fetch'](` or `fetch (x)` escape it — and the runtime ban on the network is what covers
+those. That probe opens the real file
 under a `file:` URL with `fetch`, `WebSocket` and `XMLHttpRequest` all throwing; one network attempt
 fails it. Each check was proven to fail by breaking a copy of the file.
 
@@ -1583,7 +1599,7 @@ every release build clean:
 node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
 npm install --no-save --no-package-lock jsdom@29.1.1 # the version CI pins
 node scripts/render-web-ui.js > /tmp/ui.html      # web UI smoke test + snapshot
-./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes; use an empty dir
+./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes; re-running replaces it
 inspector-daemon/build/install/inspector/bin/inspector serve --data /tmp/probe --port 8231 &   # ... served off 8099
 INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 INSPECTOR_UI_EXPECT_CHECKS=<UI_EXPECT_CHECKS in ci.yml> \
   node scripts/render-web-ui.js > /tmp/ui.html    # ... judged as CI judges it; the count only holds on that session
