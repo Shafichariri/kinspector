@@ -601,8 +601,9 @@ here as the goal, and the architect owns the details:
   `docs/decisions/*.md`. Each module gets its own `AGENTS.md` with a `CLAUDE.md` symlink. A check
   enforces that each decision exists in exactly one place.
 
-**Behaviour does not change, except in the phase E item.** Every other item is a move, a split or a
-new check. If one of them changes what a user, an agent or a consuming app sees, it has gone beyond
+**Behaviour does not change, except in the phase E item** *(and, ruled 2026-10-18, the four web
+drifts listed under phase A, which bring `app.js` back to rules already recorded)*. Every other item
+is a move, a split or a new check. If one of them changes what a user, an agent or a consuming app sees, it has gone beyond
 its scope. Stop and bring it back here.
 
 **How every check here is accepted.** No new tools: no detekt, no ktlint, no npm dependency in the
@@ -742,6 +743,59 @@ never runs. Two of those rules were each broken for two releases before a person
 
 **Out of scope.** Rewriting the probes for §6's layout, which belongs to 1a and 1b. Splitting
 `render-web-ui.js`.
+
+**Ruled 2026-10-18 (product owner, under the maintainer's delegation): the four drifts the mirror
+cases found are fixed inside this item, as bug fixes.** Designing phase A, the architect found that
+`app.js` already disagrees with `:inspector-model` in four places, and each new mirror check would
+go red on day one. That runs into the rule above that only phase E changes behaviour, so it was
+escalated rather than fixed quietly:
+
+1. **Repeat count.** `computeDuplicates` sets `count: run.length`, so a retry pair plus one more
+   call reads "sent 3x by separate calls". The recorded rule: "A repeat says `callCount`, never
+   `ids.size`."
+2. **Run id.** `runIdOf` takes the id from `run.entries[0]`, which in newest-first order is the
+   latest member. The id re-keys during live tail, which is what the recorded `TimelineRun.earliest`
+   rule exists to prevent.
+3. **Marker at a tie.** `renderTimeline` puts a marker after a call at the same millisecond. The
+   recorded `timeline()` rule puts it before (`<=`). This is the bug phase E fixes in MCP, which
+   decision 6 already approved as a bug fix.
+4. **Endpoint-chip tie order.** `app.js` breaks the final tie with `localeCompare`; the model
+   compares char codes. The model is the stated authority, and the overlay already uses its order.
+
+Also minor: `urlOf` drops a `?` with an empty query string where Kotlin keeps it. This only affects
+the duplicate key.
+
+**Why fix them now instead of pinning them.** None of these is a new behaviour decision. Each
+one is the web breaking a rule that is already written down and that the overlay already follows,
+so fixing it is the same kind of change as decision 6. A mirror case exists to say "the web
+follows the model". A `knownDrift` field turns that around: a passing case would mean a failure.
+It would be new runner machinery built only to be removed again, and the bugs would stay in front
+of users longer. **Pinning with `knownDrift` is not worth doing.** The rule that phases change no
+behaviour exists to stop scope creep inside moves and splits. It was not meant to protect behaviour
+that the record already calls wrong.
+
+**Conditions.**
+
+- **Only `app.js` changes.** The Kotlin side is the authority for all five. If building a fix shows
+  the model is the one that is wrong, stop and bring it back here. Do not change both sides inside
+  phase A. That includes the chip order: char-code order puts `Balance` before `accounts`, which
+  reads a little oddly, but it only applies after count and recency tie, and it is what the
+  overlay already shows. Changing it would be a change to the model rule, as its own item.
+- **One commit per drift**, each naming the rule it restores. That way any one of them can be
+  reverted alone.
+- **The old code is the proof that the check fails.** Each mirror case is shown failing against the
+  `app.js` from before its fix, then passing after. This counts as that check's proven-to-fail run.
+  The one-changed-threshold break listed above is still required as well.
+- `render-web-ui.js` probes that read these values (the repeat label, the chip order) are updated
+  to assert the model's answer. They must not be loosened to accept either answer.
+
+**Release notes.** One line, for drifts 1 to 3, because a person can see them: *"Web UI: the repeat
+count now counts calls, not rows; an expanded run of signals no longer collapses during live tail;
+a marker dropped at the same millisecond as a call is drawn before it, as the overlay always has."*
+Drift 4 and the `?` case get no line: they change only tie order and one edge of the duplicate key.
+No `INTEGRATION.md` entry, because nothing changes for a consuming app. If the maintainer decides to
+announce phase E's MCP tie fix (an open question below), it belongs right after this line, since it
+is the same rule on a third surface.
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
