@@ -2194,7 +2194,34 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const dupBadges = [...doc.querySelectorAll('#list .dup-badge')].length;
   const clocks = [...doc.querySelectorAll('#list .row .clock')].filter((n) => n.textContent.trim()).length;
 
+  /*
+   * The repeat label counts calls, not rows. A group that swept up a retry has more rows than
+   * calls, and "sent 3x" for a call the app made twice is the confidently wrong reading the model's
+   * `callCount` exists to prevent. Checked against the rows' own `callId`s, which the page never
+   * groups by, so this does not agree with a bug in `computeDuplicates` by construction.
+   */
+  let repeatLabel = 'n/a (no repeats in this session)';
+  if (dupRows.length) {
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json());
+    const callOf = new Map((page.items || []).map((t) => [t.id, t.callId]));
+    const byTitle = new Map();
+    for (const row of dupRows) byTitle.set(row.title, [...(byTitle.get(row.title) || []), row.dataset.id]);
+    const wrong = [];
+    let rowsMoreThanCalls = false;
+    for (const [title, ids] of byTitle) {
+      const said = Number((title.match(/sent (\d+)x/) || [])[1]);
+      const calls = new Set(ids.map((id) => callOf.get(id))).size;
+      if (ids.length > calls) rowsMoreThanCalls = true;
+      if (said !== calls) wrong.push(`"sent ${said}x" on ${ids.length} rows from ${calls} calls`);
+    }
+    repeatLabel = wrong.length
+      ? `NO - ${wrong.join('; ')}`
+      : `yes (${byTitle.size} ${byTitle.size === 1 ? 'group' : 'groups'}${rowsMoreThanCalls ? ', one with more rows than calls' : ''})`;
+  }
+
   console.error('duplicate rows     :', dupRows.length);
+  console.error('repeat counts calls:', repeatLabel, '(a retry inside a repeat is a row, not a call)');
   console.error(
     'duplicate badges   :', dupBadges === dupRows.length ? `yes (${dupBadges})` : `NO - ${dupBadges} for ${dupRows.length} rows`,
     '(must equal the rows — colour alone is not enough)',

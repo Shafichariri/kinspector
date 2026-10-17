@@ -2845,10 +2845,13 @@
       const ordered = [...group].sort((a, b) => a.mono - b.mono);
       let run = [];
       const flush = () => {
-        if (run.length > 1 && new Set(run.map((t) => t.callId)).size > 1) {
+        const calls = new Set(run.map((t) => t.callId)).size;
+        if (run.length > 1 && calls > 1) {
           ordinal += 1;
           const span = run[run.length - 1].mono - run[0].mono;
-          for (const t of run) marks.set(t.id, { ordinal, count: run.length, spanMs: span });
+          // Calls, not rows — the model's `callCount`. A group that swept up a retry has more rows
+          // than calls, and the reader is asking how many times the app asked.
+          for (const t of run) marks.set(t.id, { ordinal, count: calls, spanMs: span });
         }
         run = [];
       };

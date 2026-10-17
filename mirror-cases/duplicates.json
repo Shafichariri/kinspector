@@ -59,6 +59,38 @@
       "expect": []
     },
     {
+      "name": "a retried call that is also repeated counts calls, not rows",
+      "from": "DuplicatesTest.a retried call that is also duplicated still reports the duplication",
+      "input": {
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "call-1", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {
+            "id": "b",
+            "mono": 1100,
+            "callId": "call-1",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "attempt": 2
+          },
+          {"id": "c", "mono": 1200, "callId": "call-2", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b", "c"], "spanMs": 200, "callCount": 2}]
+    },
+    {
+      "name": "the count is calls and not rows when a retry is in the group",
+      "from": "DuplicatesTest.the count is calls and not rows when a retry is in the group",
+      "input": {
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "call-1", "path": "/v1/profile/status", "status": 500, "resBytes": 20},
+          {"id": "b", "mono": 2000, "callId": "call-2", "path": "/v1/profile/status", "status": 500, "resBytes": 20},
+          {"id": "c", "mono": 2100, "callId": "call-2", "path": "/v1/profile/status", "status": 500, "resBytes": 20, "attempt": 2}
+        ]
+      },
+      "expect": [{"ids": ["a", "b", "c"], "spanMs": 1100, "callCount": 2}]
+    },
+    {
       "name": "different paths are unrelated",
       "from": "DuplicatesTest.different paths are unrelated",
       "input": {
