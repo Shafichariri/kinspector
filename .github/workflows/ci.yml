@@ -59,6 +59,96 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  web:
+    # The web UI's checks, which for most of the project's life ran only when somebody remembered.
+    # Linux, because nothing here builds an iOS or Android artifact: the daemon is a JVM module and
+    # the probes are Node. Static checks run before Gradle so a broken mirror fails in seconds.
+    runs-on: ubuntu-latest
+    env:
+      # Pinned, and named in both probe scripts' headers. A jsdom upgrade changes what the probes
+      # can observe, so it is a change to make on purpose, not one a fresh install makes for us.
+      JSDOM_VERSION: '29.1.1'
+      # How many checks each probe must pass against the fixture session. A probe that stops
+      # running reports less rather than failing; these numbers are what notice. Update them in
+      # the same change that adds or removes a check.
+      UI_EXPECT_CHECKS: '149'
+      ARCHIVE_EXPECT_CHECKS: '20'
+      # Never 8099: that is the port every consuming app dials by default.
+      PROBE_PORT: '8231'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Point at the Android SDK
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Static web checks — network call sites, stylesheet audits, parser, mirror cases
+        run: node scripts/check-web-static.js
+
+      - name: Build the daemon and write the probe session
+        run: >-
+          ./gradlew :inspector-daemon:installDist :inspector-daemon:writeProbeFixture
+          -Pinspector.probeDir="$RUNNER_TEMP/probe"
+
+      - name: Start the daemon on the probe session
+        run: |
+          inspector-daemon/build/install/inspector/bin/inspector serve \
+            --data "$RUNNER_TEMP/probe" --port "$PROBE_PORT" > "$RUNNER_TEMP/daemon.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/daemon.pid"
+          for i in $(seq 1 60); do
+            curl -sf "http://127.0.0.1:$PROBE_PORT/api/sessions" > /dev/null && exit 0
+            sleep 1
+          done
+          echo "daemon did not answer within 60s"; cat "$RUNNER_TEMP/daemon.log"; exit 1
+
+      - name: Install jsdom
+        run: npm install --no-save --no-package-lock "jsdom@$JSDOM_VERSION"
+
+      - name: Live web UI probe
+        env:
+          INSPECTOR_UI_ORIGIN: http://127.0.0.1:${{ env.PROBE_PORT }}
+          INSPECTOR_UI_EXPECT_CHECKS: ${{ env.UI_EXPECT_CHECKS }}
+        run: node scripts/render-web-ui.js > "$RUNNER_TEMP/ui.html"
+
+      - name: Exported session probe
+        env:
+          INSPECTOR_UI_ARCHIVE: ${{ runner.temp }}/s.html
+          INSPECTOR_UI_EXPECT_CHECKS: ${{ env.ARCHIVE_EXPECT_CHECKS }}
+        run: |
+          curl -sf "http://127.0.0.1:$PROBE_PORT/api/sessions/latest/export.html" -o "$INSPECTOR_UI_ARCHIVE"
+          node scripts/render-web-ui-archive.js
+
+      # The snapshots are what a person reads when a probe goes red here; keep them either way.
+      - name: Keep the snapshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-ui-snapshots
+          path: |
+            ${{ runner.temp }}/ui.html
+            ${{ runner.temp }}/s.html
+            ${{ runner.temp }}/daemon.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Stop the daemon
+        if: always()
+        run: if [ -f "$RUNNER_TEMP/daemon.pid" ]; then kill "$(cat "$RUNNER_TEMP/daemon.pid")" || true; fi
+
   release-swap:
     # Proves -Pinspector=off is wired end to end, independently of the artifact scan above.
     runs-on: macos-latest
