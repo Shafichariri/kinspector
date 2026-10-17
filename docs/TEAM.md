@@ -19,6 +19,29 @@ still exactly one copy of each.
 | `release-steward` | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
 | `business-strategist` | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
 
+## How the definitions are tuned
+
+Each file's frontmatter carries more than a prompt, and each choice has a reason:
+
+- **`AGENTS.md` is never re-read.** `CLAUDE.md` is a symlink to it and Claude Code loads it into
+  every subagent, so "read AGENTS.md first" made each role pay for ~126 KB twice. The prompts now
+  point at sections already in context.
+- **`effort: high` on `architect` and `qa-verifier`** — the two roles whose misses ship.
+  **`model: sonnet` on `delivery-tracker`**, which reconciles text against evidence it is handed.
+  Everything else inherits the session's model.
+- **User-scope `memory` on `release-steward` and `business-strategist`** — the two roles that hold
+  knowledge which must never enter this public repository (the private term list; pricing and
+  strategy). User scope stores it under `~/.claude/agent-memory/`, outside the repo. In a cloud
+  session that directory is discarded with the container, so it persists only on a local machine.
+- **`business-strategist` runs with `omitClaudeMd`** and a `PreToolUse` hook,
+  `.claude/hooks/block-repo-writes.js`, that refuses any Write or Edit inside the repository —
+  memory switches those tools on, so its confidentiality rule needed teeth. Bash writes are outside
+  what a hook on those tools can see.
+- **`qa-verifier` never restores with `git checkout`.** It runs before the engineer's work is
+  committed, so that would revert the very change under test.
+- Project-scope memory was considered and left off: it would be a second, unreviewed copy of what
+  `AGENTS.md` and `ROADMAP.md` already hold, in a public repository.
+
 ## Flow of one item
 
 ```
