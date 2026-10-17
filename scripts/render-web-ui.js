@@ -15,16 +15,17 @@
  * INSPECTOR_UI_EXPECT_CHECKS=<n> fails the run unless exactly n checks passed; CI sets it.
  *
  * The report goes to stderr; a self-contained static snapshot goes to stdout. It ends with
- * `checks: P passed, F failed, S n/a, U unclassified`, and exits 1 on any failed check, any page
- * error, a list that did not mirror, or a pass count other than the expected one.
+ * `checks: P passed, F failed, S n/a, U unclassified, N notes`, and exits 1 on any failed check, any
+ * page error or a list that did not mirror — and, when INSPECTOR_UI_EXPECT_CHECKS is set, on a pass
+ * count other than the expected one or any unclassified line.
  *
  * Tested against jsdom 29.1.1, the version CI installs (`.github/workflows/ci.yml`, job `web`).
  * The JSON parser and `visits` mirror checks that used to live here moved to `check-web-static.js`
  * with the other mirror cases, since they need no daemon. The stylesheet audits are still printed
  * here, from the one copy in `scripts/lib/web-audits.js` that both scripts share.
  *
- * Against an archive with no sessions it runs a shorter report — the empty state, the top bar, the
- * parser and the stylesheet audits — and names every session-dependent probe as n/a. That is how
+ * Against an archive with no sessions it runs a shorter report — the empty state, the top bar and
+ * the stylesheet audits — and names every session-dependent probe as n/a. That is how
  * the "waiting for an app" empty state gets checked at all:
  *   inspector serve --port 8238 --data "$(mktemp -d)" &
  *   INSPECTOR_UI_ORIGIN=http://127.0.0.1:8238 node scripts/render-web-ui.js > /dev/null
@@ -89,15 +90,23 @@ const { window } = dom;
  * For most of its life this script exited 0 whatever it printed, so a run in which every line said
  * NO was a green run to anything that only read the exit code — which is everything in CI. Rather
  * than thread a result through a hundred probes, the report lines are classified as they are
- * printed: a value starting `yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped, and
- * anything else (a count, a label) is information. The `U unclassified` bucket is worth reading
- * after changing a probe: a pass worded as prose lands there and stops counting.
+ * printed: a value starting `yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped.
+ * A line that is information on purpose — a count, a list of labels — is printed through `note()`
+ * and says so in a comment where it is printed; anything else is *unclassified*.
+ *
+ * Unclassified is a failure whenever INSPECTOR_UI_EXPECT_CHECKS is set. A check worded as prose, or
+ * the second half of a compound line, is a check whose NO nobody counts: QA set the detail pane's
+ * default tab to the wrong one and the run stayed green because `detail default tab` printed a tab
+ * name rather than a verdict. So every check gets its own line, and every other line is declared.
+ * Without an expected count — a developer pointing this at whatever session is on the machine —
+ * probes legitimately fall into prose branches for data the session lacks, so there it is reported
+ * and not fatal.
  *
  * INSPECTOR_UI_EXPECT_CHECKS pins how many passed. A probe that quietly stopped running — a renamed
  * selector, a session lacking what it looks at — does not fail anything, it just reports less, and
  * the smaller number is the only sign of it.
  */
-const verdict = { reporting: false, passed: 0, failed: [], skipped: 0, unclassified: [], notMirror: false };
+const verdict = { reporting: false, noting: false, passed: 0, failed: [], skipped: 0, notes: 0, unclassified: [], notMirror: false };
 const realConsoleError = console.error.bind(console);
 console.error = (...args) => {
   realConsoleError(...args);
@@ -108,6 +117,7 @@ console.error = (...args) => {
   if (!match) return;
   const [, label, value] = match;
   if (label === 'errors') return; // counted from `errors` itself
+  if (verdict.noting) { verdict.notes++; return; }
   if (line.includes('(NOT a mirror)')) verdict.notMirror = true;
   if (/^(yes|true)\b/.test(value)) verdict.passed++;
   else if (/^(NO|false)\b/.test(value)) verdict.failed.push(label.trim());
@@ -115,19 +125,57 @@ console.error = (...args) => {
   else verdict.unclassified.push(label.trim());
 };
 
+/**
+ * Every transaction in a session, as `{ items }`, read a page at a time.
+ *
+ * The daemon clamps one page to 1000 rows (`SessionRepository.queryTransactions`), so asking for
+ * `limit=2000` quietly got the newest 1000 of a bigger session — and a probe comparing the page
+ * against those rows would report a false NO on any large local session. `sessionId` is already
+ * URL-encoded.
+ */
+async function sessionTransactions(sessionId) {
+  const items = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?offset=${offset}&limit=1000`)
+      .then((r) => r.json());
+    items.push(...(page.items || []));
+    if (!page.items || page.items.length < 1000 || items.length >= page.matched) return { items };
+  }
+}
+
+/** Every signal in a session, newest first, paged the same way; the route caps a page at 1000 too. */
+async function sessionSignals(sessionId) {
+  const all = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/signals?offset=${offset}&limit=1000`)
+      .then((r) => r.json());
+    if (!Array.isArray(page)) return all;
+    all.push(...page);
+    if (page.length < 1000) return all;
+  }
+}
+
+/** A report line that is information, not a check. Say why at the call site. */
+function note(...args) {
+  verdict.noting = true;
+  try { console.error(...args); } finally { verdict.noting = false; }
+}
+
 /** Prints the verdict line and sets the exit code; called once, after the last report line. */
 function finishReport() {
   verdict.reporting = false;
-  const { passed, failed, skipped, unclassified } = verdict;
+  const { passed, failed, skipped, notes, unclassified } = verdict;
   realConsoleError(
-    `checks: ${passed} passed, ${failed.length} failed, ${skipped} n/a, ${unclassified.length} unclassified`,
+    `checks: ${passed} passed, ${failed.length} failed, ${skipped} n/a, ${unclassified.length} unclassified, ${notes} notes`,
   );
   if (failed.length) realConsoleError(`failed: ${failed.join(', ')}`);
   if (unclassified.length) realConsoleError(`unclassified: ${unclassified.join(', ')}`);
   const expected = process.env.INSPECTOR_UI_EXPECT_CHECKS || undefined;
   const countWrong = expected !== undefined && Number(expected) !== passed;
   if (countWrong) realConsoleError(`expected ${expected} passing checks, got ${passed}`);
-  if (failed.length || errors.length || verdict.notMirror || countWrong) process.exitCode = 1;
+  const strayProse = expected !== undefined && unclassified.length > 0;
+  if (strayProse) realConsoleError('unclassified lines fail a run with an expected count: give each a verdict or print it with note()');
+  if (failed.length || errors.length || verdict.notMirror || countWrong || strayProse) process.exitCode = 1;
 }
 
 // Proxy the page's fetch to the live daemon.
@@ -461,7 +509,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     const topBarProbe = await probeTopBar();
     verdict.reporting = true;
     console.error('--- empty archive ---');
-    console.error('sessions           : 0');
+    note('sessions           : 0');
     console.error('emptySession       :', listProbe.emptySession ?? 'NO - the empty-state check did not run');
     for (const [name, value] of Object.entries(topBarProbe)) console.error(`${name.padEnd(19)}:`, value);
     console.error('min text size      :', auditMinTextSize(css));
@@ -751,7 +799,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await new Promise((r) => setTimeout(r, 400));
     const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
     const [page, markers] = await Promise.all([
-      fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json()),
+      sessionTransactions(sessionId),
       fetch(`${ORIGIN}/api/sessions/${sessionId}/markers`).then((r) => r.json()).catch(() => []),
     ]);
     const txns = page.items || [];
@@ -1416,9 +1464,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     const grew = callsBefore !== null && callsAfter !== null ? callsAfter - callsBefore : null;
     result.sessionMoved = grew === null
-      ? 'unknown - the daemon did not answer; counts below are not compared'
+      ? 'NO - the daemon did not answer; counts below are not compared'
       : grew > 0
-        ? `grew by ${grew} under the probe (${callsBefore} -> ${callsAfter} calls) - still recording`
+        ? `n/a (grew by ${grew} under the probe, ${callsBefore} -> ${callsAfter} calls - still recording)`
         : `yes (held still, ${callsBefore} calls)`;
 
     // A filter that removed nothing tells the two layers apart from neither, so say so rather
@@ -1482,8 +1530,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     // exercised it, rather than letting a trivial pass read as a proof.
     const id = encodeURIComponent(doc.getElementById('session-picker').value);
     const [txns, signals] = await Promise.all([
-      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
-      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+      sessionTransactions(id),
+      sessionSignals(id),
     ]);
     const screens = (Array.isArray(signals) ? signals : []).filter((s) => s.tag === 'screen');
     if (!screens.length) {
@@ -1628,8 +1676,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     const id = encodeURIComponent(doc.getElementById('session-picker').value);
     const [txns, signals, markers] = await Promise.all([
-      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
-      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+      sessionTransactions(id),
+      sessionSignals(id),
       fetch(`${ORIGIN}/api/sessions/${id}/markers`).then((r) => r.json()).catch(() => []),
     ]);
     const all = Array.isArray(signals) ? signals : [];
@@ -2201,7 +2249,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
   verdict.reporting = true;
   console.error('--- render report ---');
-  console.error('rows rendered      :', doc.querySelectorAll('#list .row').length);
+  const rendered = doc.querySelectorAll('#list .row').length;
+  console.error('rows rendered      :', rendered > 0 ? `yes (${rendered})` : 'NO - the list is empty');
   console.error('sort flip reverses :', reversed, `(button then read "${flippedLabel}")`);
   console.error('sort flip restores :', restored);
   console.error(
@@ -2210,23 +2259,27 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       ? `yes (${beforeSequence} -> ${afterSequence}, exact mirror)`
       : `NO - ${beforeSequence} -> ${afterSequence} (NOT a mirror)`,
   );
-  console.error('method classes     :', methodClasses.join(', ') || 'none');
+  // Notes below: what this session happens to hold. Each is a count or a list whose right value
+  // depends on the session, and the rules behind them are asserted on their own lines.
+  note('method classes     :', methodClasses.join(', ') || 'none');
   console.error('--- list ---');
   for (const [name, value] of Object.entries(listProbe)) {
     console.error(`${name.padEnd(19)}:`, value);
   }
-  console.error('marker dividers    :', doc.querySelectorAll('.marker-divider').length);
-  console.error('session options    :', doc.querySelectorAll('#session-picker option').length);
-  console.error('counts             :', doc.getElementById('counts').textContent);
-  console.error('session option     :', doc.querySelector('#session-picker option')?.textContent ?? 'none');
-  console.error('markers listed     :', doc.querySelectorAll('#markers li').length);
+  note('marker dividers    :', doc.querySelectorAll('.marker-divider').length, '(list and timeline together)');
+  note('session options    :', doc.querySelectorAll('#session-picker option').length);
+  note('counts             :', doc.getElementById('counts').textContent);
+  note('session option     :', doc.querySelector('#session-picker option')?.textContent ?? 'none');
+  note('markers listed     :', doc.querySelectorAll('#markers li').length);
   console.error('detail visible     :', !doc.getElementById('detail').hidden);
-  console.error(
+  // Which sections and blocks show depends on the row the probe opened; the tab rules are checked
+  // under "detail tabs" below.
+  note(
     'detail sections    :', doc.querySelectorAll('#detail .section-title').length,
     '(pinned ones plus the open tab, not all five faces)',
   );
-  console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
-  console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
+  note('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
+  note('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
   const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
   // Scoped to the list. The timeline draws transactions too, so an unscoped count double-counts
   // every duplicate and turns "badges must equal rows" into a permanent, meaningless failure.
@@ -2242,7 +2295,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   let repeatLabel = 'n/a (no repeats in this session)';
   if (dupRows.length) {
     const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
-    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json());
+    const page = await sessionTransactions(sessionId);
     const callOf = new Map((page.items || []).map((t) => [t.id, t.callId]));
     const byTitle = new Map();
     for (const row of dupRows) byTitle.set(row.title, [...(byTitle.get(row.title) || []), row.dataset.id]);
@@ -2259,7 +2312,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       : `yes (${byTitle.size} ${byTitle.size === 1 ? 'group' : 'groups'}${rowsMoreThanCalls ? ', one with more rows than calls' : ''})`;
   }
 
-  console.error('duplicate rows     :', dupRows.length);
+  note('duplicate rows     :', dupRows.length, '(their labels and badges are checked on the next lines)');
   console.error('repeat counts calls:', repeatLabel, '(a retry inside a repeat is a row, not a call)');
   console.error(
     'duplicate badges   :', dupBadges === dupRows.length ? `yes (${dupBadges})` : `NO - ${dupBadges} for ${dupRows.length} rows`,
@@ -2276,7 +2329,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   );
   const unanchored = endpointChips.filter((c) => !c.dataset.filter.startsWith('path:*/')).length;
 
-  console.error('endpoint chips     :', endpointChips.length);
+  note('endpoint chips     :', endpointChips.length);
   /*
    * Chip order is the model's: most calls first, then the most recent call, then the segment by
    * char code — `thenBy { it.segment }` compares UTF-16 units, so `Balance` sorts before
@@ -2286,7 +2339,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   let chipOrder = 'n/a (fewer than two chips)';
   if (endpointChips.length > 1) {
     const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
-    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json());
+    const page = await sessionTransactions(sessionId);
     const latest = new Map();
     for (const t of page.items || []) {
       const segment = String(t.path || '').split('/').filter(Boolean).pop();
@@ -2310,7 +2363,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       : `yes (count, then recency, then char code${tied ? '; a full tie is in this session' : ''})`;
   }
 
-  console.error('endpoint labels    :', chipLabels.join(' ') || 'none');
+  note('endpoint labels    :', chipLabels.join(' ') || 'none', '(their order is the next line)');
   console.error('chip order         :', chipOrder);
   console.error('unanchored chips   :', unanchored === 0 ? 'yes (0)' : `NO - ${unanchored}`, '(must be 0)');
   console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
@@ -2318,33 +2371,43 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('chip marks active  :', chipProbe.active, '(the clicked chip, and only it)');
   console.error('limit 3 caps to    :', limitProbe.capped === 3 ? 'yes (3)' : `NO - ${limitProbe.capped}`, '(must be 3)');
   console.error('limit 0 hides      :', limitProbe.off);
-  console.error('limit restored to  :', limitProbe.restored);
-  console.error('limit summary      :', limitProbe.summary);
+  console.error('limit restored to  :', limitProbe.restored === endpointChips.length
+    ? `yes (${limitProbe.restored})` : `NO - ${limitProbe.restored}, was ${endpointChips.length}`);
+  note('limit summary      :', limitProbe.summary);
   console.error('--- signals ---');
   console.error('all tab present    :', signalProbe.switchShown);
-  console.error('opened on view     :', signalProbe.defaultView, "('network' — traffic leads)");
-  console.error('timeline entries   :', signalProbe.entries);
-  console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
+  console.error('opened on view     :', signalProbe.defaultView === 'network'
+    ? 'yes (network)' : `NO - ${signalProbe.defaultView}`, '(traffic leads)');
+  // Counts of what the session recorded, per kind and lane.
+  note('timeline entries   :', signalProbe.entries);
+  note('lanes present      :', signalProbe.lanes.join(', ') || 'none');
   console.error('unknown tag renders:', signalProbe.unknownTagRendered);
-  console.error('span glyphs        :', signalProbe.spans, '(cache/session: interval claims)');
-  console.error('point glyphs       :', signalProbe.points, '(screen/state: instants)');
-  console.error('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
+  note('span glyphs        :', signalProbe.spans, '(cache/session: interval claims)');
+  note('point glyphs       :', signalProbe.points, '(screen/state: instants)');
+  note('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
   console.error('traffic + signals  :', signalProbe.merged);
   console.error('marker at a tie    :', timelineTie, "(before the call at its millisecond, as timeline() places it)");
-  console.error('now panel rows     :', signalProbe.currentRows);
+  note('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
   console.error('pushed row warned  :', signalProbe.pushedWarned, '(a snapshot is not live state)');
-  console.error('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun})`);
+  note('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun}; checked by the next two lines)`);
   console.error('run expands whole  :', signalProbe.runExpandsLossless, '(collapsing must lose nothing)');
   console.error('run collapses back :', signalProbe.runCollapsesBack);
   console.error('--- peers ---');
-  console.error('peers listed       :', peerRows.length);
-  console.error('peer roles         :', peerRoles.join(', ') || 'none');
+  // Whatever inspector processes this machine is running; not a property of the page.
+  note('peers listed       :', peerRows.length);
+  note('peer roles         :', peerRoles.join(', ') || 'none');
   console.error('self has kill btn  :', selfKillButtons === 0 ? 'yes (0)' : `NO - ${selfKillButtons}`, '(must be 0)');
   console.error('--- sessions ---');
-  console.error('session rows       :', sessionProbe.rows);
-  console.error('deletes disabled   :', sessionProbe.disabledDeletes, '(sessions still recording)');
+  note('session rows       :', sessionProbe.rows);
+  // The daemon refuses to delete a session with no `endedAt`, so that is what must be disabled —
+  // read from the daemon's own list, not from the page.
+  const unended = (await fetch(`${ORIGIN}/api/sessions`).then((r) => r.json()).catch(() => []))
+    .filter((meta) => !meta.endedAt).length;
+  console.error('deletes disabled   :', sessionProbe.disabledDeletes === unended
+    ? `yes (${sessionProbe.disabledDeletes}, one per session with no endedAt)`
+    : `NO - ${sessionProbe.disabledDeletes} disabled, ${unended} sessions with no endedAt`);
   console.error('clear all arms     :', sessionProbe.clearArms);
   console.error('header delete      :', sessionProbe.headerDelete);
   console.error('--- top bar ---');
@@ -2353,9 +2416,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   }
 
   console.error('--- tabs ---');
-  console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
+  note('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
-  console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
+  note('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session', '(that they render is "unknown tag renders")');
   console.error('traffic tab first  :', tabProbe.trafficFirst);
   console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
@@ -2363,8 +2426,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
   console.error('now strip present  :', nowProbe.present);
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
-  console.error('now says collapsed :', nowProbe.collapsedSummary);
-  console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('now says collapsed :', String(nowProbe.collapsedSummary).startsWith('NO') || nowProbe.collapsedSummary === 'n/a'
+    ? nowProbe.collapsedSummary : `yes ("${nowProbe.collapsedSummary}")`);
+  console.error('now expands        :', nowProbe.expandsTo > 0 ? `yes (${nowProbe.expandsTo} rows)` : 'NO - nothing listed');
+  console.error('now collapses back :', nowProbe.collapsesBack);
   console.error('--- handing to an agent ---');
   console.error('call bundle        :', bundleProbe.txnButton);
   console.error('header values cap  :', bundleProbe.headersCapped ?? 'n/a', '(a bearer token must not fill the paste)');
@@ -2374,7 +2439,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('session under probe:', axisProbe.sessionMoved);
   console.error('shape is whole sess:', axisProbe.shapeIsWholeSession);
   console.error('waterfall tab      :', waterfallProbe.tabShown, `- ${waterfallProbe.groups} screens, ${waterfallProbe.rows} calls`);
-  console.error('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none');
+  note('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none', '(the route is checked under path)');
   console.error('every call once    :', waterfallProbe.everyCallOnce ?? 'n/a');
   console.error('no call lost       :', waterfallProbe.noneLost ?? 'n/a');
   console.error('trailing calls     :', waterfallProbe.trailingCalls ?? 'n/a');
@@ -2382,7 +2447,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('oldest first       :', waterfallProbe.oldestFirst ?? 'n/a');
   console.error('bar selects call   :', waterfallProbe.rowSelects ?? 'n/a');
   console.error('--- path ---');
-  console.error('path tab           :', pathProbe.tabShown, `- second: ${pathProbe.second ?? 'n/a'}, ${pathProbe.columns ?? 0} visits`);
+  console.error('path tab           :', pathProbe.tabShown, `- ${pathProbe.columns ?? 0} visits`);
+  console.error('path tab second    :', pathProbe.second ?? 'n/a');
   console.error('route matches      :', pathProbe.route ?? 'n/a');
   console.error('map matches log    :', pathProbe.mapMatchesLog ?? 'n/a');
   console.error('station opens line :', pathProbe.stationOpensLine ?? 'n/a');
@@ -2394,17 +2460,22 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('call opens         :', pathProbe.callSelects ?? 'n/a');
   console.error('screen card opens  :', pathProbe.cardSelects ?? 'n/a');
   console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
-  console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
+  console.error('slowest row        :', glanceProbe.slowestSelects ?? 'n/a');
+  console.error('esc restores glance:', glanceProbe.escRestores ?? 'n/a');
   console.error('empty pane (tag)   :', glanceProbe.tag);
-  console.error('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
-  console.error('detail default tab :', detailTabProbe.defaultTab, '- opens on:', detailTabProbe.firstSection);
+  note('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
+  console.error('detail default tab :', detailTabProbe.defaultTab === 'res'
+    ? `yes (res, opens on: ${detailTabProbe.firstSection})`
+    : `NO - ${detailTabProbe.defaultTab}, opens on: ${detailTabProbe.firstSection}`, '(the response is why you opened the row)');
   console.error('body before headers:', detailTabProbe.bodyBeforeHeaders ?? 'n/a', '(the reason you opened the row)');
   console.error('one panel at a time:', detailTabProbe.onePanel);
-  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a', '- remembered:', detailTabProbe.remembersAcrossRows ?? 'n/a');
+  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a');
+  console.error('tab remembered     :', detailTabProbe.remembersAcrossRows ?? 'n/a', '(across rows)');
   console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
   console.error('chain numbered     :', detailTabProbe.chainOrder, '(a first attempt has no `attempt` field)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
-  console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
+  console.error('drawer opens       :', drawerProbe.opensOnSelect);
+  console.error('drawer scrim       :', drawerProbe.scrim ?? 'n/a');
   const drawerCloses = [drawerProbe.closeButton, drawerProbe.scrimCloses, drawerProbe.escape];
   console.error(
     'drawer closes by   :',
@@ -2412,7 +2483,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`,
   );
   console.error('drawer on tab swap :', drawerProbe.tabSwitch);
-  console.error('tab labels         :', tabProbe.labels);
+  note('tab labels         :', tabProbe.labels);
   console.error('tab bar shown      :', tabProbe.alwaysShown);
   console.error('signal separator   :', tabProbe.signalSeparator);
   console.error('--- toolbar labels ---');
@@ -2423,7 +2494,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('--- scope bar ---');
   console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);
   console.error('sticky in css      :', scopeProbe.stickyInCss, '(a bar that scrolls away makes the rows below it wrong)');
-  console.error('rows stripped      :', scopeProbe.shown ? `${scopeProbe.strippedRows} of ${scopeProbe.totalRows}` : 'n/a');
+  // How many rows the scope strips is a property of the session; that covered rows are stripped
+  // correctly is "host not repeated" and "outside rows say it".
+  note('rows stripped      :', scopeProbe.shown ? `${scopeProbe.strippedRows} of ${scopeProbe.totalRows}` : 'n/a');
   console.error('host not repeated  :', scopeProbe.noRepeatedHost ?? 'n/a', '(a covered row must not repeat the bar)');
   console.error('outside rows say it:', scopeProbe.uncoveredNameTheirHost ?? 'n/a', '(a row the bar does not cover names its host)');
   console.error('--- adding a marker ---');
@@ -2432,14 +2505,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('matches recording  :', markerFormProbe.matchesRecording ?? 'n/a', `- disabled: ${markerFormProbe.disabled}, recording: ${recordingNow.length}`);
   console.error('--- replay ---');
   console.error('button pressed    :', replayButtonProbe.pressed, replayButtonProbe.pressed ? '' : `- ${replayButtonProbe.reason}`);
-  console.error('section titles    :', `${replayButtonProbe.sectionTitlesDirect ?? '?'} direct, ${replayButtonProbe.sectionTitlesAnywhere ?? '?'} anywhere (the anchor must be a direct child)`);
+  // Context for the next line: the direct-child anchor is asserted by "result panel drawn".
+  note('section titles    :', `${replayButtonProbe.sectionTitlesDirect ?? '?'} direct, ${replayButtonProbe.sectionTitlesAnywhere ?? '?'} anywhere (the anchor must be a direct child)`);
   console.error('result panel drawn:', replayButtonProbe.panelRendered ?? 'n/a', '(it threw before building the request until 2026-09-19)');
   console.error('request built     :', replayButtonProbe.requestBuilt ?? 'n/a');
   console.error('status shown      :', replayButtonProbe.statusShown ?? 'n/a');
   console.error('--- replay editor (REPLAY.md step 3) ---');
   console.error('form opens        :', replayEditorProbe.opened, replayEditorProbe.opened ? '' : `- ${replayEditorProbe.reason}`);
   console.error('seeded from capture:', replayEditorProbe.seeded ?? 'n/a');
-  console.error('header lines      :', replayEditorProbe.headerLines ?? 'n/a');
+  note('header lines      :', replayEditorProbe.headerLines ?? 'n/a', '(what was seeded; stripping is the next line)');
   console.error('hop-by-hop stripped:', replayEditorProbe.hopByHopStripped ?? 'n/a', '(a sent map skips the daemon\'s own filtering)');
   console.error('body box present  :', replayEditorProbe.hasBodyBox ?? 'n/a');
   console.error('re-sign defaults on:', replayEditorProbe.resignDefaultsOn ?? 'n/a');
@@ -2447,7 +2521,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('and nothing sent  :', replayEditorProbe.nothingSent ?? 'n/a', '(a refused line must not reach the wire)');
   console.error('closes again      :', replayEditorProbe.closesAgain ?? 'n/a');
   console.error('--- per-field copy ---');
-  console.error('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows`);
+  note('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows (one each is the next line)`);
   console.error('every header has 1 :', copyProbe.everyHeaderHasOne);
   console.error('body has one       :', copyProbe.bodyButton);
   console.error('all labelled       :', copyProbe.labelled, '(a screen reader must be able to say which value)');
@@ -2458,14 +2532,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     console.error(`--- ${probe.tag} browser ---`);
     console.error('tab present        :', probe.tabShown);
     if (!probe.tabShown) continue;
-    console.error('keys               :', probe.keys);
-    console.error('observations       :', probe.observations);
-    console.error('facets             :', probe.facets.join(', ') || 'none (fewer than two values)');
-    console.error('freshness dots     :', probe.dotStates.join(', ') || 'none');
+    // What this tag holds in this session; the browser's behaviour is the lines after.
+    note('keys               :', probe.keys);
+    note('observations       :', probe.observations);
+    note('facets             :', probe.facets.join(', ') || 'none (fewer than two values)');
+    note('freshness dots     :', probe.dotStates.join(', ') || 'none');
     console.error('detail rendered    :', probe.detailRendered);
     console.error('value              :', probe.valueShown);
     console.error('some key has value :', probe.anyValueRendered);
-    console.error('history rows       :', probe.historyRows);
+    note('history rows       :', probe.historyRows, '(switching between them is the next line)');
     console.error('history switches   :', probe.historySwitches);
     console.error('key filter         :', probe.keyFilterWorks);
     console.error('facet filter       :', probe.facetFilterWorks);
