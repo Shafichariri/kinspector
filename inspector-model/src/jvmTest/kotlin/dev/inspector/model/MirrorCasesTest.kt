@@ -148,7 +148,8 @@ class MirrorCasesTest {
 
     @Test
     fun duplicates_cases() = runRule("duplicates", setOf("transactions", "windowMs")) { input ->
-        val window = (input["windowMs"] as? JsonPrimitive)?.long ?: DEFAULT_DUPLICATE_WINDOW_MS
+        // Required, as in the JS runner: neither harness may carry its own copy of the default.
+        val window = (input["windowMs"] as? JsonPrimitive)?.long ?: error("duplicates cases must give windowMs")
         JsonArray(
             duplicateGroups(txns(input), window).map { group ->
                 buildJsonObject {

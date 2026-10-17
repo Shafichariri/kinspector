@@ -57,8 +57,8 @@ rules — anything that decides something belongs in the code under test.
 - **`timelineRuns`:** input `entries` are in **draw order**, each `{ "T" | "M" | "S": row }`. Output
   `[{ key, entries: [tokens], id }]`, where `key` is `"<tag>\u0000<name>"` or `null` and `id` is
   present only for signal runs.
-- **`duplicates`:** `[{ ids, spanMs, callCount }]`, ordered by each group's first member. `windowMs`
-  defaults to 3000.
+- **`duplicates`:** `[{ ids, spanMs, callCount }]`, ordered by each group's first member. Every case
+  gives `windowMs` — 3000 is the model's default — so neither runner carries a copy of it.
 - **`hopByHop`:** with no `headers`, `{ "names": [the set, sorted] }`; with `headers`, the editor's
   seeded lines as `{ "lines": ["Name: v1, v2"…] }`.
 

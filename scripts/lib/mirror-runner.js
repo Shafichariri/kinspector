@@ -81,8 +81,11 @@ const RULES = {
     exports: 'computeDuplicates',
     inputs: ['transactions', 'windowMs'],
     run: ({ computeDuplicates }, input, d) => {
+      // Required in every case rather than defaulted here: a default in the harness would be a
+      // second copy of DEFAULT_DUPLICATE_WINDOW_MS that nothing keeps equal to the first.
+      if (typeof input.windowMs !== 'number') throw new Error('duplicates cases must give windowMs');
       const rows = txns(input, d);
-      const marks = computeDuplicates(rows, input.windowMs ?? 3000);
+      const marks = computeDuplicates(rows, input.windowMs);
       // The page keeps a map from row id to its group; regroup it by ordinal, members in the order
       // the map received them, and order the groups by their first member as the Kotlin list is.
       const groups = new Map();
