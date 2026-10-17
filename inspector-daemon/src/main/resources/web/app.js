@@ -706,11 +706,13 @@
 
   // @mirror-begin urlOf
   // Mirrors NetworkTransaction.url on the Kotlin side. Built here rather than taken from the row
-  // because `url` is a computed property and does not travel on the wire.
+  // because `url` is a computed property and does not travel on the wire. An empty query keeps its
+  // `?`, as Kotlin's `query?.let` does: `/a?` and `/a` are different URLs, and the duplicate key is
+  // built from this.
   const urlOf = (txn) => {
     const dflt = { http: 80, ws: 80, https: 443, wss: 443 }[String(txn.scheme).toLowerCase()];
     const port = txn.port != null && txn.port !== dflt ? `:${txn.port}` : '';
-    return `${txn.scheme}://${txn.host}${port}${txn.path}${txn.query ? '?' + txn.query : ''}`;
+    return `${txn.scheme}://${txn.host}${port}${txn.path}${txn.query != null ? '?' + txn.query : ''}`;
   };
   // @mirror-end urlOf
 

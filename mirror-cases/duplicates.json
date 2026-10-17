@@ -173,6 +173,17 @@
       "expect": []
     },
     {
+      "name": "an empty query is not the same URL as no query",
+      "from": "NetworkTransaction.url keeps the ? for an empty query",
+      "input": {
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "query": ""},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
       "name": "two empty queries are the same URL",
       "from": "NetworkTransaction.url",
       "input": {
