@@ -2892,8 +2892,12 @@
    *
    * Ordered by count rather than recency deliberately: recency would reshuffle the whole chip row
    * on every request during live tail, and the endpoints worth a one-click filter are the ones
-   * that dominate the list. Ties break on the most recent call and then alphabetically, so the
+   * that dominate the list. Ties break on the most recent call and then on the segment, so the
    * order is fully determined and the jsdom harness can assert it.
+   *
+   * The last tie compares UTF-16 code units, as the model's `thenBy { it.segment }` does, and not
+   * `localeCompare`: the two disagree on case — `Balance` sorts before `accounts` here — and the
+   * overlay already draws the model's order for the same session.
    */
   function endpointShortcuts(txns, limit) {
     if (!limit || limit <= 0) return [];
@@ -2909,7 +2913,7 @@
       bySegment.set(segment, entry);
     }
     return [...bySegment.values()]
-      .sort((a, b) => b.count - a.count || b.latest - a.latest || a.segment.localeCompare(b.segment))
+      .sort((a, b) => b.count - a.count || b.latest - a.latest || (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0))
       .slice(0, limit);
   }
   // @mirror-end endpointShortcuts

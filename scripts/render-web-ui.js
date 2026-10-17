@@ -2277,7 +2277,41 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const unanchored = endpointChips.filter((c) => !c.dataset.filter.startsWith('path:*/')).length;
 
   console.error('endpoint chips     :', endpointChips.length);
+  /*
+   * Chip order is the model's: most calls first, then the most recent call, then the segment by
+   * char code — `thenBy { it.segment }` compares UTF-16 units, so `Balance` sorts before
+   * `accounts`, where a locale-aware compare puts them the other way round. Recency comes from the
+   * daemon's rows rather than the page, and the fixture holds a tie on count and recency.
+   */
+  let chipOrder = 'n/a (fewer than two chips)';
+  if (endpointChips.length > 1) {
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json());
+    const latest = new Map();
+    for (const t of page.items || []) {
+      const segment = String(t.path || '').split('/').filter(Boolean).pop();
+      if (segment !== undefined) latest.set(segment, Math.max(latest.get(segment) ?? -Infinity, t.mono));
+    }
+    const chips = endpointChips.map((c) => ({
+      segment: c.firstChild.textContent,
+      count: Number(c.querySelector('.chip-count')?.textContent),
+    }));
+    const outOfOrder = [];
+    for (let i = 0; i + 1 < chips.length; i++) {
+      const [a, b] = [chips[i], chips[i + 1]];
+      const [la, lb] = [latest.get(a.segment), latest.get(b.segment)];
+      const inOrder = a.count > b.count || (a.count === b.count && (la > lb || (la === lb && a.segment < b.segment)));
+      if (!inOrder) outOfOrder.push(`${a.segment} before ${b.segment}`);
+    }
+    const tied = chips.some((a, i) => chips.slice(i + 1).some((b) =>
+      a.count === b.count && latest.get(a.segment) === latest.get(b.segment)));
+    chipOrder = outOfOrder.length
+      ? `NO - ${outOfOrder.join(', ')}`
+      : `yes (count, then recency, then char code${tied ? '; a full tie is in this session' : ''})`;
+  }
+
   console.error('endpoint labels    :', chipLabels.join(' ') || 'none');
+  console.error('chip order         :', chipOrder);
   console.error('unanchored chips   :', unanchored === 0 ? 'yes (0)' : `NO - ${unanchored}`, '(must be 0)');
   console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
   console.error('chips survive click:', chipProbe.survived, `(${endpointChips.length} -> ${chipProbe.chipsAfter})`);

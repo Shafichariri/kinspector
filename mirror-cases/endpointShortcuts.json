@@ -54,6 +54,18 @@
       "expect": [["alpha", 1], ["beta", 1]]
     },
     {
+      "name": "the final tie compares char codes, so an upper-case segment sorts first",
+      "from": "Endpoints.kt thenBy { it.segment }",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/accounts", "mono": 500},
+          {"id": "t1", "callId": "c1", "path": "/v1/wallet/Balance", "mono": 500}
+        ]
+      },
+      "expect": [["Balance", 1], ["accounts", 1]]
+    },
+    {
       "name": "the limit caps the list",
       "from": "EndpointsTest.the limit caps the list",
       "input": {
