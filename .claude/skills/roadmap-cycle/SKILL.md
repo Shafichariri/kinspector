@@ -35,6 +35,12 @@ pass the previous role's output forward verbatim, and stop at the gates below.
 
 Call `delivery-tracker` for its status report and relay it.
 
+## Mode D — commercial (`make money`, `pricing`, `monetise`)
+
+Call `business-strategist`. Relay its interview questions to the human and wait for answers. Any
+paid feature it proposes goes through Mode A via the `product-owner`. **Never write its output into
+the repository** — it is public.
+
 ## Rules for the conductor
 
 - Proxy capture (4c) never starts without the human explicitly choosing it.

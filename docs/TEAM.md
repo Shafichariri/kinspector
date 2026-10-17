@@ -1,6 +1,6 @@
 # The agent team
 
-Seven Claude Code subagents, defined in `.claude/agents/`, that work the backlog in
+Eight Claude Code subagents, defined in `.claude/agents/`, that work the backlog in
 `docs/ROADMAP.md`. The playbook that runs them in order is the `roadmap-cycle` skill
 (`.claude/skills/roadmap-cycle/SKILL.md`).
 
@@ -17,6 +17,7 @@ still exactly one copy of each.
 | `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
 | `delivery-tracker` | What is actually done | roadmap item state; "Where we are" in `AGENTS.md` | QA evidence before marking anything done |
 | `release-steward` | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
+| `business-strategist` | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
 
 ## Flow of one item
 
@@ -34,8 +35,9 @@ plan ─► product-owner ─► architect (design) ─► [human gate if API/sc
 
 Think of it as a newsroom: the product owner is the editor choosing stories, the architect is the
 style-and-standards desk, the engineer is the reporter, QA is the fact-checker, the UX reviewer is
-the reader panel, the tracker keeps the published record honest, and the release steward decides
-what goes to print.
+the reader panel, the tracker keeps the published record honest, the release steward decides
+what goes to print, and the business strategist sells the ads — and keeps the rate card off the
+public noticeboard.
 
 ## Using it
 
@@ -43,4 +45,6 @@ what goes to print.
   It stops after intake and asks what goes first.
 - **Build an item:** "build *<roadmap item name>*" → Mode B.
 - **Status:** "where are we" → Mode C.
+- **Money:** "use the business-strategist" — it interviews you first, and keeps its output out of
+  the repository.
 - Any single role can be called directly, e.g. "use the ux-reviewer on the web UI".
