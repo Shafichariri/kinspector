@@ -1,0 +1,25 @@
+{
+  "txn": {
+    "id": "t0",
+    "ts": "2026-10-18T09:00:00.000Z",
+    "mono": 0,
+    "method": "GET",
+    "scheme": "https",
+    "host": "api.example.invalid",
+    "path": "/",
+    "callId": "c0"
+  },
+  "signal": {
+    "id": "s0",
+    "ts": "2026-10-18T09:00:00.000Z",
+    "mono": 0,
+    "tag": "state",
+    "name": "x"
+  },
+  "marker": {
+    "ts": "2026-10-18T09:00:00.000Z",
+    "mono": 0,
+    "label": "m",
+    "source": "app"
+  }
+}

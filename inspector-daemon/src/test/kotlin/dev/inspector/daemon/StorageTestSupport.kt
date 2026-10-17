@@ -63,11 +63,16 @@ fun writeSession(
     markers: List<Marker> = emptyList(),
     signals: List<Pair<Signal, ByteArray?>> = emptyList(),
     padBytes: Int = 0,
+    /** Request and response bodies by transaction id; a row with no entry gets [padBytes]. */
+    bodies: Map<String, Pair<ByteArray?, ByteArray?>> = emptyMap(),
 ): Path {
     val dir = config.sessionsDir.resolve(sessionId)
     val meta = clientInfo().toSessionMeta(sessionId, startedAt)
     val writer = SessionWriter(dir, meta)
-    transactions.forEach { writer.append(it, null, if (padBytes > 0) ByteArray(padBytes) else null) }
+    transactions.forEach { txn ->
+        val (req, res) = bodies[txn.id] ?: (null to if (padBytes > 0) ByteArray(padBytes) else null)
+        writer.append(txn, req, res)
+    }
     markers.forEach { writer.append(it) }
     signals.forEach { (signal, data) -> writer.append(signal, data) }
     writer.close()

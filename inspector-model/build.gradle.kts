@@ -31,3 +31,13 @@ kotlin {
         }
     }
 }
+
+/*
+ * `MirrorCasesTest` reads the shared cases from the repository root. `inputs.dir` is load-bearing:
+ * without it a changed JSON case leaves `jvmTest` up to date, and the run meant to prove a case
+ * fails reports green from the build cache instead.
+ */
+tasks.named<Test>("jvmTest") {
+    systemProperty("inspector.mirrorCases", rootProject.file("mirror-cases").path)
+    inputs.dir(rootProject.file("mirror-cases"))
+}

@@ -41,3 +41,29 @@ tasks.jar {
         attributes("Implementation-Version" to project.version)
     }
 }
+
+/*
+ * The mirror cases are read from the repository root at test time, so Gradle has to be told they
+ * are an input. Without `inputs.dir` a changed JSON case leaves the task up to date and the run that
+ * was meant to prove it fails reports green from the cache instead.
+ */
+tasks.test {
+    systemProperty("inspector.mirrorCases", rootProject.file("mirror-cases").path)
+    inputs.dir(rootProject.file("mirror-cases"))
+}
+
+/*
+ * Writes the session CI points the web UI probes at. A test-classpath `main`, so it is never part
+ * of the published daemon; see `ProbeFixture.kt` for why the fixture is written rather than
+ * committed.
+ *
+ *   ./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe
+ */
+tasks.register<JavaExec>("writeProbeFixture") {
+    description = "Writes the web UI probe session into -Pinspector.probeDir (default build/probe-fixture)."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass = "dev.inspector.daemon.ProbeFixtureKt"
+    val dir = providers.gradleProperty("inspector.probeDir")
+        .orElse(layout.buildDirectory.dir("probe-fixture").map { it.asFile.path })
+    argumentProviders += CommandLineArgumentProvider { listOf(dir.get()) }
+}
