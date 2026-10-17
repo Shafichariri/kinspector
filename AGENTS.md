@@ -361,32 +361,12 @@ a confidently wrong answer to an agent that cannot tell. The allowlist is derive
 `descriptors()` so a new parameter cannot drift out of it, and the error names `session` explicitly
 when it sees `sessionId`. Reported from a consuming app.
 
-**Repeated-request detection lives in `:inspector-model`, and the web UI mirrors it.** Both rules
-in `duplicateGroups` are load-bearing. A **different `callId` is required**, because redirect hops
-and retry attempts share one and are a single logical call already shown as an attempt chain —
-without that rule every retry lights up, which is noise *and* a false description. And **headers are
-excluded from the key**, because a signed app puts a fresh nonce and signature on every request, so
-a key including them would find nothing on exactly the apps this helps most. Timing uses `mono`,
-never `ts`, per `docs/schema.md`. The key is method + URL + status + both byte counts, which
-identifies rows that are *indistinguishable at row level* — a weaker claim than byte-identical
-bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
-algorithm, and `mirror-cases/duplicates.json` holds it there: both sides run every case, so the two
-cannot drift without `check-web-static.js` or `MirrorCasesTest` going red. Including the count —
-`computeDuplicates` said `run.length` for two releases, so a retry inside a repeat read "sent 3x"
-for a call the app made twice.
-
-**The scope bar's rule lives in `:inspector-model`, and `app.js` mirrors it.** `pathScope` began
-in `:inspector-ui`'s `Formatting.kt` when the overlay was the only surface that lifted a shared
-prefix out of its rows. The web UI now draws the same bar, so the rule moved beside `timeline` and
-`endpointShortcuts` for the same reason those did — three thresholds and a segment walk are exactly
-what drifts invisibly, and a bar that appears on one surface and not the other, for a session both
-are showing, reads as a bug in whichever one you are looking at. `PathScopeTest` in that module is
-the authority; the copy in `app.js` follows it, and `mirror-cases/pathScope.json` — one case per
-rule and per threshold — is what makes it follow.
-
 **Mirror cases live once, at the repository root, and both sides run every one.** Seven rules in
 `app.js` copy a Kotlin authority, and for five of them "keep them in step" was the only thing
-holding them; when the cases were first written, four had already drifted. So each rule's cases are
+holding them. When the cases were first written, four drifts and a minor fifth had already opened:
+three inside mirrored functions (the repeat count, a run's id, the chip list's final tie), a
+`?` dropped from an empty query by the `urlOf` the duplicate key is built from, and one call site —
+the timeline tab — that bypassed a mirror which was itself correct. So each rule's cases are
 one JSON file in `mirror-cases/`, read by `MirrorCasesTest` in `:inspector-model` (or
 `HopByHopMirrorTest` in the daemon, for `Replay.kt`'s list) and by `scripts/check-web-static.js`
 against the function lifted out of the real `app.js`. A case added on either side is run on the
@@ -405,9 +385,34 @@ neighbouring comment.** The `visits` probe used to lift from one section header 
 function's doc comment, a boundary that moves whenever somebody adds a function and that lifts too
 much or too little without saying so. Anchors are explicit, each name must appear exactly once as a
 begin and once as an end in the same file, and anything else is exit 2 naming the block — a harness
-that cannot run must not read as one that found nothing. A block with no case file, or a case file
-with no block, is exit 2 for the same reason. `computeDuplicates` moved beside `duplicateKey` so
-the duplicates block could be one contiguous range.
+that cannot run must not read as one that found nothing. An anchored block no rule uses, or a known
+rule with no case file, is exit 2 for the same reason; a case file that names an unknown rule, holds
+no cases or is misnamed is a failed check (exit 1) in `check-web-static.js` and fails
+`MirrorCasesTest` too, so it is red on both sides either way. `computeDuplicates` moved beside
+`duplicateKey` so the duplicates block could be one contiguous range.
+
+**Repeated-request detection lives in `:inspector-model`, and the web UI mirrors it.** Both rules
+in `duplicateGroups` are load-bearing. A **different `callId` is required**, because redirect hops
+and retry attempts share one and are a single logical call already shown as an attempt chain —
+without that rule every retry lights up, which is noise *and* a false description. And **headers are
+excluded from the key**, because a signed app puts a fresh nonce and signature on every request, so
+a key including them would find nothing on exactly the apps this helps most. Timing uses `mono`,
+never `ts`, per `docs/schema.md`. The key is method + URL + status + both byte counts, which
+identifies rows that are *indistinguishable at row level* — a weaker claim than byte-identical
+bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
+algorithm, and `mirror-cases/duplicates.json` holds it there: both sides run every case, so the two
+cannot drift without `check-web-static.js` or `MirrorCasesTest` going red. Including the count —
+`computeDuplicates` said `run.length` in every release from v0.1.0, where both copies first shipped,
+through v1.3.0, so a retry inside a repeat read "sent 3x" for a call the app made twice.
+
+**The scope bar's rule lives in `:inspector-model`, and `app.js` mirrors it.** `pathScope` began
+in `:inspector-ui`'s `Formatting.kt` when the overlay was the only surface that lifted a shared
+prefix out of its rows. The web UI now draws the same bar, so the rule moved beside `timeline` and
+`endpointShortcuts` for the same reason those did — three thresholds and a segment walk are exactly
+what drifts invisibly, and a bar that appears on one surface and not the other, for a session both
+are showing, reads as a bug in whichever one you are looking at. `PathScopeTest` in that module is
+the authority; the copy in `app.js` follows it, and `mirror-cases/pathScope.json` — one case per
+rule and per threshold — is what makes it follow.
 
 The bar is **sticky on both surfaces, and that is load-bearing.** It is a standing claim that every
 path below it is missing the same front, so a stripped path read after the bar scrolled away is not
@@ -881,8 +886,9 @@ mean the same in both orders reads `TimelineRun.earliest`. The id does, and has 
 its newest end, so an id taken from the head would re-key on every observation during live tail and
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
-`app.js`'s `runIdOf` took the head for two releases, so an expanded run on the web collapsed under
-the reader during live tail; `mirror-cases/timelineRuns.json` now carries the newest-first cases.
+`app.js`'s `runIdOf` took the head from v0.8.0, when the model's id moved to `earliest`, through
+v1.3.0, so an expanded run on the web collapsed under the reader during live tail;
+`mirror-cases/timelineRuns.json` now carries the newest-first cases.
 
 **The overlay can enumerate providers and the host cannot, which is the whole of stage 4.** A
 daemon learns a provider's name only when one answers, so `app.js` infers the set from what a
@@ -1577,8 +1583,10 @@ every release build clean:
 node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
 npm install --no-save --no-package-lock jsdom@29.1.1 # the version CI pins
 node scripts/render-web-ui.js > /tmp/ui.html      # web UI smoke test + snapshot
-./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes
-INSPECTOR_UI_EXPECT_CHECKS=<UI_EXPECT_CHECKS in ci.yml> node scripts/render-web-ui.js > /tmp/ui.html  # as CI judges it
+./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes; use an empty dir
+inspector-daemon/build/install/inspector/bin/inspector serve --data /tmp/probe --port 8231 &   # ... served off 8099
+INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 INSPECTOR_UI_EXPECT_CHECKS=<UI_EXPECT_CHECKS in ci.yml> \
+  node scripts/render-web-ui.js > /tmp/ui.html    # ... judged as CI judges it; the count only holds on that session
 INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
 INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 node scripts/render-web-ui.js   # ... a daemon off 8099
 curl -s http://127.0.0.1:8099/api/sessions/latest/export.html -o /tmp/s.html     # an exported session
