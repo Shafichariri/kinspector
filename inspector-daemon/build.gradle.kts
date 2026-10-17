@@ -43,13 +43,26 @@ tasks.jar {
 }
 
 /*
+ * Passes the mirror-cases folder to the test JVM *as a declared input*, path-sensitive relative to
+ * the folder rather than absolute, so the test re-runs when a case changes and the build cache can
+ * still be shared between checkouts at different paths. An absolute `systemProperty` would be an
+ * input that differs per machine, and a bare `inputs.dir` without it was what kept a changed case
+ * from being seen at all.
+ */
+class MirrorCasesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.mirrorCases=${dir.absolutePath}")
+}
+
+/*
  * The mirror cases are read from the repository root at test time, so Gradle has to be told they
- * are an input. Without `inputs.dir` a changed JSON case leaves the task up to date and the run that
- * was meant to prove it fails reports green from the cache instead.
+ * are an input; see `inspector-model/build.gradle.kts` for why that is load-bearing.
  */
 tasks.test {
-    systemProperty("inspector.mirrorCases", rootProject.file("mirror-cases").path)
-    inputs.dir(rootProject.file("mirror-cases"))
+    jvmArgumentProviders += MirrorCasesArgument(rootProject.file("mirror-cases"))
 }
 
 /*

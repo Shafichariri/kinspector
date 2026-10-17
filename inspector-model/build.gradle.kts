@@ -33,11 +33,25 @@ kotlin {
 }
 
 /*
- * `MirrorCasesTest` reads the shared cases from the repository root. `inputs.dir` is load-bearing:
- * without it a changed JSON case leaves `jvmTest` up to date, and the run meant to prove a case
- * fails reports green from the build cache instead.
+ * Passes the mirror-cases folder to the test JVM *as a declared input*, path-sensitive relative to
+ * the folder rather than absolute, so the test re-runs when a case changes and the build cache can
+ * still be shared between checkouts at different paths. An absolute `systemProperty` would be an
+ * input that differs per machine, and a bare `inputs.dir` without it was what kept a changed case
+ * from being seen at all.
+ */
+class MirrorCasesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.mirrorCases=${dir.absolutePath}")
+}
+
+/*
+ * `MirrorCasesTest` reads the shared cases from the repository root. Declaring the folder as an
+ * input is load-bearing: without it a changed JSON case leaves `jvmTest` up to date, and the run
+ * meant to prove a case fails reports green instead — measured, not assumed.
  */
 tasks.named<Test>("jvmTest") {
-    systemProperty("inspector.mirrorCases", rootProject.file("mirror-cases").path)
-    inputs.dir(rootProject.file("mirror-cases"))
+    jvmArgumentProviders += MirrorCasesArgument(rootProject.file("mirror-cases"))
 }
