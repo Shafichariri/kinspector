@@ -55,6 +55,16 @@ class ProbeFixtureTest {
     }
 
     @Test
+    fun writing_twice_replaces_the_session_rather_than_doubling_it() {
+        writeProbeFixture(tmp)
+        val fixture = probeFixture()
+        assertEquals(listOf(PROBE_SESSION_ID), repo.listSessions().map { it.sessionId })
+        assertEquals(fixture.transactions.size, repo.readTransactions(dir).size)
+        assertEquals(fixture.markers.size, repo.readMarkers(dir).size)
+        assertEquals(fixture.signals.size, repo.readSignals(dir).size)
+    }
+
+    @Test
     fun every_case_a_probe_reads_is_present() {
         val txns = repo.readTransactions(dir)
         val markers = repo.readMarkers(dir)

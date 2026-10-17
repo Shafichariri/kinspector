@@ -39,10 +39,21 @@ fun main(args: Array<String>) {
     println("probe fixture written to ${dir.toAbsolutePath()}")
 }
 
-/** Writes the probe session under [dataDir] and points `latest` at it. */
+/**
+ * Writes the probe session under [dataDir] and points `latest` at it.
+ *
+ * Replaces the probe session if one is already there. `SessionWriter` appends, so a second run into
+ * the same directory used to double every row — and the probes, which count rows against the
+ * daemon's own answers, would then pass or fail on how many times the task had run. Only the probe
+ * session's own folder is removed; anything else under [dataDir] is left alone.
+ */
 fun writeProbeFixture(dataDir: Path): Path {
     val config = DaemonConfig(dataDir = dataDir)
     Files.createDirectories(config.sessionsDir)
+    val previous = config.sessionsDir.resolve(PROBE_SESSION_ID)
+    if (Files.exists(previous)) {
+        Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+    }
     val fixture = probeFixture()
     val dir = writeSession(
         config, PROBE_SESSION_ID, PROBE_STARTED_AT,
