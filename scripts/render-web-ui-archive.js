@@ -121,7 +121,23 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   // The code is the page's own: count the network call sites across every inlined script, with the
   // same counter `check-web-static.js` runs over the sources, so the two cannot disagree about what
   // a call site is.
-  const inlined = [...doc.querySelectorAll('script')].map((s, i) => ({ file: `inline-${i}`, text: s.textContent }));
+  //
+  // Except the data. The export embeds the session as `window.INSPECTOR_ARCHIVE = <json>;`, and a
+  // captured body that mentions `fetch(` — any JavaScript the app downloaded, say — would count as a
+  // call site and fail an export that is perfectly sound. A script is skipped as data only when the
+  // text after the assignment *parses as JSON*: a JSON value cannot call anything, and anything
+  // appended to it, a call included, breaks the parse and puts the whole script back among the code.
+  // Matching on the prefix alone would let `window.INSPECTOR_ARCHIVE = {}; fetch(x)` through.
+  const isArchiveData = (text) => {
+    const m = text.match(/^\s*window\.INSPECTOR_ARCHIVE = ([\s\S]*?);?\s*$/);
+    if (!m) return false;
+    try { JSON.parse(m[1]); return true; } catch { return false; }
+  };
+  const scripts = [...doc.querySelectorAll('script')].map((s, i) => ({ file: `inline-${i}`, text: s.textContent }));
+  const dataScripts = scripts.filter(({ text }) => isArchiveData(text));
+  const inlined = scripts.filter((s) => !dataScripts.includes(s));
+  check('session data is data only', dataScripts.length === 1,
+    `${dataScripts.length} script(s) hold only the embedded session; ${inlined.length} counted as code`);
   check('app.js inlined', inlined.some(({ text }) => text.includes('const ARCHIVE = ')));
   const counts = countNetworkPrimitives(inlined);
   const wrong = Object.entries(NETWORK_EXPECTED).filter(([name, want]) => counts[name] !== want);
