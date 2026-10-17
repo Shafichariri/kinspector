@@ -548,6 +548,173 @@ tag cut before any of this existed.
 
 ---
 
+## 5. Next: the daemon and the web UI — planned 2026-10-17
+
+Six pieces of work, all host-side. **No SDK change and no `:inspector-model` change**: every new
+rule runs in `:inspector-daemon` and reaches the page through the API, so none of it needs a
+mirror in `app.js` to keep in step — the mirrors above are the drift this plan declines to add.
+`INTEGRATION.md` is untouched, because nothing changes for a consuming app.
+
+Order is by dependency, not by appeal: the page shell comes first because every later item adds a
+screen, and building those into the current single page would mean building them twice.
+
+| Order | Item | Size | Ships in |
+|---|---|---|---|
+| 1 | Web UI foundation — pages, bulk actions, room for the list | L | 1.4 |
+| 2 | Endpoint latency stats | M | 1.5 |
+| 3 | Session diff | L | 1.5 |
+| 4 | Findings framework, and the payment-safety rules | L | 1.6 |
+| 5 | Sensitive-data detection — detect, never redact | M | 1.6 |
+| 6 | Web UI polish, against the finished screens | M | 1.7 |
+| — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK |
+
+### Web UI foundation
+
+Two complaints from use drive it: actions on lists are one item at a time (killing five processes
+is five confirms), and the main page stacks seven bands — top bar, tabs, two toolbar rows, filter
+error, now strip, axis — before the first row.
+
+**The rule for what moves:** anything about the session being watched stays on the traffic page;
+anything about the machine, the archive or more than one session gets a page of its own.
+
+- **A left rail**, collapsible to icons, over hash-routed pages: Traffic, Stats, Findings, Diff,
+  Sessions, Processes, Settings. Hash routes keep the no-build-step, one-`index.html` shape and make
+  the back button work. A rail rather than a second tab bar because it spends width, which is
+  spare, rather than height, which is not.
+- **Sessions and Processes leave the settings dialog**, and restart/stop leave the top bar for
+  Processes. Settings keeps preferences only.
+- **Bulk selection on every list.** Processes: checkboxes, select all, presets (`all servers`,
+  `all except this one`, `stale`), `kill selected (n)` with the two-click confirm. MCP processes are
+  **excluded from presets** and warned about — killing one cuts the editor off, the same trap the
+  `pkill` note in the dialog already describes. Sessions: `delete selected`, `keep last N`,
+  `older than`, and **pick two → compare**, which is the diff's entry point.
+- **Bulk endpoints keep every single-item protection.** `POST /api/peers/kill {pids}` re-verifies
+  each pid's identity at kill time and refuses the daemon's own; `POST /api/sessions/delete {ids}`
+  refuses the active session. Both need `X-Inspector-Control`, both answer per item, because a
+  batch that reports one status for five kills hides the one that failed.
+- **Room for the list:** a draggable divider between list and detail (double-click resets, width
+  remembered, collapse and full-width buttons); the now strip and the axis fold into one
+  `overview` line; the toolbar becomes one row with endpoint chips behind `endpoints ▾` past about
+  six; export goes into a `⋮` menu; a density preference; and `#/txn/{id}` opens one call full
+  screen. Measure the band heights before and after — the bar is about 120px more for rows.
+- **A daemon-side config file**, `~/.inspector/config.json` behind `GET/PUT /api/config`. Findings
+  rules have to live where MCP can read them, and an agent and the page disagreeing about what
+  counts as a finding is a worse bug than either alone. View preferences stay in `prefs`.
+
+What must still hold: the export still works offline (new pages either read the embedded archive
+or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
+`display` joins `auditHiddenPanes`; nothing new under 11px.
+
+### Endpoint latency stats
+
+- **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
+  hex and long base64-ish segments become `{id}`, so `/users/123` and `/users/456` are one row.
+  Overrides go in config for the paths the heuristic gets wrong.
+- Per method + template: calls, attempts, 4xx / 5xx / transport-failure rates, p50/p90/p95/p99,
+  max, mean bytes. **Below 20 samples p95 and p99 read `n<20`**, not a number — a percentile of
+  six values is a confident-looking guess. Latency is per attempt, retried endpoints are marked,
+  transport failures are counted and never averaged in.
+- `GET /api/sessions/{id}/stats?filter=` with the shared grammar; MCP `endpoint_stats`; a Stats page
+  whose rows open Traffic filtered to that endpoint; live, throttled to once a second; precomputed
+  into the exports so the offline file has them.
+- Must read the whole session: a test at 1001+ rows, for the reason `HarTest` exists.
+
+### Session diff
+
+`GET /api/diff?a=&b=&filter=`, defaulting to the newest session against the previous one of the
+same app; an optional `since:marker("…")` per side to compare one stretch of two runs.
+
+- Endpoints added and removed; call count changed (`/transfer` 1× → 2×, loudest on mutations);
+  status mix changed; latency regressed **only** when n ≥ 5 on both sides, the change is ≥ 25%
+  **and** ≥ 50 ms — anything less is noise drawn as signal; request and response **shape** (JSON key
+  paths and types) from bodies on disk.
+- **A body capture did not keep is "unknown", never "field removed".** Same principle as
+  `BodyOmission`: the diff must not assert what capture could not see.
+- MCP `diff_sessions`, a Markdown form, and the Diff page.
+
+### Findings, and the payment-safety rules
+
+**The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
+message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
+archive**, so a rule edit applies to every session already recorded; cached per session against
+row count and rule version. Rules are **data in the config file** — the defaults ship, and a user
+can edit, disable or add rules from Settings without a release.
+
+**This bends one stated constraint, and on purpose.** "Inspector learns nothing about app domain
+concepts" stands for *capture*. These rules are user configuration over captured rows; the
+defaults are generic conventions (`Idempotency-Key`), never a particular backend's.
+
+Payment rules apply to mutations (POST/PUT/PATCH/DELETE):
+
+| Rule | When | Severity |
+|---|---|---|
+| Duplicate mutation | same method + template + body hash, **different** `callId`, within a window (3 s), no idempotency key | high |
+| Key reused, body changed | same idempotency key, different body | high |
+| Automatic retry without a key | attempt > 1, no key | high |
+| Ambiguous resubmit | a mutation ends in timeout or transport failure and is sent again as a new call | medium |
+| Key missing on a payment path | path matches a configured pattern, no key | medium |
+| Retry with a key | attempt > 1, key present | info — the safe case, shown for context |
+
+Configurable: idempotency header names (default `Idempotency-Key`, `X-Idempotency-Key`), payment
+path patterns in the existing `path:` syntax, the window. A request body that was not captured
+makes the evidence read "body unknown"; a duplicate is never claimed without both bodies.
+
+**The filter grammar stays frozen**, so there is no `has:finding` term — "flagged rows only" is a
+view toggle. Changing the grammar is a separate decision.
+
+`GET /api/sessions/{id}/findings?category=`, MCP `list_findings`, a Findings page grouped by rule,
+a row badge, a section in the detail pane, and disclosure in every export (HAR's entry `comment`).
+
+### Sensitive-data detection — detect, never redact
+
+Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
+addable like the payment rules, in two kinds:
+
+- **Value rules**, validated rather than bare regex: card numbers (13–19 digits, **Luhn**; known
+  test PANs drop to `info`), IBAN (country length — KW is 30 — and **mod-97**), Kuwait Civil ID
+  (12 digits with a valid embedded birth date; structural, so marked lower confidence until a
+  check digit rule is supplied), JWTs and `token=`/`password=`/API keys in query strings, and
+  credentials over `http://`. Email and phone exist and default **off** — they are noise in almost
+  every session.
+- **Field-name rules**, matched on JSON key paths and query parameters whatever the value:
+  `civil_id`, `first_name`, `last_name`, `full_name`, `date_of_birth`, `passport_number`, `iban`,
+  `card_number`, `cvv`, `cvc`, `pin`, `otp`, `password`, and so on — case- and separator-insensitive
+  (`firstName`, `first-name`).
+
+Severity rises when the destination is **not** in a configured first-party host list: a card
+number going to an analytics host is the real alarm. Fields listed in `redacted[]` are skipped.
+
+**The detector must not become the leak.** Evidence is stored and shown **masked** —
+`•••• 4242`, `KW81 •••• 0001` — with the location and JSON path; never the value, in the UI, MCP
+or any export. Bodies are scanned when findings are asked for, cached, never on ingest. A finding
+can be dismissed per endpoint and path, with a reason, saved to config.
+
+### Web UI polish
+
+The notes from use, applied once the new screens exist; the first human design pass the web UI
+has had (still listed under open questions); `g s` / `g f`-style keys for the new pages; and empty
+states that say why they are empty, as the traffic list already does.
+
+### Deferred: mocking, fault injection, breakpoints
+
+All three need code on the device. Capture is a client plugin, so the daemon reads the transcript
+after the call — it is never standing in the doorway. `MockEngine` is a Ktor *client* engine;
+breakpoints pause the app's own request. They wait for a deliberate SDK phase, and carry two
+decisions with them: mocking turns an observer into an actor (it would need a visible "mocks
+active" state, mocked rows marked in the archive, and a noop twin), and breakpoints block the
+app by design, which the efficiency contract forbids outside an explicit debug mode. The config
+file, the endpoint templates and filter-grammar rule matching built above are the parts that
+phase will reuse.
+
+### Every phase
+
+Daemon tests, `render-web-ui.js` and `render-web-ui-archive.js` before each push, and every new
+guard proven to fail when broken. `DAEMON.md` for new endpoints and the config file; `AGENTS.md`
+for any decision that someone could later "fix". No client names in rule defaults, fixtures or
+commits.
+
+---
+
 ## What this document does not overturn
 
 The constraints in `AGENTS.md` → "Non-obvious decisions — do not 'fix' these", and
