@@ -597,7 +597,9 @@ anything about the machine, the archive or more than one session gets a page of 
   `overview` line; the toolbar becomes one row with endpoint chips behind `endpoints ▾` past about
   six; export goes into a `⋮` menu; a density preference; and `#/txn/{id}` opens one call full
   screen. Measure the band heights before and after — the bar is about 120px more for rows.
-- **A daemon-side config file**, `~/.inspector/config.json` behind `GET/PUT /api/config`. Findings
+- **The daemon's `config.json` becomes writable**, behind `GET/PUT /api/config`. It exists today
+  (`DaemonConfig` reads it, flags over file over defaults) but nothing writes or validates it;
+  this adds validation and an atomic write, and keeps flags winning. Findings
   rules have to live where MCP can read them, and an agent and the page disagreeing about what
   counts as a finding is a worse bug than either alone. View preferences stay in `prefs`.
 
