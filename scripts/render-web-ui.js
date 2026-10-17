@@ -735,6 +735,45 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
   const signalProbe = await probeSignals();
 
+  /**
+   * A marker at exactly a call's `mono` is drawn before that call on the timeline tab too.
+   *
+   * The model's `timeline()` places it with `<=`, because a marker is dropped just before the
+   * thing it marks, and a tie is what that looks like on a millisecond clock. The list always did
+   * this; the timeline tab sorted all three streams by `mono` in one stable sort with markers
+   * added last, so a tied marker landed after the call it introduced. The ties are found from the
+   * daemon's own rows, not from the page.
+   */
+  async function probeTimelineTie() {
+    const allTab = doc.querySelector('#tabs .tab[data-view="all"]');
+    if (!allTab) return 'n/a (no timeline tab)';
+    await click(allTab);
+    await new Promise((r) => setTimeout(r, 400));
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const [page, markers] = await Promise.all([
+      fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?limit=2000`).then((r) => r.json()),
+      fetch(`${ORIGIN}/api/sessions/${sessionId}/markers`).then((r) => r.json()).catch(() => []),
+    ]);
+    const txns = page.items || [];
+    const ties = markers.filter((m) => txns.some((t) => t.mono === m.mono));
+    if (!ties.length) return "n/a (no marker shares a call's millisecond in this session)";
+    const kids = [...doc.getElementById('timeline').children];
+    const newestFirst = doc.getElementById('order-newest').classList.contains('on');
+    const wrong = [];
+    for (const m of ties) {
+      const at = kids.findIndex((n) => n.dataset.kind === 'marker' && n.textContent === m.label);
+      for (const t of txns.filter((x) => x.mono === m.mono)) {
+        const row = kids.findIndex((n) => n.dataset.kind === 'txn' && n.dataset.id === t.id);
+        if (at < 0 || row < 0) { wrong.push(`"${m.label}" or ${t.method} ${t.path} not drawn`); continue; }
+        if (newestFirst ? at < row : at > row) wrong.push(`"${m.label}" drawn after ${t.method} ${t.path}`);
+      }
+    }
+    return wrong.length
+      ? `NO - ${wrong.join('; ')}`
+      : `yes (${ties.length} tied ${ties.length === 1 ? 'marker' : 'markers'} drawn before the call)`;
+  }
+  const timelineTie = await probeTimelineTie();
+
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
   await click(doc.querySelector('#tabs .tab[data-view="network"]'));
@@ -2257,6 +2296,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('point glyphs       :', signalProbe.points, '(screen/state: instants)');
   console.error('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
   console.error('traffic + signals  :', signalProbe.merged);
+  console.error('marker at a tie    :', timelineTie, "(before the call at its millisecond, as timeline() places it)");
   console.error('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);

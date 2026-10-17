@@ -4119,11 +4119,14 @@
     root.innerHTML = '';
 
     const ends = spanEndsFor(state.signals);
-    const entries = [
-      ...state.transactions.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
-      ...state.signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
-      ...state.markers.map((marker) => ({ kind: 'marker', mono: marker.mono, marker })),
-    ].filter((entry) => inRange(entry.mono)).sort((a, b) => a.mono - b.mono);
+    // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
+    // call's `mono` is drawn before it. One stable sort over all three streams with markers added
+    // last put a tied marker after the call it introduced — the opposite of the list beside it.
+    const entries = timelineEntries(
+      state.transactions.filter((txn) => inRange(txn.mono)),
+      state.markers.filter((marker) => inRange(marker.mono)),
+      state.signals.filter((signal) => inRange(signal.mono)),
+    );
 
     if (state.newestFirst) entries.reverse();
 
