@@ -370,7 +370,10 @@ a key including them would find nothing on exactly the apps this helps most. Tim
 never `ts`, per `docs/schema.md`. The key is method + URL + status + both byte counts, which
 identifies rows that are *indistinguishable at row level* — a weaker claim than byte-identical
 bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
-algorithm; keep them in step.
+algorithm, and `mirror-cases/duplicates.json` holds it there: both sides run every case, so the two
+cannot drift without `check-web-static.js` or `MirrorCasesTest` going red. Including the count —
+`computeDuplicates` said `run.length` for two releases, so a retry inside a repeat read "sent 3x"
+for a call the app made twice.
 
 **The scope bar's rule lives in `:inspector-model`, and `app.js` mirrors it.** `pathScope` began
 in `:inspector-ui`'s `Formatting.kt` when the overlay was the only surface that lifted a shared
@@ -378,7 +381,33 @@ prefix out of its rows. The web UI now draws the same bar, so the rule moved bes
 `endpointShortcuts` for the same reason those did — three thresholds and a segment walk are exactly
 what drifts invisibly, and a bar that appears on one surface and not the other, for a session both
 are showing, reads as a bug in whichever one you are looking at. `PathScopeTest` in that module is
-the authority; the copy in `app.js` follows it.
+the authority; the copy in `app.js` follows it, and `mirror-cases/pathScope.json` — one case per
+rule and per threshold — is what makes it follow.
+
+**Mirror cases live once, at the repository root, and both sides run every one.** Seven rules in
+`app.js` copy a Kotlin authority, and for five of them "keep them in step" was the only thing
+holding them; when the cases were first written, four had already drifted. So each rule's cases are
+one JSON file in `mirror-cases/`, read by `MirrorCasesTest` in `:inspector-model` (or
+`HopByHopMirrorTest` in the daemon, for `Replay.kt`'s list) and by `scripts/check-web-static.js`
+against the function lifted out of the real `app.js`. A case added on either side is run on the
+other; that is the point, and a case that only one side passes is a drift with the Kotlin answer
+right. Rows are partial and merged over `_defaults.json`, then decoded through the **real
+serializer with unknown keys refused** — the archive's reader ignores unknown keys so a newer device
+can talk to an older daemon, but a fixture has no such excuse, and a misspelt `calId` silently
+falling back to the default would make a case assert something other than what it says. The Kotlin
+runner is `jvmTest` because it reads files from the repository; the commonTest suites stay, since
+they are what runs on iOS and Android. Both Gradle test tasks declare `inputs.dir` on the folder,
+and that is load-bearing: without it, adding a bad case file left `jvmTest` up to date and green,
+which was measured rather than assumed.
+
+**A lifted block is bounded by `// @mirror-begin <name>` and `// @mirror-end <name>`, never by a
+neighbouring comment.** The `visits` probe used to lift from one section header to the next
+function's doc comment, a boundary that moves whenever somebody adds a function and that lifts too
+much or too little without saying so. Anchors are explicit, each name must appear exactly once as a
+begin and once as an end in the same file, and anything else is exit 2 naming the block — a harness
+that cannot run must not read as one that found nothing. A block with no case file, or a case file
+with no block, is exit 2 for the same reason. `computeDuplicates` moved beside `duplicateKey` so
+the duplicates block could be one contiguous range.
 
 The bar is **sticky on both surfaces, and that is load-bearing.** It is a standing claim that every
 path below it is missing the same front, so a stripped path read after the bar scrolled away is not
@@ -430,7 +459,8 @@ verbatim and skips `replayableHeaders`, so anything the UI leaves out is simply 
 own hop-by-hop filtering never runs either. The edit form therefore seeds from *filtered* captured
 headers rather than the raw capture, or changing a body would quietly put the captured
 `Content-Length` and `Host` back on the request. `HOP_BY_HOP` in `app.js` mirrors
-`HOP_BY_HOP_HEADERS` in `Replay.kt`; keep them in step.
+`HOP_BY_HOP_HEADERS` in `Replay.kt`, and `mirror-cases/hopByHop.json` holds the two lists equal:
+`HopByHopMirrorTest` runs it against the daemon's, `check-web-static.js` against the page's.
 
 **A probe that presses a button must stub `fetch` itself, not rely on the guard it is testing.**
 The editor's malformed-header check presses **send**, because "the form refuses this" is only
@@ -438,6 +468,32 @@ observable by trying. The first version relied on the guard being present to sto
 the one run where the guard was broken was the one run that sent something. Against an unreachable
 host that surfaced as the whole script dying; against a reachable one it would have fired a real
 edited request from a smoke test and reported a pass.
+
+**`render-web-ui.js` takes its verdict from its own report lines, and checks an exact count.** It
+exited 0 whatever it printed, so a run in which every line said NO was green to anything that read
+only the exit code — which is CI. Threading a result through a hundred probes would have been a
+rewrite; instead every line printed while reporting is classified as it goes: a value starting
+`yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped, and anything else is information.
+That makes wording load-bearing, so prose passes were reworded `yes (closes)` and friends, and
+"must be 0" numbers became yes/NO lines. Any failure, any page error or a list that is not an exact
+mirror exits 1. The count is the other half: a probe whose selector stopped matching does not fail,
+it reports `n/a` or nothing, so `INSPECTOR_UI_EXPECT_CHECKS` pins how many must pass and CI sets it
+from `.github/workflows/ci.yml`. A change that adds or removes a check changes that number in the
+same commit. The archive probe does the same. Read the `unclassified` list after editing a probe: a
+pass worded as prose lands there and stops counting.
+
+**The CI probe session is written by the daemon's own writer at CI time, and never committed.**
+`ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
+`writeSession` and `SessionWriter` like every daemon test. A committed archive would be a second
+copy of the on-disk format that nothing keeps current — the day a field is added it quietly stops
+exercising it while every probe goes on passing against the old shape. Its contents are chosen, not
+sampled, because a probe with nothing to look at says `n/a`: a shared prefix and a second host, a
+500, a retry chain, a redirect chain, a repeat that swept up a retry, a marker at exactly a call's
+`mono`, a full tie on chip count and recency, both cache payload shapes and a run of five identical
+observations. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
+is there, so a fixture edit that loses one fails a unit test rather than turning a CI check into a
+skip. Every host is under `example.invalid`, so a replay that escaped its stub reaches nothing. CI
+serves it on port 8231, never 8099, and pins jsdom by exact version.
 
 **The snapshot now writes field values into the markup.** `input.value` and `textarea.value` are
 DOM *properties*; `outerHTML` serialises the `value` attribute and a textarea's text content. Every
@@ -547,8 +603,12 @@ dependency.
 anchors the trailing literal with `endsWith`, so the term matches only paths ending in `/profile`.
 Chips are ordered by call count rather than recency on purpose: recency reshuffles the whole row on
 every
-request during live tail. Ties break on the most recent call, then alphabetically, so the order is
-deterministic and `scripts/render-web-ui.js` can assert it.
+request during live tail. Ties break on the most recent call, then on the segment by **char code**,
+so the order is deterministic — `mirror-cases/endpointShortcuts.json` holds both sides to it and
+`render-web-ui.js` asserts it on the rendered chips. Char code, not `localeCompare`: `app.js` used
+the latter and put `accounts` before `Balance` where the model and the overlay put `Balance` first.
+That order reads a little oddly and is kept anyway, because it only applies after a full tie and
+changing it is a change to the model rule.
 
 **Backtick test names in multiplatform `commonTest` cannot contain commas.** Kotlin/Native rejects
 them with `Name contains illegal characters: ","` while the JVM accepts them, so a targeted
@@ -603,8 +663,11 @@ every second rendering here has drifted from the first. What makes it work is th
 the daemon through one object, `source`: live it is `fetch`; in an export it is `archiveSource`, a
 GET router over the embedded data that mirrors the daemon's reply shapes — transactions as a page,
 signals as a bare array, both newest first — and refuses anything else with a message. **The
-browser's `fetch` is called exactly once in `app.js`**, and `render-web-ui-archive.js` counts it, so
-a new call site cannot reach for the network from inside an export. That probe opens the real file
+browser's `fetch` is called exactly once in `app.js`**, and it is counted twice: statically on every
+push by `check-web-static.js` across every loaded script — `window.fetch(`, `globalThis.fetch(` and
+`self.fetch(` must be zero, so the bare count cannot be dodged — and in the built export by
+`render-web-ui-archive.js`, with the same counter, so a new call site cannot reach for the network
+from inside an export. That probe opens the real file
 under a `file:` URL with `fetch`, `WebSocket` and `XMLHttpRequest` all throwing; one network attempt
 fails it. Each check was proven to fail by breaking a copy of the file.
 
@@ -648,8 +711,8 @@ that round trip for as long as it existed. `parseJsonTree` keeps each scalar's s
 object's entries in order, and `printJsonTree` reproduces `JSON.stringify(x, null, 2)`'s layout
 from it, so the tree, raw and copy are the captured bytes re-indented and nothing else. It is
 strict on purpose: anything `JSON.parse` rejects falls back to the text as it arrived.
-`render-web-ui.js` lifts both functions out of the real `app.js` by their markers and checks the
-ids, the order, the duplicates and the rejection cases.
+`check-web-static.js` lifts both functions out of the real `app.js` by their `jsonParser` anchors
+and checks the ids, the order, the duplicates and the rejection cases, in CI, with nothing installed.
 
 **The JSON tree's hidden fields are a view, never an edit.** Copy, raw and every export read the
 body, not the rows — a field that silently went missing from a copied body would be the viewer
@@ -754,8 +817,9 @@ in `app.js`.** The waterfall had its own segmentation in `app.js` before the pat
 it was wrong in the way a second copy usually is: it read the *filtered* signals, so typing `path:`
 took every screen away, and it dropped any screen with no matching calls, which draws a route that
 skips a screen the user was on — a navigation nobody made. Three surfaces now take one skeleton.
-`VisitsTest` is the authority; `render-web-ui.js` lifts the mirror out of the real file and runs the
-same cases, so the copy cannot drift without the probe saying so.
+`VisitsTest` is the authority; its cases live in `mirror-cases/visits.json`, which `MirrorCasesTest`
+runs against the model and `check-web-static.js` against the mirror lifted out of the real file, so
+the copy cannot drift without one of them saying so.
 
 Four rules are decisions, and each was argued before it was built:
 
@@ -817,6 +881,8 @@ mean the same in both orders reads `TimelineRun.earliest`. The id does, and has 
 its newest end, so an id taken from the head would re-key on every observation during live tail and
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
+`app.js`'s `runIdOf` took the head for two releases, so an expanded run on the web collapsed under
+the reader during live tail; `mirror-cases/timelineRuns.json` now carries the newest-first cases.
 
 **The overlay can enumerate providers and the host cannot, which is the whole of stage 4.** A
 daemon learns a provider's name only when one answers, so `app.js` infers the set from what a
@@ -1058,7 +1124,12 @@ immediately before a request is exactly what a tie looks like on a millisecond c
 A marker at a call's `mono` is placed **before** it — `<=`, not `<` — because a marker is
 dropped just before the thing it marks. Markers after the last call are still emitted: "I marked
 it and then nothing happened" is an answer, and a divider that appeared only once the next
-request arrived would hide it. `app.js` carries a mirror; keep them in step.
+request arrived would hide it. `app.js` carries a mirror, `timelineEntries`, held to the model by
+`mirror-cases/timeline.json`, and both the list and the timeline tab draw through it. The timeline
+tab did not until phase A: it sorted all three streams in one stable sort with markers added last,
+so a tied marker landed after its call there and before it in the list beside it. A mirror case
+could not see that, because the mirror was right and the tab did not call it — so
+`render-web-ui.js` checks the tie on the rendered tab as well.
 
 **A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
 the label and the grammar has **no escape inside the quotes**, so whether a label is expressible
@@ -1503,7 +1574,11 @@ every release build clean:
 ./gradlew build                                   # everything, all targets
 ./gradlew :inspector-daemon:installDist           # then: inspector-daemon/build/install/inspector/bin/inspector serve
 ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
-npm install jsdom && node scripts/render-web-ui.js > /tmp/ui.html # web UI smoke test + snapshot
+node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
+npm install --no-save --no-package-lock jsdom@29.1.1 # the version CI pins
+node scripts/render-web-ui.js > /tmp/ui.html      # web UI smoke test + snapshot
+./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes
+INSPECTOR_UI_EXPECT_CHECKS=<UI_EXPECT_CHECKS in ci.yml> node scripts/render-web-ui.js > /tmp/ui.html  # as CI judges it
 INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
 INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 node scripts/render-web-ui.js   # ... a daemon off 8099
 curl -s http://127.0.0.1:8099/api/sessions/latest/export.html -o /tmp/s.html     # an exported session
@@ -1683,7 +1758,9 @@ else a scan turns up.
 | `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
 | `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
-| `scripts/render-web-ui.js` | The live web UI's check; run it after touching `web/`, along with the archive probe below. |
+| `scripts/check-web-static.js` | The web checks that need nothing running: network call sites, the stylesheet audits, the JSON parser and every mirror case. First step of the CI `web` job. |
+| `mirror-cases/` | One JSON file per mirrored rule, run by both the Kotlin tests and `check-web-static.js`. Add a case here, never to one side. Its README has the format. |
+| `scripts/render-web-ui.js` | The live web UI's check; run it after touching `web/`, along with the archive probe below. CI runs both against a fixture session and pins how many checks pass. |
 | `scripts/render-web-ui-archive.js` | Opens an exported session's HTML with the network forbidden and checks it works offline. Run it after touching `web/`: any new request that bypasses `source` fails it. |
 | `inspector-daemon/.../Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
 | `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
