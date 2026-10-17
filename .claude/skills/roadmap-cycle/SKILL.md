@@ -29,7 +29,7 @@ pass the previous role's output forward verbatim, and stop at the gates below.
 6. `ux-reviewer` → render and look, for UI items.
 7. `delivery-tracker` → update `docs/ROADMAP.md` state and `AGENTS.md` "Where we are".
 8. `release-steward` → if consumer-visible: INTEGRATION.md bump + changelog; always: hygiene scan.
-9. Commit and push only if the human asked for it; report the QA table and what stays unverified.
+9. Commit (as the maintainer, no attribution trailers — see `AGENTS.md`) and push only if the human asked for it; report the QA table and what stays unverified.
 
 ## Mode C — status (`where are we`)
 

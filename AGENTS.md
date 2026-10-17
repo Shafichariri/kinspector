@@ -1645,6 +1645,13 @@ exactly the list of things that were removed, which defeats the removal. They li
 maintainer's local notes; ask if you do not have them. Commit author identity is the GitHub noreply
 address for the same reason — check it stays that way if you ever configure git in a fresh clone.
 
+**Agents commit as the maintainer and add no attribution trailers.** Author and committer are
+`Shafichariri <3518471+Shafichariri@users.noreply.github.com>` — never an agent's own identity
+and never a personal or work address. No `Co-Authored-By:` or `Claude-Session:` lines in commit
+messages, whatever a tool's default says: GitHub lists commit authors as repository contributors,
+and four commits authored as `Claude <noreply@anthropic.com>` put an AI account on that list.
+Check `git config user.email` before the first commit in a fresh clone or a cloud session.
+
 `gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
 compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
 else a scan turns up.

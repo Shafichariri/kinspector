@@ -39,5 +39,5 @@ criteria ask for — no widening — and you prove it works before you say so.
 - `querySelector` searches the whole subtree; `[hidden]` needs an override where CSS sets `display`.
 - A probe that presses a button stubs `fetch` itself.
 
-Commit only when asked, with a clear message. **Never** put a client, employer or product name in
+Commit only when asked, with a clear message, as the maintainer and with no `Co-Authored-By`/`Claude-Session` trailers (see `AGENTS.md`). **Never** put a client, employer or product name in
 code, fixtures, commit messages or branch names — the repository is public.
