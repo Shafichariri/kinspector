@@ -5,9 +5,11 @@ description: Run Inspector's agent team over the roadmap — take in a new plan,
 
 # Roadmap cycle
 
-The team lives in `.claude/agents/`; `docs/TEAM.md` explains each role. Subagents cannot spawn
-each other, so **you (the main session) are the conductor**: call each role with the Agent tool,
-pass the previous role's output forward verbatim, and stop at the gates below.
+The team lives in `.claude/agents/`; `docs/TEAM.md` explains each role. **You (the main session)
+are the conductor**: call each role with the Agent tool, pass the previous role's output forward
+verbatim, and stop at the gates below. Subagents *can* spawn subagents now, but do not let a role
+chain to the next one itself: subagents cannot ask the human anything, so every gate below would be
+skipped, and QA run by the engineer it is checking is no longer independent.
 
 ## Mode A — a new plan arrives (`$ARGUMENTS` is a plan or a path to one)
 
@@ -24,7 +26,8 @@ pass the previous role's output forward verbatim, and stop at the gates below.
 3. `ux-reviewer` → review the design if it touches the overlay or the web UI (run in parallel with
    step 4's start only if the design is already agreed).
 4. `engineer` → build it with tests, on the session's branch.
-5. `qa-verifier` and `architect` (diff review) → in parallel. Any **Failed** or blocking finding
+5. `qa-verifier` and `architect` (diff review) → in parallel, each in a **fresh** call — never a
+   continued engineer conversation, which would review its own reasoning instead of the diff. Any **Failed** or blocking finding
    goes back to step 4; loop until clean.
 6. `ux-reviewer` → render and look, for UI items.
 7. `delivery-tracker` → update `docs/ROADMAP.md` state and `AGENTS.md` "Where we are".
