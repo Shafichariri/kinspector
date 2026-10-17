@@ -560,13 +560,21 @@ screen, and building those into the current single page would mean building them
 
 | Order | Item | Size | Ships in |
 |---|---|---|---|
-| 1 | Web UI foundation — pages, bulk actions, room for the list | L | 1.4 |
+| 1 | Web UI foundation — pages, bulk actions, room for the list | L *(understated: see the probe rewrite)* | 1.4 |
 | 2 | Endpoint latency stats | M | 1.5 |
 | 3 | Session diff | L | 1.5 |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 |
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 |
 | 6 | Web UI polish, against the finished screens | M | 1.7 |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK |
+
+**Review, 2026-10-17: six open decisions, each recorded under the item it affects.** Only one of
+them stops an item from starting: **Endpoint latency stats** waits on *two notions of endpoint*,
+because templates are its first bullet and the diff and the findings reuse them. The rest gate a
+piece *inside* an item, or its acceptance, not its start: *the probe rewrite* resizes the Web UI
+foundation; *truncated bodies* adds an acceptance criterion to the Session diff; *two notions of
+duplicate* gates the Findings row badge; *where the cache lives* gates any on-disk cache for the
+Findings and Sensitive-data items; *regional defaults* gates the shipped Sensitive-data rule set.
 
 ### Web UI foundation
 
@@ -607,6 +615,35 @@ What must still hold: the export still works offline (new pages either read the 
 or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
 `display` joins `auditHiddenPanes`; nothing new under 11px.
 
+**Open decision — the probe rewrite is part of this item, and L understates it.** *(Review,
+2026-10-17. Does not block the start; the architect should re-size before it begins.)*
+`scripts/render-web-ui.js` is about 2,500 lines, and much of it is anchored on exactly the layout
+this item moves. Its settings probe opens `#settings` through `#open-settings` and works through
+`#peers` and the sessions list inside that dialog; the stop probe presses `#server-stop` in the top
+bar and reads `#server-banner`; the toolbar probe reads `.row-label`s across the two rows of
+`#toolbar`; the order probe drives `#order-newest`/`#order-oldest`; the now probe toggles
+`#now-toggle`; the chip probe counts `#endpoint-chips .chip`; `#tabs .tab` is queried fifteen
+times; and `auditDrawerCss` finds the `max-width` block that lays out `#panes`. The archive probe
+carries its own list — `#session-delete`, `.daemon-group`, `#export-host` and others must be hidden
+in an export — and every one of those may move or be renamed here.
+
+One anchor is worth calling out because it encodes history, not just a selector. `probeToolbar`
+asserts `railGone: !doc.getElementById('rail')`. The page **had** a left rail — the filter and a
+Now panel — and it was taken out because it spent a fifth of the window on views it could not act
+on (the Now panel alone was 1341px of it). The rail planned here is navigation, which applies on
+every page, so it does not repeat that mistake. But the assertion must be rewritten with that
+reasoning, not deleted to make the build pass, or the next person reads a removed guard as
+permission to put view controls back in a sidebar.
+
+Options: keep the item whole and accept that roughly a third of it is probe work; or split it into
+**the shell** (rail, hash routes, Sessions and Processes leaving the dialog, bulk endpoints) and
+**room for the list** (divider, overview line, one-row toolbar, density, `#/txn/{id}`), each landing
+with its probes. Recommended: split, because each half then has a probe diff small enough to review.
+Either way, add to the acceptance criteria: every existing probe still runs, moved and not deleted,
+with the before/after check count stated; every new page has a probe proven to fail when broken;
+the archive probe opens each new page in an export and finds it either working from the embedded
+data or hidden under `body.archive`.
+
 ### Endpoint latency stats
 
 - **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
@@ -621,6 +658,40 @@ or hide under `body.archive`); `fetch` is still called once in `app.js`; every n
   into the exports so the offline file has them.
 - Must read the whole session: a test at 1001+ rows, for the reason `HarTest` exists.
 
+**Open decision — two notions of "endpoint".** *(Review, 2026-10-17. **Blocks this item from
+starting**, and through it the diff and the findings, which reuse templates.)* The traffic page
+already has one: endpoint chips come from `endpointShortcuts` in `:inspector-model`, keyed on the
+**last path segment** and applied as `endpointFilterTerm` — `path:*/profile`, an anchored glob. The
+overlay and `app.js` both use it. This item adds a second, daemon-side: `{id}` templates over the
+whole path. So a chip `profile` (which counts `/users/123/profile` and `/orgs/9/profile` together)
+and a Stats row `GET /users/{id}/profile` (which counts only the first) give different numbers for
+what a reader will take to be the same endpoint.
+
+There is a second problem the plan does not mention: **a Stats row cannot open Traffic filtered to
+exactly that row.** The grammar is frozen and has no template term, and its `*` crosses `/` —
+`globMatches` matches `/users/*/profile` against `/users/1/x/profile` and against
+`/users/me/profile`, which the template would have kept apart. So "rows open Traffic filtered to
+that endpoint" can only ever open a superset.
+
+Options:
+
+- **Converge the chips onto templates.** One notion everywhere, but it is a `:inspector-model`
+  change, which the opening of this section rules out, plus an `app.js` mirror and an overlay
+  change — and a template label does not fit a chip on a 360dp strip.
+- **Converge the templates onto last segments.** Cheap, and wrong: last-segment grouping is a
+  navigation shortcut, and latency per `profile` across unrelated resources is not a statistic
+  anybody can act on.
+- **Keep both and say why they differ.** Chips answer "take me there in one tap" and must be
+  expressible as a filter; templates answer "how does this route behave" and need not be. The daemon
+  owns the template rule and returns, on each Stats row, the template *and* the filter term it
+  links with (`method:GET path:/users/*/profile`), so the page never derives either; the Traffic
+  view opened from a Stats row says it may include paths the template keeps apart.
+
+Recommended: the third. It keeps the section's no-model-change premise and puts the one honest
+caveat where the superset is shown. What has to be decided before code is the naming — calling
+both "endpoint" is what makes the disagreement read as a bug — and whether the superset link is
+acceptable at all.
+
 ### Session diff
 
 `GET /api/diff?a=&b=&filter=`, defaulting to the newest session against the previous one of the
@@ -633,6 +704,29 @@ same app; an optional `since:marker("…")` per side to compare one stretch of t
 - **A body capture did not keep is "unknown", never "field removed".** Same principle as
   `BodyOmission`: the diff must not assert what capture could not see.
 - MCP `diff_sessions`, a Markdown form, and the Diff page.
+
+Endpoint identity here follows whatever *two notions of "endpoint"* under Endpoint latency stats
+decides.
+
+**Open decision — "unknown" must cover truncated bodies, not only omitted ones.** *(Review,
+2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
+around bodies capture did not keep, which reads as `reqBodyOmitted`/`resBodyOmitted`. A body over
+the cap is a different case: capture keeps a prefix, writes it to disk with a `*BodyRef`, sets
+`reqBodyTruncated`/`resBodyTruncated`, and leaves the omission reason **null** — so a diff that only
+checks omission treats it as captured. The cap is `bodyCaptureMaxBytes`, 256 KB by default and set
+by the app, so two runs can even truncate at different points. A strict JSON parse of a cut prefix
+fails, but a lenient or streaming key-path walk succeeds up to the cut and then reports every later
+key as removed — the exact false claim the rule exists to prevent, on exactly the large responses
+people diff.
+
+Options: treat a truncated body as unknown; or walk its prefix for key paths that *are* present and
+count them as "seen", never anything as removed. Recommended: the second is tempting and not worth
+its subtlety — **shape comes only from bodies that are complete (not truncated, not omitted) and
+parse strictly; everything else is unknown for that side**, and a key path is "removed" only when
+the other side has at least one complete sample and no complete sample contains it. One adjacent
+case belongs in the same criterion: under `Redaction.On()` a redacted value becomes the placeholder
+string, so a number redacted on one side and not the other would read as a type change. Paths named
+in `redacted[]` are not compared for type.
 
 ### Findings, and the payment-safety rules
 
@@ -667,6 +761,47 @@ view toggle. Changing the grammar is a separate decision.
 `GET /api/sessions/{id}/findings?category=`, MCP `list_findings`, a Findings page grouped by rule,
 a row badge, a section in the detail pane, and disclosure in every export (HAR's entry `comment`).
 
+**Open decision — two notions of "duplicate" on one row.** *(Review, 2026-10-17. Does not block
+the start; gates the row badge for this rule.)* The page already marks repeats: `duplicateGroups` in
+`:inspector-model`, mirrored in `app.js`, keys on method + full URL + status + both byte counts,
+requires a different `callId`, excludes headers, and chains members whose consecutive gap is within
+a window — 3 s by default, editable as a *view preference* in `prefs`. It draws a `repeat` tag. The
+Duplicate mutation rule keys on method + **template** + **body hash**, has no status in the key, and
+its window lives in **config**. They will disagree in both directions: a resent POST whose first try
+got a 500 and second a 200 is a finding and not a repeat; two GETs to different ids under one
+template can never be a finding but two identical ones are a repeat. A row carrying a `repeat` tag
+and a "duplicate" badge that mean different things, with two settings both called "window", will be
+read as one feature that is broken.
+
+Options: retire the `repeat` tag on mutations and let the finding speak for them; fold
+`duplicateGroups` into the findings as an `info` rule; or keep both and make them unmistakably
+different claims. Recommended: the last. The `repeat` tag stays what it is — a row-level
+observation for every method, drawn as a tag, with its own name — and this rule is named **Duplicate
+mutation** everywhere and drawn only as a severity badge. Two things to settle in the build: the
+rule's window should chain consecutive gaps the way `duplicateGroups` does, or the two answer
+"within 3 s" differently for a run of three; and the evidence may cite a coinciding repeat group by
+id, which explains the overlap rather than hiding it. Retiring the tag would make the overlay and the
+web disagree, since the overlay has no findings; folding it in means a model-side rule moving into
+daemon config, which is a larger decision than this item.
+
+**Open decision — where the findings cache lives.** *(Review, 2026-10-17. Does not block the
+start; in-memory is safe by default. Gates any on-disk cache, here and in Sensitive-data detection.)*
+"Cached per session against row count and rule version" says when the cache is valid, not where it
+is. It must not be inside the session folder. The recorded rule is narrower than "nothing in a
+session folder" — the daemon writes `index.jsonl`, `meta.json` and `bodies/` there by design — it is
+`export_session`'s rule that **derived** files go beside `sessions/`, because retention sizes a
+session by walking its whole folder (`sessionBytes`), so a derived file inside it inflates the
+session it describes and is pruned with it. A findings cache is derived in exactly that sense.
+
+Options: memory only, recomputed after a daemon restart; or a file per session beside `sessions/`
+(for example under the data directory's own `cache/`). Recommended: **memory only** until a
+measurement on a large real session says recomputing is slow, because the sensitive-data scan is
+the one with a real cost (it reads bodies) and nobody has measured it. If a disk cache is ever
+added, three conditions come with it: every deletion path — retention, `sessions/delete`, clear-all
+— removes the entry with the session; it holds **masked** evidence only, or it becomes an unpruned
+second copy of the credentials the detector found; and retention's byte budget states whether it
+counts.
+
 ### Sensitive-data detection — detect, never redact
 
 Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
@@ -690,6 +825,28 @@ number going to an analytics host is the real alarm. Fields listed in `redacted[
 `•••• 4242`, `KW81 •••• 0001` — with the location and JSON path; never the value, in the UI, MCP
 or any export. Bodies are scanned when findings are asked for, cached, never on ingest. A finding
 can be dismissed per endpoint and path, with a reason, saved to config.
+
+The cache for this scan follows *where the findings cache lives*, under Findings.
+
+**Open decision — regional defaults.** *(Review, 2026-10-17. Does not block the start of the
+framework; gates the rule set that ships as default.)* The Kuwait Civil ID rule, the KW IBAN length
+called out by name, the `civil_id` field name and the `KW81 •••• 0001` masking example are country
+rules, not a client's name, so they do not break the no-client-names rule. But they would be the
+**only** regional defaults in a public repository, and a single country singled out in the shipped
+rules narrows who the consuming app might be about as well as a name would. The constraint that
+matters — one real consuming app handles a national identity number with a known structure — is
+worth carrying; the country is not.
+
+Options: ship as written; ship **generic structure only** (Luhn cards, IBAN with mod-97 and the full
+ISO 13616 country-length table, field names for national identity numbers across many regions, no
+national-ID value rules); or generic structure plus **optional region packs**, off by default, with
+more than one region represented from the first release. Recommended: generic by default, with
+packs. The IBAN rule needs no pack at all once it reads the whole length table — KW at 30 becomes one
+row among several dozen, which is how it should read. National-ID value rules go in packs, each
+marked lower confidence until it carries a check-digit rule, as the Civil ID one already says. The
+field-name list widens from `civil_id` to a neutral spread of national-identity names, and the
+masking example uses a generic IBAN. If no second region can be specified properly, generic-only is
+better than a lone pack.
 
 ### Web UI polish
 
