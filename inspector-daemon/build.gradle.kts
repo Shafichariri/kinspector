@@ -33,6 +33,14 @@ tasks.test {
     useJUnitPlatform()
 }
 
+/*
+ * The daemon is not published, but its runtime classpath is what ships in the release zip, so it
+ * is locked like a published module's (see the root build). `distZip` resolves it during `build`,
+ * which is what checks this lock; the test classpath stays unlocked, because nothing ships it.
+ */
+dependencyLocking { lockMode = LockMode.STRICT }
+configurations.runtimeClasspath { resolutionStrategy.activateDependencyLocking() }
+
 // So the running daemon can name its own version — the HAR export reports it as the creator, and
 // "which build produced this file" is the first question asked of any exported capture. Absent
 // from a classes directory, which is why the reader falls back rather than failing.
@@ -40,6 +48,13 @@ tasks.jar {
     manifest {
         attributes("Implementation-Version" to project.version)
     }
+}
+
+// The web UI's agent guide sits beside the files it describes, so it lands in `resources/web/`.
+// Nothing would serve it — every route names its file — but Gradle follows the `CLAUDE.md` symlink
+// and copies both into the jar, which would change the shipped artefact for a note to agents.
+tasks.processResources {
+    exclude("web/AGENTS.md", "web/CLAUDE.md")
 }
 
 /*

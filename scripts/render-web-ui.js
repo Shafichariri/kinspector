@@ -2146,10 +2146,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   /**
    * The top bar's controls, pressed.
    *
-   * `stop` is the dangerous one, and per the rule in AGENTS.md this probe stubs the request itself
-   * rather than trusting the confirm step it is testing — the run where that step is broken is
-   * the run that would otherwise stop the daemon this script is reading. The stub also counts
-   * calls, so "one click did not stop it" is observed rather than assumed.
+   * `stop` is the dangerous one, and per the rule in docs/decisions/web-ui.md this probe stubs the
+   * request itself rather than trusting the confirm step it is testing — the run where that step is
+   * broken is the run that would otherwise stop the daemon this script is reading. The stub also
+   * counts calls, so "one click did not stop it" is observed rather than assumed.
    */
   async function probeTopBar() {
     const result = {};

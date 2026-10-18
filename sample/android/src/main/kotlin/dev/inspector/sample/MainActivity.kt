@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
         // Edge-to-edge on purpose: it is the case the overlay's own inset handling exists for, and
         // the case a non-edge-to-edge host would never exercise. `Modifier.inspectorScreen` has to
         // keep its content clear of the status bar and the cutout while its background bleeds past
-        // them — see AGENTS.md.
+        // them — see docs/decisions/overlay.md.
         enableEdgeToEdge()
 
         DemoServer.start()

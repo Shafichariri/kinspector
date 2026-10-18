@@ -287,10 +287,13 @@ Read §1 first: **version alignment is the single most common integration failur
 | [`docs/schema.md`](docs/schema.md) | The data contract. Read before touching `:inspector-model`. |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is next and what is deliberately not. The live list — start here. |
 | [`docs/implementation-plan.md`](docs/implementation-plan.md) | Full build order, phases, acceptance criteria. A record of the original build, not a live plan. |
-| [`AGENTS.md`](AGENTS.md) | Contributor and AI-agent brief: architecture, decisions that must not be "fixed", gotchas. |
+| [`AGENTS.md`](AGENTS.md) | Contributor and AI-agent brief: architecture, conventions, and the index of decisions that must not be "fixed". |
+| [`docs/decisions/`](docs/decisions/) | Those decisions, one file per area. |
+| [`docs/STATUS.md`](docs/STATUS.md) | What has been verified, and what has not. |
 
 `AGENTS.md` is canonical; `CLAUDE.md` and `.cursorrules` are committed symlinks to it, so every
-assistant reads the same file.
+assistant reads the same file. Each module has its own `AGENTS.md` with a `CLAUDE.md` symlink,
+naming the decision files that apply there.
 
 ---
 

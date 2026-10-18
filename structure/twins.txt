@@ -1,0 +1,14 @@
+# Noop twins, read by repo-checks' NoopTwinTest.
+#
+# "Every real module needs a noop twin" means every *published* module a consuming app calls into.
+# The published set must be exactly the modules below: both members of each pair, plus each
+# exemption. An exemption must give its reason on the same line.
+#
+#   pair   <real module> <noop module>
+#   exempt <module> <reason>
+
+pair :inspector-core :inspector-noop
+pair :inspector-ui :inspector-noop-ui
+pair :inspector-stream :inspector-noop-stream
+
+exempt :inspector-model both members of the core pair `api` it, so it ships in either build and there is nothing to swap; it holds no capture code

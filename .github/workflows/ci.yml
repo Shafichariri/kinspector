@@ -149,6 +149,39 @@ jobs:
         if: always()
         run: if [ -f "$RUNNER_TEMP/daemon.pid" ]; then kill "$(cat "$RUNNER_TEMP/daemon.pid")" || true; fi
 
+  repo:
+    # Checks on the commits and the tree that need no JDK: who authored the commits being added,
+    # and whether anything names a client. Ubuntu, a full clone, about twenty seconds.
+    #
+    # Refs reach the scripts through `env:`, never as `${{ }}` inside `run:` -- a branch name is
+    # text a contributor chose, and interpolating it into a shell line would execute it. And this
+    # workflow stays on `pull_request`, never `pull_request_target`, so a fork's code never runs
+    # with this repository's secrets.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Both ends of the range must be present, and a shallow clone has only one.
+          fetch-depth: 0
+
+      - name: Commit identity — maintainer's noreply address, no attribution trailers
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: ./scripts/check-commit-identity.sh "$BASE" "$HEAD"
+
+      # The terms are a repository secret and never in the repository. An unset secret arrives as
+      # an empty string, and so does every secret on a fork's pull request; the script then says
+      # NOT RUN with a warning rather than printing a pass. `--require-terms` (fail instead) goes
+      # on the push to main once the secret exists -- passing it before would turn main red.
+      - name: Client names — tree, commit messages, branch name
+        env:
+          CLIENT_NAME_TERMS: ${{ secrets.CLIENT_NAME_TERMS }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+        run: ./scripts/check-client-names.sh --range "$BASE..$HEAD" --branch "$BRANCH"
+
   release-swap:
     # Proves -Pinspector=off is wired end to end, independently of the artifact scan above.
     runs-on: macos-latest

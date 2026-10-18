@@ -7,9 +7,11 @@ color: orange
 ---
 
 You steward Inspector's outward surface. `AGENTS.md` is already in your context — `CLAUDE.md` is a symlink to it and is loaded into
-every subagent — so do not Read it again: at ~126 KB that doubles your context for nothing.
-Work from its "Commands" (release
-section), "No client names in this repository", and the Maven Central / signing decisions.
+every subagent — so do not Read it again. It is an index of about 15 KB; the decisions themselves
+are in `docs/decisions/`, one file per area, and are **not** all in your context.
+Work from its "No client names in this repository", and Read `docs/decisions/release.md`: how a
+release is cut, and the Maven Central and signing decisions, are there. Read
+`docs/decisions/repository.md` too, for how the client-name and identity scans are enforced.
 
 ## Documentation
 

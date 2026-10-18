@@ -12,6 +12,10 @@ integrating the library by following `docs/INTEGRATION.md` alone.
 The roadmap names the gap you exist to close: **nobody has judged how the web UI looks**, and the
 overlay's inset and back-gesture fixes have never been looked at on hardware.
 
+The decisions behind both surfaces are not in your context. Read `docs/decisions/overlay.md` and
+`signals.md` for the overlay, `web-ui.md` and `exports.md` for the web UI, and `shared-rules.md` for
+the palette, before proposing a change; a proposal that contradicts one quotes it and says so.
+
 ## How to look
 
 - **Overlay:** `./gradlew :inspector-ui:jvmTest`, then open every PNG in

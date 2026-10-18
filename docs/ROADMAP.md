@@ -10,7 +10,7 @@ There are **no `TODO` markers in the source**, by convention. If it is worth doi
 here with a reason; if it is not, it should not be a comment someone trips over later.
 
 Numbering: this document uses **none**. Three schemes already exist — phases (0–4,
-`implementation-plan.md`), capture letters (4a/4b/4c, `AGENTS.md`) and replay steps (1–4,
+`implementation-plan.md`), capture letters (4a/4b/4c, `AGENTS.md` and `docs/decisions/capture.md`) and replay steps (1–4,
 `REPLAY.md`) — and a fourth would only collide. Items are referred to by name.
 
 ---
@@ -319,7 +319,7 @@ Pro with a throwaway app that listened on `127.0.0.1:8100` and a 40-line usbmuxd
 usbmuxd only dials **into** the phone, so the design inverts the connection: on a physical iPhone
 `StreamSink` listens on its own loopback and `inspector serve` runs a bridge that dials it and
 relays into the daemon's own `/ingest`. The daemon's bind did not move. Design notes and the
-traps are in `AGENTS.md`, under the `adb reverse` decision.
+traps are in `docs/decisions/devices-and-stream.md`, under the `adb reverse` decision.
 
 **Verified end to end on the same phone:** the real iOS sample streamed 188 transactions into the
 archive as `platform: ios-device`; a replay was re-signed by the app across the cable; kill and
@@ -403,13 +403,14 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 |---|---|---|
 | Replay step 3 — edit before replay | `REPLAY.md` §7 | ~~Specified~~ **Done, 2026-09-19.** Method, URL, headers and body, above the tabs of the request they describe. It also uncovered that the plain replay button had been throwing `NotFoundError` on ordinary rows since the tabbed detail pane arrived — `querySelector` finds a grandchild and `insertBefore` will not take one |
 | Replay step 4 — template generators | `REPLAY.md` §7 | Specified, including the generator set. Blocked on two of `REPLAY.md` §8's questions for the backend team: the clock-skew window decides whether a generated curl needs a validity label, and nonce reuse decides whether Run is idempotent |
-| 4c — proxy capture | `AGENTS.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
-| 4b — report what we cannot see | `AGENTS.md` | Not designed; flagged there as possibly not worth it |
+| 4c — proxy capture | `docs/decisions/capture.md` | Not started. **Requires an explicit decision to start**: it turns the tool from a library into network infrastructure |
+| 4b — report what we cannot see | `docs/decisions/capture.md` | Not designed; flagged there as possibly not worth it |
 | HAR export | `implementation-plan.md` Phase 3 stretch | ~~Unbuilt~~ **Done, 2026-09-18.** `GET /api/sessions/{id}/har`, taking the same `filter` as the transaction list. Everything the format asks for and capture never saw is `-1`; attempts and redaction are disclosed per entry, because HAR has no field for either and silence reads as a claim |
 | Whole-session export | Requested 2026-10-10 | **Done, 2026-10-10.** `export.html`, `export.md` and `export.json` under `/api/sessions/{id}/`, the web UI's export menu, and the `export_session` MCP tool. The HTML is the web UI itself in an archive mode, not a report written for the purpose. Building it found the HAR export silently stopping at 1000 rows |
 | Signal payload redaction | `SIGNALS.md`, `schema.md` | `Signal.redacted` is reserved and always empty; the schema field is already there |
 | Disconnected-transaction backfill | `schema.md` | Explicitly a v2 candidate |
-| The path view — what was left out | `AGENTS.md`, "the path, the waterfall and the axis band are one rule" | Web `path` tab **done, 2026-10-11; released in 1.3.0**. Deliberately deferred: the overlay (a phone has no width for a route, and its merged list is already the vertical version); an MCP `path` tool (`timeline` carries the same stream — build it when an agent visibly struggles); concurrency hints inside a column; a map view with each screen once and transitions counted; making `path` the landing tab, which stays `network` until the view has earned it |
+| Landing-page sponsor link | Moved here 2026-10-18 from a marker comment in `site/index.html`, when phase B made such markers fail the build | The button links `https://github.com/sponsors/Shafichariri`, which shows a real page only once GitHub Sponsors (or Ko-fi) is set up. Point it at whichever page exists then |
+| The path view — what was left out | `docs/decisions/shared-rules.md`, "the path, the waterfall and the axis band are one rule" | Web `path` tab **done, 2026-10-11; released in 1.3.0**. Deliberately deferred: the overlay (a phone has no width for a route, and its merged list is already the vertical version); an MCP `path` tool (`timeline` carries the same stream — build it when an agent visibly struggles); concurrency hints inside a column; a map view with each screen once and transitions counted; making `path` the landing tab, which stays `network` until the view has earned it |
 
 ### Guards
 
@@ -425,7 +426,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   turned up four further ways it could have looked right while checking nothing — unmangled
   top-level `internal` functions, facades with different names in the two modules, enum constants
   visible to no reflection list, and a receiver-drop that ate a real parameter. All four are
-  recorded in `AGENTS.md`; none of them changed the `core` golden file by a byte, which is how they
+  recorded in `docs/decisions/twins-and-api.md`; none of them changed the `core` golden file by a byte, which is how they
   were confirmed to be fixes to the guard rather than to the surface.
 
 - ~~**The twin pair's JVM file facades had different names.**~~ **Done, 2026-09-22.** The bullet
@@ -446,12 +447,12 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
   The noop side cannot pin: `kotlin.jvm.JvmName` does not resolve in a common source set shared
   with Native. So `inspector-noop-stream/.../StreamSink.kt`'s **file name is load-bearing** and the
-  guard is the only thing holding it. Recorded in the file itself and in `AGENTS.md`.
+  guard is the only thing holding it. Recorded in the file itself and in `docs/decisions/twins-and-api.md`.
 
   A raw public-class-set diff across each pair — the obvious generalisation, and what the report
   suggested — was built, measured and rejected: 19 spurious entries for `core`, 19 for `ui`, 4 for
   `stream`, because Kotlin `internal` is JVM-public and the canary is real-only by design. The
-  reasoning is in `AGENTS.md`; do not rebuild it without reading that.
+  reasoning is in `docs/decisions/twins-and-api.md`; do not rebuild it without reading that.
 
 - ~~**The twin pair's constructor descriptors differed.**~~ **Done, 2026-09-22.** The entry above
   fixed the *facade* half of "matching API is not matching ABI" and stopped there. `StreamSink`'s
@@ -499,7 +500,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - **`ExportMarkdown.kt:158` prints the query twice.** The line is
   `inlineCode(txn.url + (txn.query?.let { "?$it" } ?: ""))`, but `NetworkTransaction.url` already
-  includes the query (`AGENTS.md` records that web's `urlOf` mirrors that, empty `?` included). Every
+  includes the query (`docs/decisions/shared-rules.md` records that web's `urlOf` mirrors that, empty `?` included). Every
   call with a query string shows `…/path?a=1?a=1` in the Markdown export's **URL** line. Found while
   reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
   `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
@@ -647,8 +648,10 @@ They are recorded together here because several items depend on more than one of
    build-only module and is never published. *Touches a recorded decision; see the phase B item.*
 5. **The client-name terms are held as a repository secret for CI**, and are never written into
    the repository. This keeps the recorded rule that the terms are not listed anywhere in the
-   repo, and moves the check from "before the commit, if remembered" to every push. *Has a trap;
-   see the phase B item.*
+   repo. CI catches a match **before merge, not before publication**: a branch CI can see is
+   already on a public remote. So "the check belongs before the commit" stays the primary rule,
+   with `scripts/check-client-names.sh --terms-file` run locally, and CI is the net under it.
+   *Has a trap; see the phase B item.*
 6. **The MCP `timeline` fix is approved as a bug fix.** An agent will see a different order at
    same-millisecond ties. That is the correction, not a regression.
 
@@ -686,7 +689,7 @@ overlay.
 
 **For whom.** An agent over MCP. It asks `timeline` what happened around a marker and gets the
 marker placed *after* the call that was made at the same millisecond. Both UIs put it before. The
-recorded rule in `AGENTS.md` ("Markers interleave through `timeline()`") says before, because a
+recorded rule in `docs/decisions/shared-rules.md` ("Markers interleave through `timeline()`") says before, because a
 marker is dropped just before the thing it marks. A tie is exactly what a marker dropped right
 before a request looks like on a millisecond clock. So the wrong answer shows up in the very case
 the rule exists for. Signal ties ignore `seq` in the same way, which is the `onClick { tap;
@@ -701,7 +704,7 @@ navigate() }` case that `visits()` was fixed for.
   the same `mono` with different `seq`. It asserts that the MCP `timeline` output matches the
   model's `timeline()` for that session, entry by entry. It fails with the old sort put back.
 - The recorded clamp is either kept or deliberately changed, and the item says which. Today
-  `timeline()` clamps to 2,000 entries, and `AGENTS.md` ("All three exports read the raw readers")
+  `timeline()` clamps to 2,000 entries, and `docs/decisions/exports.md` ("All three exports read the raw readers")
   already records that clamp as a reason the exports do not use it.
 - A note in `docs/DAEMON.md` or the MCP tool description says the tie order changed and in which
   release, so an agent comparing an old transcript with a new one has an explanation.
@@ -729,7 +732,7 @@ because only daemon code changed. Phase E is done when CI is green on a pushed b
 
 **Audit finding 5.**
 
-**For whom.** Anyone with a browser open while the daemon runs. `AGENTS.md` records why
+**For whom.** Anyone with a browser open while the daemon runs. `docs/decisions/daemon-and-mcp.md` records why
 `X-Inspector-Control` exists: without it, any web page can POST to `127.0.0.1:8099`. Today each route
 opts in by hand, so a new route is unprotected unless its author remembers. §6 is about to add
 `POST /api/peers/kill` and `POST /api/sessions/delete`, which are bulk kill and bulk delete.
@@ -814,7 +817,7 @@ glance` (all three breaks) and the hidden scrim. The four drifts and the `?` cas
 `app.js` the only product file changed. `writeProbeFixture` is idempotent.
 
 *Still not shown:* the Gradle cache carrying over across checkout paths. The "897 tests" arithmetic
-is not a measurement, and `AGENTS.md` no longer claims it.
+is not a measurement, and `docs/STATUS.md` no longer claims it.
 
 **Audit findings 1 and 2.**
 
@@ -905,9 +908,9 @@ that millisecond as leading to it; in 1.3.0 and earlier both came after."*
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
-**Audit finding 8, and several rules that `AGENTS.md` states and nothing enforces.**
+**Audit finding 8, and several rules that `docs/decisions/` states and nothing enforces.**
 
-**This touches a recorded decision.** `AGENTS.md`: "**Every real module needs a noop twin.**" The
+**This touches a recorded decision.** `docs/decisions/twins-and-api.md`: "**Every real module needs a noop twin.**" The
 new `:repo-checks` module (decision 4) has no twin and must not have one. Neither does
 `:inspector-daemon` or either sample. The rule as recorded is about modules *the consuming app
 calls into*, so a check that says "every module" will either fail on day one or grow an unexplained
@@ -942,6 +945,101 @@ staying what the docs say. Also the maintainer, who today enforces every rule be
 **Out of scope.** detekt and ktlint (decision 4). A build-wide formatter. Scanning history, which is
 already public. As recorded, the check belongs before the commit.
 
+**Status, 2026-10-18: built, and CI on PR #84 is green on all four jobs. Done once merged.** It is
+on `shafic/structure-phase-b`. What landed:
+
+- `:repo-checks`, a build-only JVM module with no `maven-publish`. Its 8 JUnit 5 tests run in
+  `./gradlew build`: the module graph against `structure/modules.txt`; the twins against
+  `structure/twins.txt`, with `:inspector-model` the one exemption and its reason; a non-empty
+  lockfile for every published module and the daemon; the model's lockfile against a
+  serialization-and-stdlib allowlist; no markers outside Markdown; and the file budgets in
+  `structure/budgets.txt`.
+- A `gradle.lockfile` in each of the seven published modules and the daemon, `LockMode.STRICT`,
+  checked in `check` by `resolveLockedConfigurations`. The Android locks were generated here
+  without an Android SDK, because resolving `androidRuntimeClasspath` does not need one.
+- `scripts/check-commit-identity.sh` and `scripts/check-client-names.sh`, run by a new CI `repo`
+  job on ubuntu with no JDK.
+- The landing page's sponsor-link marker moved into §3's table. It was the one live marker, and it
+  served as the marker check's first red run.
+
+**Two deviations from the design, each smaller than the guarantee it keeps.**
+
+1. **`resolveLockedConfigurations` does not use `resolutionResult.rootComponent`.** Measured: with
+   it, a runtime dependency added to core and a stale lock entry both **passed**. Only the missing
+   lockfile failed, because STRICT throws that before resolution. The graph result drops lock
+   validation. The task resolves an artifact view that selects no component instead, which keeps
+   the design's property of no downloads and no sibling builds, and adds the guarantee.
+2. **Proof 3b's break was replaced.** Removing `ktor-network` from `:inspector-stream` leaves every
+   locked graph byte-identical, because it also arrives transitively. That break could not go red
+   whatever the guard did. The question it was asking, whether Gradle 9.5.1 fails on a stale entry,
+   was answered by removing `ktor-client-okhttp` from stream's `androidMain` instead. It does fail
+   ("Did not resolve … which is part of the dependency lock state").
+
+`./gradlew dependencies --write-locks`, the design's regenerate command, runs only the root's
+report in Gradle 9.5.1 and locks nothing. The command in `AGENTS.md` → Commands is the one that
+works.
+
+**Before merging phase B, the maintainer turns on GitHub → Settings → Emails → "Keep my email
+addresses private".** A merge made on github.com takes its author email from the merge dialog, and
+the dialog offers every verified address unless that setting is on. The dialog put a non-noreply
+author on the merges of #72, #73, #79 and #81–83. The push-to-`main` identity check reads the merge
+commit, so if phase B were merged the same way, its own merge would turn `main` red. Those six
+merges stay as they are: history on a public remote is not rewritten, and the check never reads
+them again.
+
+**After the first green run, add `repo` as a required check on `main`,** beside `build` and
+`release-swap`. Until it is required, a red identity or name check does not block a merge.
+
+**The Android locks resolved on CI.** They were written on a Mac with no Android SDK, because
+resolving `androidRuntimeClasspath` does not need one, and PR #84's CI, which has the SDK, resolved
+them green.
+
+**Still to do once the secret exists:** create `CLIENT_NAME_TERMS`, then add `--require-terms` to
+the push-to-`main` run. Until then the scan prints NOT RUN with a warning on every run, which is
+true, and never prints a pass.
+
+**Found by the locks, not fixed here: the stdlib is not the pinned Kotlin.** Six published modules
+(core, noop, ui, noop-ui, stream, noop-stream) and the daemon resolve `kotlin-stdlib:2.3.21`, while
+the pinned Kotlin is 2.3.20. Only `:inspector-model` resolves 2.3.20. Ktor 3.5.0's own modules ask
+for 2.3.21, and Gradle takes the higher version, so consumers of those modules get 2.3.21 whatever
+the pin says. The locks record this as it is. Whether to move the pin to 2.3.21 or to constrain the
+stdlib down is a decision for its own item, and it changes what consumers resolve.
+
+Evidence, run locally on macOS with no Android SDK:
+
+- `:repo-checks:test` ran 8 tests with 0 failures.
+- Every non-Android `check` passed, plus `resolveLockedConfigurations`: 834 tests, 0 failures. That
+  covers JVM and iOS-simulator tests for model, core, ui and stream, the noop JVM tests, the daemon's
+  227 and `:repo-checks`. The four `testAndroidHostTest` tasks and `:sample:android` need the SDK
+  and did not run.
+- `check-web-static.js` passed 20/20.
+- `:repo-checks:test` and `resolveLockedConfigurations` also pass under `-Pinspector=off`.
+
+Every listed proof went red, and each file was restored from a backup copy:
+
+- The module graph went red on an added edge and on a removed one.
+- The twin check went red on `maven-publish` added to `:repo-checks`, on it removed from
+  `:inspector-noop-ui`, and on a blank exemption reason.
+- The locks went red on core's OkHttp moved to `implementation`, on a stale entry, on a deleted
+  lockfile, and on a hand-edited version with the configuration cache warm. The lockfile is a
+  cache input, so the cache was discarded.
+- The model allowlist went red on kotlinx-datetime after its lock was regenerated and STRICT
+  resolved it green.
+- The marker check went red on the real `site/index.html:688` and on one planted in a `.kt`.
+- The budgets went red on Server.kt growing, on it shrinking, on an untracked 601-line file, and on
+  a deleted entry.
+- Commit identity went red on a foreign author, a foreign committer, three trailer spellings, a
+  GitHub-committed commit with a foreign author, and an empty range (exit 2). It passed a
+  GitHub-committed merge authored by the maintainer.
+- The name scan, with `Wormholy` as its only term, exited 1 listing `AGENTS.md:11` and printed the
+  term nowhere. An empty term list printed NOT RUN and exited 0, or 1 under `--require-terms`.
+
+Also red: the daemon's lock through `distZip`, a budget entry for a missing file, a regenerate run
+that would have raised a budget, and a `git ls-files` failure.
+
+Not shown: a CI run; the Android host tests; the `repo` job itself, including the `env:`-based
+range expressions, which only GitHub evaluates.
+
 ### Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides
 
 **Audit finding 7.**
@@ -971,6 +1069,15 @@ real. That check is what makes this item compatible with the decision rather tha
 **Out of scope.** Rewriting, merging or dropping any decision during the move. Changing what any of
 them says.
 
+**Found while building it, and left for later because the move must not reword anything:**
+
+- The `Formatting.kt` row, now in `inspector-ui/AGENTS.md`, still says it holds `pathScope`, which
+  moved to `:inspector-model`.
+- `docs/STATUS.md` → "Also outstanding" still lists the Android and iOS sample shells, which exist.
+- The root came in at about 14.8 KB against a 13.5 KB target, because the sections the design kept
+  add up to more than the target. Status churn has STATUS.md to go to, but a new root section will
+  need something moved out first.
+
 ### Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check
 
 **Audit findings 5 and 6.**
@@ -988,9 +1095,9 @@ in them are what make that structural rather than a matter of care. Decision 3 p
   import each other. It is proven by adding one such import.
 - `Server.kt` and `McpTools.kt` are split along those lines, with routes grouped and tools split by
   group. Every daemon test passes unchanged, and no MCP tool description or route changes.
-- The peer, MCP-probe and server-control decisions in `AGENTS.md` (identity re-checked at kill
-  time, no "start MCP" endpoint, `ServerControl` as an interface) are still true, and their file
-  references are updated.
+- The peer, MCP-probe and server-control decisions in `docs/decisions/daemon-and-mcp.md`
+  (identity re-checked at kill time, no "start MCP" endpoint, `ServerControl` as an interface) are
+  still true, and their file references are updated.
 
 **Out of scope.** Any new endpoint or tool. Changing the archive layout.
 
@@ -1086,7 +1193,7 @@ decision or a known trap:
   name, **or either `InspectorOverlay.kt`**, which holds the same property by coincidence until
   phase I makes it checked.
 - **Rebuilding a class-set diff between twins.** It was measured at 19, 19 and 4 spurious entries
-  and rejected. The reasoning is in `AGENTS.md`.
+  and rejected. The reasoning is in `docs/decisions/twins-and-api.md`.
 - **Adding a JavaScript filter evaluator to the export.** That would be a second parser of the frozen
   grammar.
 - **Adding a second network seam beside `source`.**
@@ -1471,16 +1578,16 @@ phase will reuse.
 ### Every phase
 
 Daemon tests, `render-web-ui.js` and `render-web-ui-archive.js` before each push, and every new
-guard proven to fail when broken. `DAEMON.md` for new endpoints and the config file; `AGENTS.md`
-for any decision that someone could later "fix". No client names in rule defaults, fixtures or
+guard proven to fail when broken. `DAEMON.md` for new endpoints and the config file; the right
+`docs/decisions/` file for any decision that someone could later "fix". No client names in rule defaults, fixtures or
 commits.
 
 ---
 
 ## What this document does not overturn
 
-The constraints in `AGENTS.md` → "Non-obvious decisions — do not 'fix' these", and
-`implementation-plan.md` §1, stand except where this document says otherwise. In particular:
-capture stays Ktor-client-only until 4c is deliberately chosen, the filter grammar is frozen for
-v1, production safety remains two layers and non-negotiable, Inspector learns nothing about app
-domain concepts, and no adapter modules ship.
+The constraints in `docs/decisions/`, indexed in `AGENTS.md` → "Non-obvious decisions — do not
+'fix' these", and `implementation-plan.md` §1, stand except where this document says otherwise.
+In particular: capture stays Ktor-client-only until 4c is deliberately chosen, the filter grammar
+is frozen for v1, production safety remains two layers and non-negotiable, Inspector learns
+nothing about app domain concepts, and no adapter modules ship.

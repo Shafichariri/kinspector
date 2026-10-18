@@ -55,6 +55,32 @@ val signingPassword: Provider<String> = providers.gradleProperty("signingPasswor
 // build dir, not one per module, because the bundle is a single Maven repository layout.
 val centralStagingDir: Provider<Directory> = layout.buildDirectory.dir("central/repo")
 
+// The configurations a published module locks: one main runtime classpath per JVM-shaped target
+// and the klibs each iOS target links. Names confirmed with `:inspector-core:resolvableConfigurations`
+// against AGP's KMP library plugin, not guessed.
+val lockedConfigurations = setOf(
+    "jvmRuntimeClasspath",
+    "androidRuntimeClasspath",
+    "iosArm64CompileKlibraries",
+    "iosSimulatorArm64CompileKlibraries",
+)
+
+// Resolving the graph is the whole action: a lock violation is thrown while the input below is
+// computed, so the action has nothing left to do. An input rather than
+// `doLast { configuration.resolve() }`, because the configuration cache forbids touching a
+// Configuration at execution time.
+abstract class ResolveLockedConfigurations : DefaultTask() {
+    /** Always empty; see where it is filled. Only resolving it matters. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val lockedGraphs: ConfigurableFileCollection
+
+    @TaskAction
+    fun report() {
+        logger.info("Locked configurations resolved against their gradle.lockfile")
+    }
+}
+
 subprojects {
     group = rootProject.group
     version = rootProject.version
@@ -224,6 +250,46 @@ subprojects {
         rootProject.tasks.named("stageCentralBundle") {
             dependsOn(tasks.named("publishAllPublicationsToCentralBundleRepository"))
         }
+
+        /*
+         * Dependency golden files: `gradle.lockfile` beside each published module, so a changed
+         * resolved dependency fails the build until somebody regenerates the locks on purpose.
+         * "Do not bump casually" was a sentence before this; a transitive bump arriving through
+         * a version range or a new direct dependency was invisible.
+         *
+         * Only what a consumer actually receives is locked: each target's main runtime classpath,
+         * and the klibs an iOS compilation links. Not `lockAllConfigurations()` -- the Kotlin/Native
+         * bundle and `compose.desktop.currentOs` resolve differently per host, so a lock written
+         * on one machine would fail on the next -- and no test configurations, which no consumer
+         * ever sees. STRICT, so a deleted lockfile is a failure rather than a silently unlocked
+         * configuration.
+         */
+        dependencyLocking { lockMode = LockMode.STRICT }
+        configurations.matching { it.name in lockedConfigurations }.configureEach {
+            resolutionStrategy.activateDependencyLocking()
+        }
+
+        /*
+         * Load-bearing: nothing else in a library build resolves these configurations. `jvmJar`,
+         * the publications and the tests all read other ones, so without this task the locks
+         * above would be checked by nobody and a stale entry would pass `build` indefinitely.
+         *
+         * The obvious graph-only read, `incoming.resolutionResult.rootComponent`, does not work,
+         * and that was measured rather than assumed: it hands back the graph and drops the lock
+         * validation, so a new runtime dependency and a stale lock entry both passed. Only an
+         * artifact resolution rethrows those failures. The view below selects no component at
+         * all, so the graph is resolved and validated against the lock while not one artifact is
+         * downloaded and no sibling module is built -- an iOS klib from a project dependency
+         * would otherwise mean compiling Kotlin/Native on whatever host runs `check`.
+         */
+        val resolveLocked = tasks.register<ResolveLockedConfigurations>("resolveLockedConfigurations") {
+            group = "verification"
+            description = "Resolves every locked configuration, so a stale gradle.lockfile fails."
+            configurations.matching { it.name in lockedConfigurations }.configureEach {
+                lockedGraphs.from(incoming.artifactView { componentFilter { false } }.files)
+            }
+        }
+        tasks.named("check") { dependsOn(resolveLocked) }
     }
 
     // Print the assertion message and stack trace when a test fails.

@@ -1,6 +1,6 @@
 ---
 name: delivery-tracker
-description: Tracks what is actually done. Use after an item is verified (or at any time for a status report) to reconcile the roadmap and AGENTS.md "Where we are" against evidence — git history, test results, the qa-verifier's report — mark items done, keep Verified / Not verified honest, and produce a progress summary for the human.
+description: Tracks what is actually done. Use after an item is verified (or at any time for a status report) to reconcile the roadmap, AGENTS.md "Where we are" and docs/STATUS.md against evidence — git history, test results, the qa-verifier's report — mark items done, keep Verified / Not verified honest, and produce a progress summary for the human.
 tools: Read, Grep, Glob, Bash, Edit
 model: sonnet
 color: cyan
@@ -13,7 +13,8 @@ In this repository a status line is a claim, and claims get checked.
 
 1. Code and tests on the branch (`git log`, `git diff main...HEAD`, test output).
 2. The `qa-verifier`'s report for the item.
-3. `docs/ROADMAP.md` (what was planned) and `AGENTS.md` → "Where we are" (what is claimed).
+3. `docs/ROADMAP.md` (what was planned), and `AGENTS.md` → "Where we are" and `docs/STATUS.md`
+   (what is claimed).
 
 ## What you maintain
 
@@ -21,9 +22,10 @@ In this repository a status line is a claim, and claims get checked.
   `~~Item~~ **Done, YYYY-MM-DD.**` followed by what was learned building it — the house style keeps
   the reasoning and the surprises, never just a tick. Partially done items say exactly which part.
   You change state; the `product-owner` owns scope and order.
-- **`AGENTS.md` → "Where we are".** The phase table, the test count line (count it, don't copy
-  it: sum the test results across modules after a full run, and say which targets were included),
-  and the **Verified / Not verified** lists. Move something to Verified only with the evidence that
+- **`AGENTS.md` → "Where we are"** holds only the phase table; keep it there, because the root has
+  a 15,000-byte budget. **`docs/STATUS.md`** holds the rest: the test count line (count it, don't
+  copy it: sum the test results across modules after a full run, and say which targets were
+  included), and the **Verified / Not verified** lists. Move something to Verified only with the evidence that
   justifies it, written down in the same exact-scope style ("on an emulator", "on desktop only").
 - Release notes context: when an item is consumer-visible, tell the `release-steward` that
   `docs/INTEGRATION.md` needs a version bump and a changelog entry.
