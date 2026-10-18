@@ -128,13 +128,7 @@ object SessionExport {
             errorCount = transactions.count { it.isError },
         )
 
-        val merged = dev.inspector.model.timeline(transactions, markers, signals).map { entry ->
-            when (entry) {
-                is dev.inspector.model.TimelineEntry.Call -> TimelineEntry.of(entry.txn)
-                is dev.inspector.model.TimelineEntry.Observation -> TimelineEntry.of(entry.signal)
-                is dev.inspector.model.TimelineEntry.Mark -> TimelineEntry.of(entry.marker)
-            }
-        }
+        val merged = dev.inspector.model.timeline(transactions, markers, signals).map { TimelineEntry.of(it) }
 
         return SessionExportDocument(
             format = FORMAT,

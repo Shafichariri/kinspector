@@ -12,6 +12,8 @@ import dev.inspector.model.SessionMeta
 import dev.inspector.model.Signal
 import dev.inspector.model.SignalTags
 import dev.inspector.model.SignalTrigger
+// Aliased: inside [SessionRepository] a bare `timeline(` resolves to the member, not the rule.
+import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -80,6 +82,13 @@ data class TimelineEntry(
             label = marker.label,
             detail = marker.source,
         )
+
+        /** Flattens one entry of the shared `timeline()`, keeping its position and nothing else. */
+        fun of(entry: dev.inspector.model.TimelineEntry): TimelineEntry = when (entry) {
+            is dev.inspector.model.TimelineEntry.Call -> of(entry.txn)
+            is dev.inspector.model.TimelineEntry.Observation -> of(entry.signal)
+            is dev.inspector.model.TimelineEntry.Mark -> of(entry.marker)
+        }
     }
 }
 
@@ -302,7 +311,8 @@ class SessionRepository(private val config: DaemonConfig) {
      *
      * Merged on read rather than stored merged, so every existing grep and route keeps working.
      * Ordered **oldest first**: a timeline is read forwards, unlike the row listings, which put
-     * the newest first because that is what a live tail wants.
+     * the newest first because that is what a live tail wants. Clamped to 2000 entries, because
+     * this serves a paged view; see [timelineWindow] for the same order uncut.
      */
     fun timeline(
         sessionDir: Path,
@@ -310,29 +320,38 @@ class SessionRepository(private val config: DaemonConfig) {
         since: Long? = null,
         until: Long? = null,
         limit: Int = 200,
+    ): List<TimelineEntry> =
+        timelineWindow(sessionDir, filterText, since, until).take(limit.coerceIn(1, 2000))
+
+    /**
+     * [timeline] without the clamp, for a caller that has to locate one entry inside a window.
+     *
+     * Ordered by the shared `timeline()` in `:inspector-model`, never by a sort of its own. A
+     * plain `sortedBy { mono }` here once put a marker *after* the call at its own millisecond —
+     * the opposite of what the overlay, the web UI and the exports draw — so an agent and a person
+     * looking at one session disagreed about which came first. The `since`/`until` cut is applied
+     * after merging so it cannot change the relative order of anything it keeps.
+     */
+    fun timelineWindow(
+        sessionDir: Path,
+        filterText: String = "",
+        since: Long? = null,
+        until: Long? = null,
     ): List<TimelineEntry> {
         val filter = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
         val markers = readMarkers(sessionDir)
         val context = FilterContext(markers)
 
-        val entries = buildList {
-            readTransactions(sessionDir)
-                .filter { filter.matches(it, context) }
-                .forEach { add(TimelineEntry.of(it)) }
-            readSignals(sessionDir)
-                .filter { filter.matches(it, context) }
-                .forEach { add(TimelineEntry.of(it)) }
-            // Markers go through the same filter. They carry only `mono` and a label, so every
-            // typed term drops them while since: and text: still reach them — which is what keeps
-            // a timeline cut at a marker from losing the marker it was cut at.
-            markers.filter { filter.matches(it, context) }
-                .forEach { add(TimelineEntry.of(it)) }
-        }
+        val transactions = readTransactions(sessionDir).filter { filter.matches(it, context) }
+        val signals = readSignals(sessionDir).filter { filter.matches(it, context) }
+        // Markers go through the same filter. They carry only `mono` and a label, so every typed
+        // term drops them while since: and text: still reach them — which is what keeps a
+        // timeline cut at a marker from losing the marker it was cut at.
+        val kept = markers.filter { filter.matches(it, context) }
 
-        return entries
+        return modelTimeline(transactions, kept, signals)
             .filter { (since == null || it.mono >= since) && (until == null || it.mono <= until) }
-            .sortedBy { it.mono }
-            .take(limit.coerceIn(1, 2000))
+            .map { TimelineEntry.of(it) }
     }
 
     fun readSignal(sessionDir: Path, signalId: String): Signal? =

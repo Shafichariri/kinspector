@@ -154,7 +154,9 @@ class McpTools(
                     "oldest first, one compact line each. This is the tool that answers 'what " +
                     "was the app doing when this failed' — start from a marker and read " +
                     "forwards. Follow an id into get_signal or get_body for detail. " +
-                    "Same filter grammar as list_transactions plus tag: and name:.",
+                    "Same filter grammar as list_transactions plus tag: and name:. " +
+                    "Same-millisecond ties follow the shared timeline rule: a marker comes " +
+                    "before the call or signal at its instant.",
             ) {
                 put("session", sessionProperty())
                 put("filter", stringProperty("Filter expression. Empty matches everything."))
@@ -434,17 +436,23 @@ class McpTools(
             monos = sameEndpoint.map { it.mono }.sorted().take(50),
         )
 
-        val context = repository.timeline(
+        val context = repository.timelineWindow(
             sessionDir = dir,
             filterText = "",
             since = txn.mono - window,
             until = txn.mono + window,
-            limit = 2_000,
-        ).filter { it.id != txn.id }
+        )
         // Split rather than one list: "what led to this" and "what it caused" are different
         // questions, and a single window makes the reader do the splitting.
-        val before = context.filter { it.mono < txn.mono }.takeLast(EXPLAIN_CONTEXT_CAP)
-        val after = context.filter { it.mono >= txn.mono }.take(EXPLAIN_CONTEXT_CAP)
+        //
+        // Split by **position** in the shared order, not by `mono`. A marker dropped at the call's
+        // own millisecond sits before the call in that order, as both UIs draw it; a `mono < call`
+        // test would move it into `after` and report the marker that introduced the call as
+        // something the call caused. Unclamped for the same reason: a window cut at 2000 entries
+        // could lose the call itself, and then there is nothing to split around.
+        val at = context.indexOfFirst { it.kind == "txn" && it.id == txn.id }
+        val before = if (at < 0) emptyList() else context.subList(0, at).takeLast(EXPLAIN_CONTEXT_CAP)
+        val after = if (at < 0) emptyList() else context.subList(at + 1, context.size).take(EXPLAIN_CONTEXT_CAP)
 
         if (txn.redacted.isNotEmpty()) {
             // Removed, not absent — otherwise the reader concludes no credentials were sent.

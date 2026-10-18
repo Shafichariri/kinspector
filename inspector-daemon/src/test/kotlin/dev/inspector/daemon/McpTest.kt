@@ -5,6 +5,8 @@ import dev.inspector.daemon.mcp.McpTools
 import dev.inspector.daemon.mcp.MarkerPoster
 import dev.inspector.daemon.mcp.SignalPuller
 import dev.inspector.daemon.mcp.ToolOutcome
+import dev.inspector.model.timeline as modelTimeline
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import dev.inspector.model.SignalTags
 import dev.inspector.model.SignalTrigger
@@ -632,10 +634,71 @@ class McpTest {
             explanation.getValue(key).jsonArray.map { it.jsonObject.getValue("mono").jsonPrimitive.int() }
         }
 
-        assertTrue(monoOf("before").all { it < 400 }, "before must be strictly before the call")
+        // `<=` rather than `<`: the split is by position, so a marker at the call's own instant
+        // belongs to `before` — see explain_puts_a_marker_at_the_call_s_instant_before_it.
+        assertTrue(monoOf("before").all { it <= 400 }, "before must not reach past the call")
         assertTrue(monoOf("after").all { it >= 400 }, "after must not reach back past the call")
         assertTrue(monoOf("before").isNotEmpty() && monoOf("after").isNotEmpty())
         assertFalse(text.contains("\"id\": \"cccc3333\"\n            }"), "the call is not its own context")
+    }
+
+    // --- one timeline() ------------------------------------------------------------------------
+
+    /**
+     * Every same-millisecond tie the ordering rule has an opinion about, appended in an order a
+     * sort of the daemon's own would rearrange: a marker sharing a call's instant, appended after
+     * it, and two signals sharing an instant, appended against their `seq`.
+     */
+    private fun tieSession(): String = session("2026-08-17T09-00-06_ties_dev_debug") { writer ->
+        writer.append(txn("tiea0001", path = "/a", mono = 100), null, null)
+        writer.append(signal(id = "s8", tag = SignalTags.STATE, name = "Eight", mono = 300).copy(seq = 8), null)
+        writer.append(signal(id = "s7", tag = SignalTags.STATE, name = "Seven", mono = 300).copy(seq = 7), null)
+        writer.append(txn("tiec0001", path = "/c", mono = 500).copy(seq = 9), null, null)
+        writer.append(marker("m", mono = 500))
+    }
+
+    @Test
+    fun the_timeline_tool_orders_exactly_as_the_shared_timeline_does() {
+        // Against the live model rather than a literal, so a change to the rule moves both sides
+        // together and a second ordering in the daemon cannot hide behind an expectation that
+        // happened to agree with it.
+        val id = tieSession()
+        val dir = config.sessionsDir.resolve(id)
+        val repository = SessionRepository(config)
+        val expected = modelTimeline(
+            repository.readTransactions(dir),
+            repository.readMarkers(dir),
+            repository.readSignals(dir),
+        ).map { TimelineEntry.of(it) }
+
+        val actual = Json.decodeFromString(
+            ListSerializer(TimelineEntry.serializer()),
+            callTool("timeline", """{"session":"$id"}"""),
+        )
+
+        assertEquals(expected.size, actual.size, "entry count: $actual")
+        expected.indices.forEach { i ->
+            assertEquals(expected[i], actual[i], "entry $i differs from the shared timeline()")
+        }
+    }
+
+    @Test
+    fun explain_puts_a_marker_at_the_call_s_instant_before_it() {
+        // The marker was dropped to introduce the call. A split by `mono` reports it as something
+        // the call caused, which is the reverse of what both UIs draw for the same session.
+        val id = tieSession()
+        val explanation = Json.parseToJsonElement(
+            callTool("explain", """{"session":"$id","id":"tiec0001"}"""),
+        ).jsonObject
+        val labels = { key: String ->
+            explanation.getValue(key).jsonArray.map {
+                it.jsonObject.getValue("kind").jsonPrimitive.content + ":" +
+                    it.jsonObject.getValue("label").jsonPrimitive.content
+            }
+        }
+
+        assertEquals("marker:m", labels("before").last(), "before: ${labels("before")}")
+        assertFalse("marker:m" in labels("after"), "after: ${labels("after")}")
     }
 
     @Test
