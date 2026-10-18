@@ -144,7 +144,9 @@ flowchart TD
     never -- "yes" --> r1["Refused: call again<br/>without a name"]
     never -- "no" --> tag{"Prompt has team-phase tag<br/>and role is on its roster?"}
     tag -- "no" --> r2["Refused: add the tag,<br/>or run as a subagent"]
-    tag -- "yes" --> cap{"Fewer than 3<br/>live teammates?"}
+    tag -- "yes" --> fg{"run_in_background<br/>false?"}
+    fg -- "no" --> r4["Refused: spawn<br/>in the foreground"]
+    fg -- "yes" --> cap{"Fewer than 3<br/>live teammates?"}
     cap -- "no" --> r3["Refused: shut one down<br/>or wait for the phase"]
     cap -- "yes" --> mate["Teammate spawned<br/>debates, read-only, no ticket writes"]
 
@@ -152,7 +154,7 @@ flowchart TD
     classDef no fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
     classDef team fill:#EEEDFE,stroke:#534AB7,color:#26215C
     class sub ok
-    class r1,r2,r3 no
+    class r1,r2,r3,r4 no
     class mate team
 ```
 
@@ -162,16 +164,35 @@ The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
   launches a teammate, and Claude names subagents on its own — so an ordinary step could quietly
   become a team. The guard allows a teammate only for a declared phase (`[team-phase: …]` in the
   prompt), only from that phase's roster, and at most `INSPECTOR_TEAM_MAX` (3) live at once.
+- **How the hooks know who is a teammate, and how many are live.** A teammate's hook payload is the
+  same as a subagent's (the lead's session id, its own agent id and type, no name), and the team
+  directory `~/.claude/teams/<session>/` holds only `inboxes/` — no member list. The first version
+  of these hooks read a `config.json` that does not exist, so the read-only rule, the ticket rule
+  for teammates and the cap all passed everything; a teammate's Edit went through in a probe on
+  2026-10-18. `lib/teammate.js` now reads the agent's `.meta.json` beside its transcript, which
+  carries the spawn `name` (a named agent is a teammate), and **`.claude/hooks/team-registry.js`**
+  (SubagentStart, SubagentStop, PostToolUse on Agent) keeps a per-session registry of live
+  teammates under the OS temp dir that `team-guard.js` counts, under a lock so members spawned in
+  one message are counted together. Entries expire (10 minutes pending, 3 hours live) so a crash
+  cannot hold a slot. Proven live: a teammate's Edit refused, a fourth spawn refused at the cap,
+  the registry empty once the phase ended.
 - **Never teammates:** `engineer` — teammates share one working tree with no worktree isolation;
   `business-strategist` and `release-steward` — a teammate receives a definition's `tools`, `model`,
   `disallowedTools`, `effort` and body, but **not** its `hooks`, `memory` or `omitClaudeMd`, so the
   write block and the private term list would silently vanish; `product-owner` and
   `delivery-tracker` — they own human gates and state that exists only after a phase.
-- **The three roster roles list `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate` in `tools`.**
-  A teammate gets exactly its definition's `tools`, so without them it cannot message the others
-  or read the shared task list, and a "team" is three isolated reports relayed by the lead. That
-  is how phase F's council and panel ran on 2026-10-18: every member said it had no message tool.
-  Writes stay refused by the two hooks below whatever `tools` says.
+- **A teammate is spawned in the foreground, and the guard refuses one that is not.** The Agent
+  tool backgrounds by default, and a backgrounded named agent is not an in-process teammate. Measured
+  on 2026-10-18 with the same `qa-verifier` and `architect` definitions: in the foreground each had
+  `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate`, read the lead's task list, claimed a task,
+  and exchanged messages within its turn; in the background each had `SendMessage` alone, no task
+  list, and a message reached it only by resuming it after its turn ended. Every team phase in
+  phase F had been spawned in the background, which is why its members reported missing tools and
+  the lead relayed their findings. Spawn all members of a phase in **one message** with
+  `run_in_background: false`, so they run at once and the lead waits for the phase. The three
+  roster roles also list `SendMessage` and the Task tools in `tools`; the docs say an in-process
+  teammate gets them injected anyway, so the list is belt and braces, not the fix. Writes stay
+  refused by the two hooks below whatever `tools` says.
 - **`.claude/hooks/team-read-only.js`** (PreToolUse on Write/Edit). A teammate cannot write files;
   it sends proposed text to the lead, who routes it to the owning role afterwards. Bash writes are
   outside what the hook sees, as with the strategist's.
