@@ -49,7 +49,14 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
-**897 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+**Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
+Phase A (below) added tests since, and **no full run has been counted since**: `:inspector-model:jvmTest`
+ran 159 tests and `:inspector-daemon:test` ran 219, 0 failures each (2026-10-18), and nothing else
+was run. A branch-wide total of 897 was computed by arithmetic, never measured, and is not claimed.
+
+**Phase A of the structure pass (web checks and mirror cases in CI) is built and pending its first CI
+run.** `docs/ROADMAP.md` §5 has the detail. It is not "done" until the new `web` job has gone green on
+a pushed branch; see the two lists below for what has and has not been shown.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -135,8 +142,23 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   reconnects in about a second — after the TIME_WAIT fix below; before it, 25 seconds of
   `EADDRINUSE`.
 
+- **Phase A's web checks, run locally (2026-10-18, three independent QA passes).**
+  `scripts/check-web-static.js` passes 20/20. The live probe against a daemon on 8231 holding the
+  generated probe session: 164 passed, 0 unclassified, exit 0. The archive probe: 21 passed. Each guard
+  category was re-broken by QA and went red: a second `fetch`, `[hidden]`, 11px, the JS mirrors, the
+  Kotlin mirrors, the `inputs.dir` declaration, a missing anchor, a reverted drift, the archive
+  data-versus-code check, the item-2 checks, `esc restores glance` (all three breaks) and the hidden
+  scrim. `writeProbeFixture` is idempotent, and a JSON-only change re-runs the tests. The four `app.js`
+  drifts and the empty-query `?` case are fixed, with `app.js` the only product file changed.
+
 ### Not verified
 
+- **Phase A's CI `web` job has never run.** The branch is not pushed. Whether Kotlin Multiplatform and
+  AGP configure on `ubuntu-latest` is unproven, and so is the Gradle cache carrying over between
+  checkout paths. Phase A is therefore not done.
+- **`./gradlew build` has not run on this branch**, because the machine has no Android SDK: the Android
+  host tests did not run, and `-Pinspector=off` was not run either.
+- **The live probe ran on Node 23**, outside jsdom 29's declared range. CI uses Node 22.
 - **The Auth0 adapter in `docs/INTEGRATION.md` §11 compiles but has never run.** It is now
   written against the real `auth0-android` 3.12.0 sources (read out of the Gradle cache) and
   compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the

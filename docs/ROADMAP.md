@@ -495,6 +495,16 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
   **Decided 2026-10-18: the three become `internal`.** The guard is now §5 → Phase I.
 
+### Bugs found, not fixed
+
+- **`ExportMarkdown.kt:158` prints the query twice.** The line is
+  `inlineCode(txn.url + (txn.query?.let { "?$it" } ?: ""))`, but `NetworkTransaction.url` already
+  includes the query (`AGENTS.md` records that web's `urlOf` mirrors that, empty `?` included). Every
+  call with a query string shows `…/path?a=1?a=1` in the Markdown export's **URL** line. Found while
+  reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
+  `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
+  change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -716,6 +726,23 @@ opts in by hand, so a new route is unprotected unless its author remembers. §6 
 
 ### Phase A — web checks and shared mirror cases in CI
 
+**Status, 2026-10-18: built, pending its first CI run. Not done.** The work is on the branch
+`shafic/kinspector-handoff-setup-c23cf8` and has not been pushed, so the CI `web` job has never run. Done
+means that job has gone green.
+
+*Evidenced locally (three independent QA passes, not the engineer):* the static check passes 20/20;
+`:inspector-model:jvmTest` ran 159 tests and `:inspector-daemon:test` 219, 0 failures each; the live
+probe on port 8231 reports 164 passed, 0 unclassified, exit 0; the archive probe 21 passed. Every guard
+category was re-broken and went red: network, `[hidden]`, 11px, JS mirrors, Kotlin mirrors, `inputs.dir`,
+a missing anchor, a reverted drift, the archive data-versus-code check, the item-2 checks, `esc restores
+glance` (all three breaks) and the hidden scrim. The four drifts and the `?` case are fixed, with
+`app.js` the only product file changed. `writeProbeFixture` is idempotent.
+
+*Not shown:* the `web` job itself, and whether KMP and AGP configure on `ubuntu-latest`; the Gradle cache
+carrying over across checkout paths; Android host tests and `-Pinspector=off` (no Android SDK on the
+machine that ran this); the live probe on Node 22, since it ran on Node 23, outside jsdom 29's declared
+range. The "897 tests" arithmetic is not a measurement, and `AGENTS.md` no longer claims it.
+
 **Audit findings 1 and 2.**
 
 **For whom.** A web UI user on a Mac, and everyone who edits `web/`. Every recorded web UI rule
@@ -793,7 +820,7 @@ that the record already calls wrong.
 count now counts calls, not rows; an expanded run of signals no longer collapses during live tail;
 a marker dropped at the same millisecond as a call is drawn before it, as the overlay always has."*
 Drift 4 and the `?` case get no line: they change only tie order and one edge of the duplicate key.
-No `INTEGRATION.md` entry, because nothing changes for a consuming app. If the maintainer decides to
+**Pending: nothing has shipped, so this line is not yet in any release notes. Release note when this ships** (phase A merges and is released), by the `release-steward`. No `INTEGRATION.md` entry, because nothing changes for a consuming app. If the maintainer decides to
 announce phase E's MCP tie fix (an open question below), it belongs right after this line, since it
 is the same rule on a third surface.
 
