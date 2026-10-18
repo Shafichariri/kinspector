@@ -50,13 +50,16 @@ signals. Two numbering schemes met here and the collision is historical; `implem
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
 **Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
-Phase A (below) added tests since, and **no full run has been counted since**: `:inspector-model:jvmTest`
-ran 159 tests and `:inspector-daemon:test` ran 219, 0 failures each (2026-10-18), and nothing else
+Phases A and E (below) added tests since, and **no full run has been counted since**: `:inspector-model:jvmTest`
+ran 159 tests and `:inspector-daemon:test` ran 224, 0 failures each (2026-10-18), and nothing else
 was run. A branch-wide total of 897 was computed by arithmetic, never measured, and is not claimed.
 
 **Phase A of the structure pass (web checks and mirror cases in CI) is done**: its first CI run, on
 PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swap` (macOS: full
 `./gradlew build`, Android host tests, `-Pinspector=off`). `docs/ROADMAP.md` §5 has the detail.
+
+**Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is done**: CI on
+PR #82 went green on `build`, `release-swap` and `web`. `docs/ROADMAP.md` §5 has the detail.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -151,10 +154,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   scrim. `writeProbeFixture` is idempotent, and a JSON-only change re-runs the tests. The four `app.js`
   drifts and the empty-query `?` case are fixed, with `app.js` the only product file changed.
 
+- **Phase E's MCP ordering, run locally (2026-10-18, two independent QA passes).** Daemon tests 224 and
+  `:inspector-model:jvmTest` 159, 0 failures. Five breaks went red: the old sort, the daemon's
+  `thenBy seq`, the old `mono` split in `explain`, a clamped `explain`, and `splitAround` returning
+  empty instead of null. The built `inspector mcp` binary, driven over JSON-RPC against a hand-built
+  tie archive, ordered entries as the model does. The 2,000 clamp is kept. `DAEMON.md` §8 "1.3.0 and
+  earlier" was checked against the `v1.3.0` tag.
+
 ### Not verified
 
 - **The Gradle cache carrying over between checkout paths** for the mirror-case test inputs is
   unproven.
+- **Signal ties still ignore `seq`**, in the model and so in MCP (recorded under ROADMAP §3).
 - **The Auth0 adapter in `docs/INTEGRATION.md` §11 compiles but has never run.** It is now
   written against the real `auth0-android` 3.12.0 sources (read out of the Gradle cache) and
   compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the
@@ -726,11 +737,11 @@ JSON string, where that escape means the same character to both parsers, so one 
 `render-web-ui.js` replaces, and both sides now refuse to proceed when a replacement misses.
 
 **All three exports read the raw readers, never `queryTransactions` or `SessionRepository.timeline()`.**
-The first clamps any limit to 1000 and the second to 2000 — and the second also sorts calls before a
-marker at the same `mono`, contradicting the shared `timeline()` rule. The HAR route had asked for
-`Int.MAX_VALUE` rows from the first under a comment saying a quietly incomplete export was the thing
-to avoid, so every HAR of a session over 1000 calls was exactly that. It reads
-`filterTransactions` now, and `HarTest` pins it at 1001 rows.
+The first clamps any limit to 1000 and the second to 2000. Until phase E the second also sorted
+calls before a marker at the same `mono`; it now orders through the shared `timeline()` but still
+clamps. The HAR route had asked for `Int.MAX_VALUE` rows from the first under a comment saying a
+quietly incomplete export was the thing to avoid, so every HAR of a session over 1000 calls was
+exactly that. It reads `filterTransactions` now, and `HarTest` pins it at 1001 rows.
 
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
@@ -764,7 +775,8 @@ session is on the machine and a truncated JSON body is rare there.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
-Revisit on upgrade.
+Revisit on upgrade. The same upgrade must recheck `ControlHeaderCoverageTest`'s route walk, which
+is public API but leans on the shape of Ktor's route tree (see the control-header paragraph below).
 
 **`InspectorBackHandler` is `expect`/`actual`, not Compose Multiplatform's `BackHandler`.** Do not
 "simplify" it back. CMP's common `BackHandler` resolves a dispatcher owner from the composition
@@ -782,6 +794,26 @@ listens on loopback with no authentication, so any page the developer has open c
 web page. A custom header forces a CORS preflight, and this server answers none, so only its own
 page gets through. Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the
 MCP tools post markers without it, and a marker is not a weapon.
+
+`ControlHeaderCoverageTest` pins this from the server's own route tree rather than from a list in
+the test. It walks every endpoint Ktor registered, sends every non-GET one a request with no header
+and one with `X-Inspector-Control: 0`, and expects from both a 403 whose body names the header — so
+a 403 from anything other than the guard does not count, and a future control gate must keep the
+header's name in its refusal. A route with no method selector answers any method, so it is probed
+too. GET is exempt wholesale, so the test also rests on no GET route ever changing anything. A new
+control route is covered by being registered, which matters because `ROADMAP.md` §6 adds bulk kill
+and bulk delete. `POST /api/sessions/{id}/markers` is the only
+allowlist entry. Any new entry widens what a web page can do to the daemon, so it is a
+`ROADMAP.md` decision, not a line added to make a test pass. Every side effect is an inert fake,
+so a broken guard shows up as a wrong status rather than an exited test JVM. A scan that finds no
+routes fails. **Revisit on a Ktor upgrade**, like `rawContent` above: the test depends on
+`getAllRoutes`, on `lineage()`, and on `webSocket` putting its handler below the GET node under
+header selectors, which is how the two handshakes are recognised as GET and printed as exempt.
+
+**"Exempt" there is a fact about the header, not a claim that those routes are safe.** A browser
+cannot put a custom header on a WebSocket handshake, so this header cannot guard `/api/live` or
+`/ingest`. Two security-boundary gaps found while building phase C are tracked privately and are
+open decisions for the maintainer; do not build a fix for either without that decision.
 
 **A stopped daemon's banner offers no restart, and the page keeps redialling.** The design pass
 proposed a `restart daemon` button on the banner; the process that would receive it is the one that
@@ -1169,7 +1201,10 @@ request arrived would hide it. `app.js` carries a mirror, `timelineEntries`, hel
 tab did not until phase A: it sorted all three streams in one stable sort with markers added last,
 so a tied marker landed after its call there and before it in the list beside it. A mirror case
 could not see that, because the mirror was right and the tab did not call it — so
-`render-web-ui.js` checks the tie on the rendered tab as well.
+`render-web-ui.js` checks the tie on the rendered tab as well. The MCP `timeline` and `explain`
+tools order through it too, never by a sort of their own, and `explain` splits before/after by
+position, not by `mono`. `McpTest` compares the `timeline` tool with the live model entry by
+entry, and checks that a marker at the call's own millisecond lands in `explain`'s `before`.
 
 **A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
 the label and the grammar has **no escape inside the quotes**, so whether a label is expressible

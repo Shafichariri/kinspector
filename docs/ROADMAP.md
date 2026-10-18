@@ -504,6 +504,14 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
   `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
   change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
+- **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
+  stable-sorted by `mono` alone, so two signals in one millisecond keep file order, and a signal and
+  a call in one millisecond put the call first — whatever capture order `seq` recorded. That is the
+  `onClick { tap; navigate() }` case `visits()` was fixed for. Fixing it changes every surface at
+  once: the overlay, the `app.js` mirror, the exports and the shared mirror cases. It needs a total
+  comparator (as `visits()` does with `seq ?: Long.MIN_VALUE`) and a decision about markers that
+  carry `seq`, which today are interleaved by `mono` with `<=` only. **Phase E ships as "MCP
+  equals the model"** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn), so MCP inherits this rather than diverging from it. Not scheduled.
 
 ### Open questions
 
@@ -701,6 +709,22 @@ navigate() }` case that `visits()` was fixed for.
 **Out of scope.** Changing the tool's arguments, its default limit or its oldest-first order. An MCP
 `path` tool, which §3 already defers.
 
+**Status, 2026-10-18: done.** CI on PR #82 (stacked on phase A) went green on `build`,
+`release-swap` and `web`, which covers the full `./gradlew build`, iOS and Android. The 2,000 clamp is **kept**: `timeline()` is now
+`timelineWindow()` plus the clamp, and `explain` reads the unclamped window and splits it by
+position. Signal ties ship as "MCP equals the model", which still ignores `seq`; that is recorded
+under §3 -> Bugs found, not fixed, rather than fixed here.
+
+Evidence, from two independent QA passes run locally: `:inspector-daemon:test` 224 and
+`:inspector-model:jvmTest` 159, 0 failures. Five breaks each went red: the old sort (timeline test),
+the daemon's `thenBy seq` (timeline test), the old `mono` split (explain test), a clamped `explain`
+(over-2000 test), and `splitAround` returning empty instead of null (refusal test). The built MCP
+binary was driven over JSON-RPC against a hand-built tie archive and its order matched the model.
+`DAEMON.md` §8 "1.3.0 and earlier" was checked against the `v1.3.0` tag.
+
+Not shown: a CI run; a full `./gradlew build`; the iOS and Android targets, which were not run
+because only daemon code changed. Phase E is done when CI is green on a pushed branch.
+
 ### Phase C — every control route refuses without the header, by test
 
 **Audit finding 5.**
@@ -723,6 +747,57 @@ opts in by hand, so a new route is unprotected unless its author remembers. §6 
   This item does not have to wait for D; the test is what holds the rule either way.
 
 **Out of scope.** Authentication. The loopback bind is still the boundary. CORS behaviour.
+
+**Status, 2026-10-18: built, pending CI. Not done.** It is on `shafic/structure-phase-c`, stacked on
+phases A and E. The branch is not pushed, so CI has not run. `ControlHeaderCoverageTest` starts a real daemon
+with inert fakes for every side effect: exit, peer kill, MCP probe and the replay transport. It walks
+the route tree through one new `internal` accessor, `InspectorDaemon.routingRoot()`, and that
+accessor is the only production change. It probes 8 routes:
+
+- `DELETE /api/sessions/{id}`
+- `POST /api/mcp/probe`
+- `POST /api/peers/{pid}/kill`
+- `POST /api/replay`
+- `POST /api/server/restart`
+- `POST /api/server/stop`
+- `POST /api/sessions/clear`
+- `POST /api/sessions/{id}/signals/request`
+
+Each is probed with no header and with `X-Inspector-Control: 0`. The two WebSocket handshakes
+(`GET /api/live`, `GET /ingest`) are printed as exempt, and markers is printed as allowlisted.
+
+Two further guards came out of review. One is a tripwire on `InspectorDaemon`'s constructor
+parameter count, because `control` and `peers` default to real implementations. The other asserts
+that `POST /api/server/stop` is among the probed routes, so a partial walk cannot pass. A 403 whose
+body does not name the header is reported with that body, and every side effect reached is
+reported in one failure.
+
+Evidence, run locally: `:inspector-daemon:test` ran 227 tests with 0 failures, and
+`check-web-static.js` passed 20/20. Ten breaks went red, and each file was restored from a backup
+copy:
+
+1. The check removed from `signals/request`: named with 409.
+2. The check removed from `server/stop`: 200, and the fake reported `ServerControl.exit`. The test
+   JVM survived.
+3. A new open `post(...)`: named with 200.
+4. A method-less `route { handle {} }`: reported as `ANY` with 200.
+5. The check added to markers: the allowlist assertion failed on 403.
+6. `routingRoot()` returning null: "the route scan found no non-GET routes".
+7. The guard weakened from `== "1"` to `!= null`: all eight routes were named on the
+   `X-Inspector-Control: 0` probe only. The fakes reported exit, spawn and MCP probe together.
+8. A seventh constructor parameter: "new dependency: fake it here if it has side effects".
+9. The refusal message no longer naming the header: every route was named with the body
+   `{"error":"forbidden"}`.
+10. `server/stop` renamed: "the route scan missed POST /api/server/stop".
+
+Not shown: a CI run, or a full `./gradlew build`. The iOS and Android targets did not run, because
+only daemon code changed.
+
+**What the allowlist accepts.** No preflight is needed for a cross-site `text/plain` POST, and the
+markers route reads the body without checking `Content-Type`. So any web page can add a marker to a
+live session, including one claiming `source:"user"`. The recorded decision accepts that: a marker
+is not a weapon. It is written down here so nobody later mistakes `source` for proof of who
+dropped a marker.
 
 ### Phase A — web checks and shared mirror cases in CI
 
@@ -820,9 +895,13 @@ a marker dropped at the same millisecond as a call is drawn before it, as the ov
 Drift 4 and the `?` case get no line: they change only tie order and one edge of the duplicate key.
 **Pending — not yet in any release.** When phase A ships, the `release-steward` puts this line in
 the release notes and in a daemon-only `INTEGRATION.md` entry ("download the new daemon; leave your
-coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. If the maintainer decides to
-announce phase E's MCP tie fix (an open question below), it goes right after this line, since it is
-the same rule on a third surface.
+coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. Phase E's MCP tie fix is
+announced too (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn; see the open questions below), right after the web-drift line, since it is the
+same rule on a third surface: *"MCP: `timeline` and `explain` place a marker dropped at the same
+millisecond as a call before that call, as both UIs do, and `explain` counts an earlier call at
+that millisecond as leading to it; in 1.3.0 and earlier both came after."*
+"1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
+`release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
@@ -1018,8 +1097,13 @@ decision or a known trap:
 
 - Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
   removes public API from every published version up to now (phase I).
-- Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
-  or only in the tool description (phase E).
+- ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
+  or only in the tool description (phase E).~~ **Announced in both the release notes and
+  `DAEMON.md` §8** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn). The tool description states the rule without a version.
+- **Needs the maintainer: two security-boundary gaps, tracked privately.** Found while building
+  phase C. The detail, the options and their breakage risks are in a private security advisory.
+  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. Decide
+  both before §6's bulk endpoints are built.
 
 ---
 
