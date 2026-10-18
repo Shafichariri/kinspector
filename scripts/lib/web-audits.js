@@ -365,8 +365,132 @@ function auditCssClosesPerFile(sources) {
     : `yes (${blocks} top-level blocks in ${sources.length} file(s))`;
 }
 
+/**
+ * The blocks at one nesting level of [text]: `[{ prelude, body, at, bodyAt }]`, `at` being the offset
+ * of the prelude's first character outside comments and `bodyAt` the offset just past its `{`.
+ * Comments are dropped from preludes; the scan skips strings and comments as `auditCssClosesPerFile`
+ * does, so a brace in either is not structure.
+ */
+function cssBlocks(text) {
+  const blocks = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+  let first = -1;
+  let open = -1;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote || c === '\n') quote = null;
+    } else if (c === '/' && text[i + 1] === '*') {
+      const close = text.indexOf('*/', i + 2);
+      i = close < 0 ? text.length : close + 1;
+      continue;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === ';' && depth === 0) { start = i + 1; first = -1; continue; }
+    else if (c === '{') { if (depth++ === 0) open = i; }
+    else if (c === '}' && depth > 0 && --depth === 0) {
+      blocks.push({
+        prelude: text.slice(start, open).replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+        body: text.slice(open + 1, i),
+        at: first < 0 ? start : first,
+        bodyAt: open + 1,
+      });
+      start = i + 1;
+      first = -1;
+      continue;
+    }
+    if (depth === 0 && first < 0 && !/\s/.test(c)) first = i;
+  }
+  return blocks;
+}
+
+/** A rule's selector list as single selectors with whitespace collapsed, split at top-level commas. */
+function selectorList(prelude) {
+  const out = [];
+  let depth = 0;
+  let from = 0;
+  for (let i = 0; i <= prelude.length; i++) {
+    const c = prelude[i];
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (i === prelude.length || (c === ',' && depth === 0)) {
+      const s = prelude.slice(from, i).replace(/\s+/g, ' ').trim();
+      if (s) out.push(s);
+      from = i + 1;
+    }
+  }
+  return out;
+}
+
+/** The property names a declaration block sets, lower-cased; custom properties keep their case. */
+function declaredProperties(body) {
+  const props = new Set();
+  for (const [, name] of body.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(?:^|[;{])\s*(--[\w-]+|[a-zA-Z-]+)\s*:/g)) {
+    props.add(name.startsWith('--') ? name : name.toLowerCase());
+  }
+  return props;
+}
+
+/** Whether two properties can set the same thing: equal, or one the shorthand of the other. */
+function propertiesOverlap(a, b) {
+  if (a.startsWith('--') || b.startsWith('--')) return a === b;
+  return a === b || b.startsWith(`${a}-`) || a.startsWith(`${b}-`);
+}
+
+/**
+ * An `@media` rule never loads before a plain rule it competes with.
+ *
+ * A selector inside `@media` and the same selector in a plain rule have the same specificity, so the
+ * one loaded later wins wherever both set a property — and inside the media query that has to be the
+ * `@media` one, or the override does nothing. The case this exists for spans files: the
+ * `max-width: 1199px` block in `35-list.css` overrides `#panes` in `10-panes.css`, and holds only
+ * because `styles.txt` lists `35-list.css` later. Moving it earlier changes the page below 1200px
+ * while every other check and both probes stay green, because jsdom lays nothing out.
+ *
+ * Read across all stylesheets in manifest order, which is the cascade. A pair counts only when the
+ * selectors match exactly and the two blocks set an overlapping property (equal, or a shorthand and
+ * one of its longhands by name, as `border` and `border-right`): the light palette's `@media :root`
+ * in `00-tokens.css` and a later plain `:root` that declares a different token do not compete, and
+ * matching on the selector alone would fail the stylesheet as it stands. The limits that follow:
+ * a different selector of equal or higher specificity is not compared, nor are shorthands whose
+ * longhands do not share their prefix (`inset` and `top`).
+ */
+function auditMediaOverrideOrder(sources) {
+  if (!sources.length) return 'NO - no stylesheets to read';
+  const plain = [];
+  const media = [];
+  let order = 0;
+  const walk = (file, text, base, query) => {
+    for (const { prelude, body, at, bodyAt } of cssBlocks(text)) {
+      if (/^@media\b/i.test(prelude)) { walk(file, body, base + bodyAt, prelude); continue; }
+      if (prelude.startsWith('@')) continue; // @keyframes, @font-face: not rules a selector competes with
+      const props = declaredProperties(body);
+      for (const selector of selectorList(prelude)) {
+        (query ? media : plain).push({ file, at: base + at, order: order++, selector, props, query });
+      }
+    }
+  };
+  for (const { file, text } of sources) walk(file, text, 0, null);
+  if (!media.length) return 'NO - found no rules inside @media, so this checked nothing';
+  const lineOf = (file, at) => sources.find((s) => s.file === file).text.slice(0, at).split('\n').length;
+  const offenders = [];
+  for (const m of media) {
+    const later = plain.find((p) => p.order > m.order && p.selector === m.selector
+      && [...m.props].some((a) => [...p.props].some((b) => propertiesOverlap(a, b))));
+    if (later) {
+      offenders.push(`${m.selector} in ${m.query} at ${m.file}:${lineOf(m.file, m.at)} loads before ${later.file}:${lineOf(later.file, later.at)}`);
+    }
+  }
+  return offenders.length
+    ? `NO - an @media rule is overridden by a plain rule loaded after it: ${offenders.join('; ')}`
+    : `yes (${media.length} @media selector(s) in ${sources.length} file(s))`;
+}
+
 module.exports = {
   HarnessError,
+  auditMediaOverrideOrder,
   auditUseStrict,
   auditOneDeclarationPerName,
   auditWindowNames,

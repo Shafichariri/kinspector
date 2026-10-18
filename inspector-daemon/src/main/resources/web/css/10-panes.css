@@ -1,6 +1,9 @@
 /* panes: the three-pane grid and the per-view toolbar */
 /* --- three panes -------------------------------------------------------- */
 
+/* Overridden below 1200px by the `max-width: 1199px` block in css/35-list.css, which works only
+   because styles.txt loads that file after this one; `media overrides load last` in
+   check-web-static.js fails if the order is reversed. */
 #panes {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);

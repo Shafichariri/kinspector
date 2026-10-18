@@ -14,7 +14,9 @@
  *   - the scripts as classic scripts sharing one global scope: each file starts with `'use strict'`,
  *     no top-level name is declared twice, and none takes a browser global's name;
  *   - every stylesheet closing its own braces and comments, since the stylesheet audits read them
- *     joined and a file left open would swallow the next one there and nowhere else.
+ *     joined and a file left open would swallow the next one there and nowhere else;
+ *   - no `@media` rule loading before a plain rule with the same selector that sets the same
+ *     property, which is how the cascade between files depends on `styles.txt` order.
  *
  * The scripts section prints last so the lines above it stay comparable with reports from before it
  * existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet` it
@@ -29,6 +31,7 @@ const {
   HarnessError, auditHiddenPanes, auditMinTextSize, auditLongTokenWrap, auditDrawerCss,
   countNetworkPrimitives, NETWORK_EXPECTED, mirrorBlockNames,
   auditUseStrict, auditOneDeclarationPerName, auditWindowNames, auditCssClosesPerFile,
+  auditMediaOverrideOrder,
 } = require('./lib/web-audits');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser } = require('./lib/mirror-runner');
@@ -86,6 +89,7 @@ function main() {
   report('one declaration per name', auditOneDeclarationPerName(scripts));
   report('no browser global names', auditWindowNames(scripts));
   report('css files close', auditCssClosesPerFile(styles));
+  report('media overrides load last', auditMediaOverrideOrder(styles));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

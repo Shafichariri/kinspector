@@ -32,10 +32,14 @@ done; every `prefers-reduced-motion` block is, and so are the `.pv-visit` and `-
 The `max-width: 1199px` block in `35-list.css` is the one that spans files: it also overrides
 `#panes` and `#panes.panes-wide` in `10-panes.css`, no contiguous cut under the 600-line budget puts
 them in one file, and it holds only because `styles.txt` lists `35-list.css` after `10-panes.css`.
-So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 4 (`css
-files close`: each file closes its own braces and comments, which the concatenation cannot see — a
-file that swallowed the next would still concatenate to the same bytes, and break only once served
-as its own `<link>`) and by the concatenation proof.
+So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 5
+(`media overrides load last`: no selector inside an `@media` block has a plain rule with the same
+selector and an overlapping property loading after it, across every file in `styles.txt` order —
+proven red by renaming `35-list.css` to `08-list.css` ahead of `10-panes.css`) and by static check 4
+(`css files close`: each file closes its own braces and comments, which a joined read cannot see — a
+file that swallowed the next would still join to the same text, and break only once served as its
+own `<link>`). Check 5 compares the same selector only; a different selector competing on
+specificity is still the author's to see.
 
 **The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
 a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are
