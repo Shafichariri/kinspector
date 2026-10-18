@@ -726,9 +726,9 @@ opts in by hand, so a new route is unprotected unless its author remembers. §6 
 
 ### Phase A — web checks and shared mirror cases in CI
 
-**Status, 2026-10-18: built, pending its first CI run. Not done.** The work is on the branch
-`shafic/kinspector-handoff-setup-c23cf8` and has not been pushed, so the CI `web` job has never run. Done
-means that job has gone green.
+**Status, 2026-10-18: done.** CI run 39082730859 on PR #81 went green on all three jobs: the new
+`web` job on `ubuntu-latest` (so KMP and AGP configure there), and `build` and `release-swap` on macOS,
+which ran the full `./gradlew build`, the Android host tests and `-Pinspector=off`.
 
 *Evidenced locally (three independent QA passes, not the engineer):* the static check passes 20/20;
 `:inspector-model:jvmTest` ran 159 tests and `:inspector-daemon:test` 219, 0 failures each; the live
@@ -738,10 +738,8 @@ a missing anchor, a reverted drift, the archive data-versus-code check, the item
 glance` (all three breaks) and the hidden scrim. The four drifts and the `?` case are fixed, with
 `app.js` the only product file changed. `writeProbeFixture` is idempotent.
 
-*Not shown:* the `web` job itself, and whether KMP and AGP configure on `ubuntu-latest`; the Gradle cache
-carrying over across checkout paths; Android host tests and `-Pinspector=off` (no Android SDK on the
-machine that ran this); the live probe on Node 22, since it ran on Node 23, outside jsdom 29's declared
-range. The "897 tests" arithmetic is not a measurement, and `AGENTS.md` no longer claims it.
+*Still not shown:* the Gradle cache carrying over across checkout paths. The "897 tests" arithmetic
+is not a measurement, and `AGENTS.md` no longer claims it.
 
 **Audit findings 1 and 2.**
 
