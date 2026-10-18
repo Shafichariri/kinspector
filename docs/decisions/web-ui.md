@@ -19,7 +19,8 @@ implicit global does not throw there — so the static check is the guard, not t
 `WebManifestTest` (each manifest and its folder agree both ways, entries numbered and ascending,
 nothing else in `web/`), static checks 1–3 in `check-web-static.js` (`'use strict'` is the first
 statement of every file, no top-level name is declared in two files, none is on the named list of
-browser `Window` members), both probes loading each file as its own script in manifest order so a
+browser `Window` members or an own property of Node's `globalThis` — which is where `Map`, `atob` and
+`encodeURIComponent` are refused), both probes loading each file as its own script in manifest order so a
 redeclared name or an early call into a later file fails as it would in a browser, and the archive
 probe's `every file inlined`.
 

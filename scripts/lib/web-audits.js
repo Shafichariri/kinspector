@@ -289,14 +289,21 @@ function auditOneDeclarationPerName(sources) {
 }
 
 /**
- * Browser globals no top-level declaration may take.
+ * Browser globals no top-level declaration may take, beyond the language's own.
  *
  * A top-level `function stop()` is `window.stop`: it replaces the browser's for every caller, the
  * browser's own included, and nothing reports it. A `let` or `const` of a name the browser holds as
  * non-configurable (`window`, `document`, `location`, `top`) is instead a redeclaration error that
- * stops the whole file from running. Named rather than read from a `Window` at runtime: the check runs with no browser, and a list
- * someone has to extend is one somebody decided on. The second group is what this page itself
- * calls, where shadowing breaks the page rather than the browser.
+ * stops the whole file from running. The second group is what this page itself calls, where
+ * shadowing breaks the page rather than the browser.
+ *
+ * This list is not the whole of `Window`, and it does not carry the JavaScript built-ins:
+ * `auditWindowNames` adds every own property of Node's `globalThis` at check time, which is where
+ * `Map`, `atob`, `encodeURIComponent` and the rest come from — names this page calls dozens of times,
+ * and which this list alone let through. What neither covers is a DOM-only member that is not named
+ * here and that Node does not define (`requestAnimationFrame`, `matchMedia`, `getComputedStyle`), so
+ * add one here when the page starts calling it. Named rather than read from a `Window`: the check
+ * runs with no browser.
  */
 const WINDOW_DENYLIST = [
   'top', 'parent', 'self', 'window', 'document', 'location', 'history', 'name', 'status', 'stop',
@@ -307,15 +314,24 @@ const WINDOW_DENYLIST = [
   'URL', 'URLSearchParams', 'TextDecoder', 'TextEncoder', 'console',
 ];
 
-/** No top-level name is one of [WINDOW_DENYLIST]. */
+/**
+ * No top-level name is one of [WINDOW_DENYLIST] or an own property of Node's `globalThis`.
+ *
+ * Node's `globalThis` is read at check time rather than copied into a list, so a built-in a newer
+ * engine adds is refused without anybody remembering to add it. It is a proxy for the browser's
+ * share of the language — `Map`, `atob`, `encodeURIComponent`, `structuredClone` — and also holds a
+ * few Node-only names (`process`, `Buffer`, `global`) that a page has no reason to declare either.
+ */
 function auditWindowNames(sources) {
   const decls = topLevelDeclarations(sources);
   if (!decls.length) return 'NO - found no top-level declarations, so this checked nothing';
-  const deny = new Set(WINDOW_DENYLIST);
-  const hits = decls.filter((d) => deny.has(d.name)).map((d) => `${d.name} at ${d.file}:${d.line}`);
+  const named = new Set(WINDOW_DENYLIST);
+  const engine = new Set(Object.getOwnPropertyNames(globalThis));
+  const hits = decls.filter((d) => named.has(d.name) || engine.has(d.name))
+    .map((d) => `${d.name} at ${d.file}:${d.line}${named.has(d.name) ? '' : ' (a JavaScript global)'}`);
   return hits.length
     ? `NO - a browser global declared: ${hits.join('; ')}`
-    : `yes (${decls.length} names, none of ${deny.size} browser globals)`;
+    : `yes (${decls.length} names, none of ${named.size} browser globals or ${engine.size} JavaScript globals)`;
 }
 
 /**
