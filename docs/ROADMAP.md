@@ -592,7 +592,8 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   **Out of scope.** The filter grammar, which is frozen. MCP's argument names or its page shape.
 
   Surfaces: daemon, web UI. No public API. It changes what a web UI user sees under a filter, so it
-  gets a release-notes line when it ships.
+  gets a release-notes line when it ships; the line is owed with phase A's, under "Release notes"
+  below.
 
 ### Bugs found, not fixed
 
@@ -1262,6 +1263,11 @@ that millisecond as leading to it; in 1.3.0 and earlier both came after."*
 The Markdown-export fix (`item:export-md-query-once`, done 2026-10-18) owes a third line in the same
 entry: *"Daemon: the Markdown export's URL line no longer repeats the query string, and MCP explain
 reports the full URL, port and query included."*
+`item:signals-query-one-rule` owes a fourth: *"Web UI: a filter now applies to the signals loaded on
+the timeline and path views (rows arriving live follow the filter once item:web-live-rows-filtered
+lands), and a session with more than 1000 signals shows all of them."* "Loaded" is load-bearing: a
+signal pushed over the live socket is drawn whatever the filter until that item lands, so a line
+saying the filter applies to every signal would be false on a live session.
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
