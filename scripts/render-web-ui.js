@@ -42,6 +42,7 @@ try {
 const vm = require('vm');
 const { loadScripts, loadStyles, loadIndexHtml, STYLES_SLOT, SCRIPTS_SLOT } = require('./lib/web-sources');
 const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
+const { probeWholeSessionRefresh } = require('./lib/filter-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -922,6 +923,9 @@ function runScripts() {
     };
   }
   const filterOnTimeline = await probeFilterOnTimeline();
+  // Probes that need the whole page, kept in lib/filter-probes.js; see its header.
+  const filterCtx = { window, doc, ORIGIN, settle, sessionTransactions, sessionSignals, lastSocket: () => lastSocket };
+  const wholeSession = await probeWholeSessionRefresh(filterCtx);
 
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
@@ -2515,6 +2519,8 @@ function runScripts() {
   console.error('filter tag keeps   :', filterOnTimeline.tagKeeps, '(tag:screen excludes every call and every other tag)');
   console.error('filter clear back  :', filterOnTimeline.restores);
   console.error('filter tabs steady :', filterOnTimeline.tabsSteady, '(the tabs describe the whole session)');
+  console.error('resume refreshes   :', wholeSession.resumeRefresh, '(rows missed while paused reach the tabs and chips)');
+  console.error('reconnect refreshes:', wholeSession.reconnectRefresh, '(and rows missed while the daemon was away)');
   note('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);

@@ -402,9 +402,10 @@ function applyFilter() {
 /**
  * Follow new traffic, or hold the list where it is.
  *
- * Paused drops live rows rather than queueing them, so resuming re-reads the session: a list
- * that picked up from wherever the next message happened to land would be missing everything
- * that arrived while it was paused, with nothing on screen to say so.
+ * Paused drops live rows rather than queueing them, so resuming re-reads the session, the
+ * whole-session copies included: a list that picked up from wherever the next message happened to
+ * land would be missing everything that arrived while it was paused, with nothing on screen to say
+ * so.
  */
 function setLiveTail(on) {
   state.liveTail = on;
@@ -416,5 +417,9 @@ function setLiveTail(on) {
   button.title = on
     ? 'Following new traffic as it arrives. Click to pause.'
     : 'Paused: new traffic is not added to the list. Click to catch up and follow again.';
-  if (on) loadTransactions();
+  if (on) {
+    // The rows missed while paused are missing from the whole-session copies too.
+    forgetWholeSession();
+    loadTransactions();
+  }
 }

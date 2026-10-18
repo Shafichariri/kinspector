@@ -138,6 +138,10 @@ async function loadSignals() {
  * Keeps `allSignals` in step with the current session, as `syncAllTransactions` does for calls:
  * free with no filter, one paged read per *session* with one. A pull invalidates it by clearing
  * `allSignalsSessionId`, since the rows it asked for are new and the cache would not have them.
+ *
+ * When the whole-session read fails, the filtered rows stand in so the tabs are not blank, but
+ * they are **not** marked as the whole session: marking them would cache a filtered list as the
+ * session until the filter was cleared, and every later load would trust it.
  */
 async function syncAllSignals() {
   if (!state.filter) {
@@ -147,8 +151,27 @@ async function syncAllSignals() {
     return;
   }
   if (state.allSignalsSessionId === state.sessionId && state.allSignals.length) return;
-  state.allSignals = await signalPages(api, state.sessionId, '').catch(() => state.signals.slice());
-  state.allSignalsSessionId = state.sessionId;
+  const sessionId = state.sessionId;
+  try {
+    state.allSignals = await signalPages(api, sessionId, '');
+    state.allSignalsSessionId = sessionId;
+  } catch {
+    state.allSignals = state.signals.slice();
+    state.allSignalsSessionId = null;
+  }
+}
+
+/**
+ * Drops both whole-session copies, so the next load reads them again.
+ *
+ * They are cached per session under a filter, and the live socket is the only thing that keeps
+ * them current. Whatever arrived while it was not listening — the list paused, the page
+ * disconnected, the daemon restarted — is in neither copy, so a re-read that trusted the cache
+ * would draw tabs, the route and endpoint chips without it until the filter was cleared.
+ */
+function forgetWholeSession() {
+  state.allSessionId = null;
+  state.allSignalsSessionId = null;
 }
 
 // @mirror-begin signalPages

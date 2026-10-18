@@ -174,7 +174,14 @@ waterfall tab is offered from `allTransactions` for the same reason: once the ro
 `filter`, `tag:screen` matched no calls and the tab vanished mid-filter, and the waterfall already
 says "no matching calls" itself. `allSignals` is cached
 per session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
-rows it asked for are new. Both are read through `signalPages`, which asks the route for one page at
+rows it asked for are new. So do resuming the list and the socket opening again after the daemon was
+away (`forgetWholeSession`, both caches): the live socket is the only thing that keeps either copy
+current, so rows that arrived while nothing listened are in neither, and the tabs, the route and the
+endpoint chips went on without them until the filter was cleared. The live probe's `resume
+refreshes` and `reconnect refreshes` play rows arriving in each gap under `tag:screen`. A
+whole-session read that fails leaves the filtered rows standing in and does not mark them as the
+session, or every later load would trust them; `check-web-static.js`'s `whole read failure` holds
+that. Both are read through `signalPages`, which asks the route for one page at
 a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
 never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
 shorter than asked would truncate again the day that clamp is lowered, and would never stop against

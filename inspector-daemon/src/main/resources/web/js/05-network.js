@@ -220,8 +220,10 @@ function connectLive() {
     showServerBanner(null, false);
     setControlsEnabled(true);
     // A restart means a new process with a fresh session list; a reconnect after a blip may
-    // also have missed rows. Either way the page's data is stale, so re-read it.
+    // also have missed rows. Either way the page's data is stale, so re-read it — the
+    // whole-session copies too, or a filter keeps them as they were before the gap.
     if (wasAway) {
+      forgetWholeSession();
       loadServerInfo();
       loadSessions().then(loadTransactions);
     }
