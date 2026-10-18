@@ -639,6 +639,11 @@ a session that is currently recording.
 
 Registration for Claude Code, Cursor and Codex is in [`INTEGRATION.md`](INTEGRATION.md) §10.
 
+**Ordering.** `timeline` and `explain` order entries through the same `timeline()` rule as both
+UIs. In 1.3.0 and earlier, a marker at the same millisecond as a call was listed after it; it now
+comes before. `explain` splits its `before` and `after` context by position in that order, so a
+marker dropped at the call's own millisecond is reported as leading to it, not as caused by it.
+
 To drive it by hand, which is the fastest way to check a tool change:
 
 ```bash

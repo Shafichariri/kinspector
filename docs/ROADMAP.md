@@ -504,6 +504,15 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
   `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
   change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
+- **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
+  stable-sorted by `mono` alone, so two signals in one millisecond keep file order, and a signal and
+  a call in one millisecond put the call first — whatever capture order `seq` recorded. That is the
+  `onClick { tap; navigate() }` case `visits()` was fixed for. Fixing it changes every surface at
+  once: the overlay, the `app.js` mirror, the exports and the shared mirror cases. It needs a total
+  comparator (as `visits()` does with `seq ?: Long.MIN_VALUE`) and a decision about markers that
+  carry `seq`, which today are interleaved by `mono` with `<=` only. **Decided 2026-10-18: phase E
+  ships as "MCP equals the model"**, so MCP inherits this rather than diverging from it. Not
+  scheduled.
 
 ### Open questions
 
@@ -701,6 +710,11 @@ navigate() }` case that `visits()` was fixed for.
 **Out of scope.** Changing the tool's arguments, its default limit or its oldest-first order. An MCP
 `path` tool, which §3 already defers.
 
+**Status, 2026-10-18: built on `shafic/structure-phase-e`, stacked on phase A, not pushed.** The
+2,000 clamp is **kept**: `timeline()` is now `timelineWindow()` plus the clamp, and `explain` reads
+the unclamped window and splits it by position. Signal ties ship as "MCP equals the model", which
+still ignores `seq`; that is recorded under §3 → Bugs found, not fixed, rather than fixed here.
+
 ### Phase C — every control route refuses without the header, by test
 
 **Audit finding 5.**
@@ -822,9 +836,10 @@ a marker dropped at the same millisecond as a call is drawn before it, as the ov
 Drift 4 and the `?` case get no line: they change only tie order and one edge of the duplicate key.
 **Pending — not yet in any release.** When phase A ships, the `release-steward` puts this line in
 the release notes and in a daemon-only `INTEGRATION.md` entry ("download the new daemon; leave your
-coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. If the maintainer decides to
-announce phase E's MCP tie fix (an open question below), it goes right after this line, since it is
-the same rule on a third surface.
+coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. Phase E's MCP tie fix is
+announced too (decided below), right after the web-drift line, since it is the same rule on a third
+surface: *"MCP: `timeline` and `explain` place a marker dropped at the same millisecond as a call
+before that call, as both UIs do; in 1.3.0 and earlier it came after."*
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
@@ -1020,8 +1035,9 @@ decision or a known trap:
 
 - Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
   removes public API from every published version up to now (phase I).
-- Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
-  or only in the tool description (phase E).
+- ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
+  or only in the tool description (phase E).~~ **Decided 2026-10-18: announced in both the release
+  notes and `DAEMON.md` §8.** The tool description states the rule without a version.
 
 ---
 
