@@ -243,9 +243,14 @@ function declaresMore(rest) {
   return false;
 }
 
+/** What may follow the `;` or `}` before a second declaration: blanks and block comments. */
+const DECLARES_AGAIN = /^(?:[ \t]|\/\*[\s\S]*?\*\/)*(?:async[ \t]+)?(?:function|const|let|var|class)\b/;
+
 /**
  * Whether [rest] of a declaration's line starts another declaration after a `;` or `}` that closes
  * the first, outside brackets and quotes: `const a = 1; const b = 2;`, `function a() {} function b`.
+ * Block comments between the two are skipped: a comment after the `;` changes nothing about what the
+ * line declares, and reading only what immediately follows would let it hide the second name.
  */
 function declaresAgain(rest) {
   let depth = 0;
@@ -259,7 +264,7 @@ function declaresAgain(rest) {
     else if ('([{'.includes(c)) depth++;
     else if (')]}'.includes(c)) depth--;
     if (!quote && depth <= 0 && (c === ';' || c === '}')
-      && /^[ \t]*(?:async[ \t]+)?(?:function|const|let|var|class)\b/.test(rest.slice(i + 1))) return true;
+      && DECLARES_AGAIN.test(rest.slice(i + 1))) return true;
   }
   return false;
 }
@@ -272,7 +277,8 @@ function declaresAgain(rest) {
  * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. A form
  * whose names this cannot read on that line — destructuring, two names in one `let` on its first
  * line, or a second declaration after a `;` or `}` on the same line, as `const a = 1; const b = 2;`
- * or `function a() {} function b() {}` — is refused rather than skipped. Three shapes are missed
+ * or `function a() {} function b() {}`, block comments between the two included — is refused rather
+ * than skipped. Three shapes are missed
  * silently, and `web-ui.md` says so where it cites these checks: a top-level declaration written
  * indented; one that follows a block comment on the same line; and the second name of a declaration
  * whose first line ends inside brackets, as `let a = f(1,` continued by `2), ok = 3`, because the
@@ -506,12 +512,18 @@ function propertiesOverlap(a, b) {
  * then it compared nothing. Only `@media` is walked (nested `@media` included); a rule inside any
  * other at-rule — `@supports`, `@layer`, `@container` — is not read.
  *
- * That rule is by name, and what it does not resolve is exactly this. Missed: a different selector
- * of equal or higher specificity, the same selector written in another order (`.panes-wide#panes`
- * and `#panes.panes-wide`), and longhands of one shorthand that do not prefix each other
- * (`border-style` and `border-right`, `inset` and `top`). Reported when they do not compete:
- * a prefix that is not a shorthand of its longer name (`border` and `border-radius`), and an
+ * That rule is by text and by name, not the cascade, and what it misses is not listed in full.
+ * Among the misses: a different selector of equal or higher specificity, the same selector written
+ * in another order (`.panes-wide#panes` and `#panes.panes-wide`), and longhands of one shorthand that
+ * do not prefix each other (`border-style` and `border-right`, `inset` and `top`). Among the false
+ * reports: a prefix that is not a shorthand of its longer name (`border` and `border-radius`), and an
  * `@media` declaration marked `!important`, which a later plain rule cannot override.
+ *
+ * It never compares one `@media` rule with another, so an `@media` block that loads before another
+ * `@media` block overriding it passes. That order is live in `35-list.css`: the
+ * `prefers-reduced-motion` block's `#detail-pane { transition: none }` must load after the
+ * `max-width: 1199px` block's `#detail-pane` transition, and only review and keeping both blocks in
+ * that one file hold it.
  */
 function auditMediaOverrideOrder(sources) {
   if (!sources.length) return 'NO - no stylesheets to read';

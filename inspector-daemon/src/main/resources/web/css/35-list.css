@@ -64,7 +64,10 @@
 }
 
 /* Prefers-reduced-motion is not a style preference — a pane that flies in can be genuinely
-   unpleasant, and the drawer is just as usable arriving instantly. */
+   unpleasant, and the drawer is just as usable arriving instantly.
+   Keep this block after the max-width: 1199px block above: both set #detail-pane's transition at
+   equal specificity, so the later one wins, and static check 5 does not compare one @media block
+   with another. */
 @media (prefers-reduced-motion: reduce) {
   #detail-pane { transition: none; }
 }

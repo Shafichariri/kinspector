@@ -23,7 +23,8 @@ browser `Window` members or an own property of Node's `globalThis` — which is 
 `encodeURIComponent` are refused; checks 2 and 3 read declarations at column 0, so a top-level one
 written indented, after a block comment on the same line, or as the second name of a `let` whose
 first line ends inside brackets is not seen, while a second declaration after a `;` or `}` on a
-column-0 line is refused as unreadable rather than missed), both probes loading each file as its own
+column-0 line, block comments between the two included, is refused as unreadable rather than
+missed), both probes loading each file as its own
 script in manifest order so a redeclared name or an early call into a later file fails as it would in a browser, and the archive
 probe's `every file inlined`.
 
@@ -39,18 +40,23 @@ them in one file, and it holds only because `styles.txt` lists `35-list.css` aft
 So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 5
 (`media overrides load last`: across every file in `styles.txt` order, no selector inside an
 `@media` block has a later plain rule with the same selector text that sets a property of the same
-name or one prefixing the other, as `border` and `border-right` (custom properties only by equal
-name); it prints how many such pairs, earlier or later, it compared, and fails when that is none —
+name or one whose name is the other's followed by `-`, as `border` and `border-right` (custom
+properties only by equal name); it prints how many such pairs, earlier or later, it compared, and fails when that is none —
 proven red by renaming `35-list.css` to `08-list.css` ahead of `10-panes.css`) and by static check 4 (`css files close`: each file closes its
 own braces and comments, which a joined read cannot see — a file that swallowed the next would still
 join to the same text, and break only once served as its own `<link>`). Check 5 matches by text and
-by name, not by the cascade, and walks `@media` and no other at-rule. So it misses a different
-selector competing on specificity, the same compound written in another order (`.panes-wide#panes`),
+by name, not by the cascade, and walks `@media` and no other at-rule. What it misses is not listed
+in full; among the misses are a different selector competing on specificity, the same compound written in another order (`.panes-wide#panes`),
 longhands of one shorthand that do not prefix each other (`border-style` and `border-right`, `inset`
-and `top`), and anything inside `@supports`, `@layer` or `@container`; and it reports a pair that
-does not compete when one name merely prefixes the other (`border` and `border-radius`) or the
-`@media` declaration is `!important`. None of those shapes is in the stylesheet today; the first
-group is still the author's to see.
+and `top`), and anything inside `@supports`, `@layer` or `@container`; and among its false reports
+are a pair that does not compete because one name is the other's followed by `-` without being its
+shorthand (`border` and `border-radius`), and an `@media` declaration marked `!important`. None of
+those shapes is in the stylesheet today; the misses are still the author's to see.
+**`@media` against `@media` order is not checked at all**: check 5 never compares two `@media`
+rules, so one that loads before another `@media` rule overriding it passes. That case is live in
+`35-list.css`, where the `prefers-reduced-motion` block's `#detail-pane { transition: none }` must
+load after the `max-width: 1199px` block's `#detail-pane` transition. It is held by review and by
+keeping both blocks in that one file, and a comment above the reduced-motion block says so.
 
 **The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
 a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are
