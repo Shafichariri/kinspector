@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:27'
-updated_date: '2026-10-18 21:27'
+updated_date: '2026-10-18 22:45'
 labels:
   - 'item:signals-query-one-rule'
 dependencies: []
@@ -48,7 +48,7 @@ Web half of item:signals-query-one-rule, built first because it is safe against 
 - [ ] #2 render-web-ui.js: the signal tabs' counts sum to the probe's own sessionSignals() length for the session, proving loadSignals reads the whole session through the pager. Proven failing with loadSignals reading one page of limit=500.
 - [ ] #3 render-web-ui-archive.js, in the opened export: GET …/signals?offset=0&limit=N is a bare array, newest first, of min(N, total) rows; an offset past the end is []; a non-empty filter is a 400; and the signal tabs' counts sum to archive.signals.length. ARCHIVE_EXPECT_CHECKS in ci.yml moves by the number added.
 - [x] #4 Against the current route nothing visible changes: every existing render-web-ui.js and render-web-ui-archive.js check passes, and UI_EXPECT_CHECKS moves only by the checks this ticket adds.
-- [ ] #5 No reader of state.signals remains outside renderTimeline's entries and the path view's visits(...) call (grep in the review).
+- [ ] #5 No reader of state.signals remains outside renderTimeline's entries, the path view's visits(...) call and hiddenByFilter (grep in the review). [Amended 2026-10-19: hiddenByFilter added as a third reader, recorded in docs/decisions/web-ui.md.]
 - [ ] #6 web-ui.md and shared-rules.md carry the paragraphs above; DecisionsTest passes; structure/budgets.txt raises render-web-ui.js by hand with the reason on the line.
 <!-- AC:END -->
 
@@ -69,4 +69,6 @@ AC5 grep: state.signals is read only at 50-path.js visits(...) and 70-timeline.j
 QA (verify panel, head 5f6b610): AC4 Failed and AC6 Failed; nothing ticked, ticket stays In Progress. AC4 ('nothing visible changes / allSignals stays the whole session'): under a filter the cached whole-session signal copy goes stale after pause-and-resume or a reconnect, filed as KIN-27 (blocking). AC6 (web-ui.md paragraph accurate): web-ui.md falsely claims the waterfall says 'no matching calls'; three empty states say nothing happened under a filter, filed as KIN-28 (blocking). Also filed under the item, all depending on KIN-25: KIN-29 (slow older load lands under a newer filter, should-fix), KIN-30 (release line wording), KIN-31 (lastCapture reads state.transactions where web-ui.md says allTransactions; 85-processes.js:81).
 
 QA (second verify panel, head e1711a3): AC4 Verified. AC6 Failed: ws.onclose never moves serverState off 'running', so an unplanned drop does not trigger the wasAway clear and re-read; web-ui.md and the comment at 05-network.js:221 claim it does. Filed as KIN-32. Also found on this pass and filed under the item: KIN-35 (two more ways the whole-session copies go stale). AC1-3 and AC5 were not part of this panel's verified list and stay unticked.
+
+QA (third verify panel, head a86dde2): AC6 Failed again. Reverting 15-session-data.js:294 to 'if (!filter)' leaves static, live and archive checks all green, yet load-unfiltered-then-type-a-filter makes the path read 'nothing recorded' over visits with calls; checkPastTheClamp tests only filter-first. Also web-ui.md:161-162 says the copy costs 'nothing at all when no filter is set' (false since KIN-34) and :191 says the copies 'go stale in three ways, and each is closed' while the paragraph lists five and one is open. Filed as the bug below (C), with D for the open one. AC5 literal grep amended 2026-10-19 to include hiddenByFilter (25-traffic-list.js:237), a third reader of state.signals recorded in web-ui.md:166-169; the amendment widens the grep to what the doc already states, the intent (only the filter-honouring readers) is unchanged. AC5 itself was not part of this panel's verified list and stays unticked.
 <!-- SECTION:NOTES:END -->
