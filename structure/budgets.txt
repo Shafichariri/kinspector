@@ -13,7 +13,6 @@
 2612 scripts/render-web-ui.js  # the live probe; split after phase F, by the areas app.js splits into
 1926 inspector-daemon/src/main/resources/web/style.css  # phase F splits it into tokens.css plus one file per area
 966 inspector-daemon/src/main/kotlin/dev/inspector/daemon/mcp/McpTools.kt  # phase D splits the tools by group
-939 inspector-daemon/src/main/kotlin/dev/inspector/daemon/http/Server.kt  # phase D C5: moved to http/; C2 +7 and C3 +24 import lines, C4 -10 (phase D splits the routes and adds the control gate)
 815 inspector-daemon/src/test/kotlin/dev/inspector/daemon/McpTest.kt  # phase D C4: +1 import line, after C2: +4 (follows McpTools.kt in phase D)
 758 inspector-ui/src/commonMain/kotlin/dev/inspector/ui/InspectorList.kt  # phase H
 723 site/index.html  # the landing page: one hand-written file with its CSS inline, by design
