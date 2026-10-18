@@ -15,26 +15,30 @@ import kotlin.test.assertTrue
  *
  * Reads the web tokens out of `web/css/00-tokens.css` rather than from a copy, so the stylesheet
  * stays the authority for the web and this test is the only place the two meet. It finds that file
- * through `inspector.webStyles`, the path of `web/styles.txt`, which `:inspector-ui`'s `jvmTest`
- * passes with the stylesheets declared as inputs. Without that declaration a CSS-only change left
- * this task up to date and green; and without the property it fails rather than guess a relative
- * path, because a guessed path is how a test quietly reads a stale or missing copy.
+ * through `inspector.webCss`, the path of `web/css/`, which `:inspector-ui`'s `jvmTest` passes with
+ * the folder declared as an input. Without that declaration a CSS-only change left this task up to
+ * date and green; and without the property it fails rather than guess a relative path, because a
+ * guessed path is how a test quietly reads a stale or missing copy.
  *
  * Reading one file is only sound while the tokens live only there. A checked token declared again in
  * a later stylesheet wins the cascade in the browser while this test goes on comparing the copy in
  * `00-tokens.css`, so the web would drift with this test green. The third test holds that.
+ *
+ * It reads the folder, never `web/styles.txt`. `WebPage` is the only Kotlin that parses a manifest,
+ * and `WebManifestTest` holds every stylesheet in the folder listed and every listed one present, so
+ * the folder is the page's stylesheets without a second parser of the list. Order does not matter
+ * here: the third test asks whether a token is declared anywhere else at all.
  */
 class PaletteParityTest {
 
-    /** Every stylesheet `web/styles.txt` lists, in order, by its manifest entry. */
+    /** Every stylesheet in `web/css/`, keyed `css/<name>` as the manifest would list it. */
     private val sheets: Map<String, String> = run {
-        val manifest = System.getProperty("inspector.webStyles")?.let(::File)
-            ?: error("inspector.webStyles is not set; :inspector-ui:jvmTest passes it, see build.gradle.kts")
-        assertTrue(manifest.isFile, "inspector.webStyles names $manifest, which is not a file")
-        // The same rule `WebPage.entries` reads the manifest with in the daemon.
-        val listed = manifest.readLines().filterNot { it.isBlank() || it.trimStart().startsWith("#") }
-        assertTrue(TOKENS in listed, "web/styles.txt no longer lists $TOKENS, where the palette tokens live")
-        listed.associateWith { File(manifest.parentFile, it).readText() }
+        val dir = System.getProperty("inspector.webCss")?.let(::File)
+            ?: error("inspector.webCss is not set; :inspector-ui:jvmTest passes it, see build.gradle.kts")
+        assertTrue(dir.isDirectory, "inspector.webCss names $dir, which is not a directory")
+        val files = dir.listFiles { f -> f.isFile && f.extension == "css" }.orEmpty().sortedBy { it.name }
+        files.associate { "css/${it.name}" to it.readText() }
+            .also { assertTrue(TOKENS in it, "$dir no longer holds $TOKENS, where the palette tokens live") }
     }
 
     private val css: String = sheets.getValue(TOKENS)
@@ -99,7 +103,7 @@ class PaletteParityTest {
             val code = text.replace(Regex("""/\*[\s\S]*?\*/"""), "")
             names.filter { Regex("""--${Regex.escape(it)}\s*:""").containsMatchIn(code) }.map { "--$it in $file" }
         }
-        assertTrue(sheets.size > 1, "web/styles.txt lists only $TOKENS, so there is nothing to check this against")
+        assertTrue(sheets.size > 1, "web/css holds only $TOKENS, so there is nothing to check this against")
         assertTrue(
             elsewhere.isEmpty(),
             "declared outside $TOKENS, where this test cannot see it win the cascade: ${elsewhere.joinToString()}",

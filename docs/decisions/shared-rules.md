@@ -95,8 +95,10 @@ colours its dot muted when there is no call yet rather than asking `forStatus(nu
 that has made no request would show a failure.
 
 The web UI's tokens and `InspectorColors` are one palette, and **`PaletteParityTest` enforces it**:
-it reads `web/css/00-tokens.css`, declared as a test input so a CSS-only change re-runs it, and
-fails if a token it checks is declared in any other file `web/styles.txt` lists; it fails naming
+it reads `web/css/00-tokens.css`, with the folder declared as a test input so a CSS-only change
+re-runs it, and fails if a token it checks is declared in any other stylesheet in `web/css/` — the
+folder rather than `web/styles.txt`, because `WebManifestTest` holds the two equal and `WebPage` is
+the one Kotlin reader of a manifest; it fails naming
 the token when either side drifts, proven in both directions. It replaced a "keep them in step"
 comment that held only as long as every change remembered both files.
 
