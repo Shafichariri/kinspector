@@ -215,8 +215,10 @@ address for the same reason — check it stays that way if you ever configure gi
 
 **Agents commit as the maintainer and add no attribution trailers.** The author email is
 `3518471+Shafichariri@users.noreply.github.com`, never an agent's own identity and never a
-personal or work address. The committer email is the same, or `noreply@github.com` when the commit
-was made on github.com, as a pull request merge is. Only emails are checked: GitHub attributes by
+work address. The maintainer's personal address, `shafichariri@gmail.com`, is also accepted as an
+author or committer: by their choice it is what they pick in the web merge dialog. Otherwise the
+committer email is the noreply address, or `noreply@github.com` when the commit was made on
+github.com, as a pull request merge is. Agents still commit as the noreply address. Only emails are checked: GitHub attributes by
 email, and a display name identifies nobody. No `Co-Authored-By:` or `Claude-Session:` lines in
 commit messages, whatever a tool's default says. GitHub lists commit authors as repository
 contributors, and four commits authored as `Claude <noreply@anthropic.com>` put an AI account on
