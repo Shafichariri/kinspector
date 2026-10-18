@@ -691,6 +691,47 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
   option needs it. Surfaces: web UI only. No public API. It changes what a user sees on a long
   session, so it gets a release-notes line.
 
+  **Where it stands, 2026-10-19 (the architect's note, placed by the product owner).** Part of this
+  item has already been built, under another label. The "one pager" criterion is **met** by KIN-34's
+  `routePages` (`web/js/15-session-data.js`). KIN-34 was filed under `item:signals-query-one-rule`
+  and reads both whole-session copies through that one function. What is left:
+
+  - **The count with no filter.** A 3016-call session still reads `1000 of 3016 calls` with nothing
+    typed. The count criterion above is unmet.
+  - **A live probe at 1001 or more calls** for the endpoint chips and the repeat marks. The first
+    criterion above needs it, and nothing runs it yet.
+  - **The export honouring `offset` and `limit`** (below).
+  - **A decision on capping the full read.** The read has no ceiling now. A session of about
+    160,000 calls hit the argument-spread limit and drew a blank page. KIN-37 fixes that crash
+    by replacing the spreads with loops. It does not answer whether the page should hold 160,000
+    rows in memory. The design says whether the whole-session read is capped, and if so, how the
+    page says what it left out without reading as a filter. Whether a *labelled* 1000-call ceiling
+    on what the list draws is acceptable at all is the maintainer's call. It is under §5 → "Open
+    questions only the human can answer".
+
+  **Two criteria folded in, 2026-10-19,** from defects the signals verify panels found outside any
+  item. They go here because this item now owns the whole-session read, and the signals item is
+  closing and takes no more:
+
+  - **A live row that arrives during the whole-session read is in the copy when the read lands,
+    and is in it once.** Today a live row joins the copy only once the copy is marked as the
+    session's, and the mark is set when the read lands. So a row that arrives between the first
+    page and the last is in neither the read nor the copy. KIN-34's paging widened that window from
+    one request to every page. The criterion covers both copies, `state.allTransactions` and
+    `state.allSignals`, because `routePages` reads both. A committed check delivers a live row
+    between two pages of the read and fails with the mark-on-land rule put back. The panel's
+    harness lived in a scratch directory and is not in the repository, so it does not count as
+    the check.
+  - **The export's transactions route slices by `offset` and `limit`**, as its signals route already
+    does. Today `archiveSource` (`web/js/05-network.js:63-66`) returns every row whatever it is asked
+    for, so the archive half of the 1001-call criterion above cannot be checked against a real page
+    walk. The signals route's own comment says why it matters: an export that ignores `offset` is
+    answering a different question from the daemon. `render-web-ui-archive.js` asks the export for
+    a second page and gets the second page.
+
+  **Size.** It was ordered as S before these were added. The architect re-sizes it. Its place stays
+  third, because it still shows a user something false today: a filter that is not there.
+
 - **Live rows ignore the filter until the next reload.** *Ticket label:*
   `item:web-live-rows-filtered`. **Ordered 2026-10-18: fourth in the order from here**, conditional
   on its size (see the end of this entry).
@@ -787,6 +828,58 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
   with its `?`. Making the tooltips agree would spread the empty-`?` rule to two more call sites
   that carry no evidence. If someone edits those lines for another reason, `txn.query != null` is
   the one-word change.
+
+*The six defects below were found by the signals verify panels on 2026-10-18, while verifying
+`item:signals-query-one-rule`. They are should-fixes, not blockers of that item; two were widened
+or brought into view by its tickets, and the entries say which. Placed
+by the product owner on 2026-10-19. None joins the signals item, which is closing. One is its own
+item, here. The other five became acceptance criteria on items that already rebuild the code
+involved:*
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| A live row arriving during the whole-session read is lost from the copy | `item:web-transactions-paged` | that item owns the whole-session read; KIN-34's paging widened the window |
+| `refreshCurrent` has no session guard | **its own item**, below | no open item touches `/current` |
+| KIN-33's sticky list-pane layout has no committed guard | 1b, `item:web-foundation-list-room` | 1b rebuilds the bands above the list, so the guard must exist before 1b moves them |
+| List, timeline, waterfall and path share one scroll position | 1b, `item:web-foundation-list-room` | 1b rebuilds the list pane, and 1a's hash routes give each view an address to remember a position by |
+| The export's transactions route ignores `offset`/`limit` | `item:web-transactions-paged` | that item's export criterion cannot be checked without it |
+| The "Lost the daemon" banner shows only on the first close after an unplanned drop | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
+
+- **One session's "now" values can land under another.** *Ticket label:*
+  `item:web-current-session-guard`. **Ordered 2026-10-19: straight after
+  `item:web-live-rows-filtered`** (§5 → "Order from here").
+
+  `refreshCurrent` (`web/js/70-timeline.js:347-352`) awaits `GET /api/sessions/{id}/current` and
+  writes `state.current` with no check that the session it asked about is still the one on screen.
+  It is the one async writer of session state without a load or session guard. KIN-29 gave the
+  others one. It runs on every session load and on every live signal, so with live traffic a read
+  is often in flight. Switch sessions while one is, and the old session's values are drawn in the
+  new session's now strip. There is a second way in: on a failed read it keeps `state.current` as
+  it was, and right after a switch that is the other session's.
+
+  **The user and the problem.** A web UI user on a Mac who switches sessions, most often to compare
+  a run with the previous one. The now strip claims to show what this app holds now. Showing
+  another session's values there is the confidently wrong reading that the strip's age and
+  provenance exist to prevent.
+
+  **Acceptance criteria.**
+
+  - A `/current` reply for a session that is no longer selected is dropped. The strip shows the
+    selected session's values or none, never another session's.
+  - A failed `/current` read after a switch leaves the strip empty for the new session. It does not
+    keep the previous session's values.
+  - A `render-web-ui.js` probe holds a `/current` reply, switches session, then releases it, and
+    asserts what the strip shows. It fails with the guard removed, and with the `catch` fallback
+    put back.
+  - No other state writer changes.
+
+  **Out of scope.** What the daemon derives for `/current`. The overlay, which holds one session.
+  Surfaces: web UI only. No public API. Size S. It gets a release-notes line with its neighbours,
+  because a user could have seen it.
+
+  **Why its own item.** `item:web-live-rows-filtered` changes which live rows join the lists, not what
+  a session switch leaves behind. The signals item is closing. Folding it into 1a would leave a
+  false fact on screen for three more items, to save one small ticket.
 
 ### Open questions
 
@@ -977,14 +1070,15 @@ here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They ar
 | 2 | The signals sort and clamp exist twice | §3 → Guards | `item:signals-query-one-rule` | S |
 | 3 | The web traffic list stops at 1000 calls *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | S |
 | 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed |
-| 5 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 6 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
-| 7 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 8 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
-| 10 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
-| 11 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
-| 12 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| 5 | One session's "now" values can land under another *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
+| 6 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 7 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 8 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 9 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 10 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
 wait for the next one.
@@ -1000,6 +1094,15 @@ fact comes before a move that changes nothing anyone sees. The two web defects g
 the signals item because they are in the same files and the same class, and the first reuses its
 pager. The port label is the exception and goes one step later, after the `McpTest.kt` split,
 because its test belongs in the files the split creates.
+
+**One row added 2026-10-19 by the product owner**, `item:web-current-session-guard`, from the
+signals verify panels' should-fixes. Five more from the same batch were folded into rows already
+here, as acceptance criteria: two into `item:web-transactions-paged`, one into 1a and two into 1b.
+The table of where each went is in §3, above that item. The new row goes with the other web defects
+for the same reason they go first: it shows a user something false, and it is small. Whether the web
+defects should go ahead of the `McpTest.kt` split and phases H and I at all is still open for the
+maintainer (§5 → "Open questions only the human can answer"). If the answer is no, this row moves
+with them. The maintainer's rows keep their order relative to each other.
 
 **Why this order.** By value per hour. The two defects come first: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -1709,6 +1812,19 @@ decision or a known trap:
   chosen. 1a carries an acceptance criterion so the fix lands without rebuilding them. The details
   stay in the advisory; tickets under this label name the advisory and never describe the gaps.
   See "Order from here".
+- **Do the web defects go ahead of the `McpTest.kt` split and phases H and I?** *(Raised 2026-10-18,
+  recorded 2026-10-19.)* The product owner placed `item:web-transactions-paged`,
+  `item:web-live-rows-filtered` and now `item:web-current-session-guard` between the maintainer's
+  rows, on the maintainer's own rule that a false fact comes before a move. The maintainer has not
+  confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
+  web defects straight after phase I. Either way they stay ahead of 1a.
+- **Is a labelled 1000-call ceiling acceptable?** *(Raised 2026-10-18, recorded 2026-10-19.)*
+  `item:web-transactions-paged` lets the architect cap what the list draws, provided the count says
+  so in words that cannot be read as a filter, such as `newest 1000 of 4210 shown`. A session of
+  about 160,000 calls has since shown that drawing and holding everything has a real cost. If the
+  answer is no, the list draws every call and the item likely needs virtualising, which it now
+  leaves out of scope, and its size goes up. If yes, the remaining question, whether the
+  *whole-session read* behind the chips and repeat marks is capped too, is the architect's.
 
 ---
 
@@ -1730,17 +1846,18 @@ screen, and building those into the current single page would mean building them
 
 | Order | Item | Size | Ships in | Scheduled 2026-10-18 |
 |---|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ 9th in §5 → "Order from here" |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ 10th |
-| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ 11th |
-| — | The private security advisory's fix | not sized | not set | ~~9th~~ 12th, after 2 |
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ ~~9th~~ 10th in §5 → "Order from here" |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ ~~10th~~ 11th |
+| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ ~~11th~~ 12th |
+| — | The private security advisory's fix | not sized | not set | ~~9th~~ ~~12th~~ 13th, after 2 |
 | 3 | Session diff | L | 1.5 | not scheduled |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 | not scheduled |
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 | not scheduled |
 | 6 | Web UI polish, against the finished screens | M | 1.7 | not scheduled |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
 
-*Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
+*Last column added 2026-10-18, and shifted one place on 2026-10-19 when
+`item:web-current-session-guard` was added ahead of it.* The maintainer's decision that day ordered work across §3, §5 and
 §6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
 a §6 item; it sits here because it now comes after 2.
 
@@ -1831,6 +1948,18 @@ In **1a, the shell**:
   architect chooses which. "The tab bar is always drawn" (`docs/decisions/web-ui.md`) still holds.
 - **(f1) The session picker shows its whole label at 1440px**, or clips it with an ellipsis and the
   full label as a tooltip. It is not cut off mid-text.
+- **The "Lost the daemon" banner is on screen for as long as the page has lost the daemon.**
+  *(Added 2026-10-19, from the signals verify panels.)* As reported, `Lost the daemon — reconnecting…`
+  (`web/js/05-network.js`, `ws.onclose`) shows only on the first close after an unplanned drop.
+  The code that shows it runs only while `state.serverState` is `running`. The architect confirms
+  the reproduction and its cause first. The criterion holds either way: after any
+  unplanned drop the banner is visible until the page reconnects, and it clears then. That covers
+  the first drop, a second drop after a reconnect, and a drop during a restart that never comes
+  back. The stop probe's replayed `onclose`/`onopen` pair runs twice in a row and asserts the
+  banner both times, and fails with the `running` check put back. *Why 1a:* 1a moves restart and stop
+  into Processes and rebuilds the top bar the banner sits under, so the states this keys on
+  (`stopped`, `restarting`, `away`) are rewritten there anyway. The recorded rule that a stopped
+  daemon's banner offers no restart (`docs/decisions/web-ui.md`) still holds.
 
 In **1b, room for the list**:
 
@@ -1857,6 +1986,28 @@ In **1b, room for the list**:
 - **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
   top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
   `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
+- **The sticky layout KIN-33 fixed is held by a committed check, and the check lands before 1b
+  moves anything.** *(Added 2026-10-19, from the signals verify panels.)* KIN-33 made every sticky
+  band in the list pane stop under the scope bar, through `--sticky-top`
+  (`web/css/35-list.css`). It was verified only by headless-Chrome scripts in a scratch directory,
+  so nothing in the repository fails if a new band goes back to `top: 0` and slides under the bar.
+  1b is about to add such a band, the overview line. The criterion: a CI check fails when a sticky
+  rule in the list pane, other than `.scope-bar` itself, takes its `top` from anything but
+  `--sticky-top`. It is proven red by putting `top: 0` back on `#timeline > .filter-note`. The panel
+  proposed a static audit in `check-web-static.js`, the shape of the 11px and `[hidden]` audits.
+  jsdom has no layout engine, so a computed-position check there would pass whatever the CSS says.
+  The architect chooses the shape. It is 1b's first commit, so that 1b's own changes are made under
+  it.
+- **Each traffic view opens where it was left, not where another view left off.** *(Added
+  2026-10-19, from the signals verify panels.)* Since KIN-33 the list, the timeline, the waterfall
+  and the path scroll one pane. With live off, a list scrolled to 5000 opens the timeline at 5000
+  of 29,800, a place nobody chose. After 1b, with live off, going list → timeline → list returns the
+  list to its own position. The timeline opens where it was last left, or at its start the first
+  time. With live on, each view still follows new rows as it does now, and expanding a run still
+  does not move the pane (KIN-38's rule). jsdom does not lay out, so this is a probe if jsdom can hold
+  the positions, or a documented browser check if it cannot. The architect says which. Out of scope:
+  remembering a position across a reload. *Why 1b:* 1b rebuilds the list pane, and 1a's hash routes
+  give each view an address to keep a position under.
 
 If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
 because it is a keyboard trap. See §5 → "Order from here".
