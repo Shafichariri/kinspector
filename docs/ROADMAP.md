@@ -849,7 +849,8 @@ the release notes and in a daemon-only `INTEGRATION.md` entry ("download the new
 coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. Phase E's MCP tie fix is
 announced too (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn; see the open questions below), right after the web-drift line, since it is the
 same rule on a third surface: *"MCP: `timeline` and `explain` place a marker dropped at the same
-millisecond as a call before that call, as both UIs do; in 1.3.0 and earlier it came after."*
+millisecond as a call before that call, as both UIs do, and `explain` counts an earlier call at
+that millisecond as leading to it; in 1.3.0 and earlier both came after."*
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
