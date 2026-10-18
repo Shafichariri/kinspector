@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.service
 
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction

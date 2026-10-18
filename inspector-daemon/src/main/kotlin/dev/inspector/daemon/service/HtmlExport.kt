@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.service
 
 /**
  * The web UI's own files, read from the jar. One loader for the page the daemon serves and the

@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.service
 
 import dev.inspector.daemon.archive.SessionRepository
 import java.net.URI

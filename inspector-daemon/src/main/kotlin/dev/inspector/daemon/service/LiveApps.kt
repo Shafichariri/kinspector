@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.service
 
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse
@@ -7,6 +7,7 @@ import dev.inspector.model.SignalError
 import dev.inspector.model.SignalRequest
 import dev.inspector.model.WireMsg
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
@@ -20,6 +21,11 @@ class SignalProviderException(message: String) : Exception(message)
 
 /** Body of `POST /api/sessions/{id}/signals/request`. Both fields are required. */
 @Serializable
+// Pinned to the name this class had before phase D. kotlinx-serialization quotes the serial name
+// in MissingFieldException, and the route echoes that message into a 400 body (for FileConfig, to
+// stderr). Moving the class must not change what a caller reads. Do not "correct" this to the
+// current package.
+@SerialName("dev.inspector.daemon.SignalPullRequest")
 data class SignalPullRequest(
     val tag: String,
     val name: String,

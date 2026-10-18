@@ -1,11 +1,17 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.service
 
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** What the caller asks to replay, plus any edits applied on top of the capture. */
 @Serializable
+// Pinned to the name this class had before phase D. kotlinx-serialization quotes the serial name
+// in MissingFieldException, and the route echoes that message into a 400 body (for FileConfig, to
+// stderr). Moving the class must not change what a caller reads. Do not "correct" this to the
+// current package.
+@SerialName("dev.inspector.daemon.ReplayRequest")
 data class ReplayRequest(
     val txnId: String,
     val session: String = "latest",

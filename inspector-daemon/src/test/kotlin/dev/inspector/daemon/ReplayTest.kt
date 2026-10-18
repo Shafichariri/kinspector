@@ -3,6 +3,11 @@ package dev.inspector.daemon
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionWriter
+import dev.inspector.daemon.service.LiveApps
+import dev.inspector.daemon.service.ReplayRequest
+import dev.inspector.daemon.service.ReplayTransport
+import dev.inspector.daemon.service.Replayer
+import dev.inspector.daemon.service.diagnose
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.SignRequest
 import dev.inspector.model.SignResponse

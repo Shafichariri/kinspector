@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.service.PeerArgv
 import java.lang.reflect.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals

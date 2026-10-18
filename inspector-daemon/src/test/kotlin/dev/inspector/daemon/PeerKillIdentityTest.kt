@@ -1,5 +1,7 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.service.KillOutcome
+import dev.inspector.daemon.service.ProcessHandlePeerRegistry
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContains

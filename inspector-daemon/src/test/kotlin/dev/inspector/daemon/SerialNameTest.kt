@@ -1,6 +1,8 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.service.ReplayRequest
+import dev.inspector.daemon.service.SignalPullRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
