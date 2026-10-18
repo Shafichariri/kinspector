@@ -1,15 +1,18 @@
 /* The web UI's source files, as the checks read them.
  *
- * The one place the *checks* learn which files make up the page. Today that is `app.js` and
- * `style.css`; when `app.js` splits into ordered scripts behind `web/scripts.txt`, this is the file
- * the checks need changed, and nothing that calls it does. Every check takes the list it returns
- * rather than a path, which is why `liftBlock` and `countNetworkPrimitives` search all of them.
+ * The one place the *checks* learn which files make up the page: `web/scripts.txt` and
+ * `web/styles.txt`, in load order. Every check takes the list this returns rather than a path,
+ * which is why `liftBlock` and `countNetworkPrimitives` search all of them.
  *
- * It is not the only place that knows the page's shape. Two others replace the literal
- * `<script src="/app.js"></script>` tag in `index.html` with inlined code, and both must follow a
- * split: `render-web-ui.js` (its `SCRIPT_TAG`, to build the snapshot) and `HtmlExport.kt` (its
- * `SCRIPT_TAG`, to build an exported session). Each refuses to proceed when its replacement misses,
- * so a split that forgets one fails loudly rather than shipping a page with no code.
+ * It reads a manifest with the rule `WebPage.entries` in the daemon uses: a line that is blank or
+ * starts with `#` is skipped, and any other line is an entry exactly as written. Trimming here
+ * would let a stray space pass the checks while the daemon failed to resolve the same entry.
+ *
+ * It is not the only place that knows the page's shape. Two others expand the slots in
+ * `index.html`, `<!-- inspector:styles -->` and `<!-- inspector:scripts -->`: `render-web-ui.js`,
+ * to build the page it probes, and `WebPage.kt`, for `GET /` and for an exported session. Each
+ * refuses to proceed when an expansion misses, so a slot that moved fails loudly rather than
+ * shipping a page with no code.
  *
  * Zero dependencies: `check-web-static.js` must run with nothing installed.
  */
@@ -18,14 +21,29 @@ const path = require('path');
 
 const WEB = path.join(__dirname, '..', '..', 'inspector-daemon', 'src', 'main', 'resources', 'web');
 
-/** Every script the page loads, in load order: `[{ file, text }]`. */
-function loadScripts() {
-  return ['app.js'].map((file) => ({ file, text: fs.readFileSync(path.join(WEB, file), 'utf8') }));
+/** The two slot literals `index.html` holds; `WebPage.STYLES_SLOT` and `SCRIPTS_SLOT` in the daemon. */
+const STYLES_SLOT = '<!-- inspector:styles -->';
+const SCRIPTS_SLOT = '<!-- inspector:scripts -->';
+
+/** A manifest's entries in order, e.g. `['js/00-app.js']`. */
+function manifest(name) {
+  return fs.readFileSync(path.join(WEB, name), 'utf8')
+    .split('\n')
+    .filter((line) => !(line.trim() === '' || line.trimStart().startsWith('#')));
 }
 
-/** Every stylesheet the page loads, in load order: `[{ file, text }]`. */
+function load(name) {
+  return manifest(name).map((file) => ({ file, text: fs.readFileSync(path.join(WEB, file), 'utf8') }));
+}
+
+/** Every script the page loads, in load order: `[{ file, text }]`. */
+function loadScripts() {
+  return load('scripts.txt');
+}
+
+/** Every stylesheet the page loads, in cascade order: `[{ file, text }]`. */
 function loadStyles() {
-  return ['style.css'].map((file) => ({ file, text: fs.readFileSync(path.join(WEB, file), 'utf8') }));
+  return load('styles.txt');
 }
 
 /** The page shell. */
@@ -33,4 +51,4 @@ function loadIndexHtml() {
   return fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
 }
 
-module.exports = { WEB, loadScripts, loadStyles, loadIndexHtml };
+module.exports = { WEB, STYLES_SLOT, SCRIPTS_SLOT, manifest, loadScripts, loadStyles, loadIndexHtml };

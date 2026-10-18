@@ -78,11 +78,26 @@ class MirrorCasesArgument(
 }
 
 /*
+ * `WebManifestTest` lists the web UI's *source* folder, not the processed resources: the guides in
+ * it are excluded from the jar, and the test's rule about what the folder may hold is about the
+ * folder. Declared as an input on the same pattern as the mirror cases, so a file added, removed or
+ * renamed there re-runs the test with no rerun flag.
+ */
+class WebRootArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.webRoot=${dir.absolutePath}")
+}
+
+/*
  * The mirror cases are read from the repository root at test time, so Gradle has to be told they
  * are an input; see `inspector-model/build.gradle.kts` for why that is load-bearing.
  */
 tasks.test {
     jvmArgumentProviders += MirrorCasesArgument(rootProject.file("mirror-cases"))
+    jvmArgumentProviders += WebRootArgument(file("src/main/resources/web"))
 }
 
 /*

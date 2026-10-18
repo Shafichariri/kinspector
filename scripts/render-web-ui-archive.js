@@ -1,7 +1,7 @@
 /* Smoke-test an exported session: the HTML file `GET /api/sessions/{id}/export.html` produces.
  *
  * The export's whole claim is that it is the web UI working from disk with no daemon. So this
- * opens the file the way a double-click does — a `file:` URL, the two inline scripts run by the
+ * opens the file the way a double-click does — a `file:` URL, the inline scripts run by the
  * page's own load — with `fetch`, `WebSocket` and `XMLHttpRequest` all made to throw and record the
  * attempt. A single network call is a failure, which is the proof: the file is self-contained
  * only if nothing it does needs anything else.
@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
+const { loadScripts, loadStyles } = require('./lib/web-sources');
 
 let JSDOM, VirtualConsole;
 try {
@@ -51,7 +52,7 @@ process.on('uncaughtException', (e) => errors.push(`uncaught: ${e && e.message ?
 
 let copied = null;
 const dom = new JSDOM(html, {
-  // The page's own inline scripts, run by the page's own load — not app.js injected by this script,
+  // The page's own inline scripts, run by the page's own load — not code injected by this script,
   // which would prove only that this script can assemble a page.
   runScripts: 'dangerously',
   pretendToBeVisual: true,
@@ -103,6 +104,49 @@ async function settle(sample, timeoutMs = 4000) {
     previous = current;
   }
 }
+/**
+ * Whether the export is exactly the manifests, inlined: `[ok, detail]`, the detail naming every
+ * condition that failed.
+ *
+ * Compared with the working tree's `web/scripts.txt` and `web/styles.txt`, so an export built from
+ * another tree fails here, and says so; export the session again from a daemon built from this one.
+ * Each condition closes a way to pass on too little. A count alone passes with the right number of
+ * wrong files; a search for one known line passed with every file but one missing. Text is compared
+ * exactly, position by position, which is also what makes order count. `@import` and `url(` are
+ * searched in the inline stylesheets only, never in the code (a JavaScript function may well be
+ * called `url`, and code reaching the network is what the network count holds) and never in the
+ * data, where a captured body is free to mention either.
+ */
+function everyFileInlined(codeScripts) {
+  const scripts = loadScripts();
+  const styles = loadStyles();
+  const inlineStyles = [...doc.querySelectorAll('style')].map((s) => s.textContent);
+  const failed = [];
+  if (codeScripts.length !== scripts.length) {
+    failed.push(`${codeScripts.length} code script(s), scripts.txt lists ${scripts.length}`);
+  }
+  scripts.forEach(({ file }, i) => {
+    if (!codeScripts[i] || codeScripts[i].text !== scripts[i].text) failed.push(`script ${i + 1} is not ${file}`);
+  });
+  if (inlineStyles.length !== styles.length) {
+    failed.push(`${inlineStyles.length} inline <style>(s), styles.txt lists ${styles.length}`);
+  }
+  styles.forEach(({ file, text }, i) => {
+    if (inlineStyles[i] !== text) failed.push(`<style> ${i + 1} is not ${file}`);
+  });
+  if (doc.querySelector('script[src]')) failed.push('a <script src> is left in the document');
+  const linked = [...doc.querySelectorAll('link[rel]')].some((l) => /(^|\s)stylesheet(\s|$)/i.test(l.getAttribute('rel')));
+  if (linked) failed.push('a <link rel="stylesheet"> is left in the document');
+  inlineStyles.forEach((text, i) => {
+    for (const reach of ['@import', 'url(']) {
+      if (text.toLowerCase().includes(reach)) failed.push(`<style> ${i + 1} contains ${reach}`);
+    }
+  });
+  return failed.length
+    ? [false, failed.join('; ')]
+    : [true, `${scripts.length} script(s) and ${styles.length} stylesheet(s), each its file, in manifest order`];
+}
+
 const click = (node) => node && node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 const hiddenByCss = (node) => !node || window.getComputedStyle(node).display === 'none';
 
@@ -138,7 +182,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   const inlined = scripts.filter((s) => !dataScripts.includes(s));
   check('session data is data only', dataScripts.length === 1,
     `${dataScripts.length} script(s) hold only the embedded session; ${inlined.length} counted as code`);
-  check('app.js inlined', inlined.some(({ text }) => text.includes('const ARCHIVE = ')));
+  check('every file inlined', ...everyFileInlined(inlined));
   const counts = countNetworkPrimitives(inlined);
   const wrong = Object.entries(NETWORK_EXPECTED).filter(([name, want]) => counts[name] !== want);
   check(

@@ -13,16 +13,24 @@ import kotlin.test.assertTrue
  * it held exactly as long as every change remembered both files. A 500 that is one red on the phone
  * and another in the browser reads as two different claims about the same row.
  *
- * Reads the web tokens out of `style.css` rather than from a copy, so the stylesheet stays the
- * authority for the web and this test is the only place the two meet.
+ * Reads the web tokens out of `web/css/00-tokens.css` rather than from a copy, so the stylesheet
+ * stays the authority for the web and this test is the only place the two meet. It finds that file
+ * through `inspector.webStyles`, the path of `web/styles.txt`, which `:inspector-ui`'s `jvmTest`
+ * passes with the stylesheets declared as inputs. Without that declaration a CSS-only change left
+ * this task up to date and green; and without the property it fails rather than guess a relative
+ * path, because a guessed path is how a test quietly reads a stale or missing copy.
  */
 class PaletteParityTest {
 
-    private val css: String = sequenceOf(
-        File("../inspector-daemon/src/main/resources/web/style.css"),
-        File("inspector-daemon/src/main/resources/web/style.css"),
-    ).firstOrNull { it.isFile }?.readText()
-        ?: error("style.css not found from ${File(".").absoluteFile} — the parity check cannot run")
+    private val css: String = run {
+        val manifest = System.getProperty("inspector.webStyles")?.let(::File)
+            ?: error("inspector.webStyles is not set; :inspector-ui:jvmTest passes it, see build.gradle.kts")
+        assertTrue(manifest.isFile, "inspector.webStyles names $manifest, which is not a file")
+        // The same rule `WebPage.entries` reads the manifest with in the daemon.
+        val listed = manifest.readLines().filterNot { it.isBlank() || it.trimStart().startsWith("#") }
+        assertTrue(TOKENS in listed, "web/styles.txt no longer lists $TOKENS, where the palette tokens live")
+        File(manifest.parentFile, TOKENS).readText()
+    }
 
     /** The `:root` block before the light media query, and the one inside it. */
     private fun block(light: Boolean): String {
@@ -72,4 +80,8 @@ class PaletteParityTest {
 
     @Test
     fun `the light palette matches the web tokens`() = assertParity(LightColors, light = true)
+
+    private companion object {
+        const val TOKENS = "css/00-tokens.css"
+    }
 }

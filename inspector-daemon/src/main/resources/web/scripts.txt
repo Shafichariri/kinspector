@@ -1,0 +1,5 @@
+# The web UI's scripts, in load order: one path per line, relative to this folder. `#` starts a
+# comment line. Classic scripts share one global scope, so a file may call into an earlier one at
+# load time and into any of them later. The daemon expands this list into <script> tags for `GET /`
+# and inlines it for an HTML export; nothing serves or fetches this file.
+js/00-app.js
