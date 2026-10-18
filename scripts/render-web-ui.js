@@ -2522,6 +2522,7 @@ function runScripts() {
   console.error('filter tabs steady :', filterOnTimeline.tabsSteady, '(the tabs describe the whole session)');
   console.error('resume refreshes   :', wholeSession.resumeRefresh, '(rows missed while paused reach the tabs and chips)');
   console.error('reconnect refreshes:', wholeSession.reconnectRefresh, '(and rows missed while the daemon was away)');
+  console.error('drop refreshes     :', wholeSession.dropRefresh, '(and after a drop nobody asked for)');
   console.error('waterfall emptied  :', filterPanes.waterfallEmptied);
   console.error('waterfall thinned  :', filterPanes.waterfallThinned);
   console.error('path 0 of N match  :', filterPanes.pathCounts, '("nothing recorded" only where nothing was)');

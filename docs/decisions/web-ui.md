@@ -187,8 +187,13 @@ The two cached copies go stale in three ways, and each is closed. Resuming the l
 opening again after the daemon was away clear both (`forgetWholeSession`): the live socket is the
 only thing that keeps either copy current, so rows that arrived while nothing listened are in
 neither, and the tabs, the route and the endpoint chips went on without them until the filter was
-cleared. The live probe's `resume refreshes` and `reconnect refreshes` play rows arriving in each
-gap under `tag:screen`. Forgetting also overtakes every load in flight (`callLoad`, `signalLoad`),
+cleared. "The daemon was away" covers a drop nobody asked for as well as a stop or a restart:
+`ws.onclose` moves `serverState` from `running` to `away`, and it used to leave it at `running`, so
+after a plain drop the next open took the page for one that had never been gone. The live probe's
+`resume refreshes`, `reconnect refreshes` and `drop refreshes` play rows arriving in each gap under
+`tag:screen`; the last closes the page's socket and lets its own redial open the next, because the
+reconnect line reaches `onopen` through the stubbed stop, which marks the daemon away by itself and
+so could never show whether a drop does. Forgetting also overtakes every load in flight (`callLoad`, `signalLoad`),
 because a whole-session read sent before the gap answers from before it, and landing afterwards it
 marked the copy again with the old rows (`forget drops calls read`, `forget drops signals read`);
 deleting the session on screen clears through the same function (`session change forgets`). A

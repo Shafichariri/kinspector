@@ -35,11 +35,13 @@ async function press(ctx, node) {
  * busiest endpoint, so its chip counts one more. The filter is `tag:screen`, which matches no call
  * and no tag but `screen`, so the daemon's filtered answers are right to leave both out and only
  * the unfiltered reads are touched. Nothing is written to the archive. The stop request is stubbed,
- * as the top bar probe does, so the daemon under test keeps running.
+ * as the top bar probe does, so the daemon under test keeps running. The third gap is a drop nobody
+ * asked for, played through the page's own `onclose` and its own redial: the stubbed stop marks the
+ * daemon away by itself, so it could never show whether a plain drop does.
  */
 async function probeWholeSessionRefresh(ctx) {
   const { window, doc, ORIGIN } = ctx;
-  const na = (why) => ({ resumeRefresh: `n/a (${why})`, reconnectRefresh: `n/a (${why})` });
+  const na = (why) => ({ resumeRefresh: `n/a (${why})`, reconnectRefresh: `n/a (${why})`, dropRefresh: `n/a (${why})` });
   const id = encodeURIComponent(doc.getElementById('session-picker').value);
   const calls = (await ctx.sessionTransactions(id)).items || [];
   const signals = await ctx.sessionSignals(id);
@@ -114,6 +116,23 @@ async function probeWholeSessionRefresh(ctx) {
     await ctx.settle();
     await pause(300);
     result.reconnectRefresh = seen('probe-reconnected', before);
+
+    // An unplanned drop: nobody pressed stop, the socket just closed — the daemon was killed, the
+    // laptop slept. The page's own `onclose` runs and its own redial opens a new socket, which the
+    // stub answers at once; nothing here fires `onopen` by hand.
+    arrived = null;
+    await typeFilter(ctx, '');
+    await typeFilter(ctx, 'tag:screen');
+    before = chipCount();
+    const dropped = ctx.lastSocket();
+    arrive('probe-dropped', 3);
+    if (dropped && dropped.onclose) dropped.onclose();
+    await pause(1500);
+    await ctx.settle();
+    await pause(300);
+    result.dropRefresh = ctx.lastSocket() === dropped
+      ? 'NO - the page never redialled after the drop'
+      : seen('probe-dropped', before);
   } finally {
     window.fetch = realFetch;
     arrived = null;

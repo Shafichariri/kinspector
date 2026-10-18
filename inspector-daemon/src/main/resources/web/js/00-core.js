@@ -39,8 +39,9 @@ const state = {
   filter: '',
   liveTail: true,
   activeSessionId: null,
-  // 'running' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem to
-  // reconnect from or the outcome the user asked for.
+  // 'running' | 'away' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem
+  // to reconnect from or the outcome the user asked for. `away` is a drop nobody asked for; every
+  // state but `running` makes the next open re-read the session.
   serverState: 'running',
   // The newest capture this page has seen arrive, from any session: what the stopped banner
   // means by "last capture". Null until the live socket delivers a row.

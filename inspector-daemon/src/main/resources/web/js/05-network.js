@@ -208,7 +208,12 @@ function connectLive() {
       return;
     }
     setConn('reconnecting');
+    // A drop nobody asked for marks the daemon away, as a stop or a restart does. Left at
+    // `running`, the next open took the page for one that had never been gone, and rows that
+    // arrived while nothing listened stayed out of the whole-session copies until the filter
+    // was cleared.
     if (state.serverState === 'running') {
+      state.serverState = 'away';
       showServerBanner('Lost the daemon — reconnecting…', true);
     }
     setTimeout(connectLive, 1000);
@@ -219,8 +224,8 @@ function connectLive() {
     state.serverState = 'running';
     showServerBanner(null, false);
     setControlsEnabled(true);
-    // A restart means a new process with a fresh session list; a reconnect after a blip may
-    // also have missed rows. Either way the page's data is stale, so re-read it — the
+    // A restart means a new process with a fresh session list; a reconnect after a drop or a
+    // blip may also have missed rows. Either way the page's data is stale, so re-read it — the
     // whole-session copies too, or a filter keeps them as they were before the gap.
     if (wasAway) {
       forgetWholeSession();
