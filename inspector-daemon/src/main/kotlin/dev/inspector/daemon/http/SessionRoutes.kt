@@ -64,97 +64,97 @@ internal fun Route.sessionRoutes(config: DaemonConfig, repository: SessionReposi
         )
     }
 
-    /**
-     * Deletes one session and everything in it. Permanent — there is no trash.
-     *
-     * The `latest` alias is refused rather than resolved. It names a different folder
-     * depending on when you call it, which is tolerable for a read and is not tolerable for
-     * a delete: the archive it points at is the one you are most likely to still want.
-     */
-    delete("/api/sessions/{id}") {
-        if (!call.requireControlHeader()) return@delete
-        val id = call.parameters["id"].orEmpty()
-        if (id == "latest") {
-            return@delete call.respondError(
-                HttpStatusCode.BadRequest,
-                "refusing to delete through the 'latest' alias — name the session explicitly",
-            )
-        }
-        val dir = call.resolveSession(repository) ?: return@delete
-        val sessionId = dir.fileName.toString()
-        if (sessionId in manager.activeSessionIds()) {
-            return@delete call.respondError(
-                HttpStatusCode.Conflict,
-                "session $sessionId is still being written; disconnect the app first",
-            )
-        }
-
-        val bytes = repository.sessionBytes(dir)
-        if (!repository.deleteSession(dir, DeletionCause.REQUESTED)) {
-            return@delete call.respondError(
-                HttpStatusCode.InternalServerError,
-                "could not delete $sessionId; check permissions on ${config.sessionsDir}",
-            )
-        }
-        call.respondJson(
-            InspectorJson.encodeToString(
-                SessionDeletion.serializer(),
-                SessionDeletion(
-                    deleted = listOf(sessionId),
-                    remaining = repository.sessionDirs().size,
-                    freedBytes = bytes,
-                ),
-            )
-        )
-    }
-
-    /**
-     * Deletes every session except the ones still being written.
-     *
-     * Skipping the live session is not a convenience. Removing the folder underneath an open
-     * writer corrupts the append stream and throws away the traffic on screen — the same rule
-     * [Retention] enforces, for the same reason.
-     */
-    post("/api/sessions/clear") {
-        if (!call.requireControlHeader()) return@post
-        val active = manager.activeSessionIds()
-        val deleted = mutableListOf<String>()
-        val kept = mutableListOf<String>()
-        var freed = 0L
-
-        for (dir in repository.sessionDirs()) {
+    controlGated {
+        /**
+         * Deletes one session and everything in it. Permanent — there is no trash.
+         *
+         * The `latest` alias is refused rather than resolved. It names a different folder
+         * depending on when you call it, which is tolerable for a read and is not tolerable for
+         * a delete: the archive it points at is the one you are most likely to still want.
+         */
+        delete("/api/sessions/{id}") {
+            val id = call.parameters["id"].orEmpty()
+            if (id == "latest") {
+                return@delete call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "refusing to delete through the 'latest' alias — name the session explicitly",
+                )
+            }
+            val dir = call.resolveSession(repository) ?: return@delete
             val sessionId = dir.fileName.toString()
-            if (sessionId in active) {
-                kept += sessionId
-                continue
+            if (sessionId in manager.activeSessionIds()) {
+                return@delete call.respondError(
+                    HttpStatusCode.Conflict,
+                    "session $sessionId is still being written; disconnect the app first",
+                )
             }
+
             val bytes = repository.sessionBytes(dir)
-            if (repository.deleteSession(dir, DeletionCause.CLEARED)) {
-                deleted += sessionId
-                freed += bytes
-            } else {
-                kept += sessionId
+            if (!repository.deleteSession(dir, DeletionCause.REQUESTED)) {
+                return@delete call.respondError(
+                    HttpStatusCode.InternalServerError,
+                    "could not delete $sessionId; check permissions on ${config.sessionsDir}",
+                )
             }
+            call.respondJson(
+                InspectorJson.encodeToString(
+                    SessionDeletion.serializer(),
+                    SessionDeletion(
+                        deleted = listOf(sessionId),
+                        remaining = repository.sessionDirs().size,
+                        freedBytes = bytes,
+                    ),
+                )
+            )
         }
 
-        // A total beside the per-session lines. This is the call that removes many at once,
-        // so it is the one whose shape you want to recognise in a scrollback without counting.
-        println(
-            "inspector: cleared ${deleted.size} session(s), kept ${kept.size}, " +
-                "freed ${freed / 1024} KB"
-        )
+        /**
+         * Deletes every session except the ones still being written.
+         *
+         * Skipping the live session is not a convenience. Removing the folder underneath an open
+         * writer corrupts the append stream and throws away the traffic on screen — the same rule
+         * [Retention] enforces, for the same reason.
+         */
+        post("/api/sessions/clear") {
+            val active = manager.activeSessionIds()
+            val deleted = mutableListOf<String>()
+            val kept = mutableListOf<String>()
+            var freed = 0L
 
-        call.respondJson(
-            InspectorJson.encodeToString(
-                SessionDeletion.serializer(),
-                SessionDeletion(
-                    deleted = deleted.sorted(),
-                    kept = kept.sorted(),
-                    remaining = repository.sessionDirs().size,
-                    freedBytes = freed,
-                ),
+            for (dir in repository.sessionDirs()) {
+                val sessionId = dir.fileName.toString()
+                if (sessionId in active) {
+                    kept += sessionId
+                    continue
+                }
+                val bytes = repository.sessionBytes(dir)
+                if (repository.deleteSession(dir, DeletionCause.CLEARED)) {
+                    deleted += sessionId
+                    freed += bytes
+                } else {
+                    kept += sessionId
+                }
+            }
+
+            // A total beside the per-session lines. This is the call that removes many at once,
+            // so it is the one whose shape you want to recognise in a scrollback without counting.
+            println(
+                "inspector: cleared ${deleted.size} session(s), kept ${kept.size}, " +
+                    "freed ${freed / 1024} KB"
             )
-        )
+
+            call.respondJson(
+                InspectorJson.encodeToString(
+                    SessionDeletion.serializer(),
+                    SessionDeletion(
+                        deleted = deleted.sorted(),
+                        kept = kept.sorted(),
+                        remaining = repository.sessionDirs().size,
+                        freedBytes = freed,
+                    ),
+                )
+            )
+        }
     }
 
     get("/api/sessions/{id}/summary") {

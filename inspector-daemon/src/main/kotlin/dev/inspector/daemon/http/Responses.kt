@@ -36,21 +36,3 @@ internal suspend fun ApplicationCall.resolveSession(repository: SessionRepositor
     }
     return dir
 }
-
-/**
- * Requires a header no cross-origin request can set without a preflight.
- *
- * The daemon listens on loopback with no authentication, which means *any* page the developer
- * happens to have open can POST to `127.0.0.1:8099`. A simple form or `no-cors` fetch could
- * therefore kill the daemon. A custom header forces the browser to preflight, and this server
- * answers no CORS preflight, so only its own page gets through. The read-only endpoints are
- * left alone — this guard is about not handing strangers an off switch.
- */
-internal suspend fun ApplicationCall.requireControlHeader(): Boolean {
-    if (request.headers["X-Inspector-Control"] == "1") return true
-    respondError(
-        HttpStatusCode.Forbidden,
-        "control endpoints require the X-Inspector-Control: 1 header",
-    )
-    return false
-}

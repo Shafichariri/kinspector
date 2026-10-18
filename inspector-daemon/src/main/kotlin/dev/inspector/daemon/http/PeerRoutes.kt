@@ -30,19 +30,20 @@ internal fun Route.peerRoutes(peers: PeerRegistry) {
         )
     }
 
-    post("/api/peers/{pid}/kill") {
-        if (!call.requireControlHeader()) return@post
-        val pid = call.parameters["pid"]?.toLongOrNull()
-            ?: return@post call.respondError(HttpStatusCode.BadRequest, "pid must be a number")
-        val force = call.request.queryParameters["force"] == "true"
+    controlGated {
+        post("/api/peers/{pid}/kill") {
+            val pid = call.parameters["pid"]?.toLongOrNull()
+                ?: return@post call.respondError(HttpStatusCode.BadRequest, "pid must be a number")
+            val force = call.request.queryParameters["force"] == "true"
 
-        when (val outcome = peers.kill(pid, force)) {
-            is KillOutcome.Signalled ->
-                call.respondJson("""{"ok":true,"pid":$pid,"force":$force}""")
-            is KillOutcome.NoSuchProcess ->
-                call.respondError(HttpStatusCode.NotFound, "no live process with pid $pid")
-            is KillOutcome.Refused ->
-                call.respondError(HttpStatusCode.Conflict, outcome.reason)
+            when (val outcome = peers.kill(pid, force)) {
+                is KillOutcome.Signalled ->
+                    call.respondJson("""{"ok":true,"pid":$pid,"force":$force}""")
+                is KillOutcome.NoSuchProcess ->
+                    call.respondError(HttpStatusCode.NotFound, "no live process with pid $pid")
+                is KillOutcome.Refused ->
+                    call.respondError(HttpStatusCode.Conflict, outcome.reason)
+            }
         }
     }
 }

@@ -23,9 +23,10 @@ internal fun Route.mcpRoutes(mcpControlLazy: Lazy<McpControl>) {
         call.respondJson(InspectorJson.encodeToString(McpInfo.serializer(), mcpControl.info()))
     }
 
-    post("/api/mcp/probe") {
-        if (!call.requireControlHeader()) return@post
-        val result = mcpControl.probe()
-        call.respondJson(InspectorJson.encodeToString(McpProbeResult.serializer(), result))
+    controlGated {
+        post("/api/mcp/probe") {
+            val result = mcpControl.probe()
+            call.respondJson(InspectorJson.encodeToString(McpProbeResult.serializer(), result))
+        }
     }
 }

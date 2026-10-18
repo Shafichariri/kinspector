@@ -23,19 +23,20 @@ internal fun Route.replayRoutes(replayLazy: Lazy<Replayer>) {
     // Resolved on the first replay, not when the routes are built; see InspectorDaemon.
     val replay by replayLazy
 
-    post("/api/replay") {
-        if (!call.requireControlHeader()) return@post
-        val body = call.receiveText()
-        val request = try {
-            InspectorJson.decodeFromString(ReplayRequest.serializer(), body)
-        } catch (e: Exception) {
-            return@post call.respondError(
-                HttpStatusCode.BadRequest,
-                "could not read the replay request: ${e.message}",
-            )
-        }
+    controlGated {
+        post("/api/replay") {
+            val body = call.receiveText()
+            val request = try {
+                InspectorJson.decodeFromString(ReplayRequest.serializer(), body)
+            } catch (e: Exception) {
+                return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "could not read the replay request: ${e.message}",
+                )
+            }
 
-        val result = replay.replay(request)
-        call.respondJson(InspectorJson.encodeToString(ReplayResult.serializer(), result))
+            val result = replay.replay(request)
+            call.respondJson(InspectorJson.encodeToString(ReplayResult.serializer(), result))
+        }
     }
 }

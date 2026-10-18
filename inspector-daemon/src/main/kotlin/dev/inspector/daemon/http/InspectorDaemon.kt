@@ -178,23 +178,23 @@ class InspectorDaemon(
             )
         }
 
-        post("/api/server/stop") {
-            if (!call.requireControlHeader()) return@post
-            call.respondJson("""{"ok":true,"action":"stop"}""")
-            shutdownAfterResponse(restart = false)
-        }
-
-        post("/api/server/restart") {
-            if (!call.requireControlHeader()) return@post
-            if (!control.canRestart) {
-                return@post call.respondError(
-                    HttpStatusCode.NotImplemented,
-                    "this process cannot report its own command line, so it cannot relaunch " +
-                        "itself — stop it and start it again from your terminal",
-                )
+        controlGated {
+            post("/api/server/stop") {
+                call.respondJson("""{"ok":true,"action":"stop"}""")
+                shutdownAfterResponse(restart = false)
             }
-            call.respondJson("""{"ok":true,"action":"restart"}""")
-            shutdownAfterResponse(restart = true)
+
+            post("/api/server/restart") {
+                if (!control.canRestart) {
+                    return@post call.respondError(
+                        HttpStatusCode.NotImplemented,
+                        "this process cannot report its own command line, so it cannot relaunch " +
+                            "itself — stop it and start it again from your terminal",
+                    )
+                }
+                call.respondJson("""{"ok":true,"action":"restart"}""")
+                shutdownAfterResponse(restart = true)
+            }
         }
     }
 
