@@ -233,12 +233,6 @@ How it is enforced is in `docs/decisions/repository.md`.
 | `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a changelog entry saying what they must *do*, not just what changed. |
 | `docs/ROADMAP.md` | **The live backlog.** What is next, what it overturns, and what is deliberately not being done. Every other plan-shaped document here is a record of finished work — this is the one to update when the plan changes. |
 | `docs/README.md` | What every other document in `docs/` is for. |
-| `api/inspector-public-api.txt` | Golden public API surface for the `core` pair, asserted by both modules. |
-| `api/inspector-stream-public-api.txt` | The same for the `stream` pair, minus the Ktor-typed members a release build cannot carry. |
-| `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/` and `stream/` hold one test each. Every directory here is compiled into the `jvmTest` of the two modules it guards. |
-| `scripts/check-release-clean.sh` | Production-safety enforcement. |
-| `repo-checks/` | Build-only, never published. JUnit 5 checks over the repository itself — module graph, noop twins, lockfiles, markers, file budgets — run by `./gradlew build`. |
-| `structure/` | The goldens `:repo-checks` reads: `modules.txt` (generated), `twins.txt` and `budgets.txt` (hand-edited, each exemption and budget with its reason). |
 | `*/gradle.lockfile` | Dependency goldens for every published module and the daemon. Regenerate on macOS; see Commands. |
 | `scripts/check-commit-identity.sh`, `scripts/check-client-names.sh` | CI's `repo` job. The name scan is also the check to run locally before committing. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages, and stages it on Maven Central. Three jobs — the two library ones need macOS for the iOS klibs. |
