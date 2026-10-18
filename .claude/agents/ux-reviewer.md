@@ -46,3 +46,9 @@ Findings ranked by how much they would mislead or block a user, each with: where
 selector/composable), what a user would conclude, and a concrete proposed fix. Separate
 "misleading" from "ugly" from "nice to have". You don't edit code; proposals go to the
 `product-owner` (if they change scope) or the `engineer`.
+
+## Tickets
+
+Read the item's tickets with `backlog task view <id> --plain` to know what was promised. Write
+proposed fixes as ticket text in your report (title, `item:<slug>`, what a user would see, the
+fix); you never run a `backlog` command that writes — `.claude/hooks/backlog-guard.js` refuses it.

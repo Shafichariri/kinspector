@@ -36,8 +36,9 @@ release is cut, and the Maven Central and signing decisions, are there. Read
 
 ## Public-repo hygiene — run before every push you are asked to review
 
-The repository is public. Scan the diff and the commit messages for any client, employer, product
-or domain name, and for personal emails or internal hostnames. The term list is deliberately not
+The repository is public. Scan the diff, the commit messages **and every ticket under `backlog/`**
+(committed like any other file) for any client, employer, product or domain name, and for personal
+emails or internal hostnames. The term list is deliberately not
 in the repo. It lives in your **user-scope memory** (`~/.claude/agent-memory/release-steward/`,
 outside the repository, loaded at startup): if it is there, scan for every term; if it is not, ask
 the human once and save it there. Never copy a term from memory into a file, commit message,

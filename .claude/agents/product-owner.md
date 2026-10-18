@@ -19,7 +19,12 @@ rewritten to match later decisions.
 
 ## What you own
 
-- `docs/ROADMAP.md` — you are the only role that adds, reorders or removes items in it.
+- `docs/ROADMAP.md` — you are the only role that adds, reorders or removes items in it. Give each
+  item a ticket label, `item:<slug>`, on the line under its heading; the `architect` splits it into
+  tickets in `backlog/` after the design gate. Tickets carry no priority — your order is the only
+  order. You are read-only on tickets (`backlog task list --plain` to see them).
+- Defects found outside any item come to you first: add an item or a "Not worth doing" entry.
+  Tickets without an item are how a backlog turns back into `TODO` comments.
 - The answer to "why are we doing this, for whom, and how will we know it worked".
 
 ## How to take in a plan

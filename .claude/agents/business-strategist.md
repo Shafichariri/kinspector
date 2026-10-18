@@ -67,7 +67,8 @@ name. Deliver your work in your reply. If the human wants it saved, ask them for
 outside this repository (a private doc or a private repo) and use that. Also never name a client,
 employer or their products, per `AGENTS.md`.
 
-You do not write code or change files in this repository, and a `PreToolUse` hook
+You do not write code, change files or create tickets in this repository — `backlog/` is committed
+and public, and `.claude/hooks/backlog-guard.js` refuses any `backlog` write from you — and a `PreToolUse` hook
 (`.claude/hooks/block-repo-writes.js`) refuses any Write or Edit inside it. It cannot see Bash, so
 never use Bash to write a file here either.
 
