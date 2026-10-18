@@ -188,9 +188,14 @@ opening again after the daemon was away clear both (`forgetWholeSession`): the l
 only thing that keeps either copy current, so rows that arrived while nothing listened are in
 neither, and the tabs, the route and the endpoint chips went on without them until the filter was
 cleared. The live probe's `resume refreshes` and `reconnect refreshes` play rows arriving in each
-gap under `tag:screen`. A whole-session read that fails leaves the filtered rows standing in and
-does not mark them as the session, or every later load would trust them (`whole read failure` in
-`check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
+gap under `tag:screen`. Forgetting also overtakes every load in flight (`callLoad`, `signalLoad`),
+because a whole-session read sent before the gap answers from before it, and landing afterwards it
+marked the copy again with the old rows (`forget drops calls read`, `forget drops signals read`);
+deleting the session on screen clears through the same function (`session change forgets`). A
+whole-session read that fails leaves the filtered rows standing in and does not mark them as the
+session, for the calls as for the signals, or every later load would trust them — and the list,
+reading the mark, said a session with calls had recorded none (`whole read failure`,
+`whole calls read failure` in `check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
 one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
 answer two loads out of order, and a slow unfiltered read that landed last put every row back under
 the filter just typed (`older call load dropped`, `older signal load dropped`).

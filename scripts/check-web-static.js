@@ -21,7 +21,8 @@
  *   - the signal pager, `signalPages`, against stub routes that clamp, ignore `offset` or shift a
  *     row across a page seam;
  *   - the session data under a filter: which list "last capture" dates the session by, and which
- *     answer survives when two loads overlap or a whole-session read fails.
+ *     answer survives when two loads overlap, a whole-session read fails, or the page forgets the
+ *     whole session while a read is in flight.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`

@@ -209,10 +209,16 @@ async function syncAllSignals(filter, isLatest = () => true) {
  * them current. Whatever arrived while it was not listening — the list paused, the page
  * disconnected, the daemon restarted — is in neither copy, so a re-read that trusted the cache
  * would draw tabs, the route and endpoint chips without it until the filter was cleared.
+ *
+ * It also overtakes every load in flight. A whole-session read sent before the gap answers from
+ * before it, and landing after this it would mark the copy again with the old rows, which the next
+ * load would then trust. Whoever calls this starts the load that replaces them, or clears the page.
  */
 function forgetWholeSession() {
   state.allSessionId = null;
   state.allSignalsSessionId = null;
+  state.callLoad++;
+  state.signalLoad++;
 }
 
 // @mirror-begin signalPages
@@ -276,8 +282,13 @@ async function syncAllTransactions(filter, isLatest = () => true) {
     all = (await api(`/api/sessions/${encodeURIComponent(sessionId)}/transactions?${q}`)).items;
   } catch {
     // Chips are a convenience. If this fails, fall back to what we have rather than taking the
-    // list down with it.
-    all = state.transactions.slice();
+    // list down with it — but not marked as the session, as `syncAllSignals` does not mark its
+    // stand-in: the list's empty state reads the mark, and a filtered stand-in taken for the whole
+    // session said "no calls were recorded" of a session that had them.
+    if (!isLatest()) return;
+    state.allTransactions = state.transactions.slice();
+    state.allSessionId = null;
+    return;
   }
   if (!isLatest()) return;
   state.allTransactions = all;

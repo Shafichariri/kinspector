@@ -94,11 +94,13 @@ async function afterSessionChange() {
   if (state.sessionId) {
     await loadTransactions();
   } else {
+    // Through `forgetWholeSession`, so a load still in flight for the session just deleted is
+    // dropped rather than drawing it back, and neither copy stays marked as a session's.
+    forgetWholeSession();
     state.transactions = [];
     state.allTransactions = [];
     state.signals = [];
     state.allSignals = [];
-    state.allSignalsSessionId = null;
     state.screens = [];
     state.current = [];
     state.markers = [];
