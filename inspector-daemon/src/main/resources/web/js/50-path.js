@@ -258,9 +258,22 @@ function pathStop(visit, index, list, colour) {
     state.expandedVisits.add(key);
     renderPath();
     const row = $('path').querySelector(`.pv-visit[data-visit="${index}"]`);
-    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'start' });
+    if (row) scrollBelowMap(row);
   });
   return stop;
+}
+
+/**
+ * Scrolls the pane so `row` starts just under the sticky box — the scope bar, then the map and any
+ * filter note. A fixed `scroll-margin-top` did this and was always wrong by something: the note
+ * wraps to two lines on a narrow pane and the bar is there or not, so a clicked station's line
+ * landed 27px under the box at 1440 and 41px at 400 under a filter. Measured instead, at click time.
+ */
+function scrollBelowMap(row) {
+  const pane = $('path').parentElement;
+  const box = $('path').querySelector('.pv-top');
+  const stuck = box ? (parseFloat(getComputedStyle(box).top) || 0) + box.offsetHeight : 0;
+  pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top - stuck;
 }
 
 /** One line of the log: the visit's name and length, then what happened there, in order. */

@@ -4,7 +4,10 @@
 .view-switch { display: inline-flex; gap: 2px; }
 .view-switch .btn.active { background: var(--accent-bg, #2b3a55); color: var(--fg, #e6e6e6); }
 
-#timeline { overflow-y: auto; height: 100%; }
+/* No scroller of its own: the timeline flows in #list-pane, as the list does. It was a full-height
+   scroller beside the sticky scope bar, so the pane overflowed by the bar's height, live follow
+   scrolled the pane by that much, and the bar sat on the timeline's first row — and, under a
+   filter, the timeline's sticky note sat on the bar. */
 
 /* A signal row reads as a sibling of a request row, not as a different kind of object: the
    whole point of the merge is that they sit on one clock. */

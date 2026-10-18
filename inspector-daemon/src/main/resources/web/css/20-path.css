@@ -11,7 +11,7 @@
 /* Sticky so it is visible wherever the line you are reading sits. */
 .path-new {
   position: sticky;
-  top: 6px;
+  top: calc(var(--sticky-top, 0px) + 6px);
   z-index: 3;
   display: block;
   margin: 6px 12px 0 auto;
@@ -31,7 +31,7 @@
 
 /* --- the map --- */
 /* The map and, under a filter, the note saying what it hid: one sticky box, so neither covers the other. */
-.pv-top { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.pv-top { position: sticky; top: var(--sticky-top, 0px); z-index: 2; background: var(--bg); }
 .pv-metro {
   position: sticky;
   top: 0;
@@ -115,8 +115,6 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--divider);
   border-left: 3px solid var(--pv-colour, var(--divider));
-  /* Clears the sticky map when a station scrolls its line into view. */
-  scroll-margin-top: 96px;
 }
 .pv-visit.pv-leading { border-left-style: dashed; }
 .pv-visit.pv-focus { background: var(--sel-bg); }

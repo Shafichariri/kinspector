@@ -12,7 +12,7 @@
   gap: 8px;
   padding: 8px 10px 5px;
   position: sticky;
-  top: 0;
+  top: var(--sticky-top, 0px);
   /* The group header is the answer — "this screen cost six calls and two seconds" — so it stays
      on screen while you read the rows it is about. */
   background: var(--bg);

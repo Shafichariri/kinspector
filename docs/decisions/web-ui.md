@@ -238,10 +238,26 @@ filtered calls, so a filter plus an empty stretch called a session with calls em
 probe's lines from `waterfall emptied` to `filter panes tabs` press each pane's button and
 check the tab bar never moves; `waterfall stretch`, `waterfall order` and `waterfall calls` hold
 the order and the wording, the stretch set through `setTimeRange`, which the brush calls. Where the note sits is layout, which jsdom does not do, so it was checked in
-headless Chrome at 1440 and 400 wide: the timeline's empty note is above the timeline, which is a
-full-height box, and an empty timeline does not follow its foot under live tail, or the note
-scrolled out of sight; the thinned note is sticky inside the timeline, and the path's rides in one
-sticky box with the map.
+headless Chrome at 1440 and 400 wide: the timeline's empty note is above the timeline, and an
+empty timeline does not follow its foot under live tail, or the note scrolled out of sight; the
+thinned note is sticky, and the path's rides in one sticky box with the map.
+
+**Nothing sticky in the list pane stops above the scope bar.** The bar is sticky at the top of
+`#list-pane` and is a standing claim about every path below it (`shared-rules.md`), and every view
+in the pane sticks something of its own: the timeline's filter note, the path's map, the waterfall's
+group heads, the new-visit pill. Each stuck at `top: 0`, so whichever came later in the document
+drew over the bar — the timeline's note under any filter, the path's map at 400 wide. They stop at
+`--sticky-top` now, which is the bar's height while it is drawn and 0 otherwise, set by
+`#scope-bar:not([hidden]) ~ *`; the bar's height is fixed so the offset is a number, not a
+measurement. The timeline is no longer its own full-height scroller: beside the bar it made the pane
+overflow by the bar's height, live follow scrolled the pane that far, and the bar sat on the first
+row while the timeline's own foot was never followed. It flows in the pane as the list does. A
+clicked station scrolls its visit to just under the sticky box by measuring the box at click time;
+the fixed `scroll-margin-top: 96px` it replaced did not count the filter note, and landed the row 19
+to 33px under the box. Layout again, so not a probe: KIN-33's notes record the headless Chrome
+measurement — the element at the bar's centre, the first and newest timeline rows, and each
+station's row against the box, at 1440 and 400, with and without a filter — red at e1711a3 and
+green after.
 
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
