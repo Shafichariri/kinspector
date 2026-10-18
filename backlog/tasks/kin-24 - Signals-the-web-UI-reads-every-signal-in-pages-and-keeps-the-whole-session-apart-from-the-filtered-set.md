@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:27'
-updated_date: '2026-10-18 20:22'
+updated_date: '2026-10-18 21:27'
 labels:
   - 'item:signals-query-one-rule'
 dependencies: []
@@ -47,7 +47,7 @@ Web half of item:signals-query-one-rule, built first because it is safe against 
 - [ ] #1 scripts/check-web-static.js runs the real signalPages lifted by its anchors against stubs: a 1001-signal session served 1000 per page returns all 1001 ids, newest first, each once; a server clamping at 500 still returns all 1001; a source that ignores offset terminates with each id once; a row repeated across the page seam appears once. Proven failing with a 'page.length < 1000' stop (the 500 stub) and with the dedupe removed.
 - [ ] #2 render-web-ui.js: the signal tabs' counts sum to the probe's own sessionSignals() length for the session, proving loadSignals reads the whole session through the pager. Proven failing with loadSignals reading one page of limit=500.
 - [ ] #3 render-web-ui-archive.js, in the opened export: GET …/signals?offset=0&limit=N is a bare array, newest first, of min(N, total) rows; an offset past the end is []; a non-empty filter is a 400; and the signal tabs' counts sum to archive.signals.length. ARCHIVE_EXPECT_CHECKS in ci.yml moves by the number added.
-- [ ] #4 Against the current route nothing visible changes: every existing render-web-ui.js and render-web-ui-archive.js check passes, and UI_EXPECT_CHECKS moves only by the checks this ticket adds.
+- [x] #4 Against the current route nothing visible changes: every existing render-web-ui.js and render-web-ui-archive.js check passes, and UI_EXPECT_CHECKS moves only by the checks this ticket adds.
 - [ ] #5 No reader of state.signals remains outside renderTimeline's entries and the path view's visits(...) call (grep in the review).
 - [ ] #6 web-ui.md and shared-rules.md carry the paragraphs above; DecisionsTest passes; structure/budgets.txt raises render-web-ui.js by hand with the reason on the line.
 <!-- AC:END -->
@@ -67,4 +67,6 @@ RED PROOFS. (1) 'if (page.length < 1000) return all' in place of the no-new-id s
 AC5 grep: state.signals is read only at 50-path.js visits(...) and 70-timeline.js entries; other hits are writes (signalPages result, live push, reset) and syncAllSignals' unfiltered copy. Small adds beyond the list: the reset also clears allSignalsSessionId and screens; selectSignal's screens fallback and the extra ...state.screens spreads in sessionStartMono/lastMono went, since allSignals contains every screen. Client-name scan could not run here (no terms provided).
 
 QA (verify panel, head 5f6b610): AC4 Failed and AC6 Failed; nothing ticked, ticket stays In Progress. AC4 ('nothing visible changes / allSignals stays the whole session'): under a filter the cached whole-session signal copy goes stale after pause-and-resume or a reconnect, filed as KIN-27 (blocking). AC6 (web-ui.md paragraph accurate): web-ui.md falsely claims the waterfall says 'no matching calls'; three empty states say nothing happened under a filter, filed as KIN-28 (blocking). Also filed under the item, all depending on KIN-25: KIN-29 (slow older load lands under a newer filter, should-fix), KIN-30 (release line wording), KIN-31 (lastCapture reads state.transactions where web-ui.md says allTransactions; 85-processes.js:81).
+
+QA (second verify panel, head e1711a3): AC4 Verified. AC6 Failed: ws.onclose never moves serverState off 'running', so an unplanned drop does not trigger the wasAway clear and re-read; web-ui.md and the comment at 05-network.js:221 claim it does. Filed as KIN-32. Also found on this pass and filed under the item: KIN-35 (two more ways the whole-session copies go stale). AC1-3 and AC5 were not part of this panel's verified list and stay unticked.
 <!-- SECTION:NOTES:END -->
