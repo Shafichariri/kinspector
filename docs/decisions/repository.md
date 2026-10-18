@@ -13,7 +13,7 @@ are `LockMode.STRICT`, so a deleted lockfile fails instead of silently unlocking
 `lockAllConfigurations()`, because the Kotlin/Native bundle and `compose.desktop.currentOs` resolve
 per host, so a lock written on one machine fails on the next. Test classpaths are not locked
 either, because no consumer sees them. Regenerate on macOS, the only host where the iOS graphs are
-real, with the command under Commands.
+real, with the command under Commands in the root `AGENTS.md`.
 
 **`resolveLockedConfigurations` is load-bearing, and the obvious way to write it checks nothing.**
 Nothing else in a library build resolves a main runtime classpath: the jars, the publications and
@@ -52,7 +52,8 @@ fails at class-init with "should be void" if the block's last expression returns
 `assertNotNull` returns its argument. `:inspector-daemon` runs **JUnit 5**
 (`useJUnitPlatform()`), where a value-returning `@BeforeEach` is rejected instead.
 
-`scripts/check-client-names.sh` is that check. Run it locally with `--terms-file` before
+`scripts/check-client-names.sh` is the check that the paragraph on history in the root `AGENTS.md`
+puts before the commit. Run it locally with `--terms-file` before
 committing. CI's `repo` job runs it too, with the terms from the `CLIENT_NAME_TERMS` secret, and
 that catches a match **before merge, not before publication**: by the time CI sees a branch, it is
 on a public remote. The script reports file and line, a count of matching paths, the SHA of a
@@ -66,8 +67,9 @@ secrets, and an unset secret arrives empty. In both cases the script prints `NOT
 case exit 1. CI does not pass it yet, because the secret has not been created and `main` would go
 red. Add it to the push-to-`main` run once the secret exists.
 
-`scripts/check-commit-identity.sh <base> <head>` enforces this over every commit in a range, merges
-included, and CI's `repo` job runs it over what a pull request adds and what a push to `main`
+`scripts/check-commit-identity.sh <base> <head>` enforces the root `AGENTS.md`'s "Agents commit as
+the maintainer" rule over every commit in a range, merges included, and CI's `repo` job runs it
+over what a pull request adds and what a push to `main`
 brings. It names the commit and the failing field, never the address. An empty or uncomputable
 range exits 2, because a check over no commits must not pass.
 
