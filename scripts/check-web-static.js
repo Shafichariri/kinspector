@@ -10,7 +10,12 @@
  *   - the stylesheet audits: `[hidden]` overrides, nothing under 11px, long tokens wrap, the drawer;
  *   - the JSON tree's parser;
  *   - every shared mirror case in `mirror-cases/`, against the functions lifted out of the real
- *     `app.js` by their `@mirror-begin`/`@mirror-end` anchors.
+ *     `app.js` by their `@mirror-begin`/`@mirror-end` anchors;
+ *   - the scripts as classic scripts sharing one global scope: each file starts with `'use strict'`,
+ *     no top-level name is declared twice, and none takes a browser global's name.
+ *
+ * The scripts section prints last so the lines above it stay comparable with reports from before it
+ * existed.
  *
  * Output is the same `label : value` shape as the other reports, ending `N checks, M failed`.
  * Exit 1 when a check fails; exit 2 when the harness cannot run at all — an anchor missing or
@@ -20,6 +25,7 @@
 const {
   HarnessError, auditHiddenPanes, auditMinTextSize, auditLongTokenWrap, auditDrawerCss,
   countNetworkPrimitives, NETWORK_EXPECTED, mirrorBlockNames,
+  auditUseStrict, auditOneDeclarationPerName, auditWindowNames,
 } = require('./lib/web-audits');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser } = require('./lib/mirror-runner');
@@ -70,6 +76,11 @@ function main() {
       ? `NO - ${failures.length} of ${total} cases failed\n    ${failures.join('\n    ')}`
       : `yes (${total} cases)`);
   }
+
+  console.error('--- scripts ---');
+  report('use strict first', auditUseStrict(scripts));
+  report('one declaration per name', auditOneDeclarationPerName(scripts));
+  report('no browser global names', auditWindowNames(scripts));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

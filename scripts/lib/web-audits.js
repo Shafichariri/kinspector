@@ -186,8 +186,144 @@ function liftBlock(sources, name) {
   return sources.find((s) => s.file === b.file).text.slice(b.end, e.index);
 }
 
+/**
+ * Every manifest file opts into strict mode as its first statement.
+ *
+ * The page is classic scripts sharing one global scope, and `'use strict'` applies per file, so a
+ * file without it silently turns a misspelt assignment into a new global. jsdom does not throw on
+ * an implicit global even under the directive (measured in 29.1.1, through `vm.Script` and through
+ * a real `<script>`), so neither probe can see a missing one: this check and a real browser are
+ * the only things that can.
+ *
+ * "First" is the whole rule. A `'use strict'` after any other statement is not a directive, only a
+ * string expression that does nothing, so the file is read past its leading comments and blank
+ * lines and the next thing must be the directive itself.
+ */
+function auditUseStrict(sources) {
+  if (!sources.length) return 'NO - no scripts to read';
+  const offenders = [];
+  for (const { file, text } of sources) {
+    let rest = text;
+    for (;;) {
+      rest = rest.replace(/^\s+/, '');
+      if (rest.startsWith('//')) {
+        const eol = rest.indexOf('\n');
+        rest = eol < 0 ? '' : rest.slice(eol + 1);
+      } else if (rest.startsWith('/*')) {
+        const close = rest.indexOf('*/', 2);
+        rest = close < 0 ? '' : rest.slice(close + 2);
+      } else break;
+    }
+    const first = rest.split('\n', 1)[0].trim();
+    if (!/^(['"])use strict\1;?$/.test(first)) offenders.push(`${file} starts with ${JSON.stringify(first.slice(0, 40))}`);
+  }
+  return offenders.length
+    ? `NO - ${offenders.join('; ')}, not 'use strict'`
+    : `yes (${sources.length} file(s))`;
+}
+
+/** Declarations at column 0. Matched by kind, so `for (const x …)` and `(async function init…` are not. */
+const TOP_LEVEL = /^(?:async[ \t]+)?(function\b[ \t]*\*?|const\b|let\b|var\b|class\b)[ \t]*([^\s(=;]+)(.*)$/gm;
+
+/** Whether [rest] of a declaration's line has a comma outside brackets and quotes: `let a = 1, b`. */
+function declaresMore(rest) {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < rest.length; i++) {
+    const c = rest[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"' || c === '`') quote = c;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === ',' && depth === 0) return true;
+    else if (c === ';' && depth === 0) return false;
+  }
+  return false;
+}
+
+/**
+ * Every top-level name each script declares: `[{ file, line, name }]`.
+ *
+ * Read by layout, not by a parse, because the checks run with nothing installed. Every file is
+ * written with its top level at column 0 and everything nested indented, which is what lets a
+ * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. The limit
+ * that follows: a top-level declaration written indented is not seen. A form whose names this
+ * cannot read — destructuring, or two names in one `let` on its first line — is refused rather than
+ * skipped, so a declaration is never silently left out by its shape.
+ */
+function topLevelDeclarations(sources) {
+  const found = [];
+  for (const { file, text } of sources) {
+    for (const m of text.matchAll(TOP_LEVEL)) {
+      const line = text.slice(0, m.index).split('\n').length;
+      const [, kind, name, rest] = m;
+      if (!/^[A-Za-z_$][\w$]*$/.test(name) || (/^(const|let|var)$/.test(kind) && declaresMore(rest))) {
+        throw new HarnessError(`${file}:${line}: cannot read the names declared by: ${m[0].trim()}`);
+      }
+      found.push({ file, line, name });
+    }
+  }
+  return found;
+}
+
+/**
+ * No top-level name is declared twice, in one file or across two.
+ *
+ * Without the IIFE every top-level `function` is a property of `window`, and a second declaration
+ * of the same name silently replaces the first wherever it was called from — which is also what a
+ * stale copy of a moved function would do, anchors or not. A duplicate `const` would at least be
+ * a `SyntaxError`, but only in whichever browser loaded both files.
+ */
+function auditOneDeclarationPerName(sources) {
+  const decls = topLevelDeclarations(sources);
+  if (!decls.length) return 'NO - found no top-level declarations, so this checked nothing';
+  const byName = new Map();
+  for (const d of decls) byName.set(d.name, [...(byName.get(d.name) || []), d]);
+  const twice = [...byName].filter(([, ds]) => ds.length > 1)
+    .map(([name, ds]) => `${name} in ${ds.map((d) => `${d.file}:${d.line}`).join(' and ')}`);
+  return twice.length
+    ? `NO - declared more than once: ${twice.join('; ')}`
+    : `yes (${decls.length} names in ${sources.length} file(s))`;
+}
+
+/**
+ * Browser globals no top-level declaration may take.
+ *
+ * A top-level `function stop()` is `window.stop`: it replaces the browser's for every caller, the
+ * browser's own included, and nothing reports it. A `let` or `const` of a name the browser holds as
+ * non-configurable (`window`, `document`, `location`, `top`) is instead a redeclaration error that
+ * stops the whole file from running. Named rather than read from a `Window` at runtime: the check runs with no browser, and a list
+ * someone has to extend is one somebody decided on. The second group is what this page itself
+ * calls, where shadowing breaks the page rather than the browser.
+ */
+const WINDOW_DENYLIST = [
+  'top', 'parent', 'self', 'window', 'document', 'location', 'history', 'name', 'status', 'stop',
+  'close', 'open', 'print', 'focus', 'blur', 'find', 'scroll', 'event', 'origin', 'external',
+  'screen', 'navigator', 'frames', 'length', 'opener', 'closed', 'alert', 'confirm', 'prompt',
+  'fetch', 'toolbar', 'menubar', 'crypto', 'performance', 'INSPECTOR_ARCHIVE',
+  'localStorage', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'WebSocket',
+  'URL', 'URLSearchParams', 'TextDecoder', 'TextEncoder', 'console',
+];
+
+/** No top-level name is one of [WINDOW_DENYLIST]. */
+function auditWindowNames(sources) {
+  const decls = topLevelDeclarations(sources);
+  if (!decls.length) return 'NO - found no top-level declarations, so this checked nothing';
+  const deny = new Set(WINDOW_DENYLIST);
+  const hits = decls.filter((d) => deny.has(d.name)).map((d) => `${d.name} at ${d.file}:${d.line}`);
+  return hits.length
+    ? `NO - a browser global declared: ${hits.join('; ')}`
+    : `yes (${decls.length} names, none of ${deny.size} browser globals)`;
+}
+
 module.exports = {
   HarnessError,
+  auditUseStrict,
+  auditOneDeclarationPerName,
+  auditWindowNames,
+  WINDOW_DENYLIST,
   auditMinTextSize,
   auditLongTokenWrap,
   auditDrawerCss,
