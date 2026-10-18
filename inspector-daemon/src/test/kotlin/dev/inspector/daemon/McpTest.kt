@@ -802,6 +802,21 @@ class McpTest {
     }
 
     @Test
+    fun explain_reports_the_full_url_with_port_and_query() {
+        // A hand-built scheme://host/path dropped both, which is the port defect capture already
+        // fixed once: an agent handed that URL would call a different address.
+        val row = txn("port0001", path = "/v2/users/me").copy(port = 8080, query = "a=1")
+        val id = session("2026-08-17T09-00-09_port_dev_debug") { writer -> writer.append(row, null, null) }
+
+        val text = callTool("explain", """{"session":"$id","id":"port0001"}""")
+        val url = Json.parseToJsonElement(text).jsonObject
+            .getValue("call").jsonObject.getValue("url").jsonPrimitive.content
+
+        assertEquals("https://api.example.com:8080/v2/users/me?a=1", row.url)
+        assertEquals(row.url, url)
+    }
+
+    @Test
     fun explain_is_offered_to_agents_as_a_tool() {
         val frames = exchange("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""")
         val names = frames.single().getValue("result").jsonObject

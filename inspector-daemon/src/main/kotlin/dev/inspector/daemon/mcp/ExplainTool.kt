@@ -101,7 +101,8 @@ internal fun TransactionTools.explain(args: JsonObject): ToolOutcome {
                     ts = txn.ts,
                     mono = txn.mono,
                     method = txn.method,
-                    url = "${txn.scheme}://${txn.host}${txn.path}",
+                    // The shared rule: a hand-built URL dropped the port and the query.
+                    url = txn.url,
                     status = txn.status,
                     error = txn.error,
                     ms = txn.ms,

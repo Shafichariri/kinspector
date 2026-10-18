@@ -242,6 +242,37 @@ class ExportTest {
         assertContains(ExportMarkdown.render(build(dir)), "/a\\|b")
     }
 
+    // `NetworkTransaction.url` already carries the query, so the URL line is that and nothing more.
+    // Appending `query` again printed it twice on every call that had one.
+    private fun urlLine(md: String): String = md.lines().single { it.startsWith("- **URL:** ") }
+
+    @Test
+    fun `the URL line carries the query once`() {
+        val dir = session { it.append(txn("aaaa1111").copy(query = "a=1&b=2"), null, null) }
+        assertEquals(
+            "- **URL:** `https://api.example.com/v2/users/me?a=1&b=2`",
+            urlLine(ExportMarkdown.render(build(dir))),
+        )
+    }
+
+    @Test
+    fun `the URL line has no question mark without a query`() {
+        val dir = session { it.append(txn("aaaa1111").copy(query = null), null, null) }
+        assertEquals(
+            "- **URL:** `https://api.example.com/v2/users/me`",
+            urlLine(ExportMarkdown.render(build(dir))),
+        )
+    }
+
+    @Test
+    fun `an empty query is one question mark, as the web UI draws it`() {
+        val dir = session { it.append(txn("aaaa1111").copy(query = ""), null, null) }
+        assertEquals(
+            "- **URL:** `https://api.example.com/v2/users/me?`",
+            urlLine(ExportMarkdown.render(build(dir))),
+        )
+    }
+
     // --- HTML ----------------------------------------------------------------------------------
 
     private fun embedded(html: String): JsonObject {
