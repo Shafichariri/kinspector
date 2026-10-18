@@ -1235,6 +1235,8 @@ so QA cannot run it. The release steward scans what it can. `McpTest.kt` was not
 
 ### Phase F — `app.js` and CSS split behind the manifest
 
+*Ticket label:* `item:structure-phase-f`.
+
 **Audit finding 4. Must land before 1a**, because 1a adds a rail, hash routes and four pages. Adding
 them to one 5,398-line function would be the "building it twice" that §6's ordering argues against.
 
@@ -1268,6 +1270,12 @@ is for are whoever edits the web UI next, and the reviewer of 1a's diff.
 
 **Out of scope.** Any visual or behavioural change. Splitting `render-web-ui.js`. A module system or
 a bundler.
+
+**Design agreed, 2026-10-18.** A design council agreed it and the maintainer approved it. It lands as
+five commits, F1 to F5. The maintainer accepted the architect's call that the live probe keeps reading
+the working tree; `RestApiTest` holds the served half. F1 also fixes a measured defect.
+`PaletteParityTest` reported UP-TO-DATE on a CSS-only change, so palette drift passed an ordinary
+build.
 
 ### Phase I — `noop-ui` golden file
 
@@ -1452,8 +1460,8 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
   counts as a finding is a worse bug than either alone. View preferences stay in `prefs`.
 
 What must still hold: the export still works offline (new pages either read the embedded archive
-or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
-`display` joins `auditHiddenPanes`; nothing new under 11px.
+or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
+lists; every new pane that sets `display` joins `auditHiddenPanes`; nothing new under 11px.
 
 **The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
 they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
