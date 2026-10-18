@@ -11,16 +11,16 @@ we are" in phase G; the phase table stayed in "Where we are"). The one addition 
 tickets that are the **how** under each roadmap item, never a second list of what (see
 [Tickets](#tickets)).
 
-| Role | Owns | Writes | Asks for |
-|---|---|---|---|
-| `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` (read-only on tickets) | Decisions only the human can make |
-| `architect` | Structure: modules, twins, golden files, model ↔ web UI mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
-| `engineer` | Building one designed item, with tests | code and tests; ticket status up to In Progress | A design note before starting |
-| `qa-verifier` | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
-| `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
-| `delivery-tracker` | What is actually done | roadmap item state; closing tickets and filing bug tickets; `docs/STATUS.md` and the phase table in `AGENTS.md` | QA evidence before marking anything done |
-| `release-steward` | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
-| `business-strategist` | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
+| Role | Name (handle) | Owns | Writes | Asks for |
+|---|---|---|---|---|
+| `product-owner` | Steve Jobs (`steve`) | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` (read-only on tickets) | Decisions only the human can make |
+| `architect` | Charles (`charles`) | Structure: modules, twins, golden files, model ↔ web UI mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
+| `engineer` | Bob the Builder (`bob`) | Building one designed item, with tests | code and tests; ticket status up to In Progress | A design note before starting |
+| `qa-verifier` | Doug the Doomsayer (`doug`) | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
+| `ux-reviewer` | Simon Cowell (`simon`) | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
+| `delivery-tracker` | Sherlock Holmes (`sherlock`) | What is actually done | roadmap item state; closing tickets and filing bug tickets; `docs/STATUS.md` and the phase table in `AGENTS.md` | QA evidence before marking anything done |
+| `release-steward` | Heimdall (`heimdall`) | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
+| `business-strategist` | Bill Gates (`bill`) | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
 
 ## How the definitions are tuned
 

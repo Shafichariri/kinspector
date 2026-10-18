@@ -92,7 +92,10 @@ conductor; every gate above still stops for the human.
 
 Teammates do not see this conversation. Every spawn prompt carries the item's text and acceptance
 criteria verbatim, the phase rules below, and the names of the other teammates. Name them
-`architect`, `ux`, `qa` (or `qa-<hypothesis>`) so they can address each other.
+by their handles — `charles` (architect), `simon` (ux-reviewer), `doug` (qa-verifier), or
+`doug-<hypothesis>` for one per hypothesis — so they can address each other. A handle reused in a
+later phase resolves to the newest agent, so add a suffix (`doug-2`) when an earlier one may still
+be messaged. When you report to the human, call each role by its name (docs/TEAM.md lists them).
 
 **design-council** (replaces Mode B step 1)
 1. Create the tasks: design note (`architect`); design review (`ux`, blocked by the note, only if the
