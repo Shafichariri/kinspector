@@ -20,7 +20,9 @@ implicit global does not throw there — so the static check is the guard, not t
 nothing else in `web/`), static checks 1–3 in `check-web-static.js` (`'use strict'` is the first
 statement of every file, no top-level name is declared in two files, none is on the named list of
 browser `Window` members or an own property of Node's `globalThis` — which is where `Map`, `atob` and
-`encodeURIComponent` are refused), both probes loading each file as its own script in manifest order so a
+`encodeURIComponent` are refused; checks 2 and 3 read declarations at column 0, so a top-level one
+written indented, after a block comment on the same line, or as the second name of a `let` whose
+first line ends inside brackets is not seen), both probes loading each file as its own script in manifest order so a
 redeclared name or an early call into a later file fails as it would in a browser, and the archive
 probe's `every file inlined`.
 

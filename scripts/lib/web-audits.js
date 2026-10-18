@@ -248,10 +248,13 @@ function declaresMore(rest) {
  *
  * Read by layout, not by a parse, because the checks run with nothing installed. Every file is
  * written with its top level at column 0 and everything nested indented, which is what lets a
- * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. The limit
- * that follows: a top-level declaration written indented is not seen. A form whose names this
- * cannot read — destructuring, or two names in one `let` on its first line — is refused rather than
- * skipped, so a declaration is never silently left out by its shape.
+ * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. A form
+ * whose names this cannot read on that line — destructuring, or two names in one `let` on its first
+ * line — is refused rather than skipped. Three shapes are missed silently, and `web-ui.md` says so
+ * where it cites these checks: a top-level declaration written indented; one that follows a block
+ * comment on the same line; and the second name of a declaration
+ * whose first line ends inside brackets, as `let a = f(1,` continued by `2), ok = 3`, because the
+ * comma that introduces it is on a line this does not read.
  */
 function topLevelDeclarations(sources) {
   const found = [];
