@@ -3,11 +3,11 @@ id: KIN-21
 title: >-
   Phase F bug: check 5's empty-input guard counts selectors, and web-ui.md
   overstates checks 2, 3 and 5
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 15:22'
-updated_date: '2026-10-18 15:35'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -30,19 +30,19 @@ Reproductions:
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Check 5 counts the (@media rule, earlier-or-later plain rule) pairs it actually compares, requires at least one, and prints that count on its green line; proven red with the broken property reader in (1), green restored
-- [ ] #2 web-ui.md and check 5's doc comment state the matching rule exactly (same selector text, property overlap by name prefix with shorthand/longhand not resolved, @media only with other at-rules not walked), or the code is extended to cover the missed cases; engineer's choice, recorded. No false claim remains
-- [ ] #3 Checks 2 and 3 refuse a second declaration on a column-0 line (HarnessError / exit 2, as multi-name declarations already are), proven by both examples in (3); OR web-ui.md lists it as a fourth blind spot. Engineer's choice, recorded; refusing is preferred because it costs nothing today
-- [ ] #4 The first 24 lines of 'node scripts/check-web-static.js' stay byte-identical; probes 164 / 21 unchanged; gradle suites green
+- [x] #1 Check 5 counts the (@media rule, earlier-or-later plain rule) pairs it actually compares, requires at least one, and prints that count on its green line; proven red with the broken property reader in (1), green restored
+- [x] #2 web-ui.md and check 5's doc comment state the matching rule exactly (same selector text, property overlap by name prefix with shorthand/longhand not resolved, @media only with other at-rules not walked), or the code is extended to cover the missed cases; engineer's choice, recorded. No false claim remains
+- [x] #3 Checks 2 and 3 refuse a second declaration on a column-0 line (HarnessError / exit 2, as multi-name declarations already are), proven by both examples in (3); OR web-ui.md lists it as a fourth blind spot. Engineer's choice, recorded; refusing is preferred because it costs nothing today
+- [x] #4 The first 24 lines of 'node scripts/check-web-static.js' stay byte-identical; probes 164 / 21 unchanged; gradle suites green
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
-- [ ] #4 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #5 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #4 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #5 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #6 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -53,3 +53,9 @@ Engineer, commit 526dab7. CHOICES: checks 2/3 REFUSE (HarnessError, exit 2) a se
 
 QA at 526dab7: AC#1, #3, #4 Verified; AC#2 Failed (completeness claim in check 5's doc comment) — follow-up in KIN-22.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA at 526dab7: AC#1, #3, #4 Verified, AC#2 Failed and was filed as KIN-22; after KIN-22 (f05603b, wording pass b733aa4) AC#2 re-verified. Check 5 counts compared pairs; checks 2-3 refuse two declarations per line; static output byte-identical across 76b6c99/f05603b/b733aa4. This ticket carries a duplicated DoD block; items 3 and 6 are the no-client-names item, left unticked since the term list is not on this machine.
+<!-- SECTION:FINAL_SUMMARY:END -->

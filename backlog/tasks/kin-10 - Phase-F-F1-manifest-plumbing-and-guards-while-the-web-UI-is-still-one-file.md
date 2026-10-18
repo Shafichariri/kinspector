@@ -1,11 +1,11 @@
 ---
 id: KIN-10
 title: 'Phase F F1: manifest plumbing and guards while the web UI is still one file'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 13:30'
-updated_date: '2026-10-18 13:51'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies: []
@@ -59,34 +59,34 @@ After this commit QA re-runs phase D's route matrix base against head.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `web/app.js` is `git mv`ed to `web/js/00-app.js` and `web/style.css` to `web/css/00-tokens.css`; `web/scripts.txt` and `web/styles.txt` list one entry each; `index.html` holds `<!-- inspector:styles -->` in `<head>` and `<!-- inspector:scripts -->` before `</body>` and keeps no file list
-- [ ] #2 `service/WebPage.kt` is the only Kotlin reader of the manifests and imports no Ktor; `DaemonLayersTest` stays green
-- [ ] #3 `GET /js/{f}` and `GET /css/{f}` serve only files the manifest lists; `/app.js` and `/style.css` go away; nothing serves or fetches `scripts.txt`
-- [ ] #4 `RestApiTest`: `/` contains the tags in exact manifest order, and no slot comment is left
-- [ ] #5 `RestApiTest`: every listed path returns 200 with `text/javascript` or `text/css`, and a body byte-equal to the resource
-- [ ] #6 `RestApiTest`: an unlisted file gives 404; an encoded traversal (`/js/..%2f..%2findex.html`) gives 404; `PUT /js/00-core.js` gives 405 (KIN-9)
-- [ ] #7 `HtmlExport` reads both manifests through `WebPage`, with `checkNotNull` on each entry naming the file, and refuses per file `</script`, `<!--` and `<script` in JS and `</style` in CSS
-- [ ] #8 `ExportTest`: `</script>` count = 1 + number of scripts; `<style>` count = number of stylesheets; no `<script src`, `<link rel="stylesheet"`, `@import` or `url(` outside the data
-- [ ] #9 `ExportTest`: "Refuses an index.html without a slot", "Refuses a manifest entry with no file", and per-file refusal of the sequences that would break inlining
-- [ ] #10 `web-sources.js` reads both manifests; `loadScripts()` and `loadStyles()` return `[{file, text}]` in manifest order
-- [ ] #11 `render-web-ui.js` expands the two slot literals from the working tree and refuses to proceed when an expansion misses; it runs each manifest file as its own `vm.Script` in `dom.getInternalVMContext()` (or the `runScripts: 'dangerously'` fallback), records a throw from the constructor or `runInContext` as a page error and continues with the next file, and injects one `<style>` per CSS file
-- [ ] #12 `render-web-ui-archive.js` replaces `app.js inlined` with `every file inlined`, which passes only if: the number of code scripts (data excluded by the existing JSON rule) equals the length of `scripts.txt`; each code script's text equals the file at the same position exactly; the same for inline `<style>`s against `styles.txt`; the document has no `<script src` and no `<link rel="stylesheet"`; no `@import` or `url(` appears in any inline `<style>`, the data script never searched. The detail line names the failed condition
-- [ ] #13 Red proofs for `every file inlined`, each seen failing with its condition named and then restored: one file dropped in the inliner; a leftover `<script src>`; an `@import` added to a CSS file
-- [ ] #14 `WebManifestTest` asserts for both manifests, each with its own message: (a) every entry resolves on the built classpath; (b) the recursive listing of `web/js` and `web/css`, subdirectories included, equals the manifest exactly, failing if a directory is missing or a manifest is empty; (c) every entry matches `^js/\d\d-[a-z0-9-]+\.js$` or the CSS equivalent, with no stray whitespace; (d) entries are strictly ascending and a duplicate line gets its own message; (e) the web root holds only `index.html`, `scripts.txt`, `styles.txt`, `js/`, `css/`, `AGENTS.md` and `CLAUDE.md`
-- [ ] #15 `WebManifestTest` red proofs, each run as plain `./gradlew :inspector-daemon:test` with no rerun flag, seen failing and restored: a ghost line in `scripts.txt`, and one in `styles.txt`; an unlisted `js/42-x.js`, and an unlisted CSS file; `js/sub/x.js`; a commented-out entry whose file still exists; a duplicate line; two lines swapped; a trailing space; a leftover `web/app.js`
-- [ ] #16 `:inspector-ui` `jvmTest` declares `@InputDirectory @PathSensitive(RELATIVE)` on `inspector-daemon/src/main/resources/web/css` and `@InputFile` on `web/styles.txt` through a `CommandLineArgumentProvider`, passed as `-Dinspector.webStyles=…`; PaletteParityTest reads only that property, with no fallback on relative paths, and fails if it is unset
-- [ ] #17 PaletteParityTest proven red with no `--rerun` by drifting `--m-get` in the CSS (the ordinary `jvmTest` run is not UP-TO-DATE), then green when restored
-- [ ] #18 exports.md carries the four §7 rewordings: the export inlines every file in `web/styles.txt` and `web/scripts.txt` in manifest order; "the page talks to the daemon through one object"; `fetch` is called exactly once across every file `web/scripts.txt` lists, and `WebManifestTest` refuses a file it does not list; the two slots are the same literals `render-web-ui.js` expands
-- [ ] #19 Probes 164 and 21, compared per label (label plus verdict) against base `f574bda`, not by totals
-- [ ] #20 `node scripts/check-web-static.js` output byte-identical to base (20 checks)
-- [ ] #21 QA re-runs phase D's route matrix base against head; differences only on `/app.js`, `/style.css`, `/js/*` and `/css/*`
-- [ ] #22 `./gradlew :inspector-daemon:test :inspector-ui:jvmTest :repo-checks:test` passes
+- [x] #1 `web/app.js` is `git mv`ed to `web/js/00-app.js` and `web/style.css` to `web/css/00-tokens.css`; `web/scripts.txt` and `web/styles.txt` list one entry each; `index.html` holds `<!-- inspector:styles -->` in `<head>` and `<!-- inspector:scripts -->` before `</body>` and keeps no file list
+- [x] #2 `service/WebPage.kt` is the only Kotlin reader of the manifests and imports no Ktor; `DaemonLayersTest` stays green
+- [x] #3 `GET /js/{f}` and `GET /css/{f}` serve only files the manifest lists; `/app.js` and `/style.css` go away; nothing serves or fetches `scripts.txt`
+- [x] #4 `RestApiTest`: `/` contains the tags in exact manifest order, and no slot comment is left
+- [x] #5 `RestApiTest`: every listed path returns 200 with `text/javascript` or `text/css`, and a body byte-equal to the resource
+- [x] #6 `RestApiTest`: an unlisted file gives 404; an encoded traversal (`/js/..%2f..%2findex.html`) gives 404; `PUT /js/00-core.js` gives 405 (KIN-9)
+- [x] #7 `HtmlExport` reads both manifests through `WebPage`, with `checkNotNull` on each entry naming the file, and refuses per file `</script`, `<!--` and `<script` in JS and `</style` in CSS
+- [x] #8 `ExportTest`: `</script>` count = 1 + number of scripts; `<style>` count = number of stylesheets; no `<script src`, `<link rel="stylesheet"`, `@import` or `url(` outside the data
+- [x] #9 `ExportTest`: "Refuses an index.html without a slot", "Refuses a manifest entry with no file", and per-file refusal of the sequences that would break inlining
+- [x] #10 `web-sources.js` reads both manifests; `loadScripts()` and `loadStyles()` return `[{file, text}]` in manifest order
+- [x] #11 `render-web-ui.js` expands the two slot literals from the working tree and refuses to proceed when an expansion misses; it runs each manifest file as its own `vm.Script` in `dom.getInternalVMContext()` (or the `runScripts: 'dangerously'` fallback), records a throw from the constructor or `runInContext` as a page error and continues with the next file, and injects one `<style>` per CSS file
+- [x] #12 `render-web-ui-archive.js` replaces `app.js inlined` with `every file inlined`, which passes only if: the number of code scripts (data excluded by the existing JSON rule) equals the length of `scripts.txt`; each code script's text equals the file at the same position exactly; the same for inline `<style>`s against `styles.txt`; the document has no `<script src` and no `<link rel="stylesheet"`; no `@import` or `url(` appears in any inline `<style>`, the data script never searched. The detail line names the failed condition
+- [x] #13 Red proofs for `every file inlined`, each seen failing with its condition named and then restored: one file dropped in the inliner; a leftover `<script src>`; an `@import` added to a CSS file
+- [x] #14 `WebManifestTest` asserts for both manifests, each with its own message: (a) every entry resolves on the built classpath; (b) the recursive listing of `web/js` and `web/css`, subdirectories included, equals the manifest exactly, failing if a directory is missing or a manifest is empty; (c) every entry matches `^js/\d\d-[a-z0-9-]+\.js$` or the CSS equivalent, with no stray whitespace; (d) entries are strictly ascending and a duplicate line gets its own message; (e) the web root holds only `index.html`, `scripts.txt`, `styles.txt`, `js/`, `css/`, `AGENTS.md` and `CLAUDE.md`
+- [x] #15 `WebManifestTest` red proofs, each run as plain `./gradlew :inspector-daemon:test` with no rerun flag, seen failing and restored: a ghost line in `scripts.txt`, and one in `styles.txt`; an unlisted `js/42-x.js`, and an unlisted CSS file; `js/sub/x.js`; a commented-out entry whose file still exists; a duplicate line; two lines swapped; a trailing space; a leftover `web/app.js`
+- [x] #16 `:inspector-ui` `jvmTest` declares `@InputDirectory @PathSensitive(RELATIVE)` on `inspector-daemon/src/main/resources/web/css` and `@InputFile` on `web/styles.txt` through a `CommandLineArgumentProvider`, passed as `-Dinspector.webStyles=…`; PaletteParityTest reads only that property, with no fallback on relative paths, and fails if it is unset
+- [x] #17 PaletteParityTest proven red with no `--rerun` by drifting `--m-get` in the CSS (the ordinary `jvmTest` run is not UP-TO-DATE), then green when restored
+- [x] #18 exports.md carries the four §7 rewordings: the export inlines every file in `web/styles.txt` and `web/scripts.txt` in manifest order; "the page talks to the daemon through one object"; `fetch` is called exactly once across every file `web/scripts.txt` lists, and `WebManifestTest` refuses a file it does not list; the two slots are the same literals `render-web-ui.js` expands
+- [x] #19 Probes 164 and 21, compared per label (label plus verdict) against base `f574bda`, not by totals
+- [x] #20 `node scripts/check-web-static.js` output byte-identical to base (20 checks)
+- [x] #21 QA re-runs phase D's route matrix base against head; differences only on `/app.js`, `/style.css`, `/js/*` and `/css/*`
+- [x] #22 `./gradlew :inspector-daemon:test :inspector-ui:jvmTest :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -129,3 +129,9 @@ Done differently, for QA to judge:
 - The served index fails with 500 rather than 404 if index.html were missing from the jar (servedIndex throws).
 Not done here: QA's route matrix (#21), Chrome CDP comparison, CI. The client-name scan printed "NOT RUN — no terms" on this machine.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA panel 1 at 90618e2 (fresh qa-verifier): all 22 ACs Verified, none Failed. Manifest plumbing proven: RestApiTest serves only listed files, /app.js and /style.css gone, PUT on a served file 405, unlisted and encoded traversal 404; export inliner and web-sources.js read the manifests; live probe 164/1 n/a/42 notes and archive 21, per-label identical to base f574bda. Fixed the pre-existing PaletteParityTest UP-TO-DATE defect (CSS-only change no longer skipped). Re-confirmed at e065f11 (daemon 259, repo-checks 35). DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

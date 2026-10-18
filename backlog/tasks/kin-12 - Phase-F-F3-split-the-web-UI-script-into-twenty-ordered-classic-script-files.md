@@ -1,11 +1,11 @@
 ---
 id: KIN-12
 title: 'Phase F F3: split the web UI script into twenty ordered classic-script files'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 13:30'
-updated_date: '2026-10-18 14:10'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -57,25 +57,25 @@ Load order: hoisting does not cross files. The only load-time references between
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `web/js` holds the twenty files of the description's table, listed in that order in `scripts.txt`, and `js/00-app.js` is gone; each file is a one-line `/* area */` header, then `'use strict';`, then a blank line, then its blocks
-- [ ] #2 Boundaries fall at a declaration's doc comment; each mirror block sits wholly inside one file; `fetch(` and `new WebSocket(` both live in `05-network.js`
-- [ ] #3 Every file is under the 600-line `FileBudgetTest` limit, with no new budget entries; the `js/00-app.js` entry is removed from `structure/budgets.txt`
-- [ ] #4 Proof, a one-off script in the PR and not committed: the multiset of top-level blocks equals `00-app.js`'s, and `99-init.js` is the tail verbatim
-- [ ] #5 Red proof, load order: `archiveSource` moved to a file after `source` turns the archive probe red; the live probe stays green, as expected
-- [ ] #6 Red proof, syntax error: a `SyntaxError` in one file is recorded as a page error and the later files still run
-- [ ] #7 Red proof, mirror anchors: begin and end of `duplicates` in different files gives exit 2; a stale anchored copy in another file gives exit 2
-- [ ] #8 Red proof, fetch: a `fetch(` in a listed file turns the static check and the archive probe red; a `fetch(` in an unlisted file turns `WebManifestTest` red, while the static check stays green
-- [ ] #9 Red proof, export order: two files swapped in the export turns `every file inlined` red
-- [ ] #10 shared-rules.md lines 2, 5, 12, 45, 51, 57, 74, 111 and 170: "`app.js`" → "the web UI" or "the web UI's `<name>` block"; web-ui.md: "`HOP_BY_HOP` in `app.js` mirrors" → "`HOP_BY_HOP` (the web UI's `hopByHop` block) mirrors", and "lifts both functions out of the real `app.js` by their `jsonParser` anchors" → "lifts both functions, by their `jsonParser` anchors, out of whichever manifest file holds them"
-- [ ] #11 Static checks 23 (24 once F4 has landed), the first 20 lines byte-identical to base `f574bda`: case counts (95 in all), network counts and the min-text selector list included
-- [ ] #12 Probes 164 and 21, compared per label (label plus verdict) against base
-- [ ] #13 `./gradlew :inspector-model:jvmTest :inspector-daemon:test :repo-checks:test` passes
+- [x] #1 `web/js` holds the twenty files of the description's table, listed in that order in `scripts.txt`, and `js/00-app.js` is gone; each file is a one-line `/* area */` header, then `'use strict';`, then a blank line, then its blocks
+- [x] #2 Boundaries fall at a declaration's doc comment; each mirror block sits wholly inside one file; `fetch(` and `new WebSocket(` both live in `05-network.js`
+- [x] #3 Every file is under the 600-line `FileBudgetTest` limit, with no new budget entries; the `js/00-app.js` entry is removed from `structure/budgets.txt`
+- [x] #4 Proof, a one-off script in the PR and not committed: the multiset of top-level blocks equals `00-app.js`'s, and `99-init.js` is the tail verbatim
+- [x] #5 Red proof, load order: `archiveSource` moved to a file after `source` turns the archive probe red; the live probe stays green, as expected
+- [x] #6 Red proof, syntax error: a `SyntaxError` in one file is recorded as a page error and the later files still run
+- [x] #7 Red proof, mirror anchors: begin and end of `duplicates` in different files gives exit 2; a stale anchored copy in another file gives exit 2
+- [x] #8 Red proof, fetch: a `fetch(` in a listed file turns the static check and the archive probe red; a `fetch(` in an unlisted file turns `WebManifestTest` red, while the static check stays green
+- [x] #9 Red proof, export order: two files swapped in the export turns `every file inlined` red
+- [x] #10 shared-rules.md lines 2, 5, 12, 45, 51, 57, 74, 111 and 170: "`app.js`" → "the web UI" or "the web UI's `<name>` block"; web-ui.md: "`HOP_BY_HOP` in `app.js` mirrors" → "`HOP_BY_HOP` (the web UI's `hopByHop` block) mirrors", and "lifts both functions out of the real `app.js` by their `jsonParser` anchors" → "lifts both functions, by their `jsonParser` anchors, out of whichever manifest file holds them"
+- [x] #11 Static checks 23 (24 once F4 has landed), the first 20 lines byte-identical to base `f574bda`: case counts (95 in all), network counts and the min-text selector list included
+- [x] #12 Probes 164 and 21, compared per label (label plus verdict) against base
+- [x] #13 `./gradlew :inspector-model:jvmTest :inspector-daemon:test :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -111,3 +111,9 @@ Done differently, for QA to judge:
 - Left for F5 (comments naming files): WebPage.kt:41 and web-sources.js:28 still use js/00-app.js as an example; web AGENTS.md still says app.js.
 Not run: Chrome harness (QA's), CI, Android host. Client-name scan: 'NOT RUN — no terms' on this machine.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA panel 1 at 90618e2: all 13 ACs Verified. Script split into twenty ordered classic files; QA re-ran the move proof (JS block multiset identical, 99-init tail). Live probe 164/1 n/a/42 notes per-label identical to base; archive 21; headless Chrome 131, 16 configs served and export under file:, 32/32 identical computed-style, text and PNG hashes, 0 page errors. DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -50,6 +50,7 @@ Nobody should be told to "open the desktop app".
 | **4b** | Report what we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 | **S-D** | Structure pass (not a capture letter), phase D — daemon packages, layering check | 🟡 built, done once PR merged and CI green |
+| **S-F** | Structure pass, phase F — web UI script and CSS split behind the manifest | 🟡 built, done once PR merged and CI green |
 
 The lettered rows are **capture mechanisms** and are lettered independently of Phase 4, which is
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`

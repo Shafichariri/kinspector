@@ -3,11 +3,11 @@ id: KIN-13
 title: >-
   Phase F F4: split the web stylesheet into seventeen contiguous files and add
   static check 4
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 13:30'
-updated_date: '2026-10-18 14:17'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -56,21 +56,21 @@ Concatenation equality does not prove each sheet is the same (QA objection 6): a
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `web/css` holds the seventeen contiguous slices of the description's table in original order, listed in that order in `styles.txt`; every `@media` block is in the same file as every rule it overrides, after them (750–758 with the 771 block; the reduced-motion blocks at 814, 1135 and 1924; `.pv-visit` 453 with the 504 block; `--stop-bg` 1039/1040)
-- [ ] #2 Proof: concatenating the files without their headers equals the F1 file byte for byte
-- [ ] #3 Static check 4: every CSS file closes its own braces and comments, outside strings; proven red with an unclosed `{` and with an unclosed comment, then restored
-- [ ] #4 Static count 24, the first 20 lines byte-identical to base `f574bda`
-- [ ] #5 PaletteParityTest takes the tokens from `00-tokens.css` and fails if any token it checks is declared in another file `styles.txt` lists
-- [ ] #6 PaletteParityTest's "outside tokens" assertion proven red with no `--rerun` by a drifted token in `00-tokens.css` and by `--m-get` declared in `35-list.css`, then green when restored
-- [ ] #7 The `css/00-tokens.css` budget entry is removed and there are no new budget entries
-- [ ] #8 Probes 164 and 21, compared per label (label plus verdict) against base
-- [ ] #9 `./gradlew :inspector-daemon:test :inspector-ui:jvmTest :repo-checks:test` passes
+- [x] #1 `web/css` holds the seventeen contiguous slices of the description's table in original order, listed in that order in `styles.txt`; every `@media` block is in the same file as every rule it overrides, after them (750–758 with the 771 block; the reduced-motion blocks at 814, 1135 and 1924; `.pv-visit` 453 with the 504 block; `--stop-bg` 1039/1040)
+- [x] #2 Proof: concatenating the files without their headers equals the F1 file byte for byte
+- [x] #3 Static check 4: every CSS file closes its own braces and comments, outside strings; proven red with an unclosed `{` and with an unclosed comment, then restored
+- [x] #4 Static count 24, the first 20 lines byte-identical to base `f574bda`
+- [x] #5 PaletteParityTest takes the tokens from `00-tokens.css` and fails if any token it checks is declared in another file `styles.txt` lists
+- [x] #6 PaletteParityTest's "outside tokens" assertion proven red with no `--rerun` by a drifted token in `00-tokens.css` and by `--m-get` declared in `35-list.css`, then green when restored
+- [x] #7 The `css/00-tokens.css` budget entry is removed and there are no new budget entries
+- [x] #8 Probes 164 and 21, compared per label (label plus verdict) against base
+- [x] #9 `./gradlew :inspector-daemon:test :inspector-ui:jvmTest :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -100,3 +100,9 @@ Not run: Chrome CDP diff (QA's harness), iOS/Android targets.
 
 Conductor, 2026-10-18: criterion #1 ('every @media block in the same file as every rule it overrides') cannot hold for the 1199px block at original line 771, which also overrides #panes / #panes.panes-wide (lines 172, 184, in 10-panes.css); no contiguous cut under the 600-line budget fixes it. The rule that guarantees the cascade, and the one UX's objection asked for, is: styles.txt order is the cascade, the files are contiguous slices of the original in original order, and an @media block never loads before a rule it overrides. That holds here (771 loads after 172/184). F5 writes the decision paragraph in those terms; QA judges criterion #1 against this restatement and reports the exception explicitly.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA panel 1 at 90618e2: all 9 ACs Verified. CSS split into seventeen contiguous files; QA re-ran the concatenation proof (61736 bytes identical to base). AC#1 judged against the conductor's restatement (the 1199px @media block overrides #panes across files and loads after them). Static check 4 added. Chrome: 0/16 configs differ served and export at e065f11. DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

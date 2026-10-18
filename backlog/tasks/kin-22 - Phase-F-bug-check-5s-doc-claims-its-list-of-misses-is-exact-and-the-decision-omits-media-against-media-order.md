@@ -3,11 +3,11 @@ id: KIN-22
 title: >-
   Phase F bug: check 5's doc claims its list of misses is exact, and the
   decision omits @media-against-@media order
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 15:35'
-updated_date: '2026-10-18 15:49'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -30,16 +30,16 @@ Reproduction (QA probe: $TMPDIR/qa3/probe5.js; each shape passed to auditMediaOv
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The check 5 doc comment and web-ui.md make no completeness claim about misses ('among them', not 'exactly this'), and both state that @media-against-@media order is not checked, naming the reduced-motion/1199px pair in 35-list.css as the live case held by review and by keeping both blocks in one file.
-- [ ] #2 web-ui.md's checks 2/3 sentence is true as written for a comment between the two declarations (either the scan refuses it, proven exit 2, or the sentence excludes it).
-- [ ] #3 The prefix wording matches the code (a '-' is required at the boundary).
-- [ ] #4 No code behaviour change beyond, optionally, the checks 2/3 refusal; first 24 lines of 'node scripts/check-web-static.js' byte-identical; static still 25 checks, 0 failed.
+- [x] #1 The check 5 doc comment and web-ui.md make no completeness claim about misses ('among them', not 'exactly this'), and both state that @media-against-@media order is not checked, naming the reduced-motion/1199px pair in 35-list.css as the live case held by review and by keeping both blocks in one file.
+- [x] #2 web-ui.md's checks 2/3 sentence is true as written for a comment between the two declarations (either the scan refuses it, proven exit 2, or the sentence excludes it).
+- [x] #3 The prefix wording matches the code (a '-' is required at the boundary).
+- [x] #4 No code behaviour change beyond, optionally, the checks 2/3 refusal; first 24 lines of 'node scripts/check-web-static.js' byte-identical; static still 25 checks, 0 failed.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -52,3 +52,9 @@ QA at f05603b: AC#1-#4 Verified; KIN-21 AC#2 now Verified. QA found the checks 2
 
 Engineer, commit b733aa4 (wording only, per the conductor's framing rule). topLevelDeclarations' doc, check-web-static.js's header, the doc lines of auditOneDeclarationPerName/auditWindowNames, and web-ui.md now say checks 2/3 are a column-0 line heuristic, not a JavaScript parser; known misses given 'among them' (indented; after a block comment on the line; later names of a declaration whose first line ends inside brackets; after a regex literal, a leading statement or a leading }); a second declaration on a column-0 line is refused 'when the scan can see it'. web-ui.md check 5 prefix phrase now 'one name followed by - at the start of the other' (all three places). STATIC: 'node scripts/check-web-static.js 2>&1' cmp-identical to f05603b's output, exit 0, 25 checks, 0 failed. GRADLE: ':repo-checks:test --rerun' 35/0 (needs -Porg.gradle.java.installations.paths pointing at a JDK 21; this machine has only 17 on the default path). No probes: no served file changed. Not pushed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA at f05603b: AC#1-#4 Verified; wording pass b733aa4 re-verified all KIN-22 ACs. Check 5 claims no complete list of misses; the decision records @media-against-@media order; checks 2-3 described as a column-0 line heuristic. Static output byte-identical across 76b6c99/f05603b/b733aa4; repo-checks 35/0. DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

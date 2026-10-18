@@ -3,11 +3,11 @@ id: KIN-14
 title: >-
   Phase F F5: decisions, guides, comments and README for the manifest-split web
   UI
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 13:31'
-updated_date: '2026-10-18 14:21'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -48,22 +48,22 @@ Already landed earlier in the item: exports.md (F1) and the mirror wording in sh
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 web-ui.md gains the paragraph **"The web UI is ordered classic scripts listed in `web/scripts.txt`, and the daemon is the only thing that turns the list into served tags."** with the reason (the shared lexical scope and the load-time rule), the sentence that jsdom does not enforce `'use strict'` so the static check is the guard, and its pins: `WebManifestTest`, static checks 1–3, per-file probe loading and `every file inlined`
-- [ ] #2 web-ui.md gains the paragraph **"`web/styles.txt` order is the cascade; an `@media` block stays in the file of the rules it overrides, after them."**, pinned by static check 4 and the concatenation proof
-- [ ] #3 shared-rules.md line 98: "it reads `style.css`" → "it reads `web/css/00-tokens.css`, declared as a test input so a CSS-only change re-runs it, and fails if a token it checks is declared in any other file `web/styles.txt` lists"
-- [ ] #4 signals.md lines 30, 133 and 145: "`app.js`" → "the web UI" and "`style.css`" → "the web stylesheets"; line 25 is history and stays
-- [ ] #5 Comments naming the files are updated in `Endpoints.kt`, `PathScope.kt`, `Timeline.kt`, `Visits.kt`, `SignalGroups.kt`, `Inspector.kt` and `InspectorSignalDetail.kt`, and the mirror comments in `mirror-runner.js`, `MirrorCasesTest`, `HopByHopMirrorTest` and `mirror-cases/README.md` name the `@mirror-begin <name>` block, never a file
-- [ ] #6 The web `AGENTS.md`, the root `AGENTS.md` index line, README:376 and `site/index.html:9` no longer name `app.js` or `style.css`
-- [ ] #7 `.claude/agents/architect.md:39` no longer names `app.js` as the place a mirror lives
-- [ ] #8 `FileBudgetTest`'s KDoc wording no longer names `app.js` as a file awaiting a split
-- [ ] #9 `STATUS.md` and `implementation-plan.md` are unchanged
-- [ ] #10 `./gradlew :repo-checks:test` passes (`DecisionsTest`, `AgentGuideTest`), and `./gradlew :inspector-model:jvmTest :inspector-daemon:test :inspector-ui:jvmTest` passes
+- [x] #1 web-ui.md gains the paragraph **"The web UI is ordered classic scripts listed in `web/scripts.txt`, and the daemon is the only thing that turns the list into served tags."** with the reason (the shared lexical scope and the load-time rule), the sentence that jsdom does not enforce `'use strict'` so the static check is the guard, and its pins: `WebManifestTest`, static checks 1–3, per-file probe loading and `every file inlined`
+- [x] #2 web-ui.md gains the paragraph **"`web/styles.txt` order is the cascade; an `@media` block stays in the file of the rules it overrides, after them."**, pinned by static check 4 and the concatenation proof
+- [x] #3 shared-rules.md line 98: "it reads `style.css`" → "it reads `web/css/00-tokens.css`, declared as a test input so a CSS-only change re-runs it, and fails if a token it checks is declared in any other file `web/styles.txt` lists"
+- [x] #4 signals.md lines 30, 133 and 145: "`app.js`" → "the web UI" and "`style.css`" → "the web stylesheets"; line 25 is history and stays
+- [x] #5 Comments naming the files are updated in `Endpoints.kt`, `PathScope.kt`, `Timeline.kt`, `Visits.kt`, `SignalGroups.kt`, `Inspector.kt` and `InspectorSignalDetail.kt`, and the mirror comments in `mirror-runner.js`, `MirrorCasesTest`, `HopByHopMirrorTest` and `mirror-cases/README.md` name the `@mirror-begin <name>` block, never a file
+- [x] #6 The web `AGENTS.md`, the root `AGENTS.md` index line, README:376 and `site/index.html:9` no longer name `app.js` or `style.css`
+- [x] #7 `.claude/agents/architect.md:39` no longer names `app.js` as the place a mirror lives
+- [x] #8 `FileBudgetTest`'s KDoc wording no longer names `app.js` as a file awaiting a split
+- [x] #9 `STATUS.md` and `implementation-plan.md` are unchanged
+- [x] #10 `./gradlew :repo-checks:test` passes (`DecisionsTest`, `AgentGuideTest`), and `./gradlew :inspector-model:jvmTest :inspector-daemon:test :inspector-ui:jvmTest` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -92,3 +92,9 @@ grep -rnI -E 'app\.js|style\.css' (excluding .git, build, node_modules, backlog,
 
 STATUS.md, implementation-plan.md, ROADMAP.md: git diff empty. Client-name scan: NOT RUN — the terms are not on this machine.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA panel 1 at 90618e2: all 10 ACs Verified. Decisions, guides, comments and README describe the manifest-split web UI. Later wording corrections tracked as KIN-18, KIN-21, KIN-22. DoD2: no new guard in this ticket. DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

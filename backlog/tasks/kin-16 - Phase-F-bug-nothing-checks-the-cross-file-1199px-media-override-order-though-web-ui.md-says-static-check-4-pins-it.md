@@ -3,11 +3,11 @@ id: KIN-16
 title: >-
   Phase F bug: nothing checks the cross-file 1199px @media override order,
   though web-ui.md says static check 4 pins it
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 14:52'
-updated_date: '2026-10-18 15:22'
+updated_date: '2026-10-18 15:55'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -24,17 +24,17 @@ Found by the verify panel (architect S1, confirmed by QA). docs/decisions/web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A zero-dependency static check in scripts/lib/web-audits.js, printed in the '--- scripts ---' section, fails when, for a selector inside an @media block, a plain (non-@media) rule with the same selector loads later in styles.txt order
-- [ ] #2 Proven red by renaming css/35-list.css to css/08-list.css with styles.txt reordered, and green again once restored
-- [ ] #3 The first 24 lines of check-web-static.js output stay byte-identical
-- [ ] #4 docs/decisions/web-ui.md 'Pinned by' names the new check and no longer cites the uncommitted concatenation proof
-- [ ] #5 A comment above #panes in css/10-panes.css points at the override in css/35-list.css
+- [x] #1 A zero-dependency static check in scripts/lib/web-audits.js, printed in the '--- scripts ---' section, fails when, for a selector inside an @media block, a plain (non-@media) rule with the same selector loads later in styles.txt order
+- [x] #2 Proven red by renaming css/35-list.css to css/08-list.css with styles.txt reordered, and green again once restored
+- [x] #3 The first 24 lines of check-web-static.js output stay byte-identical
+- [x] #4 docs/decisions/web-ui.md 'Pinned by' names the new check and no longer cites the uncommitted concatenation proof
+- [x] #5 A comment above #panes in css/10-panes.css points at the override in css/35-list.css
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -45,3 +45,9 @@ Engineer, commit e046990. New static check 5 'media overrides load last' (auditM
 
 Maintainer, 2026-10-18 (via the conductor): AC#1 is accepted as narrowed — a later plain rule counts only when it has the same selector AND sets an overlapping property. Selector-only matching fails today's correct CSS (:root light tokens in 00-tokens.css:53 vs a plain :root in 40-detail.css:111 setting a different token). Both verify-panel members recommended accepting.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA panel 2 at e065f11: all ACs Verified; AC#1 met as narrowed (same selector AND overlapping property), accepted by the maintainer 2026-10-18 (recorded in KIN-16 notes). Static check 5 pins the cross-file @media override order. Later hardened under KIN-21 and KIN-22. DoD no-client-names left unticked: the term list is kept out of the repository, so it was not runnable here; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

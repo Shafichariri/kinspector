@@ -20,6 +20,17 @@ run. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf
 and no full-repository count has been taken. Not verified: the no-client-names check, whose term list is
 kept out of the repository. `docs/ROADMAP.md` §5 has the detail.
 
+**Phase F (`app.js` and CSS split behind the manifest) is built, and done once its PR is merged and CI
+is green**: it is on `shafic/structure-phase-f`, not pushed, so CI has not run. Tickets KIN-10 to KIN-22
+are Done on verifier evidence (last pass on `b733aa4`). Counts at `e065f11`, per module and not a
+full-repository total: `:inspector-daemon:test` 259, `:inspector-ui:jvmTest` 134,
+`:inspector-model:jvmTest` 159, repo-checks 35 (35/0 again after `b733aa4`). Web probes: live 164 passed,
+1 n/a, 42 notes and archive 21, both per-label identical to base `f574bda`; static checks 24. Headless
+Chrome 131: 16 configurations, served and exported under `file:`, computed-style, text and PNG hashes
+identical to base, 0 page errors. Not verified: Safari and Firefox, CI, Android host tests (no SDK), the
+no-client-names check, and how the page looks to a human. Six layout defects that predate the phase are
+listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP.md` §5 has the detail.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -126,8 +137,22 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   commands did not load them. Still unverified: whether a fresh subagent that never Reads a file
   gets them, which is why the role prompts name the decision files to Read.
 
+- **The manifest-split web UI is indistinguishable from the single-file one, in headless Chrome 131
+  only.** 16 configurations (widths 1440, 1000, 1000 with the drawer open and 400; dark and light;
+  reduced motion on and off), served by the daemon and exported under `file:`: computed-style, body text
+  and PNG hashes identical to base `f574bda`, 0 page errors. Route matrix against base differs only on
+  `/app.js`, `/style.css`, `/js/*` and `/css/*`; `PUT` on a served file is 405, an unlisted file and an
+  encoded traversal are 404.
+
 ### Not verified
 
+- **Phase F in Safari, Firefox and on CI.** Only Chrome 131 was driven, the branch is not pushed, the
+  Android host tests need an SDK this machine lacks, and the no-client-names term list is not here.
+  Nobody has looked at the split page: hash equality proves "identical to before", not "looks right".
+- **Six web UI layout defects found at base by UX, unfixed** (closed drawer focusable at 1000px and
+  widening the page; endpoint cut at 400px; drawer close button over the header's last action at
+  1000px; the closed drawer's shadow strip; top bar and tab bar overflow at 400px; small items). They
+  predate phase F; `docs/ROADMAP.md` §5 hands them to the product-owner.
 - **The Gradle cache carrying over between checkout paths** for the mirror-case test inputs is
   unproven.
 - **Signal ties still ignore `seq`**, in the model and so in MCP (recorded under ROADMAP §3).
