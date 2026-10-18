@@ -54,9 +54,9 @@ Phases A and E (below) added tests since, and **no full run has been counted sin
 ran 159 tests and `:inspector-daemon:test` ran 224, 0 failures each (2026-10-18), and nothing else
 was run. A branch-wide total of 897 was computed by arithmetic, never measured, and is not claimed.
 
-**Phase A of the structure pass (web checks and mirror cases in CI) is built and pending its first CI
-run.** `docs/ROADMAP.md` §5 has the detail. It is not "done" until the new `web` job has gone green on
-a pushed branch; see the two lists below for what has and has not been shown.
+**Phase A of the structure pass (web checks and mirror cases in CI) is done**: its first CI run, on
+PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swap` (macOS: full
+`./gradlew build`, Android host tests, `-Pinspector=off`). `docs/ROADMAP.md` §5 has the detail.
 
 **Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is built and pending CI.**
 `docs/ROADMAP.md` §5 has the detail. It is not "done" until CI has run on a pushed branch.
@@ -163,14 +163,10 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
-- **Phase A's CI `web` job has never run.** The branch is not pushed. Whether Kotlin Multiplatform and
-  AGP configure on `ubuntu-latest` is unproven, and so is the Gradle cache carrying over between
-  checkout paths. Phase A is therefore not done.
+- **The Gradle cache carrying over between checkout paths** for the mirror-case test inputs is
+  unproven.
 - **Phase E's CI has never run**, and the branch is not pushed. Full `./gradlew build`, iOS and Android
   were not run; only daemon code changed. Signal ties still ignore `seq`, in the model and so in MCP.
-- **`./gradlew build` has not run on this branch**, because the machine has no Android SDK: the Android
-  host tests did not run, and `-Pinspector=off` was not run either.
-- **The live probe ran on Node 23**, outside jsdom 29's declared range. CI uses Node 22.
 - **The Auth0 adapter in `docs/INTEGRATION.md` §11 compiles but has never run.** It is now
   written against the real `auth0-android` 3.12.0 sources (read out of the Gradle cache) and
   compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the
