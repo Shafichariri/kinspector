@@ -115,6 +115,12 @@ one, *and* still grep the directory itself, because klib output is an unpacked t
 archive. Proved both ways: a raw grep of `inspector-core/build/libs` finds nothing, and the script
 now exits 1 on it.
 
+Publishing the library locally, to try a build from a consuming app:
+
+```bash
+./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
+```
+
 Cutting a daemon release — the tag is the trigger, and the only thing that ships this way:
 
 ```bash

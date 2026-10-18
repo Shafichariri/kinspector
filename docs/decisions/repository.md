@@ -85,3 +85,16 @@ push brings, so it never sees them again.
 `gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
 compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
 else a scan turns up.
+
+Two conventions `:repo-checks` holds, moved out of the root so it stays under its budget:
+
+- **No deferred-work markers in source.** Unfinished work goes in `docs/ROADMAP.md`. `NoTodoTest`
+  fails on the uppercase markers in any file git tracks or would track, except Markdown.
+- **A source file over 600 lines needs a budget, and budgets only tighten.** "Source" means `.kt`,
+  `.kts`, `.js`, `.css`, `.html`, `.sh` and `.swift`, tracked or untracked-but-not-ignored, and
+  `FileBudgetTest` holds it. `structure/budgets.txt` is a
+  ratchet, not a cap: a budgeted file fails when it grows, and it also fails when it *shrinks*,
+  until the budget is lowered to match. A budget left at the old size would let the lost lines
+  back in unnoticed. `-Dinspector.budgets.tighten=true` only lowers or removes, and never touches
+  `modules.txt`. Raising a budget or adding a file is a
+  hand edit with the reason on the line.

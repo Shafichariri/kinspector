@@ -1,8 +1,9 @@
 # Inspector — agent guide
 
-Canonical context file for AI coding agents. `CLAUDE.md` is a symlink to this file and
-`.cursor/rules/inspector.mdc` points here, so **there is exactly one copy to keep current** —
-edit this file, never a duplicate.
+Canonical context file for AI coding agents, and an index. `CLAUDE.md` and `.cursorrules` link
+here, as does `.cursor/rules/inspector.mdc`. There is **one copy of each decision**, in
+`docs/decisions/`, never also here or in a guide; `DecisionsTest` fails on a second copy. Every
+module has an `AGENTS.md` naming the decision files to read before changing it.
 
 ---
 
@@ -18,6 +19,10 @@ Three consumers of the same captured data:
 2. **Host daemon** — archives every session to `~/.inspector/sessions/…` as readable folders and
    serves a web UI at `http://127.0.0.1:8099`. Operations are in `docs/DAEMON.md`.
 3. **Agents** — read `index.jsonl` directly, or query via the CLI or the MCP server.
+
+**There are four surfaces, and only two are for users.** The in-app overlay and the browser web
+UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
+Nobody should be told to "open the desktop app".
 
 ## What it is not
 
@@ -49,22 +54,31 @@ The lettered rows are **capture mechanisms** and are lettered independently of P
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
 owns the phases, and the letters only ever appear in the capture roadmap below.
 
+Counts, Verified and Not verified are in `docs/STATUS.md`. It is not in context: read it before
+claiming anything is verified.
+
 ---
 
 ## Architecture
 
 ```
-:inspector-model     KMP  Schema, wire protocol, filter grammar. Only kotlinx-serialization.
-:inspector-core      KMP  Ktor plugin, recorder, ring buffer, redaction, sinks.
-:inspector-noop      KMP  Identical public API, does nothing. Release builds.
-:inspector-ui        KMP  Compose overlay pill + inspector screens.
-:inspector-noop-ui   KMP  Passthrough overlay. Release builds.
-:inspector-noop-stream KMP  No-op stream sink. Release builds.
-:inspector-stream    KMP  WebSocket sink to the daemon.
-:inspector-daemon    JVM  Archive, REST, live WS, web UI, CLI.   MCP is Phase 3.
-:repo-checks         JVM  Build-only structural checks over the repo. Never published.
-sample/desktop       JVM  Runnable reference integration.
+:inspector-model       KMP  Schema, wire protocol, filter grammar, USB framing, the rules both
+                            surfaces draw. Only kotlinx-serialization.
+:inspector-core        KMP  Ktor plugin, OkHttp interceptor, recorder, ring buffer, redaction, signals.
+:inspector-noop        KMP  Release twin of core. Golden: api/inspector-public-api.txt.
+:inspector-ui          KMP  Compose overlay pill + inspector screens.
+:inspector-noop-ui     KMP  Release twin of ui. Golden: none yet (phase I).
+:inspector-stream      KMP  Sink to the daemon: dials /ingest, or on an iPhone listens for the bridge.
+:inspector-noop-stream KMP  Release twin of stream. Golden: api/inspector-stream-public-api.txt.
+:inspector-daemon      JVM  Archive, REST, live WS, web UI, CLI, MCP server, USB bridge.
+:repo-checks           JVM  Build-only structural checks over the repo. Never published.
+:sample:desktop        JVM  Runnable reference integration.
+:sample:android        APK  The same sample on a device or emulator.
+:sample:ios:shared     KMP  Framework for the Xcode project in sample/ios/iosApp.
 ```
+
+Not modules: `sample/shared/kotlin` (the samples' common source), `api/`, `api-parity/`,
+`mirror-cases/`, `structure/`, `scripts/` and `site/` (the landing page).
 
 `:inspector-model` is shared between device and daemon **on purpose**: schema types and the
 filter parser are then literally the same code on device, in the web UI backend, the CLI and the
@@ -77,11 +91,23 @@ Multiplatform 1.11+ dropped the Intel simulator, so no CMP app can target it.
 
 ## Non-obvious decisions — do not "fix" these
 
-The decisions moved, word for word, into `docs/decisions/`, one file per area; the state of the project — counts, Verified, Not verified — moved into `docs/STATUS.md`.
+| File | Holds |
+|---|---|
+| `docs/decisions/capture.md` | Ktor and OkHttp capture, the tee, redaction, what Ktor cannot see. |
+| `docs/decisions/signals.md` | Signals in the overlay: runs, providers, the now strip, ages, payloads. |
+| `docs/decisions/shared-rules.md` | Model rules `app.js` mirrors, the filter grammar, the palette. |
+| `docs/decisions/overlay.md` | The Compose overlay: chrome, detail, JSON tree, ellipsis, insets, tests. |
+| `docs/decisions/web-ui.md` | The browser UI and its probes. |
+| `docs/decisions/exports.md` | HAR, Markdown and HTML exports. |
+| `docs/decisions/daemon-and-mcp.md` | The daemon, its loopback boundary, replay signing, peers, MCP. |
+| `docs/decisions/devices-and-stream.md` | How an app reaches the daemon from an emulator or a phone. |
+| `docs/decisions/twins-and-api.md` | The noop twins, golden files, API versus ABI. |
+| `docs/decisions/release.md` | The release guard, publishing, and cutting a release. |
+| `docs/decisions/repository.md` | Locks, test traps, the name and identity scans. |
 
-**There are four surfaces, and only two are for users.** The in-app overlay and the browser web
-UI are the products. The daemon is a headless CLI, and `sample/desktop` is a demo, not a tool.
-Nobody should be told to "open the desktop app".
+A new decision goes in its area's file; a new file joins this table. A lead naming two areas goes
+to the first that applies: its parent's file if it continues one, `twins-and-api`, `release`,
+`signals`, `shared-rules`, the module whose test pins it, `repository`.
 
 ---
 
@@ -128,38 +154,8 @@ every release build clean:
 
 ```bash
 ./gradlew build                                   # everything, all targets
-./gradlew :inspector-daemon:installDist           # then: inspector-daemon/build/install/inspector/bin/inspector serve
-./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
 node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
-npm install --no-save --no-package-lock jsdom@29.1.1 # the version CI pins
-node scripts/render-web-ui.js > /tmp/ui.html      # web UI smoke test + snapshot
-./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe   # the session CI probes; re-running replaces it
-inspector-daemon/build/install/inspector/bin/inspector serve --data /tmp/probe --port 8231 &   # ... served off 8099
-INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 INSPECTOR_UI_EXPECT_CHECKS=<UI_EXPECT_CHECKS in ci.yml> \
-  node scripts/render-web-ui.js > /tmp/ui.html    # ... judged as CI judges it; the count only holds on that session
-INSPECTOR_UI_SESSION=<id> node scripts/render-web-ui.js           # ... against a chosen session
-INSPECTOR_UI_ORIGIN=http://127.0.0.1:8231 node scripts/render-web-ui.js   # ... a daemon off 8099
-curl -s http://127.0.0.1:8099/api/sessions/latest/export.html -o /tmp/s.html     # an exported session
-INSPECTOR_UI_ARCHIVE=/tmp/s.html node scripts/render-web-ui-archive.js        # ... works with no network
-./gradlew :sample:desktop:run                     # runnable reference app
-./gradlew :sample:android:installDebug            # the same app on a device or emulator
-adb shell am start -n dev.inspector.sample/.MainActivity        # ... and launch it
-xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp \
-  -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' build
-xcrun simctl install booted <path>/iosApp.app && xcrun simctl launch booted dev.inspector.sample
-# ... on a physical iPhone over USB: sign it (the project ships unsigned), install, run `inspector serve`
-xcodebuild -project sample/ios/iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS,id=<udid>' \
-  -allowProvisioningUpdates CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=<team> build
-xcrun devicectl device install app --device <id> <path>/iosApp.app
-inspector serve --port 8231 --usb-port 8099       # a second daemon beside your usual one; the app still listens on 8099
-./gradlew :inspector-core:jvmTest                 # capture integration tests
-./gradlew :inspector-model:iosSimulatorArm64Test  # iOS
-./gradlew :inspector-model:testAndroidHostTest    # Android host
-./gradlew :inspector-ui:jvmTest                   # overlay: prefix rules + a real render
-open inspector-ui/build/screenshots/list-dark.png # ... what that render produced
 ./gradlew build -Pinspector=off                   # release swap
-./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
-./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
 ./gradlew :repo-checks:test                       # module graph, twins, locks, markers, file budgets
 ./gradlew :repo-checks:test -Dinspector.modules.regenerate=true     # ... rewrite structure/modules.txt after a deliberate edge change
 ./gradlew :repo-checks:test -Dinspector.budgets.tighten=true        # ... lower or remove budgets after a file shrank; touches nothing else
@@ -173,34 +169,8 @@ open inspector-ui/build/screenshots/list-dark.png # ... what that render produce
 In Gradle 9.5.1 it runs only the root project's report, which has no configurations, and writes
 nothing a module locks.
 
-Driving the MCP server by hand, which is the fastest way to check a tool change:
-
-```bash
-printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{}}}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"session_summary","arguments":{}}}' \
-  | inspector-daemon/build/install/inspector/bin/inspector mcp
-```
-
-Changing the public API is deliberately high-friction, because it is a contract:
-
-```bash
-# 1. change BOTH :inspector-core and :inspector-noop
-# 2. regenerate:
-./gradlew :inspector-core:jvmTest -Dinspector.api.regenerate=true
-# 3. confirm both modules pass:
-./gradlew :inspector-core:jvmTest :inspector-noop:jvmTest
-```
-
-The stream pair has its own golden file, and the same friction:
-
-```bash
-# 1. change BOTH :inspector-stream and :inspector-noop-stream
-# 2. regenerate (from the REAL module — it is the one that knows what is Ktor-typed):
-./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true
-# 3. confirm both modules pass:
-./gradlew :inspector-stream:jvmTest :inspector-noop-stream:jvmTest
-```
+Module commands are in each guide; releases in `docs/decisions/release.md`; API regeneration in
+`api-parity/AGENTS.md`.
 
 ---
 
@@ -218,29 +188,6 @@ The stream pair has its own golden file, and the same friction:
 - Comments explain *why*, especially where the obvious approach is wrong.
 - `:inspector-model` may depend only on kotlinx-serialization. Keep it that way. `:repo-checks`
   enforces it for what the model resolves at runtime and links on iOS.
-- **No deferred-work markers in source.** Unfinished work goes in `docs/ROADMAP.md`. `NoTodoTest`
-  fails on the uppercase markers in any file git tracks or would track, except Markdown.
-- **A source file over 600 lines needs a budget, and budgets only tighten.** "Source" means `.kt`,
-  `.kts`, `.js`, `.css`, `.html`, `.sh` and `.swift`, tracked or untracked-but-not-ignored, and
-  `FileBudgetTest` holds it. `structure/budgets.txt` is a
-  ratchet, not a cap: a budgeted file fails when it grows, and it also fails when it *shrinks*,
-  until the budget is lowered to match. A budget left at the old size would let the lost lines
-  back in unnoticed. `-Dinspector.budgets.tighten=true` only lowers or removes, and never touches
-  `modules.txt`. Raising a budget or adding a file is a
-  hand edit with the reason on the line.
-
----
-
-## Reproducing the full stack locally
-
-```bash
-./gradlew :inspector-daemon:installDist
-inspector-daemon/build/install/inspector/bin/inspector serve --data /tmp/demo &
-./gradlew :sample:desktop:run -Dinspector.sample.autofire=true
-open http://127.0.0.1:8099
-```
-
-Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 
 ---
 
@@ -275,46 +222,24 @@ that list. Check `git config user.email` before the first commit in a fresh clon
 session; a per-commit `-c user.email=…` or the `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL` variables
 work where the local config holds another address.
 
+How it is enforced is in `docs/decisions/repository.md`.
+
 ---
 
 ## Key files
 
 | Path | Why it matters |
 |---|---|
-| `docs/schema.md` | The data contract. Read before touching `:inspector-model`. |
-| `docs/ACCESS.md` | Who can get Inspector and how, and the honest answer for someone who cannot. Update it if the distribution story changes — it is the only doc that answers "am I blocked". |
-| `docs/DAEMON.md` | Running the daemon: start, stop, restart, kill, the CLI, archive layout, troubleshooting. Update it when a flag or command changes. |
 | `docs/INTEGRATION.md` | Self-contained guide for integrating into a consuming CMP app. **Versioned** — it is handed to other teams as a file, so a reader cannot diff it against anything. Any change that affects a consumer bumps the version line at the top and adds a changelog entry saying what they must *do*, not just what changed. |
-| `docs/TEAM.md` | The agent team in `.claude/agents/` — product owner, architect, engineer, QA, UX, tracker, release steward, business strategist — and the `roadmap-cycle` skill that runs them. It adds no tracking document of its own: the backlog stays here in `ROADMAP.md`, state stays in "Where we are". |
 | `docs/ROADMAP.md` | **The live backlog.** What is next, what it overturns, and what is deliberately not being done. Every other plan-shaped document here is a record of finished work — this is the one to update when the plan changes. |
-| `docs/implementation-plan.md` | Full build order, phases, acceptance criteria. Phases 0–4 shipped, signals in 0.3.0; of the capture mechanisms, 4a shipped and 4b/4c have not started. A record of the original build — do not rewrite it to match later work. |
-| `docs/SIGNALS.md` | Why signals are shaped the way they are — app state on the traffic timeline. **Built and released in 0.3.0**; kept as the design record, so where it and the code disagree, the code won. Read it before changing anything signal-shaped: it carries the decisions, the traps, and what was deliberately left out. Its build order is numbered in *stages* so it does not collide with the plan's phases. |
-| `docs/SIGNALS-CHECKLIST.md` | What must be true of a build that records signals — assertions only, no rationale. The live companion to the spec above; update this one when the bar moves. |
-| `docs/REPLAY.md` | Replay, on-device re-signing and daemon control. Steps 1–3 are built; the template generators (step 4) are specified and not written. Read it before touching replay — the signing constraint decides the whole architecture. |
+| `docs/README.md` | What every other document in `docs/` is for. |
 | `api/inspector-public-api.txt` | Golden public API surface for the `core` pair, asserted by both modules. |
 | `api/inspector-stream-public-api.txt` | The same for the `stream` pair, minus the Ktor-typed members a release build cannot carry. |
 | `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/` and `stream/` hold one test each. Every directory here is compiled into the `jvmTest` of the two modules it guards. |
-| `inspector-core/.../InspectorPlugin.kt` | Capture hooks, `CallState`, per-attempt logic. |
-| `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
-| `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
 | `repo-checks/` | Build-only, never published. JUnit 5 checks over the repository itself — module graph, noop twins, lockfiles, markers, file budgets — run by `./gradlew build`. |
 | `structure/` | The goldens `:repo-checks` reads: `modules.txt` (generated), `twins.txt` and `budgets.txt` (hand-edited, each exemption and budget with its reason). |
 | `*/gradle.lockfile` | Dependency goldens for every published module and the daemon. Regenerate on macOS; see Commands. |
 | `scripts/check-commit-identity.sh`, `scripts/check-client-names.sh` | CI's `repo` job. The name scan is also the check to run locally before committing. |
-| `inspector-stream/.../Transport.kt` | How `StreamSink` reaches the host: dialling `/ingest`, or — on a physical iPhone — listening on the phone's loopback for the USB bridge. |
-| `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
-| `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
-| `scripts/check-web-static.js` | The web checks that need nothing running: network call sites, the stylesheet audits, the JSON parser and every mirror case. First step of the CI `web` job. |
 | `mirror-cases/` | One JSON file per mirrored rule, run by both the Kotlin tests and `check-web-static.js`. Add a case here, never to one side. Its README has the format. |
-| `scripts/render-web-ui.js` | The live web UI's check; run it after touching `web/`, along with the archive probe below. CI runs both against a fixture session and pins how many checks pass. |
-| `scripts/render-web-ui-archive.js` | Opens an exported session's HTML with the network forbidden and checks it works offline. Run it after touching `web/`: any new request that bypasses `source` fails it. |
-| `inspector-daemon/.../Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
-| `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
-| `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
-| `inspector-ui/.../InspectorSignalDetail.kt` | One observation: payload, provenance and the history of its key. Where stage 1's undrawn payloads went. |
-| `inspector-ui/.../NowStrip.kt` | What the app holds now — latest per `(tag, name)`, with age and provenance. Sorted stably, unlike `signalGroups`; read its doc before changing either. |
-| `inspector-ui/src/jvmTest/.../ListRenderTest.kt` | The mobile equivalent of `render-web-ui.js`: renders the real list **and the signal screen** at 360dp and writes PNGs to `inspector-ui/build/screenshots/`. Run it after touching either, then *look at the output* — it is there to be read, not just to pass. Two layout defects and a misleading fixture clock in stage 2 were found only by looking. |
-| `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
-| `inspector-daemon/src/main/resources/web/` | The web UI. No build step, no dependencies. |
