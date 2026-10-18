@@ -107,35 +107,49 @@ function auditNoArgumentSpread(sources) {
     : `yes (${spreads} spread(s) read in ${sources.length} file(s), none into an argument list)`;
 }
 
-/** A DOM node that accepts what the renderers do to one and keeps only its children's count. */
-function stubNode(id = null) {
+/**
+ * A DOM node that accepts what the renderers do to one. It keeps its children, its class and its
+ * listeners, so a check can find a row and press it; `scrollTop` and the sizes are plain numbers a
+ * check sets, since there is no layout to compute them.
+ */
+function stubNode(id = null, className = '') {
   const node = {
-    id, hidden: false, textContent: '', innerHTML: '', title: '', type: '', tabIndex: 0, value: '',
+    id, className, hidden: false, textContent: '', title: '', type: '', tabIndex: 0, value: '',
     scrollTop: 0, scrollLeft: 0, scrollHeight: 0, scrollWidth: 0, clientHeight: 0, clientWidth: 0, offsetHeight: 0,
-    children: 0, dataset: {}, style: { setProperty() {} },
+    children: [], listeners: {}, dataset: {}, style: { setProperty() {} },
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    appendChild(child) { node.children++; return child; },
-    append() { node.children++; }, prepend() {}, replaceChildren() { node.children = 0; },
-    setAttribute() {}, addEventListener() {}, querySelector: () => null, querySelectorAll: () => [],
+    get innerHTML() { return ''; },
+    set innerHTML(html) { node.children.length = 0; },
+    appendChild(child) { node.children.push(child); return child; },
+    append(...xs) { node.children.push(...xs); }, prepend() {}, replaceChildren() { node.children.length = 0; },
+    setAttribute() {}, querySelector: () => null, querySelectorAll: () => [],
+    addEventListener(type, fn) { (node.listeners[type] = node.listeners[type] || []).push(fn); },
     getBoundingClientRect: () => ({ top: 0, bottom: 0, left: 0, right: 0, height: 0, width: 0 }),
   };
   return node;
 }
 
-/** The files that held a spread, run in one scope over [state], with the DOM stubbed. */
-function longPage(sources, state) {
+/**
+ * The traffic views' files run in one scope over [state], with the DOM stubbed: `$` hands out one
+ * node per id, each a child of one `list-pane`, and `el` a fresh node with the class it was given.
+ */
+function stubPage(sources, state) {
   const nodes = new Map();
   const pane = stubNode('list-pane');
   const $ = (id) => {
     if (!nodes.has(id)) { const n = stubNode(id); n.parentElement = pane; nodes.set(id, n); }
     return nodes.get(id);
   };
-  return runFile(sources, ['js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
-    state, $, el: () => stubNode(), document: { getElementById: $ },
+  const page = runFile(sources, ['js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
+    state, $, el: (tag, cls) => stubNode(null, cls || ''), document: { getElementById: $ },
     getComputedStyle: () => ({ top: '0' }), sessionIsLive: () => false,
     fmtMs: (ms) => `${ms}ms`, fmtBytes: (n) => `${n} B`, ageNode: () => stubNode(),
     selectSignal() {}, source: { fetch: async () => ({ ok: false }) }, ARCHIVE: null,
+    closeDrawer() {}, closePops() {}, renderSessionGlance() {},
   });
+  // A call's row is the list's, which reads `00-core.js`'s formatters; its shape is not checked here.
+  page.rowFor = () => stubNode(null, 'row');
+  return { page, pane };
 }
 
 function longState() {
@@ -167,7 +181,7 @@ function attempt(fn) {
 
 async function checkLongSession(sources) {
   const state = longState();
-  const page = longPage(sources, state);
+  const { page } = stubPage(sources, state);
   for (const name of ['sessionWindow', 'waterfallGroups', 'hiddenByFilter', 'renderTimeline', 'renderPath']) {
     if (typeof page[name] !== 'function') throw new HarnessError(`${name} is not declared where long-session-checks.js looks for it`);
   }
@@ -195,10 +209,8 @@ async function checkLongSession(sources) {
       : `NO - ${JSON.stringify(hidden)}, where "at least" was due: the held rows stop short of the session`;
   })]);
   lines.push([`timeline ${ROWS / 1000}k`, attempt(() => {
-    // A call's row is the list's, which reads `00-core.js`'s formatters; its shape is not checked here.
-    page.rowFor = () => stubNode();
     page.renderTimeline();
-    const drawn = page.$('timeline').children;
+    const drawn = page.$('timeline').children.length;
     return drawn === ROWS + 1
       ? `yes (${ROWS} calls and a run of ${ROWS} observations drawn as ${drawn} rows)`
       : `NO - ${drawn} rows drawn, where ${ROWS + 1} were due: each call and the run as one`;
@@ -207,10 +219,10 @@ async function checkLongSession(sources) {
     state.view = 'path';
     page.renderPath();
     state.view = 'all';
-    const drawn = page.$('path').children;
+    const drawn = page.$('path').children.length;
     return drawn > 0 ? `yes (the map and the log drawn over ${ROWS} calls)` : 'NO - nothing drawn';
   })]);
   return lines;
 }
 
-module.exports = { checkLongSession, auditNoArgumentSpread };
+module.exports = { checkLongSession, auditNoArgumentSpread, stubNode, stubPage };

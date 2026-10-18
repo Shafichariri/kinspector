@@ -97,6 +97,8 @@ const state = {
   // opened — which lands on the newest visit rather than wherever the shared pane was scrolled.
   pathFocus: null,
   pathFresh: true,
+  // The timeline was just opened, so it follows once whatever the pane's position (`renderTimeline`).
+  timelineFresh: true,
   // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
   // them — a session can hold thousands — but every field a browser row shows lives in one.
   payloads: new Map(),

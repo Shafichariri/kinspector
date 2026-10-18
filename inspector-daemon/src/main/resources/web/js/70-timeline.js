@@ -72,9 +72,23 @@ const runIdOf = (run) => {
 };
 // @mirror-end timelineRuns
 
-function renderTimeline() {
+/**
+ * The merged timeline. `follow` is false for a redraw the reader asked for — a run expanded or
+ * collapsed — which must leave the pane where it is.
+ */
+function renderTimeline({ follow = true } = {}) {
   if (state.view !== 'all') return;
   const root = $('timeline');
+  const pane = root.parentElement;
+  // Measured before the rows are replaced. The timeline flows in the pane since KIN-33, so a follow
+  // here scrolls the whole pane: following on every redraw threw a reader who expanded a run in the
+  // middle of a 3016-call session to its end. It follows only when the pane was already at the end
+  // it follows, or the view was just opened, as the path's log does.
+  const atEnd = state.newestFirst
+    ? pane.scrollTop <= 8
+    : pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 8;
+  const fresh = state.timelineFresh;
+  state.timelineFresh = false;
   root.innerHTML = '';
 
   const ends = spanEndsFor(state.allSignals);
@@ -121,8 +135,7 @@ function renderTimeline() {
     for (const entry of run.entries) root.appendChild(timelineRow(entry, ends, last, span));
   }
 
-  if (state.liveTail) {
-    const pane = root.parentElement;
+  if (state.liveTail && follow && (fresh || atEnd)) {
     // An empty timeline has nothing newest to follow, and its note sits above it: following the
     // foot of the pane scrolled the note out of sight under whatever markers were left.
     pane.scrollTop = state.newestFirst || !empty.hidden ? 0 : pane.scrollHeight;
@@ -166,7 +179,7 @@ function runRow(run, { expanded = false } = {}) {
     const id = runIdOf(run);
     if (state.expandedRuns.has(id)) state.expandedRuns.delete(id);
     else state.expandedRuns.add(id);
-    renderTimeline();
+    renderTimeline({ follow: false });
   };
   node.addEventListener('click', toggle);
   node.addEventListener('keydown', (event) => {

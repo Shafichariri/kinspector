@@ -25,12 +25,14 @@
  *     whole session while a read is in flight; and what the filter notes and the path count on a
  *     session past the route's clamp;
  *   - a session too long to spread into an argument list: no `f(...rows)` anywhere in the scripts,
- *     and the axis, the waterfall, the stretch note, the timeline and the path run over 200,000 rows.
+ *     and the axis, the waterfall, the stretch note, the timeline and the path run over 200,000 rows;
+ *   - the timeline under live tail: a run opened or closed leaves the pane where it is, a new row is
+ *     followed only from the end it follows, and opening the view follows once.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
  * it would push every later line down. The signal pages section came after it, on the same rule,
- * the session state section after that, and the long session section last.
+ * the session state section after that, then the long session and live follow sections.
  *
  * Output is the same `label : value` shape as the other reports, ending `N checks, M failed`.
  * Exit 1 when a check fails; exit 2 when the harness cannot run at all — an anchor missing or
@@ -47,6 +49,7 @@ const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
 const { checkSessionState } = require('./lib/session-state-checks');
 const { checkLongSession, auditNoArgumentSpread } = require('./lib/long-session-checks');
+const { checkTimelineFollow } = require('./lib/follow-checks');
 
 const results = [];
 const report = (label, value) => {
@@ -112,6 +115,9 @@ async function main() {
   console.error('--- long session ---');
   report('no argument spread', auditNoArgumentSpread(scripts));
   for (const [label, value] of await checkLongSession(scripts)) report(label, value);
+
+  console.error('--- live follow ---');
+  for (const [label, value] of await checkTimelineFollow(scripts)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

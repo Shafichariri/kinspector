@@ -266,7 +266,14 @@ drew over the bar — the timeline's note under any filter, the path's map at 40
 `#scope-bar:not([hidden]) ~ *`; the bar's height is fixed so the offset is a number, not a
 measurement. The timeline is no longer its own full-height scroller: beside the bar it made the pane
 overflow by the bar's height, live follow scrolled the pane that far, and the bar sat on the first
-row while the timeline's own foot was never followed. It flows in the pane as the list does. A
+row while the timeline's own foot was never followed. It flows in the pane as the list does. That
+made its follow move the whole pane on every redraw, so expanding a run in the middle of a 3016-call
+session threw the reader to the end — 24 to 29934 oldest-first, 29800 to 0 newest-first. It now
+follows as the path's log does: on opening the view, and on a redraw only when the pane was already
+at the end it follows; a run opened or closed never moves it (`renderTimeline({ follow: false })`).
+`check-web-static.js`'s live follow section drives the real file over a stub pane in both orders,
+red at `a86dde2` on the run and on a row arriving while scrolled back; KIN-38's notes record the
+headless Chrome numbers. A
 clicked station scrolls its visit to just under the sticky box by measuring the box at click time;
 the fixed `scroll-margin-top: 96px` it replaced did not count the filter note, and landed the row 19
 to 33px under the box. Layout again, so not a probe: KIN-33's notes record the headless Chrome
