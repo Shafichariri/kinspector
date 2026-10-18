@@ -13,16 +13,35 @@ import kotlin.test.assertTrue
  * it held exactly as long as every change remembered both files. A 500 that is one red on the phone
  * and another in the browser reads as two different claims about the same row.
  *
- * Reads the web tokens out of `style.css` rather than from a copy, so the stylesheet stays the
- * authority for the web and this test is the only place the two meet.
+ * Reads the web tokens out of `web/css/00-tokens.css` rather than from a copy, so the stylesheet
+ * stays the authority for the web and this test is the only place the two meet. It finds that file
+ * through `inspector.webCss`, the path of `web/css/`, which `:inspector-ui`'s `jvmTest` passes with
+ * the folder declared as an input. Without that declaration a CSS-only change left this task up to
+ * date and green; and without the property it fails rather than guess a relative path, because a
+ * guessed path is how a test quietly reads a stale or missing copy.
+ *
+ * Reading one file is only sound while the tokens live only there. A checked token declared again in
+ * a later stylesheet wins the cascade in the browser while this test goes on comparing the copy in
+ * `00-tokens.css`, so the web would drift with this test green. The third test holds that.
+ *
+ * It reads the folder, never `web/styles.txt`. `WebPage` is the only Kotlin that parses a manifest,
+ * and `WebManifestTest` holds every stylesheet in the folder listed and every listed one present, so
+ * the folder is the page's stylesheets without a second parser of the list. Order does not matter
+ * here: the third test asks whether a token is declared anywhere else at all.
  */
 class PaletteParityTest {
 
-    private val css: String = sequenceOf(
-        File("../inspector-daemon/src/main/resources/web/style.css"),
-        File("inspector-daemon/src/main/resources/web/style.css"),
-    ).firstOrNull { it.isFile }?.readText()
-        ?: error("style.css not found from ${File(".").absoluteFile} — the parity check cannot run")
+    /** Every stylesheet in `web/css/`, keyed `css/<name>` as the manifest would list it. */
+    private val sheets: Map<String, String> = run {
+        val dir = System.getProperty("inspector.webCss")?.let(::File)
+            ?: error("inspector.webCss is not set; :inspector-ui:jvmTest passes it, see build.gradle.kts")
+        assertTrue(dir.isDirectory, "inspector.webCss names $dir, which is not a directory")
+        val files = dir.listFiles { f -> f.isFile && f.extension == "css" }.orEmpty().sortedBy { it.name }
+        files.associate { "css/${it.name}" to it.readText() }
+            .also { assertTrue(TOKENS in it, "$dir no longer holds $TOKENS, where the palette tokens live") }
+    }
+
+    private val css: String = sheets.getValue(TOKENS)
 
     /** The `:root` block before the light media query, and the one inside it. */
     private fun block(light: Boolean): String {
@@ -47,7 +66,14 @@ class PaletteParityTest {
     private fun assertParity(colors: InspectorColors, light: Boolean) {
         val theme = if (light) "light" else "dark"
         val block = block(light)
-        val pairs = listOf(
+        for ((name, overlay) in pairs(colors)) {
+            assertEquals(token(block, name), overlay, "$theme --$name differs between the web and the overlay")
+        }
+    }
+
+    /** Each web token this test checks, with the overlay colour it must equal. */
+    private fun pairs(colors: InspectorColors): List<Pair<String, Color>> =
+        listOf(
             "accent" to colors.accent,
             "ok" to colors.success,
             "redirect" to colors.redirect,
@@ -62,14 +88,29 @@ class PaletteParityTest {
             "m-delete" to colors.methodDelete,
             "fg-muted" to colors.onSurfaceMuted,
         )
-        for ((name, overlay) in pairs) {
-            assertEquals(token(block, name), overlay, "$theme --$name differs between the web and the overlay")
-        }
-    }
 
     @Test
     fun `the dark palette matches the web tokens`() = assertParity(DarkColors, light = false)
 
     @Test
     fun `the light palette matches the web tokens`() = assertParity(LightColors, light = true)
+
+    @Test
+    fun `no checked token is declared outside the tokens file`() {
+        val names = pairs(DarkColors).map { it.first }.distinct()
+        val elsewhere = sheets.filterKeys { it != TOKENS }.flatMap { (file, text) ->
+            // Comments stripped, so a sentence naming a token is not taken for a declaration of it.
+            val code = text.replace(Regex("""/\*[\s\S]*?\*/"""), "")
+            names.filter { Regex("""--${Regex.escape(it)}\s*:""").containsMatchIn(code) }.map { "--$it in $file" }
+        }
+        assertTrue(sheets.size > 1, "web/css holds only $TOKENS, so there is nothing to check this against")
+        assertTrue(
+            elsewhere.isEmpty(),
+            "declared outside $TOKENS, where this test cannot see it win the cascade: ${elsewhere.joinToString()}",
+        )
+    }
+
+    private companion object {
+        const val TOKENS = "css/00-tokens.css"
+    }
 }

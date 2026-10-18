@@ -7,7 +7,7 @@ package dev.inspector.model
  * "app-defined identity within `tag`", and the daemon's last-wins `current` query uses the same
  * pair. Grouping anywhere else would invent a second identity for the same row.
  *
- * Shared rather than written twice: `app.js` builds the same grouping for its tag browsers, and
+ * Shared rather than written twice: the web UI builds the same grouping for its tag browsers, and
  * the overlay needs it for a signal's history. Both are answering one question — *every time the
  * app told us about this thing, in order* — and two implementations of that answer are two
  * answers waiting to disagree.

@@ -1,0 +1,231 @@
+/* detail: one transaction, the daemon banner, headers, bodies and per-field copy */
+/* --- detail ------------------------------------------------------------- */
+
+#detail { padding: 14px; }
+
+.detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+/* Pushed right, and kept together when a long path wraps the header. */
+.detail-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.btn.btn-outline { background: none; border-color: var(--divider); color: var(--fg); }
+.btn.btn-outline:hover:not(:disabled) { border-color: var(--accent); }
+
+/* A small menu under the button that opened it. */
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.25);
+}
+.menu[hidden] { display: none; }
+.menu-item {
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 10px;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+/* The export menu opens from the top bar's left side, where right-aligning would run off screen. */
+.menu.menu-left { left: 0; right: auto; min-width: 210px; }
+/* Export items are links, so the browser saves the file under the name the daemon sends. */
+a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
+
+/*
+ * An exported session, opened from disk. There is no daemon, so nothing that would send something
+ * to one is drawn: process control, the live toggle, deletion, the filter chips (the grammar is
+ * evaluated by the daemon), adding a marker, pulls, replay and export itself.
+ *
+ * `!important` because two of these are toggled by script on every render — `renderBrowser`
+ * un-hides the pull button, and the replay menu is rebuilt with each detail pane — and an author
+ * `display` rule otherwise beats `[hidden]` here.
+ */
+body.archive #live-btn,
+body.archive .daemon-group,
+body.archive #session-delete,
+body.archive #export-host,
+body.archive #chips-label,
+body.archive #chips,
+body.archive #endpoint-chips,
+body.archive #marker-form,
+body.archive #marker-status,
+body.archive #browser-pull,
+body.archive #browser-pull-status,
+body.archive .replay-menu,
+body.archive .replay-menu + .menu { display: none !important; }
+.server-banner.archive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+}
+.server-banner.archive[hidden] { display: none; }
+.server-banner.archive .banner-title { font-weight: 600; color: var(--fg); }
+.detail-head .path { font-family: var(--mono); font-size: 14px; word-break: break-all; }
+.detail-head .method { font-size: 11px; flex: 0 0 auto; }
+
+.btn {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.btn-sm { padding: 2px 8px; font-size: 11px; }
+.btn-danger { color: var(--err); }
+.btn-danger:hover { background: var(--err); color: #fff; border-color: var(--err); }
+
+/* Full-width because a dead daemon is not a detail — every number on the page is now stale. */
+.server-banner {
+  padding: 8px 14px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--err);
+  color: var(--err);
+}
+.server-banner.pending { border-bottom-color: var(--warn); color: var(--warn); }
+
+/* A daemon stopped on purpose. Its own tint token rather than a literal, shared with armed
+   buttons, because both say "one step from something that stops". Declared here rather than in the
+   main token block so the two can move together. */
+:root { --stop-bg: rgb(229 72 77 / 0.10); }
+@media (prefers-color-scheme: light) {
+  :root { --stop-bg: rgb(198 42 47 / 0.08); }
+}
+.server-banner.big {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--stop-bg);
+  border-bottom: 1px solid var(--err);
+}
+.server-banner[hidden] { display: none; }
+.server-banner.big .banner-title { font-weight: 600; color: var(--err); }
+.server-banner.big .banner-hint { font-size: 12px; }
+.server-banner.big code { font-family: var(--mono); color: var(--fg); }
+/* Everything under the banner is history now; dimmed so it cannot be mistaken for live. */
+body.stopped #panes,
+body.stopped .toolbar,
+body.stopped .axis,
+body.stopped .tabs { opacity: 0.6; }
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 0 6px;
+}
+
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 3px 10px; font-size: 12px; }
+.kv dt { color: var(--fg-muted); }
+.kv dd { margin: 0; font-family: var(--mono); word-break: break-all; }
+
+.headers {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  min-width: 0;
+  /* A bearer token is one unbroken 7000px "word". Without this it is not clipped-but-scrollable
+     -- `overflow-x` here is visible -- it is painted outside the pane and gives the *page* a
+     horizontal scrollbar, so reading it slides the whole three-column layout sideways. `anywhere`
+     rather than `break-all` so ordinary header names still break at their hyphens. */
+  overflow-wrap: anywhere;
+}
+.headers .hname { color: var(--fg-muted); }
+
+pre.body {
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 0;
+  max-height: 460px;
+  overflow: auto;   /* wide bodies scroll here, never the page */
+}
+
+/* --- per-field copy ------------------------------------------------------
+
+   Quiet until wanted. The button is always in the DOM so it is reachable by keyboard and
+   announced by a screen reader; opacity is what keeps a detail pane full of header rows from
+   reading as a wall of icons. `:focus-within` is the half that makes tabbing to it work — without
+   it the button is focused, invisible, and the focus ring lands on nothing. */
+.copyable { display: flex; align-items: baseline; gap: 6px; }
+.copyable-value { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+
+.copy-field {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  color: var(--fg-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.copyable:hover .copy-field,
+.copyable:focus-within .copy-field,
+.body-wrap:hover .copy-field,
+.body-wrap:focus-within .copy-field,
+.copy-field:focus-visible { opacity: 1; }
+.copy-field:hover { color: var(--accent); border-color: var(--divider); }
+.copy-field.done { opacity: 1; color: var(--ok); }
+.copy-field.bad { opacity: 1; color: var(--err); }
+
+@media (prefers-reduced-motion: reduce) {
+  .copy-field { transition: none; }
+}
+
+/* Positioned over the body rather than beside it: a body is a block, and a button on its own
+   line under it reads as belonging to whatever comes next. */
+.body-wrap { position: relative; }
+.body-wrap .copy-field {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--bg-elevated);
+  border-color: var(--divider);
+}
+
+.banner {
+  font-size: 11px;
+  color: var(--warn);
+  margin-bottom: 6px;
+}
+.banner.redacted { color: var(--err); }
+
+.chain-row { font-family: var(--mono); font-size: 12px; padding: 3px 0; cursor: pointer; color: var(--accent); }
+.chain-row.current { color: var(--fg); font-weight: 600; cursor: default; }
+

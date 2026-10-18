@@ -50,6 +50,7 @@ Nobody should be told to "open the desktop app".
 | **4b** | Report what we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 | **S-D** | Structure pass (not a capture letter), phase D — daemon packages, layering check | 🟡 built, done once PR merged and CI green |
+| **S-F** | Structure pass, phase F — web UI script and CSS split behind the manifest | 🟡 built, done once PR merged and CI green |
 
 The lettered rows are **capture mechanisms** and are lettered independently of Phase 4, which is
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
@@ -96,7 +97,7 @@ Multiplatform 1.11+ dropped the Intel simulator, so no CMP app can target it.
 |---|---|
 | `docs/decisions/capture.md` | Ktor and OkHttp capture, the tee, redaction, what Ktor cannot see. |
 | `docs/decisions/signals.md` | Signals in the overlay: runs, providers, the now strip, ages, payloads. |
-| `docs/decisions/shared-rules.md` | Model rules `app.js` mirrors, the filter grammar, the palette. |
+| `docs/decisions/shared-rules.md` | Model rules the web UI mirrors, the filter grammar, the palette. |
 | `docs/decisions/overlay.md` | The Compose overlay: chrome, detail, JSON tree, ellipsis, insets, tests. |
 | `docs/decisions/web-ui.md` | The browser UI and its probes. |
 | `docs/decisions/exports.md` | HAR, Markdown and HTML exports. |

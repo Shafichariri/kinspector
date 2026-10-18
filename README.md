@@ -373,7 +373,7 @@ The sample app doubles as the reference integration and as a traffic generator:
 ./gradlew :sample:desktop:run -Dinspector.sample.autofire=true   # scripted traffic, no clicking
 ```
 
-The web UI has no Kotlin test behind it, so it has a jsdom harness that runs the *real* `app.js`
+The web UI has no Kotlin test behind it, so it has a jsdom harness that runs the *real* page
 against a running daemon and reports what actually rendered:
 
 ```bash

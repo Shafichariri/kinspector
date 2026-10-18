@@ -1,0 +1,162 @@
+/* browser: the tag browser */
+/* --- tag browser --------------------------------------------------------- */
+
+.browser { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.browser[hidden] { display: none; }
+
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+.browser-toolbar input[type="search"] {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 12px;
+  width: 180px;
+}
+.browser-facets { margin-top: 0; align-items: center; }
+.facet { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; }
+.facet-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.browser-status { font-size: 11px; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-status-error, .cache-status-error { color: #ff8f8f; }
+
+/* The key list is fixed and the detail takes the rest: a value is the wide thing here, and a key
+   that needs more than this is one the eye skims anyway. */
+.browser-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.browser-keys {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--divider);
+}
+.browser-list { list-style: none; margin: 0; padding: 4px 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.browser-count {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--divider);
+  flex: 0 0 auto;
+}
+
+.bkey {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.bkey:hover { background: var(--bg-hover); }
+.bkey.sel { background: var(--sel-bg); border-left-color: var(--accent); }
+
+/* Freshness before you read the row. Hollow means the app said nothing about it, which is not
+   the same as saying it is live — see the tri-state in cacheFieldsOf. */
+.bkey-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--neutral);
+}
+.bkey-dot.live { background: var(--ok); border-color: var(--ok); }
+.bkey-dot.expired { background: var(--warn); border-color: var(--warn); }
+.bkey-dot.gone { background: none; border-color: var(--err); }
+.bkey-dot-none { border-color: transparent; }
+
+.bkey-text { min-width: 0; }
+.bkey-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.bkey-meta {
+  display: block;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bkey-age { font-size: 11px; white-space: nowrap; }
+.bkey-age.stale, .current-age.stale { color: var(--warn); }
+
+.browser-detail { overflow-y: auto; padding: 12px 14px; min-height: 0; }
+
+.bdetail-key { font-size: 13px; word-break: break-all; }
+.bdetail-raw { font-size: 11px; word-break: break-all; margin-top: 2px; }
+
+.bdetail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+.bdetail-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  color: var(--fg-muted);
+}
+.bdetail-chip.good { color: var(--ok); border-color: rgb(76 195 138 / 0.4); }
+.bdetail-chip.bad { color: var(--warn); border-color: rgb(224 160 48 / 0.4); }
+.bdetail-clock, .bdetail-age { font-size: 11px; }
+
+.bkind { text-transform: lowercase; }
+.bkind-written { background: rgba(89, 201, 138, 0.18); color: #59c98a; border-color: transparent; }
+.bkind-removed { background: rgba(255, 143, 143, 0.18); color: #ff8f8f; border-color: transparent; }
+.bkind-cleared { background: rgba(255, 180, 84, 0.18); color: #ffb454; border-color: transparent; }
+
+.bvalue { margin-bottom: 14px; }
+.bvalue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.bvalue-body {
+  margin: 0;
+  padding: 9px 11px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  max-height: 46vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bvalue-none {
+  font-size: 12px;
+  padding: 8px 11px;
+  border-left: 2px solid var(--divider);
+}
+
+.bhistory-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.bhistory-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.bhistory-item:hover { background: var(--bg-hover); }
+.bhistory-item.sel { background: var(--bg-hover); outline: 1px solid var(--divider); }
+.bhistory-clock { font-size: 11px; }
+.bhistory-kind { font-size: 11px; }
+.bhistory-bytes { font-size: 11px; margin-left: auto; }
+

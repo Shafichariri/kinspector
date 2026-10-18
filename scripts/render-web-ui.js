@@ -1,6 +1,6 @@
 /* Smoke-test and snapshot the web UI.
  *
- * Runs the REAL app.js against the REAL index.html with fetch proxied to a running daemon, then
+ * Runs the REAL scripts against the REAL index.html with fetch proxied to a running daemon, then
  * reports what actually rendered. This exists because the web UI is the one surface with no
  * Kotlin test behind it — everything below the HTTP boundary is covered by :inspector-daemon
  * tests, but whether the page turns that data into rows is otherwise unverified.
@@ -39,7 +39,8 @@ try {
   process.exit(2);
 }
 
-const { loadScripts, loadStyles, loadIndexHtml } = require('./lib/web-sources');
+const vm = require('vm');
+const { loadScripts, loadStyles, loadIndexHtml, STYLES_SLOT, SCRIPTS_SLOT } = require('./lib/web-sources');
 const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
@@ -48,27 +49,37 @@ const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes }
  */
 const ORIGIN = process.env.INSPECTOR_UI_ORIGIN || 'http://127.0.0.1:8099';
 
-const css = loadStyles().map((s) => s.text).join('\n');
-const js = loadScripts().map((s) => s.text).join('\n');
+const styles = loadStyles();
+const scripts = loadScripts();
+// The audits read the stylesheets as one text, in cascade order, which is what the page applies.
+const css = styles.map((s) => s.text).join('\n');
 let html = loadIndexHtml();
 
 /*
- * The same two literal tags `HtmlExport.kt` replaces to build an exported session; change one side
- * and the other must follow. Checked rather than trusted, because a `replace` that matches nothing
- * is silent — the snapshot would load the stylesheet from a path that does not exist, and the
- * export would ship a page with no code in it.
+ * The same two slot literals `WebPage.kt` expands for `GET /` and for an exported session; change
+ * one side and the other must follow. Checked rather than trusted, because a `replace` that matches
+ * nothing is silent — the snapshot would have no styles, and the export would ship a page with no
+ * code in it.
+ *
+ * Expanded from the working tree, not fetched from the daemon. The usual loop is "edit, re-run
+ * against a daemon that is already running", and a daemon serves the jar it was built from, so a
+ * probe that loaded the served page would test the code before the edit and report green on code
+ * that is no longer there. `RestApiTest` holds the served half: the tags in manifest order and
+ * every listed file byte for byte.
  */
-const STYLE_TAG = '<link rel="stylesheet" href="/style.css">';
-const SCRIPT_TAG = '<script src="/app.js"></script>';
-for (const tag of [STYLE_TAG, SCRIPT_TAG]) {
-  if (!html.includes(tag)) {
-    console.error(`index.html no longer contains ${tag}; update this script and HtmlExport.kt together`);
+for (const slot of [STYLES_SLOT, SCRIPTS_SLOT]) {
+  const count = html.split(slot).length - 1;
+  if (count !== 1) {
+    console.error(`index.html holds ${slot} ${count} time(s), not once; update this script and WebPage.kt together`);
     process.exit(2);
   }
 }
 html = html
-  .replace(STYLE_TAG, `<style>\n${css}\n</style>`)
-  .replace(SCRIPT_TAG, '');
+  // One <style> per file, as the export inlines them: a file that fails to close a brace or a
+  // comment is then its own sheet here too, and does not swallow the next one.
+  .replace(STYLES_SLOT, () => styles.map((s) => `<style>${s.text}</style>`).join('\n'))
+  // The scripts run below, one `vm.Script` each, after the stubs they rely on are in place.
+  .replace(SCRIPTS_SLOT, '');
 
 const errors = [];
 const virtualConsole = new VirtualConsole();
@@ -194,8 +205,30 @@ window.WebSocket = class {
 let lastCopied = null;
 window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; } };
 
+/*
+ * Each listed script as its own classic script, in manifest order, in the page's own global scope —
+ * what the browser does with consecutive `<script src>` tags. One shared lexical scope, so a
+ * top-level `const` in one file is visible to the next and redeclaring it is a SyntaxError; and no
+ * hoisting across files, so a call at load time into a later file is a ReferenceError. A joined
+ * `window.eval` would hide both.
+ *
+ * A file that fails to compile or throws while running is a page error, and the next file still
+ * runs, because that is what a browser does; stopping here would turn one broken file into a report
+ * about every probe instead of one that names it.
+ */
+const vmContext = dom.getInternalVMContext();
+function runScripts() {
+  for (const { file, text } of scripts) {
+    try {
+      new vm.Script(text, { filename: file }).runInContext(vmContext);
+    } catch (e) {
+      errors.push(`script ${file}: ${e && e.name ? `${e.name}: ${e.message}` : e}`);
+    }
+  }
+}
+
 (async () => {
-  window.eval(js);
+  runScripts();
 
   // Let init() finish its fetches, then select a row so the detail pane renders too.
   await new Promise((r) => setTimeout(r, 1500));
@@ -2597,10 +2630,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await settle();
   }
 
-  writeSnapshot('Static snapshot of the live UI (rendered from the real app.js against a real session). ');
+  writeSnapshot('Static snapshot of the live UI (rendered from the real web UI against a real session). ');
 
   // The snapshot is written, but jsdom is still running a window: `pretendToBeVisual` drives a
-  // requestAnimationFrame loop and app.js sets a 1s interval to repaint ages. Two live timer
+  // requestAnimationFrame loop and 99-init.js sets a 1s interval to repaint ages. Two live timer
   // handles, neither of which belongs to a page that has already been serialised — and enough to
   // keep node from exiting, so every caller had to notice the report had stopped and kill the
   // process. Closing the window clears them.

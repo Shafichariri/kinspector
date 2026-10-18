@@ -1,10 +1,10 @@
 # Mirror cases
 
-`app.js` carries copies of rules whose authority is Kotlin, because the web UI has no build step and
+The web UI carries copies of rules whose authority is Kotlin, because it has no build step and
 cannot call `:inspector-model`. Each file here is one rule's cases, and **both sides run every
 case**:
 
-| File | Kotlin authority | Kotlin runner | `app.js` block |
+| File | Kotlin authority | Kotlin runner | Web UI block |
 |---|---|---|---|
 | `timeline.json` | `timeline()` (oldest first) | `MirrorCasesTest` | `visits` → `timelineEntries` |
 | `visits.json` | `visits()`, `visitIndexAt()` | `MirrorCasesTest` | `visits` (+ `tagOf`) |
@@ -14,8 +14,9 @@ case**:
 | `duplicates.json` | `duplicateGroups()` | `MirrorCasesTest` | `duplicates` (+ `urlOf`) |
 | `hopByHop.json` | `HOP_BY_HOP_HEADERS`, `replayableHeaders()` in `Replay.kt` | `HopByHopMirrorTest` (daemon) | `hopByHop` |
 
-The JavaScript runner is `scripts/check-web-static.js`, which lifts each block out of the real
-`app.js` between `// @mirror-begin <name>` and `// @mirror-end <name>`.
+The JavaScript runner is `scripts/check-web-static.js`, which lifts each block out of the real web
+UI between `// @mirror-begin <name>` and `// @mirror-end <name>`, whichever file `web/scripts.txt`
+lists it in. A block's begin and end must be in the same file, and each name appears once.
 
 ```bash
 node scripts/check-web-static.js

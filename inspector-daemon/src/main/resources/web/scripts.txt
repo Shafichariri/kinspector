@@ -1,0 +1,24 @@
+# The web UI's scripts, in load order: one path per line, relative to this folder. `#` starts a
+# comment line. Classic scripts share one global scope, so a file may call into an earlier one at
+# load time and into any of them later. The daemon expands this list into <script> tags for `GET /`
+# and inlines it for an HTML export; nothing serves or fetches this file.
+js/00-core.js
+js/05-network.js
+js/10-json-tree.js
+js/15-session-data.js
+js/20-navigation.js
+js/25-traffic-list.js
+js/30-repeats-endpoints.js
+js/35-detail.js
+js/40-copy-export.js
+js/45-visits.js
+js/50-path.js
+js/55-axis.js
+js/60-browser.js
+js/65-browser-detail.js
+js/70-timeline.js
+js/75-replay.js
+js/80-settings.js
+js/85-processes.js
+js/90-sessions.js
+js/99-init.js

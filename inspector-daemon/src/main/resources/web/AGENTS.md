@@ -1,8 +1,13 @@
 # web UI — agent guide
 
-The browser UI the daemon serves: `index.html`, `style.css` and `app.js`, with no build step and
-no dependencies. The same files are inlined into every HTML export, and `app.js` mirrors rules
-whose authority is `:inspector-model`. This guide and its `CLAUDE.md` are kept out of the jar.
+The browser UI the daemon serves, with no build step and no dependencies: `index.html`, the
+classic scripts in `js/` listed in load order by `scripts.txt`, and the stylesheets in `css/`
+listed in cascade order by `styles.txt`. The daemon expands the two lists into the page's tags,
+and the same files are inlined one by one into every HTML export. A file in `js/` or `css/` that
+its list does not name fails the build, and so does an entry with no file. Some blocks mirror
+rules whose authority is `:inspector-model`, each between `// @mirror-begin <name>` and
+`// @mirror-end <name>`. Why it is shaped this way, and the load-time and cascade rules a new file
+must keep, are in `web-ui.md`. This guide and its `CLAUDE.md` are kept out of the jar.
 
 Read before changing anything here: `docs/decisions/web-ui.md`, `docs/decisions/shared-rules.md`.
 

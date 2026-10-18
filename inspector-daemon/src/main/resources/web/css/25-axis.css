@@ -1,0 +1,47 @@
+/* axis: the time axis */
+/* --- the time axis ------------------------------------------------------ */
+
+.axis {
+  flex: 0 0 auto;
+  padding: 6px 10px 3px;
+  border-bottom: 1px solid var(--divider);
+  user-select: none;
+  cursor: crosshair;
+}
+.axis[hidden] { display: none !important; }
+
+.axis-svg { display: block; width: 100%; height: 37px; }
+
+/* All activity, dim: the shape of the session, drawn from every call it holds. */
+.axis-bar-all { fill: var(--fg-muted); opacity: 0.3; }
+/* What the current filter kept. With no filter this covers the dim bars exactly. */
+.axis-bar-hit { fill: var(--accent); opacity: 0.75; }
+/* Failures, always on top — the one thing you should never have to hunt for. */
+.axis-bar-bad { fill: var(--err); opacity: 0.95; }
+
+.axis-screen { opacity: 0.85; }
+.axis-marker { stroke: var(--fg-muted); stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.7; }
+.axis-marker-flag { fill: var(--accent); }
+
+/* Excluded stretches are pushed back rather than the kept one being tinted: the selection should
+   read as the normal chart with the rest dimmed, not as a highlight laid over an unchanged one. */
+.axis-mask { fill: var(--bg); opacity: 0.66; }
+.axis-edge { stroke: var(--accent); stroke-width: 1; }
+
+.axis-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.axis-time { flex: 0 0 auto; }
+.axis-hint {
+  flex: 1 1 auto;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+

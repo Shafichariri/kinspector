@@ -14,7 +14,7 @@ tickets that are the **how** under each roadmap item, never a second list of wha
 | Role | Owns | Writes | Asks for |
 |---|---|---|---|
 | `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` (read-only on tickets) | Decisions only the human can make |
-| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
+| `architect` | Structure: modules, twins, golden files, model ↔ web UI mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
 | `engineer` | Building one designed item, with tests | code and tests; ticket status up to In Progress | A design note before starting |
 | `qa-verifier` | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
 | `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
@@ -167,6 +167,11 @@ The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
   `disallowedTools`, `effort` and body, but **not** its `hooks`, `memory` or `omitClaudeMd`, so the
   write block and the private term list would silently vanish; `product-owner` and
   `delivery-tracker` — they own human gates and state that exists only after a phase.
+- **The three roster roles list `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate` in `tools`.**
+  A teammate gets exactly its definition's `tools`, so without them it cannot message the others
+  or read the shared task list, and a "team" is three isolated reports relayed by the lead. That
+  is how phase F's council and panel ran on 2026-10-18: every member said it had no message tool.
+  Writes stay refused by the two hooks below whatever `tools` says.
 - **`.claude/hooks/team-read-only.js`** (PreToolUse on Write/Edit). A teammate cannot write files;
   it sends proposed text to the lead, who routes it to the owning role afterwards. Bash writes are
   outside what the hook sees, as with the strategist's.

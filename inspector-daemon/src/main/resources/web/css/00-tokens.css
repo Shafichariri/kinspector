@@ -1,0 +1,82 @@
+/* tokens: the dark palette and its light override, shared with the overlay */
+/* Dark by default; the light palette is a media-query override only.
+   No external fonts, no CDN — the daemon is offline-only by design. */
+:root {
+  --bg: #14161a;
+  --bg-elevated: #1e2127;
+  --bg-hover: #262a32;
+  --fg: #e6e8eb;
+  --fg-muted: #9aa1ac;
+  --divider: #2c3038;
+  --accent: #6aa9ff;
+  /* Same colour as --accent, as bare RGB components, so a tint can be taken from it with
+     rgb(var(--accent-rgb) / alpha) — the same trick the --m-* tokens below use. Two spellings of
+     one colour; change both together. */
+  --accent-rgb: 106 169 255;
+  --ok: #4cc38a;
+  /* Grey, not blue: blue is the accent, and a 3xx is routine enough not to need a hue at all. */
+  --redirect: #8a8f98;
+  --warn: #e0a030;
+  /* Lifted from #e5484d, which was 3.7:1 on --bg-hover; this is 5.2:1. */
+  --err: #ff6b6f;
+  --neutral: #8a8f98;
+  /* Method hues, as bare RGB components so one token yields both the text colour and the badge
+     tint via rgb(var(--x) / alpha). Kept out of the status family above (green/amber/red) on
+     purpose — see the .m-* rules for why.
+     GET is neutral because it is most of the rows: while it was the accent blue, blue meant "a
+     read" nearly everywhere and could no longer mean selection or a link. PATCH is teal rather than
+     amber so that amber means 4xx and stale and nothing else. */
+  --m-get: 154 161 172;
+  --m-post: 76 195 138;
+  --m-put: 217 155 255;
+  --m-patch: 62 199 199;
+  --m-delete: 255 107 111;
+  /* Row backgrounds. Selection is its own tint rather than --bg-hover, so a selected row still
+     reads as selected under the pointer. Duplicates are tinted from the PUT hue — not amber, which
+     would read as a 4xx row. */
+  --sel-bg: rgb(var(--accent-rgb) / 0.10);
+  --dup-bg: rgb(var(--m-put) / 0.08);
+  /* Five hues for an app's own signal tags, handed out in order of first appearance. Chosen by
+     running the dataviz validator against the four lane colours above them: none introduces a
+     pair closer than the blue/purple pair the lanes already have, and every one clears the
+     chroma floor. Words always travel beside them — a station and a log line both name each kind. */
+  --tag-1: #d55181;
+  --tag-2: #199e70;
+  --tag-3: #40e0ff;
+  --tag-4: #d4ff6a;
+  --tag-5: #f08fb0;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fafafb;
+    --bg-elevated: #ffffff;
+    --bg-hover: #f0f2f5;
+    --fg: #14161a;
+    --fg-muted: #5f6672;
+    --divider: #e1e4e8;
+    --accent: #2563eb;
+    --accent-rgb: 37 99 235;
+    --ok: #13875b;
+    --redirect: #6b7280;
+    --warn: #b45309;
+    --err: #c62a2f;
+    --neutral: #6b7280;
+    --m-get: 95 102 114;
+    --m-post: 19 135 91;
+    --m-put: 124 58 237;
+    /* #0f766e, darker than the proposed #0d9488, which was 2.9:1 on its own badge tint. */
+    --m-patch: 15 118 110;
+    --m-delete: 198 42 47;
+    --sel-bg: rgb(37 99 235 / 0.08);
+    --dup-bg: rgb(124 58 237 / 0.07);
+    /* Stepped for a light surface: the dark-theme cyan, lime and pink fell under 3:1 on white. */
+    --tag-1: #b83a73;
+    --tag-2: #13845d;
+    --tag-3: #0a7fa3;
+    --tag-4: #8a7a00;
+    --tag-5: #e0609c;
+  }
+}

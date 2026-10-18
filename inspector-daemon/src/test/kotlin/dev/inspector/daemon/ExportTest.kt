@@ -8,6 +8,7 @@ import dev.inspector.daemon.service.ExportMarkdown
 import dev.inspector.daemon.service.ExportedBody
 import dev.inspector.daemon.service.HtmlExport
 import dev.inspector.daemon.service.SessionExport
+import dev.inspector.daemon.service.WebPage
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.SignalTags
 import kotlinx.serialization.json.Json
@@ -250,18 +251,56 @@ class ExportTest {
         return json.parseToJsonElement(html.substring(start, end)).jsonObject
     }
 
+    /** The bundled web UI, with one file replaced or added; every refusal below starts from it. */
+    private fun bundledWith(vararg overrides: Pair<String, String?>): (String) -> String? {
+        val map = overrides.toMap()
+        return { name -> if (name in map) map[name] else WebPage.bundled(name) }
+    }
+
+    /** The inline `<style>` bodies; the only place `@import` or `url(` could make an export reach out. */
+    private fun inlineStyles(html: String): List<String> =
+        Regex("<style>([\\s\\S]*?)</style>").findAll(html).map { it.groupValues[1] }.toList()
+
     @Test
     fun `the file is self-contained and is the real web UI`() {
         val dir = session { it.append(txn("aaaa1111"), null, null) }
         val html = HtmlExport.render(build(dir))
-        assertFalse(HtmlExport.SCRIPT_TAG in html, "app.js must be inlined, not linked")
-        assertFalse(HtmlExport.STYLE_TAG in html, "style.css must be inlined, not linked")
+        assertFalse(WebPage.STYLES_SLOT in html, "the styles slot must be filled")
+        assertFalse(WebPage.SCRIPTS_SLOT in html, "the scripts slot must be filled")
         assertFalse(Regex("""(src|href)="(https?:)?/""").containsMatchIn(html), "nothing may be fetched")
         assertContains(html, "--m-get")
         assertContains(html, "const ARCHIVE = window.INSPECTOR_ARCHIVE")
         assertContains(html, "<title>2026-08-16T10-14-02_app_dev_debug · Inspector</title>")
         assertEquals("aaaa1111", embedded(html)["transactions"]!!.jsonArray.single()
             .jsonObject["txn"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `every listed file is inlined in manifest order and nothing is linked`() {
+        val dir = session { it.append(txn("aaaa1111"), null, null) }
+        val html = HtmlExport.render(build(dir))
+        val scripts = WebPage.scripts()
+        val styles = WebPage.styles()
+
+        // The data script, then one per listed file.
+        assertEquals(1 + scripts.size, Regex("</script>").findAll(html).count(), "one </script> per script plus the data")
+        assertEquals(styles.size, Regex("<style>").findAll(html).count(), "one <style> per stylesheet")
+
+        val data = html.substring(html.indexOf("window.INSPECTOR_ARCHIVE"), html.indexOf(";</script>"))
+        val outside = html.replace(data, "")
+        assertFalse("<script src" in outside, "a <script src> is left in the export")
+        assertFalse("<link rel=\"stylesheet\"" in outside, "a stylesheet link is left in the export")
+        for (css in inlineStyles(html)) {
+            assertFalse("@import" in css.lowercase(), "an inlined stylesheet imports another")
+            assertFalse("url(" in css.lowercase(), "an inlined stylesheet loads a url(")
+        }
+
+        // In order, and each exactly the file: positions are strictly increasing.
+        val positions = scripts.map { html.indexOf("<script>${WebPage.bundled(it)}</script>") }
+        assertTrue(positions.none { it < 0 }, "a listed script is not inlined verbatim: ${scripts.zip(positions)}")
+        assertEquals(positions.sorted(), positions, "scripts are not in manifest order")
+        assertTrue(html.indexOf("window.INSPECTOR_ARCHIVE") < positions.first(), "the data must come before the code")
+        assertEquals(styles.map { WebPage.bundled(it) }, inlineStyles(html), "stylesheets are not each file, in order")
     }
 
     @Test
@@ -272,8 +311,8 @@ class ExportTest {
             it.append(marker("<!-- x -->"))
         }
         val html = HtmlExport.render(build(dir))
-        // Exactly the data script's and app.js's own closing tags.
-        assertEquals(2, Regex("</script>").findAll(html).count())
+        // Exactly the data script's closing tag and one per listed script.
+        assertEquals(1 + WebPage.scripts().size, Regex("</script>").findAll(html).count())
         val data = html.substring(html.indexOf("window.INSPECTOR_ARCHIVE"), html.indexOf(";</script>"))
         assertFalse("<" in data, "no raw '<' may reach the embedded data")
         val root = embedded(html)
@@ -283,14 +322,75 @@ class ExportTest {
     }
 
     @Test
-    fun `it refuses to build a page that would load no code`() {
+    fun `refuses an index html without a slot`() {
         val dir = session { }
-        val error = assertFailsWith<IllegalStateException> {
-            HtmlExport.render(build(dir)) { name ->
-                if (name == "index.html") "<html><head>${HtmlExport.STYLE_TAG}</head><body></body></html>" else ""
+        val index = WebPage.bundled("index.html")!!
+        for (slot in listOf(WebPage.STYLES_SLOT, WebPage.SCRIPTS_SLOT)) {
+            val error = assertFailsWith<IllegalStateException> {
+                HtmlExport.render(build(dir), bundledWith("index.html" to index.replace(slot, "")))
             }
+            assertContains(error.message.orEmpty(), slot)
         }
-        assertContains(error.message.orEmpty(), "app.js")
+    }
+
+    @Test
+    fun `refuses a manifest entry with no file`() {
+        val dir = session { }
+        // Each ghost follows a real first entry, so the ghost is the only thing that cannot resolve
+        // however the page is split.
+        val ghostJs = "js/42-ghost.js"
+        val jsError = assertFailsWith<IllegalStateException> {
+            HtmlExport.render(build(dir), bundledWith(WebPage.SCRIPTS_MANIFEST to "${WebPage.scripts().first()}\n$ghostJs\n"))
+        }
+        assertContains(jsError.message.orEmpty(), ghostJs)
+        val ghostCss = "css/42-ghost.css"
+        val cssError = assertFailsWith<IllegalStateException> {
+            HtmlExport.render(build(dir), bundledWith(WebPage.STYLES_MANIFEST to "${WebPage.styles().first()}\n$ghostCss\n"))
+        }
+        assertContains(cssError.message.orEmpty(), ghostCss)
+    }
+
+    @Test
+    fun `refuses an empty manifest`() {
+        val dir = session { }
+        for (manifest in listOf(WebPage.SCRIPTS_MANIFEST, WebPage.STYLES_MANIFEST)) {
+            val error = assertFailsWith<IllegalStateException> {
+                HtmlExport.render(build(dir), bundledWith(manifest to "# nothing listed\n"))
+            }
+            assertContains(error.message.orEmpty(), manifest)
+        }
+    }
+
+    @Test
+    fun `refuses per file the sequences that would break inlining`() {
+        val dir = session { }
+        val extraJs = "js/42-extra.js"
+        val withExtraJs = WebPage.bundled(WebPage.SCRIPTS_MANIFEST) + "$extraJs\n"
+        for (sequence in listOf("</script", "<!--", "<script", "</SCRIPT")) {
+            val error = assertFailsWith<IllegalStateException>(sequence) {
+                HtmlExport.render(
+                    build(dir),
+                    bundledWith(WebPage.SCRIPTS_MANIFEST to withExtraJs, extraJs to "const s = '${sequence}>';\n"),
+                )
+            }
+            assertContains(error.message.orEmpty(), extraJs)
+            assertContains(error.message.orEmpty(), sequence.lowercase())
+        }
+        val extraCss = "css/42-extra.css"
+        val withExtraCss = WebPage.bundled(WebPage.STYLES_MANIFEST) + "$extraCss\n"
+        val error = assertFailsWith<IllegalStateException> {
+            HtmlExport.render(
+                build(dir),
+                bundledWith(WebPage.STYLES_MANIFEST to withExtraCss, extraCss to "a::after { content: '</style>'; }\n"),
+            )
+        }
+        assertContains(error.message.orEmpty(), extraCss)
+        assertContains(error.message.orEmpty(), "</style")
+        // A stylesheet may hold what only breaks a script: `<!--` is harmless inside <style>.
+        HtmlExport.render(
+            build(dir),
+            bundledWith(WebPage.STYLES_MANIFEST to withExtraCss, extraCss to "/* <!-- */\n"),
+        )
     }
 
     @Test

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inspector</title>
-  <link rel="stylesheet" href="/style.css">
+  <!-- inspector:styles -->
 </head>
 <body>
   <header id="topbar">
@@ -15,7 +15,7 @@
             title="Delete this session from ~/.inspector. Permanent — click twice.">✕</button>
     <!--
       The whole session as one file: HTML that is this page working offline, Markdown to read,
-      JSON to process, HAR for DevTools. Filled in by app.js, which builds the menu.
+      JSON to process, HAR for DevTools. Filled in by the page's script, which builds the menu.
     -->
     <span id="export-host" hidden></span>
     <span id="counts" class="muted mono"></span>
@@ -339,6 +339,6 @@
     </section>
   </dialog>
 
-  <script src="/app.js"></script>
+  <!-- inspector:scripts -->
 </body>
 </html>

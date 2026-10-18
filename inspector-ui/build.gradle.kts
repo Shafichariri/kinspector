@@ -51,3 +51,26 @@ kotlin {
         }
     }
 }
+
+/*
+ * Passes the web stylesheets to the test JVM *as declared inputs*, on the pattern of
+ * `MirrorCasesArgument` in `inspector-model/build.gradle.kts`. `PaletteParityTest` reads them from
+ * another module, so nothing else tells Gradle they matter: measured before this existed, drifting
+ * `--m-get` in the stylesheet left `jvmTest` UP-TO-DATE and green, and only `--rerun` failed it.
+ * Relative path sensitivity keeps the cache entry independent of where the checkout lives.
+ *
+ * The folder, not `styles.txt`: the test reads every stylesheet in it, and `WebManifestTest` in the
+ * daemon already holds the folder and the manifest equal, so parsing the manifest here as well would
+ * be a second reader of it beside `WebPage`.
+ */
+class WebCssArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val css: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.webCss=${css.absolutePath}")
+}
+
+tasks.named<Test>("jvmTest") {
+    jvmArgumentProviders += WebCssArgument(rootProject.file("inspector-daemon/src/main/resources/web/css"))
+}

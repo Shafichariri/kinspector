@@ -100,7 +100,7 @@ internal fun InspectorSignalDetail(
              * Offered exactly where it will work.
              *
              * The web UI cannot do this: a daemon only learns a provider's name once one has
-             * answered, so `app.js` infers the set from what the session holds and says in its own
+             * answered, so it infers the set from what the session holds and says in its own
              * comment that it is guessing. In-process there is nothing to guess — the registry is
              * readable, so a button that appears is a button that works.
              */

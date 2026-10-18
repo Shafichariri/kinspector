@@ -4,10 +4,10 @@ package dev.inspector.model
  * Shared by the overlay and the web UI, like `timeline` and `endpointShortcuts` beside it.
  *
  * It began as `Formatting.kt` in `:inspector-ui`, where nothing else needed it. The web UI grew
- * the same bar and the choice was to copy three thresholds and a segment-walk into `app.js` from
- * scratch, or to have one rule that `app.js` mirrors deliberately. The rules here are exactly the
- * kind that drift invisibly: a bar that appears on one surface and not the other, for a session
- * both are showing, reads as a bug in whichever one you are looking at.
+ * the same bar and the choice was to copy three thresholds and a segment-walk into it from
+ * scratch, or to have one rule that its `pathScope` block mirrors deliberately. The rules here are
+ * exactly the kind that drift invisibly: a bar that appears on one surface and not the other, for
+ * a session both are showing, reads as a bug in whichever one you are looking at.
  */
 
 /**

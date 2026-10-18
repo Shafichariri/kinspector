@@ -152,8 +152,8 @@ object Inspector {
      *
      * Exists because the **overlay can ask and the host cannot**. A daemon learns a provider's name
      * only once one has answered, so the web UI infers the set from what a session already holds —
-     * conservatively, and it says so in `app.js`. In-process there is nothing to infer: this is the
-     * registry.
+     * conservatively, and it says so in its own comment. In-process there is nothing to infer: this
+     * is the registry.
      *
      * Two things follow that the host can never do. A pull is offered exactly where one will work,
      * rather than where one probably will; and a provider that has **never answered** is still

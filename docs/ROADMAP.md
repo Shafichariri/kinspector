@@ -764,7 +764,7 @@ scheme.
 | 4 | Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks | S | before §6 |
 | 5 | Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides | M | before §6 |
 | 6 | Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check | M | before §6 |
-| 7 | Phase F — `app.js` and CSS split behind the manifest | M | before 1a |
+| 7 | Phase F — `app.js` and CSS split behind the manifest (built 2026-10-18; done once PR merged and CI green) | M | before 1a |
 | 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 |
 | 9 | Phase H — split the two large overlay files | S | later |
 | 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D |
@@ -1235,6 +1235,8 @@ so QA cannot run it. The release steward scans what it can. `McpTest.kt` was not
 
 ### Phase F — `app.js` and CSS split behind the manifest
 
+*Ticket label:* `item:structure-phase-f`.
+
 **Audit finding 4. Must land before 1a**, because 1a adds a rail, hash routes and four pages. Adding
 them to one 5,398-line function would be the "building it twice" that §6's ordering argues against.
 
@@ -1268,6 +1270,69 @@ is for are whoever edits the web UI next, and the reviewer of 1a's diff.
 
 **Out of scope.** Any visual or behavioural change. Splitting `render-web-ui.js`. A module system or
 a bundler.
+
+**Design agreed, 2026-10-18.** A design council agreed it and the maintainer approved it. It lands as
+five commits, F1 to F5. The maintainer accepted the architect's call that the live probe keeps reading
+the working tree; `RestApiTest` holds the served half. F1 also fixes a measured defect.
+`PaletteParityTest` reported UP-TO-DATE on a CSS-only change, so palette drift passed an ordinary
+build.
+
+**Status, 2026-10-18: built; done once its PR is merged and CI is green.** It is on
+`shafic/structure-phase-f`, which is not pushed, so CI has not run. Tickets KIN-10 to KIN-22 are Done on
+QA evidence from fresh verifier runs, the last on the wording pass `b733aa4`. What landed, against base
+`f574bda`:
+
+- **F1 `8b20dcc`, manifest plumbing.** `web/scripts.txt` and `web/styles.txt`, with `index.html` holding
+  two slot comments. `service/WebPage.kt` is the one Kotlin reader of the manifests. The export inliner,
+  `web-sources.js` and `render-web-ui.js` read them too. F1 also fixed the pre-existing
+  `PaletteParityTest` defect: Gradle reported it UP-TO-DATE on a CSS-only change, so palette drift passed
+  an ordinary build.
+- **F2 `266f7bd`, F3 `4a23f77`.** The IIFE is gone, static checks 1-3 were added, and the script became
+  twenty ordered classic files in `web/js/`.
+- **F4 `4eace25`.** The stylesheet became seventeen contiguous files in `web/css/`, and static check 4
+  was added.
+- **F5 `90618e2`.** Decisions, guides, comments and README for the manifest-split web UI.
+- **Review fixes** `e046990` to `e065f11`, then `526dab7`, `f05603b` and `b733aa4`. These are KIN-16 to
+  KIN-22: static check 5 for the cross-file `@media` order, a denylist that also refuses JavaScript
+  globals, the blind spots of checks 2, 3 and 5 stated in `web-ui.md` (a column-0 line heuristic, not a
+  parser), `PaletteParityTest` reading `web/css` directly, and four small nits. KIN-16 AC#1 was met as
+  narrowed (same selector and overlapping property), which the maintainer accepted on 2026-10-18.
+
+**Route design.** One fixed `GET` per listed file, not a wildcard, so a file the manifest does not list
+cannot be served and an encoded traversal gives 404. It keeps KIN-9's 405: `PUT` on a served file is
+refused with 405 rather than turned into a 404. `/app.js` and `/style.css` are gone.
+
+**Evidence against base `f574bda`.** Live probe 164 passed, 1 n/a, 42 notes, per-label identical; archive
+probe 21, the only label change being `app.js inlined` to `every file inlined`. The first 20 static lines
+are byte-identical, and head reports 24 checks. The route matrix differs only on `/app.js`, `/style.css`,
+`/js/*` and `/css/*`. Headless Chrome 131 over 16 configurations, served and exported under `file:`, gave
+32/32 identical computed-style, text and PNG hashes and 0 page errors. QA re-ran the move proofs: the JS
+block multiset with the `99-init` tail, and the CSS concatenation of 61736 bytes. Re-confirmed at
+`e065f11`: daemon 259, ui 134, repo-checks 35, model 159. After `b733aa4` the static output was
+byte-identical across `76b6c99`, `f05603b` and `b733aa4`, and repo-checks were 35/0. No `package.json` and
+no dependency were added.
+
+**Process note.** The agent-team roster roles gained `SendMessage` and the task tools (`a5a8661`).
+Messaging between teammates then worked in the second panel (qa2 and arch2), while the task tools still
+did not reach them.
+
+**Not verified.** Safari and Firefox (Chrome only). CI (branch not pushed). Android host tests (no SDK on
+this machine). The no-client-names check (term list kept out of the repository), so that DoD item is
+unticked on all of KIN-10 to KIN-22. How the page looks to a human: the hash comparison proves "identical
+to before", not "looks right".
+
+**Follow-up for the product-owner, not a ticket under phase F.** UX found six web UI layout defects at
+base, so phase F neither caused nor fixed them. Screenshots are in `$TMPDIR/ux-f/shots/`.
+
+1. The closed drawer is still focusable at 1000px, and it widens the page.
+2. The endpoint is cut off at 400px.
+3. The drawer's close button overlaps the header's last action at 1000px.
+4. A strip of the closed drawer's shadow shows.
+5. The top bar and tab bar overflow at 400px.
+6. Small items.
+
+Scope and order are the product-owner's. Item 6 needs itemising before it can be ticketed, and 1a, which
+rebuilds the rail and pages, may overtake some of them.
 
 ### Phase I — `noop-ui` golden file
 
@@ -1452,8 +1517,8 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
   counts as a finding is a worse bug than either alone. View preferences stay in `prefs`.
 
 What must still hold: the export still works offline (new pages either read the embedded archive
-or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
-`display` joins `auditHiddenPanes`; nothing new under 11px.
+or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
+lists; every new pane that sets `display` joins `auditHiddenPanes`; nothing new under 11px.
 
 **The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
 they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in

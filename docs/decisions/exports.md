@@ -21,15 +21,17 @@ not is reported absent with the reason, because `postData.text` is a string with
 characters as the captured body. The strict decoder exists to reach that branch.
 
 **The HTML export is the web UI, not a report, and one seam is what makes that hold.**
-`export.html` inlines the served `index.html`, `style.css` and `app.js` with the session embedded as
+`export.html` is the served `index.html` with every file in `web/styles.txt` and `web/scripts.txt`
+inlined in manifest order, one `<style>` or `<script>` each, with the session embedded as
 `window.INSPECTOR_ARCHIVE`. A purpose-built report would be a second rendering of every row, and
-every second rendering here has drifted from the first. What makes it work is that `app.js` talks to
+every second rendering here has drifted from the first. What makes it work is that the page talks to
 the daemon through one object, `source`: live it is `fetch`; in an export it is `archiveSource`, a
 GET router over the embedded data that mirrors the daemon's reply shapes — transactions as a page,
 signals as a bare array, both newest first — and refuses anything else with a message. **The
-browser's `fetch` is called exactly once in `app.js`**, and it is counted twice: statically on every
-push by `check-web-static.js` across every loaded script — `window.fetch(`, `globalThis.fetch(` and
-`self.fetch(` must be zero, so the bare count cannot be dodged — and in the built export by
+browser's `fetch` is called exactly once across every file `web/scripts.txt` lists**, and it is
+counted twice: statically on every push by `check-web-static.js` over the files the manifest lists
+— `window.fetch(`, `globalThis.fetch(` and `self.fetch(` must be zero, so the bare count cannot be
+dodged, and `WebManifestTest` refuses a file it does not list — and in the built export by
 `render-web-ui-archive.js`, with the same counter, so a new call site cannot reach for the network
 from inside an export. The export's embedded session is not code and is not counted: a script is
 skipped as data only when what follows `window.INSPECTOR_ARCHIVE = ` parses as JSON, which nothing
@@ -52,8 +54,9 @@ renders.
 
 Embedding is safe because every `<` in the JSON becomes `\u003c`. A `<` can only occur inside a
 JSON string, where that escape means the same character to both parsers, so one rule disarms
-`</script>` and `<!--`. The two tags the exporter replaces are the same literals
-`render-web-ui.js` replaces, and both sides now refuse to proceed when a replacement misses.
+`</script>` and `<!--`. The two slots the exporter expands, `<!-- inspector:styles -->` and
+`<!-- inspector:scripts -->`, are the same literals `render-web-ui.js` expands, and both sides
+refuse to proceed when an expansion misses.
 
 **All three exports read the raw readers, never `queryTransactions` or `SessionRepository.timeline()`.**
 The first clamps any limit to 1000 and the second to 2000. Until phase E the second also sorted

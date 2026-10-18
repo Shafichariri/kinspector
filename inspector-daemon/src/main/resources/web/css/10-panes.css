@@ -1,0 +1,89 @@
+/* panes: the three-pane grid and the per-view toolbar */
+/* --- three panes -------------------------------------------------------- */
+
+/* Overridden below 1200px by the `max-width: 1199px` block in css/35-list.css, which works only
+   because styles.txt loads that file after this one; `media overrides load last` in
+   check-web-static.js fails if the order is reversed. */
+#panes {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The narrow-width drawer anchors to this. */
+  position: relative;
+}
+
+/* The tag browser carries its own detail panel, so it takes the transaction detail pane's track
+   rather than being squeezed into the list column. The track has to go with it: hiding the pane
+   alone would leave the grid holding an empty second column. */
+#panes.panes-wide { grid-template-columns: minmax(520px, 1fr); }
+#panes.panes-wide #detail-pane { display: none; }
+
+/* --- the per-view toolbar ----------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* `hidden` alone loses to the `display: flex` above — the same bug the panes already shipped
+   once. Every element this app shows and hides by toggling `hidden` needs its own override. */
+.toolbar[hidden] { display: none !important; }
+
+.rail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#filter {
+  /* Wide enough for a real filter expression, and the first thing to give width back when the
+     chips need to wrap. */
+  flex: 1 1 240px;
+  max-width: 380px;
+  min-width: 150px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+#filter:focus { outline: none; border-color: var(--accent); }
+
+.filter-error {
+  padding: 5px 10px;
+  color: var(--warn);
+  font-size: 11px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--divider);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chips[hidden] { display: none !important; }
+
+/* Popovers for the two things that were reference material taking up permanent space. */
+.pop {
+  position: absolute;
+  right: 10px;
+  z-index: 40;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+

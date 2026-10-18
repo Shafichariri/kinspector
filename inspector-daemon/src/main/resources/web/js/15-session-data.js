@@ -1,0 +1,168 @@
+/* session data: sessions, transactions and signals from the daemon */
+'use strict';
+
+async function loadSessions() {
+  state.sessions = await api('/api/sessions');
+  state.recording = await api('/api/recording').catch(() => state.recording);
+  const picker = $('session-picker');
+  picker.innerHTML = '';
+  for (const s of state.sessions) {
+    const option = el('option', null, sessionLabel(s));
+    option.value = s.sessionId;
+    // The id is what the CLI, the MCP tools and the archive folder use, so it stays reachable.
+    option.title = s.sessionId;
+    picker.appendChild(option);
+  }
+  if (!state.sessionId && state.sessions.length) state.sessionId = state.sessions[0].sessionId;
+  if (state.sessionId) picker.value = state.sessionId;
+
+  showSessionLabel();
+}
+
+/**
+ * `● app · device · 09:41 today · 12 calls`.
+ *
+ * The option used to be the session id, which is a timestamp and three slugs run together — the
+ * facts were in it, but in the order a folder name needs rather than the one a reader asks in.
+ * The dot marks a session an app is attached to right now, asked of `/api/recording` rather than
+ * inferred from `endedAt`: a session whose app vanished has no `endedAt` and no app either.
+ */
+function sessionLabel(meta) {
+  const started = new Date(meta.startedAt);
+  let when = '';
+  if (!Number.isNaN(started.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const today = new Date();
+    const sameDay = started.toDateString() === today.toDateString();
+    const day = sameDay
+      ? 'today'
+      : started.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    when = `${pad(started.getHours())}:${pad(started.getMinutes())} ${day}`;
+  }
+  // `?? 0`, not `||`: kotlinx omits a field equal to its default, so a session with no traffic
+  // arrives with `txnCount` missing rather than zero.
+  const count = meta.txnCount ?? 0;
+  const parts = [meta.appId, meta.device, when, `${count} ${count === 1 ? 'call' : 'calls'}`];
+  const recording = (state.recording || []).includes(meta.sessionId);
+  return `${recording ? '● ' : ''}${parts.filter(Boolean).join(' · ')}`;
+}
+
+/**
+ * The header count, over whatever is actually on screen.
+ *
+ * The daemon reports how many rows the *text filter* matched, which was the whole story until
+ * the axis could narrow things further. Counting only that would leave the header reading
+ * `17/17` above a list of five — a number that is true of a query nobody can see.
+ */
+function renderCounts() {
+  const total = state.matchTotal;
+  if (total === null || total === undefined) {
+    $('counts').textContent = '';
+    return;
+  }
+  // With its noun: a bare `12/12` beside a session picker could be a count of anything.
+  $('counts').textContent = `${visibleTransactions().length} of ${total} ${total === 1 ? 'call' : 'calls'}`;
+}
+
+/**
+ * Which app the page is showing, in the window title — the picker already names it in the bar.
+ * Also runs on switch, or it would name the old one.
+ */
+function showSessionLabel() {
+  const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
+  document.title = meta ? `${meta.appId} · inspector` : 'inspector';
+}
+
+async function loadTransactions() {
+  // An export of nothing would be a 404 with a filename; offer it only when there is a session.
+  $('export-host').hidden = !!ARCHIVE || !state.sessionId;
+  // With no session there is nothing to load, and the empty list is the only thing that can
+  // say what the page is waiting for.
+  if (!state.sessionId) { renderListEmpty(); return; }
+  const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
+  try {
+    const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
+    state.transactions = page.items;
+    state.matchTotal = page.total;
+    showFilterError(null);
+  } catch (e) {
+    // Parser messages are written to be shown verbatim, so show them verbatim.
+    showFilterError(e.message);
+    state.transactions = [];
+    state.matchTotal = null;
+  }
+  renderCounts();
+  state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
+  state.recording = await api('/api/recording').catch(() => []);
+  await syncAllTransactions();
+  await loadSignals();
+  renderMarkers();
+  markerFormState();
+  renderList();
+  renderTimeline();
+}
+
+/**
+ * Signals and the current-state panel.
+ *
+ * Failures are swallowed to an empty list on purpose: a daemon older than this page has no
+ * signal routes, and the traffic view must keep working against one rather than going blank.
+ */
+async function loadSignals() {
+  if (!state.sessionId) return;
+  const id = encodeURIComponent(state.sessionId);
+  const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
+  const page = await api(`/api/sessions/${id}/signals?${q}`).catch(() => null);
+  state.signals = Array.isArray(page) ? page : [];
+  const isScreen = (s) => tagOf(s) === 'screen';
+  if (!state.filter) {
+    state.screens = state.signals.filter(isScreen);
+  } else {
+    // The skeleton ignores the filter. One more request per filter change, not per live row:
+    // the live socket appends screens as they arrive.
+    const q2 = new URLSearchParams({ filter: 'tag:screen', limit: '2000' });
+    const all = await api(`/api/sessions/${id}/signals?${q2}`).catch(() => null);
+    state.screens = (Array.isArray(all) ? all : state.signals).filter(isScreen);
+  }
+  state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
+
+  // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
+  // session and the current view falls back rather than pointing at nothing.
+  const ids = availableViews().map((view) => view.id);
+  if (!ids.includes(state.view)) state.view = 'network';
+  state.viewChosenForSession = true;
+
+  renderTabs();
+  renderCurrent();
+  applyView();
+  if ($('detail').hidden) renderSessionGlance();
+}
+
+/**
+ * Keeps `allTransactions` in step with the current session.
+ *
+ * With no filter the rows just fetched already are the whole session, so the common case costs
+ * nothing. With a filter active it costs one extra request per *session*, not per keystroke:
+ * the endpoint inventory only grows when new traffic arrives, and the live socket appends to
+ * both lists.
+ */
+async function syncAllTransactions() {
+  if (!state.filter) {
+    // A copy, not an alias — the live socket pushes into both, and sharing one array would
+    // append every new row twice.
+    state.allTransactions = state.transactions.slice();
+    state.allSessionId = state.sessionId;
+    return;
+  }
+  if (state.allSessionId === state.sessionId && state.allTransactions.length) return;
+  try {
+    const q = new URLSearchParams({ filter: '', limit: '2000' });
+    const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
+    state.allTransactions = page.items;
+  } catch {
+    // Chips are a convenience. If this fails, fall back to what we have rather than taking the
+    // list down with it.
+    state.allTransactions = state.transactions.slice();
+  }
+  state.allSessionId = state.sessionId;
+}

@@ -1,9 +1,10 @@
 /* The JavaScript half of the shared mirror cases in `mirror-cases/`.
  *
- * `app.js` mirrors rules whose authority is Kotlin — six in `:inspector-model`, one in the daemon's
- * `Replay.kt`. Each case file is read by `MirrorCasesTest` (or `HopByHopMirrorTest`) on the Kotlin
- * side and by this file against the functions lifted out of the real `app.js`, so a case is one fact
- * asserted of both surfaces. See `mirror-cases/README.md` for the format.
+ * The web UI mirrors rules whose authority is Kotlin — six in `:inspector-model`, one in the
+ * daemon's `Replay.kt`. Each case file is read by `MirrorCasesTest` (or `HopByHopMirrorTest`) on the
+ * Kotlin side and by this file against the functions lifted out of the real web UI by their
+ * `@mirror-begin <name>` anchors, so a case is one fact asserted of both surfaces. See
+ * `mirror-cases/README.md` for the format.
  *
  * The projections below turn each function's answer into the shape a case expects. They hold no
  * rules — grouping, ordering and thresholds all come from the lifted code — so a projection that
@@ -18,8 +19,8 @@ const CASES = path.join(__dirname, '..', '..', 'mirror-cases');
 const CASE_KEYS = ['name', 'from', 'input', 'expect'];
 
 /**
- * Each rule: the `app.js` blocks it needs, what it returns from them, the input keys a case may
- * use, and how a case's input becomes an answer. `urlOf` and `tagOf` are helpers some rules lean
+ * Each rule: the `@mirror-begin` blocks it needs, what it returns from them, the input keys a case
+ * may use, and how a case's input becomes an answer. `urlOf` and `tagOf` are helpers some rules lean
  * on; they are blocks so the lift is exact, and they have no case file of their own.
  */
 const RULES = {

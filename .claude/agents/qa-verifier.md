@@ -1,7 +1,7 @@
 ---
 name: qa-verifier
 description: Adversarial verifier. Use after the engineer reports an item built, to independently check each acceptance criterion with evidence (commands run, output, screenshots read), prove guards fail when broken, and sort claims into Verified / Not verified. Does not fix code.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage, TaskList, TaskGet, TaskUpdate
 effort: high
 color: red
 ---

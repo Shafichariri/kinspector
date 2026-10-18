@@ -3,14 +3,18 @@ package dev.inspector.daemon
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionWriter
 import dev.inspector.daemon.http.InspectorDaemon
+import dev.inspector.daemon.service.WebPage
+import dev.inspector.daemon.service.webResource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import dev.inspector.model.SignalTags
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -21,8 +25,10 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** The HTTP surface the web UI, CLI and (later) MCP tools all read through. */
@@ -163,8 +169,65 @@ class RestApiTest {
             !html.contains("http://") || !html.contains("cdn"),
             "the web UI must not reference any CDN",
         )
-        assertEquals(200, http.get(url("/app.js")).status.value)
-        assertEquals(200, http.get(url("/style.css")).status.value)
+    }
+
+    /*
+     * The served half of the manifest. `render-web-ui.js` assembles the page from the working tree
+     * rather than loading it from a daemon, so this is what proves the daemon turns the manifests
+     * into the right tags and serves the right bytes behind them.
+     */
+    @Test
+    fun the_index_carries_the_manifest_tags_in_order_and_no_slot() = runBlocking {
+        val html = http.get(url("/")).bodyAsText()
+        assertFalse(WebPage.STYLES_SLOT in html, "the styles slot was left in the served page")
+        assertFalse(WebPage.SCRIPTS_SLOT in html, "the scripts slot was left in the served page")
+        assertFalse("inspector:" in html, "a slot comment was left in the served page")
+
+        val linked = Regex("""<link rel="stylesheet" href="/([^"]+)">""").findAll(html).map { it.groupValues[1] }.toList()
+        assertEquals(WebPage.styles(), linked, "stylesheet tags are not the manifest, in order")
+        val loaded = Regex("""<script src="/([^"]+)"></script>""").findAll(html).map { it.groupValues[1] }.toList()
+        assertEquals(WebPage.scripts(), loaded, "script tags are not the manifest, in order")
+        assertTrue(html.indexOf("<link rel=\"stylesheet\"") < html.indexOf("</head>"), "stylesheets must be in <head>")
+        assertTrue(html.lastIndexOf("<script src") < html.indexOf("</body>"), "scripts must be in <body>")
+        assertTrue(html.indexOf("<script src") > html.indexOf("</dialog>"), "scripts must follow the page they draw into")
+    }
+
+    @Test
+    fun every_listed_file_is_served_byte_for_byte_with_its_type() = runBlocking {
+        val listed = WebPage.scripts().map { it to "text/javascript" } + WebPage.styles().map { it to "text/css" }
+        assertTrue(listed.size >= 2, "the manifests listed nothing; this checked nothing")
+        for ((file, type) in listed) {
+            val response = http.get(url("/$file"))
+            assertEquals(200, response.status.value, "GET /$file")
+            assertEquals(type, response.headers["Content-Type"]?.substringBefore(';'), "content type of /$file")
+            val resource = assertNotNull(webResource(file), "web/$file is listed but not bundled")
+            assertContentEquals(resource, response.readRawBytes(), "GET /$file is not the bundled file")
+        }
+    }
+
+    @Test
+    fun only_listed_files_are_served() = runBlocking {
+        // The pre-manifest paths are gone, not redirected.
+        assertEquals(404, http.get(url("/app.js")).status.value)
+        assertEquals(404, http.get(url("/style.css")).status.value)
+        // Real files that no manifest lists, and names that exist nowhere.
+        assertEquals(404, http.get(url("/js/scripts.txt")).status.value)
+        assertEquals(404, http.get(url("/css/index.html")).status.value)
+        assertEquals(404, http.get(url("/js/99-unlisted.js")).status.value)
+        assertEquals(404, http.get(url("/css/99-unlisted.css")).status.value)
+        // A script name under the stylesheet route, and the reverse: membership is per manifest.
+        assertEquals(404, http.get(url("/css/${WebPage.scripts().first().substringAfter('/')}")).status.value)
+        assertEquals(404, http.get(url("/js/${WebPage.styles().first().substringAfter('/')}")).status.value)
+        // Nothing serves a manifest, at any path.
+        assertEquals(404, http.get(url("/scripts.txt")).status.value)
+        assertEquals(404, http.get(url("/styles.txt")).status.value)
+        // An encoded traversal decodes to one segment that no manifest lists.
+        assertEquals(404, http.get(url("/js/..%2f..%2findex.html")).status.value)
+        assertEquals(404, http.get(url("/css/..%2f..%2findex.html")).status.value)
+        // A wrong method on a served file is 405, not 404 (KIN-9), on every file either list names.
+        for (file in WebPage.scripts() + WebPage.styles()) {
+            assertEquals(405, http.put(url("/$file")).status.value, "PUT /$file")
+        }
     }
 
     @Test

@@ -1,0 +1,89 @@
+/* base: the page, shared utilities and the top bar */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+/* A column, rather than panes sized by `calc(100% - <height of the bars above>)`. That arithmetic
+   is wrong the moment a row is added to the header, and it fails silently — the panes just run
+   off the bottom of the window. */
+body { display: flex; flex-direction: column; }
+
+.mono { font-family: var(--mono); }
+.muted { color: var(--fg-muted); }
+.spacer { flex: 1; }
+.sep { color: var(--fg-muted); }
+
+/* --- top bar ------------------------------------------------------------ */
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+}
+
+.brand { font-weight: 600; letter-spacing: 0.2px; }
+
+#session-picker {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  max-width: 380px;
+}
+
+/* Whether the list follows new rows. Names its state; the dot is green only while following. */
+.live-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--fg);
+  background: none;
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 3px 9px 3px 7px;
+  cursor: pointer;
+}
+.live-btn:hover { background: var(--bg-hover); }
+.live-btn.on .dot { background: var(--ok); }
+.live-btn.paused { color: var(--fg-muted); }
+.live-btn.paused .dot { background: var(--fg-muted); }
+
+/* The daemon process, set apart: its connection first, then the controls that act on it. */
+.daemon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--divider);
+}
+.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-muted); margin-right: 2px; }
+.conn[data-state="connected"] .dot { background: var(--ok); }
+.conn[data-state="reconnecting"] .dot { background: var(--warn); }
+.conn[data-state="stopped"] .dot { background: var(--err); }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--neutral);
+  display: inline-block;
+}
+.dot.on { background: var(--ok); }
+

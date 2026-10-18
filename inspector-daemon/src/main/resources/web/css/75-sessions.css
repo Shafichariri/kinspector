@@ -1,0 +1,33 @@
+/* sessions: the session picker, quiet buttons and armed buttons */
+/* --- sessions ------------------------------------------------------------ */
+
+.session-rows { max-height: 240px; overflow-y: auto; margin: 8px 0; }
+.session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 7px;
+  border-radius: 4px;
+}
+.session-row:hover { background: var(--bg-hover); }
+.session-row.sel { outline: 1px solid var(--divider); }
+.session-row-id { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row-meta { font-size: 11px; white-space: nowrap; }
+
+.btn-quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--fg-muted);
+  padding: 2px 7px;
+}
+.btn-quiet:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg); }
+.btn-quiet:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* An armed button is one click from deleting something permanently, so it stops looking quiet. */
+.btn.armed {
+  border-color: var(--err);
+  color: var(--err);
+  background: var(--stop-bg);
+}
+

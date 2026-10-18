@@ -1,15 +1,15 @@
 # Decisions — shared rules
-Owned by `:inspector-model`: rules both surfaces draw, their mirrors in `app.js`, the filter grammar and the palette. Imported by the `inspector-model`, `inspector-ui` and web guides.
+Owned by `:inspector-model`: rules both surfaces draw, their mirrors in the web UI, the filter grammar and the palette. Imported by the `inspector-model`, `inspector-ui` and web guides.
 
 **Mirror cases live once, at the repository root, and both sides run every one.** Seven rules in
-`app.js` copy a Kotlin authority, and for five of them "keep them in step" was the only thing
+the web UI copy a Kotlin authority, and for five of them "keep them in step" was the only thing
 holding them. When the cases were first written, four drifts and a minor fifth had already opened:
 three inside mirrored functions (the repeat count, a run's id, the chip list's final tie), a
 `?` dropped from an empty query by the `urlOf` the duplicate key is built from, and one call site —
 the timeline tab — that bypassed a mirror which was itself correct. So each rule's cases are
 one JSON file in `mirror-cases/`, read by `MirrorCasesTest` in `:inspector-model` (or
 `HopByHopMirrorTest` in the daemon, for `Replay.kt`'s list) and by `scripts/check-web-static.js`
-against the function lifted out of the real `app.js`. A case added on either side is run on the
+against the function lifted out of the real web UI. A case added on either side is run on the
 other; that is the point, and a case that only one side passes is a drift with the Kotlin answer
 right. Rows are partial and merged over `_defaults.json`, then decoded through the **real
 serializer with unknown keys refused** — the archive's reader ignores unknown keys so a newer device
@@ -42,19 +42,19 @@ excluded from the key**, because a signed app puts a fresh nonce and signature o
 a key including them would find nothing on exactly the apps this helps most. Timing uses `mono`,
 never `ts`, per `docs/schema.md`. The key is method + URL + status + both byte counts, which
 identifies rows that are *indistinguishable at row level* — a weaker claim than byte-identical
-bodies, and the doc says so rather than overselling it. `app.js` carries a mirror of the same
+bodies, and the doc says so rather than overselling it. The web UI's `duplicates` block mirrors the same
 algorithm, and `mirror-cases/duplicates.json` holds it there: both sides run every case, so the two
 cannot drift without `check-web-static.js` or `MirrorCasesTest` going red. Including the count —
 `computeDuplicates` said `run.length` in every release from v0.1.0, where both copies first shipped,
 through v1.3.0, so a retry inside a repeat read "sent 3x" for a call the app made twice.
 
-**The scope bar's rule lives in `:inspector-model`, and `app.js` mirrors it.** `pathScope` began
+**The scope bar's rule lives in `:inspector-model`, and the web UI's `pathScope` block mirrors it.** `pathScope` began
 in `:inspector-ui`'s `Formatting.kt` when the overlay was the only surface that lifted a shared
 prefix out of its rows. The web UI now draws the same bar, so the rule moved beside `timeline` and
 `endpointShortcuts` for the same reason those did — three thresholds and a segment walk are exactly
 what drifts invisibly, and a bar that appears on one surface and not the other, for a session both
 are showing, reads as a bug in whichever one you are looking at. `PathScopeTest` in that module is
-the authority; the copy in `app.js` follows it, and `mirror-cases/pathScope.json` — one case per
+the authority; the copy in the web UI's `pathScope` block follows it, and `mirror-cases/pathScope.json` — one case per
 rule and per threshold — is what makes it follow.
 
 The bar is **sticky on both surfaces, and that is load-bearing.** It is a standing claim that every
@@ -71,7 +71,7 @@ Chips are ordered by call count rather than recency on purpose: recency reshuffl
 every
 request during live tail. Ties break on the most recent call, then on the segment by **char code**,
 so the order is deterministic — `mirror-cases/endpointShortcuts.json` holds both sides to it and
-`render-web-ui.js` asserts it on the rendered chips. Char code, not `localeCompare`: `app.js` used
+`render-web-ui.js` asserts it on the rendered chips. Char code, not `localeCompare`: the web UI used
 the latter and put `accounts` before `Balance` where the model and the overlay put `Balance` first.
 That order reads a little oddly and is kept anyway, because it only applies after a full tie and
 changing it is a change to the model rule.
@@ -95,9 +95,12 @@ colours its dot muted when there is no call yet rather than asking `forStatus(nu
 that has made no request would show a failure.
 
 The web UI's tokens and `InspectorColors` are one palette, and **`PaletteParityTest` enforces it**:
-it reads `style.css` and fails naming the token when either side drifts, proven in both
-directions. It replaced a "keep them in step" comment that held only as long as every change
-remembered both files.
+it reads `web/css/00-tokens.css`, with the folder declared as a test input so a CSS-only change
+re-runs it, and fails if a token it checks is declared in any other stylesheet in `web/css/` — the
+folder rather than `web/styles.txt`, because `WebManifestTest` holds the two equal and `WebPage` is
+the one Kotlin reader of a manifest; it fails naming
+the token when either side drifts, proven in both directions. It replaced a "keep them in step"
+comment that held only as long as every change remembered both files.
 
 The method renders as a **tinted badge**, not coloured text: `MethodBadge` in the overlay, `.method`
 plus `.m-*` on the web. Both tint at 0.18 alpha of the text colour rather than filling solid with
@@ -108,7 +111,7 @@ components (`106 169 255`), so `rgb(var(--m-get) / 0.18)` yields the tint from t
 older engine drops the whole `background` declaration and the badge with it.
 
 **The path, the waterfall and the axis band are one rule: `visits()` in `:inspector-model`, mirrored
-in `app.js`.** The waterfall had its own segmentation in `app.js` before the path view existed, and
+in the web UI's `visits` block.** The waterfall had its own segmentation in the web UI before the path view existed, and
 it was wrong in the way a second copy usually is: it read the *filtered* signals, so typing `path:`
 took every screen away, and it dropped any screen with no matching calls, which draws a route that
 skips a screen the user was on — a navigation nobody made. Three surfaces now take one skeleton.
@@ -167,7 +170,7 @@ immediately before a request is exactly what a tie looks like on a millisecond c
 A marker at a call's `mono` is placed **before** it — `<=`, not `<` — because a marker is
 dropped just before the thing it marks. Markers after the last call are still emitted: "I marked
 it and then nothing happened" is an answer, and a divider that appeared only once the next
-request arrived would hide it. `app.js` carries a mirror, `timelineEntries`, held to the model by
+request arrived would hide it. The web UI carries a mirror, `timelineEntries` in its `visits` block, held to the model by
 `mirror-cases/timeline.json`, and both the list and the timeline tab draw through it. The timeline
 tab did not until phase A: it sorted all three streams in one stable sort with markers added last,
 so a tied marker landed after its call there and before it in the list beside it. A mirror case

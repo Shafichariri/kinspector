@@ -1,0 +1,21 @@
+# The web UI's stylesheets, in cascade order: one path per line, relative to this folder. `#` starts
+# a comment line. Order is the cascade, so a rule that overrides another must come after it. The
+# daemon expands this list into <link> tags for `GET /` and inlines it for an HTML export; nothing
+# serves or fetches this file.
+css/00-tokens.css
+css/05-base.css
+css/10-panes.css
+css/15-waterfall.css
+css/20-path.css
+css/25-axis.css
+css/30-now-chips.css
+css/35-list.css
+css/40-detail.css
+css/45-settings.css
+css/50-replay.css
+css/55-duplicates.css
+css/60-timeline.css
+css/65-tabs.css
+css/70-browser.css
+css/75-sessions.css
+css/80-json-tree.css

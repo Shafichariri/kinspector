@@ -23,11 +23,12 @@ import kotlinx.serialization.json.put
 /**
  * The Kotlin half of the shared mirror cases in `mirror-cases/` at the repository root.
  *
- * `app.js` mirrors six rules from this module, and `scripts/check-web-static.js` runs the same
- * files against the functions lifted out of the real `app.js`. A case is therefore one fact asserted
- * of both surfaces, and one added on either side is run on the other. The commonTest suites stay as
- * they are — they are what runs on iOS and Android — and this one runs on the JVM only, because it
- * reads files from the repository.
+ * The web UI mirrors six rules from this module, and `scripts/check-web-static.js` runs the same
+ * files against the functions it lifts out of the real web UI by their `@mirror-begin <name>`
+ * anchors, whichever file holds each block. A case is therefore one fact asserted of both
+ * surfaces, and one added on either side is run on the other. The commonTest suites stay as they
+ * are — they are what runs on iOS and Android — and this one runs on the JVM only, because it reads
+ * files from the repository.
  *
  * Rows are decoded through the real serializer with unknown keys **refused**. The archive's own
  * reader ignores unknown keys so a newer device can talk to an older daemon; a test fixture has no

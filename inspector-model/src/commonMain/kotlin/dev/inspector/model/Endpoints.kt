@@ -23,7 +23,7 @@ data class EndpointShortcut(
  * two and toggles on the third, so such a segment cannot be written as a term at all. A chip that
  * filtered to the wrong thing would be worse than an endpoint with no chip.
  *
- * `app.js` carries a mirror of this; keep them in step.
+ * The web UI's `endpointShortcuts` block carries a mirror of this; keep them in step.
  */
 fun endpointShortcuts(
     transactions: List<NetworkTransaction>,
