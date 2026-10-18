@@ -5,10 +5,10 @@ import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.application.install
 import io.ktor.server.application.pluginOrNull
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.RouteSelector
-import io.ktor.server.routing.RouteSelectorEvaluation
 import io.ktor.server.routing.RoutingNode
-import io.ktor.server.routing.RoutingResolveContext
+import io.ktor.server.routing.getAllRoutes
+import java.util.Collections
+import java.util.IdentityHashMap
 
 /**
  * The refusal, worded once. It names the header because `ControlHeaderCoverageTest` counts only a
@@ -39,31 +39,31 @@ private val ControlGate = createRouteScopedPlugin("ControlGate") {
 }
 
 /**
- * Matches without consuming a path segment, so a route below it keeps its path; and `path` renders
- * only path components, so its template is unchanged too.
+ * Registers [build]'s routes behind the control gate, by installing it on each route [build] adds.
  *
- * An `object`, and that is load-bearing: `createChild` reuses a child whose selector is equal, so
- * every [controlGated] on one parent lands on the same node.
- */
-private object ControlGateSelector : RouteSelector() {
-    override suspend fun evaluate(context: RoutingResolveContext, segmentIndex: Int): RouteSelectorEvaluation =
-        RouteSelectorEvaluation.Transparent
-
-    override fun toString(): String = "(X-Inspector-Control: 1)"
-}
-
-/**
- * Registers [build]'s routes behind the control gate.
+ * On the routes themselves, and never on a node of its own above them. A gate node would move the
+ * gated routes into a subtree beside their open siblings, and Ktor reports the deepest failure it
+ * met while resolving: `PUT /api/sessions` then failed on the path one level further down that
+ * subtree instead of on the method of the open `GET /api/sessions`, and answered 404 where it had
+ * always answered 405. With no node added, the route tree is the one the daemon had before the gate.
  *
- * The gate is one node, so the second call on a parent finds the plugin already installed there,
- * and installing it again would throw `DuplicatePluginException`; hence the check.
+ * The routes are found by comparing the handler nodes under this one before and after [build]. A
+ * route added to a node that already had a handler is not new and is not gated; nothing here can
+ * see that (a node's handler list is internal to Ktor), which is one more reason
+ * `ControlHeaderCoverageTest`, which walks every route Ktor registered, is what catches a control
+ * route left outside the gate, not this file.
  *
- * What this cannot do is notice a control route registered outside it. `ControlHeaderCoverageTest`
- * walks every route Ktor registered and is what catches that, not this file.
+ * A route already gated, by a `controlGated` nested inside this one, keeps its one install: a
+ * second would throw `DuplicatePluginException`, hence the check.
  */
 internal fun Route.controlGated(build: Route.() -> Unit): Route {
-    val gated = createChild(ControlGateSelector) as RoutingNode
-    if (gated.pluginOrNull(ControlGate) == null) gated.install(ControlGate)
-    gated.build()
-    return gated
+    val parent = this as RoutingNode
+    val before: MutableSet<RoutingNode> = Collections.newSetFromMap(IdentityHashMap())
+    before += parent.getAllRoutes()
+    parent.build()
+    val added = parent.getAllRoutes().filter { it !in before }
+    for (route in added) {
+        if (route.pluginOrNull(ControlGate) == null) route.install(ControlGate)
+    }
+    return this
 }

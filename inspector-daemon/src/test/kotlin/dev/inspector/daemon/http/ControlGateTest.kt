@@ -59,12 +59,20 @@ class ControlGateTest {
         port = ServerSocket(0).use { it.localPort }
         server = embeddedServer(CIO, port = port, host = "127.0.0.1") {
             routing {
+                // 9: an open path registered before anything is gated, as /api is in the daemon,
+                // with a gated route below it. Ktor resolves children in registration order, and
+                // the order decides which failure a wrong method on /p is reported as.
+                get("/p") { hit("p") }
+
                 // 1-3: one gated route.
                 controlGated { post("/g") { hit("g") } }
 
-                // 4: the gate applied twice on one parent lands on one node; both stay gated.
+                // 4: the gate applied twice on one parent; both stay gated.
                 controlGated { post("/twice/a") { hit("twice-a") } }
                 controlGated { post("/twice/b") { hit("twice-b") } }
+
+                // 4b: the gate nested inside itself reaches the same route twice; it installs once.
+                controlGated { controlGated { post("/nested") { hit("nested") } } }
 
                 // 5: a gated literal beside an open parameter must not fall through to it.
                 controlGated { post("/x/clear") { hit("x-clear") } }
@@ -80,6 +88,8 @@ class ControlGateTest {
 
                 // 7: routes nested inside the gate are gated too.
                 controlGated { route("/n") { post("/m") { hit("n-m") } } }
+
+                controlGated { post("/p/q") { hit("p-q") } }
             }
         }
         server.start(wait = false)
@@ -145,6 +155,15 @@ class ControlGateTest {
     }
 
     @Test
+    fun `4b the gate nested inside itself installs once and still gates`() {
+        // Reaching this test at all means the second install did not throw while the server started.
+        assertRefused(send(HttpMethod.Post, "/nested"), "POST /nested with no header")
+        assertEquals(0, count("nested"))
+        assertEquals(200, send(HttpMethod.Post, "/nested", control = "1").status)
+        assertEquals(1, count("nested"))
+    }
+
+    @Test
     fun `5 a gated literal beside an open parameter is refused rather than falling through`() {
         assertRefused(send(HttpMethod.Post, "/x/clear"), "POST /x/clear with no header")
         assertEquals(0, count("x-clear"))
@@ -175,6 +194,25 @@ class ControlGateTest {
     fun `7 routes nested inside the gate are refused`() {
         assertRefused(send(HttpMethod.Post, "/n/m"), "POST /n/m with no header")
         assertEquals(0, count("n-m"))
+    }
+
+    /**
+     * A wrong method on an open path still answers 405 when a gated route sits below that path.
+     *
+     * Ktor reports the deepest failure it met while resolving, and a selector the gate added would
+     * count towards that depth: a gated `/p/q` failing on its path one level further down than the
+     * open `GET /p` failing on its method turned every such 405 into a 404. The daemon has four such
+     * paths (`/api/sessions`, `/api/server`, `/api/peers`, `/api/mcp`).
+     */
+    @Test
+    fun `9 a wrong method beside a gated sub-route is still 405`() {
+        for (method in listOf(HttpMethod.Put, HttpMethod.Post, HttpMethod.Delete)) {
+            val reply = send(method, "/p")
+            assertEquals(405, reply.status, "${method.value} /p: ${reply.body}")
+        }
+        assertEquals(0, count("p"))
+        assertEquals(0, count("p-q"))
+        assertRefused(send(HttpMethod.Post, "/p/q"), "POST /p/q with no header")
     }
 
     /**
