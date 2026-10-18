@@ -22,8 +22,9 @@ statement of every file, no top-level name is declared in two files, none is on 
 browser `Window` members or an own property of Node's `globalThis` — which is where `Map`, `atob` and
 `encodeURIComponent` are refused; checks 2 and 3 read declarations at column 0, so a top-level one
 written indented, after a block comment on the same line, or as the second name of a `let` whose
-first line ends inside brackets is not seen), both probes loading each file as its own script in manifest order so a
-redeclared name or an early call into a later file fails as it would in a browser, and the archive
+first line ends inside brackets is not seen, while a second declaration after a `;` or `}` on a
+column-0 line is refused as unreadable rather than missed), both probes loading each file as its own
+script in manifest order so a redeclared name or an early call into a later file fails as it would in a browser, and the archive
 probe's `every file inlined`.
 
 **`web/styles.txt` order is the cascade.** The seventeen files are contiguous slices of the one
@@ -36,13 +37,20 @@ The `max-width: 1199px` block in `35-list.css` is the one that spans files: it a
 `#panes` and `#panes.panes-wide` in `10-panes.css`, no contiguous cut under the 600-line budget puts
 them in one file, and it holds only because `styles.txt` lists `35-list.css` after `10-panes.css`.
 So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 5
-(`media overrides load last`: no selector inside an `@media` block has a plain rule with the same
-selector and an overlapping property loading after it, across every file in `styles.txt` order —
-proven red by renaming `35-list.css` to `08-list.css` ahead of `10-panes.css`) and by static check 4
-(`css files close`: each file closes its own braces and comments, which a joined read cannot see — a
-file that swallowed the next would still join to the same text, and break only once served as its
-own `<link>`). Check 5 compares the same selector only; a different selector competing on
-specificity is still the author's to see.
+(`media overrides load last`: across every file in `styles.txt` order, no selector inside an
+`@media` block has a later plain rule with the same selector text that sets a property of the same
+name or one prefixing the other, as `border` and `border-right` (custom properties only by equal
+name); it prints how many such pairs, earlier or later, it compared, and fails when that is none —
+proven red by renaming `35-list.css` to `08-list.css` ahead of `10-panes.css`) and by static check 4 (`css files close`: each file closes its
+own braces and comments, which a joined read cannot see — a file that swallowed the next would still
+join to the same text, and break only once served as its own `<link>`). Check 5 matches by text and
+by name, not by the cascade, and walks `@media` and no other at-rule. So it misses a different
+selector competing on specificity, the same compound written in another order (`.panes-wide#panes`),
+longhands of one shorthand that do not prefix each other (`border-style` and `border-right`, `inset`
+and `top`), and anything inside `@supports`, `@layer` or `@container`; and it reports a pair that
+does not compete when one name merely prefixes the other (`border` and `border-radius`) or the
+`@media` declaration is `!important`. None of those shapes is in the stylesheet today; the first
+group is still the author's to see.
 
 **The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
 a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are

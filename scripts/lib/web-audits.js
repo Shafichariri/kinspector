@@ -244,15 +244,37 @@ function declaresMore(rest) {
 }
 
 /**
+ * Whether [rest] of a declaration's line starts another declaration after a `;` or `}` that closes
+ * the first, outside brackets and quotes: `const a = 1; const b = 2;`, `function a() {} function b`.
+ */
+function declaresAgain(rest) {
+  let depth = 0;
+  let quote = null;
+  for (let i = 0; i < rest.length; i++) {
+    const c = rest[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"' || c === '`') quote = c;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    if (!quote && depth <= 0 && (c === ';' || c === '}')
+      && /^[ \t]*(?:async[ \t]+)?(?:function|const|let|var|class)\b/.test(rest.slice(i + 1))) return true;
+  }
+  return false;
+}
+
+/**
  * Every top-level name each script declares: `[{ file, line, name }]`.
  *
  * Read by layout, not by a parse, because the checks run with nothing installed. Every file is
  * written with its top level at column 0 and everything nested indented, which is what lets a
  * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. A form
- * whose names this cannot read on that line — destructuring, or two names in one `let` on its first
- * line — is refused rather than skipped. Three shapes are missed silently, and `web-ui.md` says so
- * where it cites these checks: a top-level declaration written indented; one that follows a block
- * comment on the same line; and the second name of a declaration
+ * whose names this cannot read on that line — destructuring, two names in one `let` on its first
+ * line, or a second declaration after a `;` or `}` on the same line, as `const a = 1; const b = 2;`
+ * or `function a() {} function b() {}` — is refused rather than skipped. Three shapes are missed
+ * silently, and `web-ui.md` says so where it cites these checks: a top-level declaration written
+ * indented; one that follows a block comment on the same line; and the second name of a declaration
  * whose first line ends inside brackets, as `let a = f(1,` continued by `2), ok = 3`, because the
  * comma that introduces it is on a line this does not read.
  */
@@ -262,7 +284,8 @@ function topLevelDeclarations(sources) {
     for (const m of text.matchAll(TOP_LEVEL)) {
       const line = text.slice(0, m.index).split('\n').length;
       const [, kind, name, rest] = m;
-      if (!/^[A-Za-z_$][\w$]*$/.test(name) || (/^(const|let|var)$/.test(kind) && declaresMore(rest))) {
+      if (!/^[A-Za-z_$][\w$]*$/.test(name) || (/^(const|let|var)$/.test(kind) && declaresMore(rest))
+        || declaresAgain(rest)) {
         throw new HarnessError(`${file}:${line}: cannot read the names declared by: ${m[0].trim()}`);
       }
       found.push({ file, line, name });
@@ -452,7 +475,11 @@ function declaredProperties(body) {
   return props;
 }
 
-/** Whether two properties can set the same thing: equal, or one the shorthand of the other. */
+/**
+ * Whether two properties may set the same thing, by name only: equal, or one name followed by `-`
+ * at the start of the other, so `border` matches `border-radius` and `inset` does not match `top`.
+ * Custom properties match only when equal: `--bg` and `--bg-hover` are two tokens.
+ */
 function propertiesOverlap(a, b) {
   if (a.startsWith('--') || b.startsWith('--')) return a === b;
   return a === b || b.startsWith(`${a}-`) || a.startsWith(`${b}-`);
@@ -468,13 +495,23 @@ function propertiesOverlap(a, b) {
  * because `styles.txt` lists `35-list.css` later. Moving it earlier changes the page below 1200px
  * while every other check and both probes stay green, because jsdom lays nothing out.
  *
- * Read across all stylesheets in manifest order, which is the cascade. A pair counts only when the
- * selectors match exactly and the two blocks set an overlapping property (equal, or a shorthand and
- * one of its longhands by name, as `border` and `border-right`): the light palette's `@media :root`
- * in `00-tokens.css` and a later plain `:root` that declares a different token do not compete, and
- * matching on the selector alone would fail the stylesheet as it stands. The limits that follow:
- * a different selector of equal or higher specificity is not compared, nor are shorthands whose
- * longhands do not share their prefix (`inset` and `top`).
+ * Read across all stylesheets in manifest order, which is the cascade. A pair is an `@media`
+ * selector and a plain rule, earlier or later, with the same selector text — whitespace collapsed,
+ * nothing else normalised — that set an overlapping property: the same name, or one name followed
+ * by `-` at the start of the other (`border` and `border-right`), custom properties only when equal.
+ * Requiring the property is what lets the light palette's `@media :root` in `00-tokens.css` stand
+ * before a later plain `:root` that declares a different token; matching on the selector alone
+ * would fail the stylesheet as it stands.
+ * The check fails when a later plain rule forms a pair, and when no pair was formed at all, because
+ * then it compared nothing. Only `@media` is walked (nested `@media` included); a rule inside any
+ * other at-rule — `@supports`, `@layer`, `@container` — is not read.
+ *
+ * That rule is by name, and what it does not resolve is exactly this. Missed: a different selector
+ * of equal or higher specificity, the same selector written in another order (`.panes-wide#panes`
+ * and `#panes.panes-wide`), and longhands of one shorthand that do not prefix each other
+ * (`border-style` and `border-right`, `inset` and `top`). Reported when they do not compete:
+ * a prefix that is not a shorthand of its longer name (`border` and `border-radius`), and an
+ * `@media` declaration marked `!important`, which a later plain rule cannot override.
  */
 function auditMediaOverrideOrder(sources) {
   if (!sources.length) return 'NO - no stylesheets to read';
@@ -495,16 +532,22 @@ function auditMediaOverrideOrder(sources) {
   if (!media.length) return 'NO - found no rules inside @media, so this checked nothing';
   const lineOf = (file, at) => sources.find((s) => s.file === file).text.slice(0, at).split('\n').length;
   const offenders = [];
+  // Pairs, not selectors, are what this compared: an @media selector with no competing plain rule
+  // checks nothing, and a property reader that read nothing would leave every one of them so.
+  let pairs = 0;
   for (const m of media) {
-    const later = plain.find((p) => p.order > m.order && p.selector === m.selector
+    const competing = plain.filter((p) => p.selector === m.selector
       && [...m.props].some((a) => [...p.props].some((b) => propertiesOverlap(a, b))));
+    pairs += competing.length;
+    const later = competing.find((p) => p.order > m.order);
     if (later) {
       offenders.push(`${m.selector} in ${m.query} at ${m.file}:${lineOf(m.file, m.at)} loads before ${later.file}:${lineOf(later.file, later.at)}`);
     }
   }
+  if (!pairs) return 'NO - compared no @media rule with a plain rule setting the same property, so this checked nothing';
   return offenders.length
     ? `NO - an @media rule is overridden by a plain rule loaded after it: ${offenders.join('; ')}`
-    : `yes (${media.length} @media selector(s) in ${sources.length} file(s))`;
+    : `yes (${pairs} pair(s) compared, ${media.length} @media selector(s) in ${sources.length} file(s))`;
 }
 
 module.exports = {
