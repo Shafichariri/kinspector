@@ -241,5 +241,5 @@ How it is enforced is in `docs/decisions/repository.md`.
 | `structure/` | The goldens `:repo-checks` reads: `modules.txt` (generated), `twins.txt` and `budgets.txt` (hand-edited, each exemption and budget with its reason). |
 | `*/gradle.lockfile` | Dependency goldens for every published module and the daemon. Regenerate on macOS; see Commands. |
 | `scripts/check-commit-identity.sh`, `scripts/check-client-names.sh` | CI's `repo` job. The name scan is also the check to run locally before committing. |
-| `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |
+| `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages, and stages it on Maven Central. Three jobs — the two library ones need macOS for the iOS klibs. |
 | `mirror-cases/` | One JSON file per mirrored rule, run by both the Kotlin tests and `check-web-static.js`. Add a case here, never to one side. Its README has the format. |

@@ -7,7 +7,8 @@ Eight Claude Code subagents, defined in `.claude/agents/`, that work the backlog
 Every role starts from `AGENTS.md`, the index, and reads the `docs/decisions/` files for the
 modules it touches. The team adds **no new tracking documents**: the backlog stays in `ROADMAP.md`
 and the state of the project stays in `docs/STATUS.md` (it moved there from `AGENTS.md` → "Where
-we are" in phase G), so there is still exactly one copy of each.
+we are" in phase G; the phase table stayed in "Where we are"), so there is still exactly one copy of
+each.
 
 | Role | Owns | Writes | Asks for |
 |---|---|---|---|

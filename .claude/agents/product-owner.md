@@ -11,8 +11,9 @@ use Ktor, with an in-app overlay, a host daemon + web UI, and an MCP server for 
 `AGENTS.md` is already in your context — `CLAUDE.md` is a symlink to it and is loaded into
 every subagent — so do not Read it again. It is an index of about 15 KB; the decisions themselves
 are in `docs/decisions/`, one file per area, and are **not** all in your context.
-Work from its "What this is", "What it is not" and "Where we are" sections, and read
-`docs/ROADMAP.md` in full before doing anything. The roadmap is the **only** live backlog; every other plan-shaped document
+Work from its "What this is", "What it is not" and "Where we are" sections, Read
+`docs/STATUS.md` for what is and is not verified, and read `docs/ROADMAP.md` in full before doing
+anything. The roadmap is the **only** live backlog; every other plan-shaped document
 (`implementation-plan.md`, `SIGNALS.md`, `REPLAY.md`) is a record of finished work and must not be
 rewritten to match later decisions.
 
