@@ -748,6 +748,57 @@ opts in by hand, so a new route is unprotected unless its author remembers. §6 
 
 **Out of scope.** Authentication. The loopback bind is still the boundary. CORS behaviour.
 
+**Status, 2026-10-18: built, pending CI. Not done.** It is on `shafic/structure-phase-c`, stacked on
+phases A and E. The branch is not pushed, so CI has not run. `ControlHeaderCoverageTest` starts a real daemon
+with inert fakes for every side effect: exit, peer kill, MCP probe and the replay transport. It walks
+the route tree through one new `internal` accessor, `InspectorDaemon.routingRoot()`, and that
+accessor is the only production change. It probes 8 routes:
+
+- `DELETE /api/sessions/{id}`
+- `POST /api/mcp/probe`
+- `POST /api/peers/{pid}/kill`
+- `POST /api/replay`
+- `POST /api/server/restart`
+- `POST /api/server/stop`
+- `POST /api/sessions/clear`
+- `POST /api/sessions/{id}/signals/request`
+
+Each is probed with no header and with `X-Inspector-Control: 0`. The two WebSocket handshakes
+(`GET /api/live`, `GET /ingest`) are printed as exempt, and markers is printed as allowlisted.
+
+Two further guards came out of review. One is a tripwire on `InspectorDaemon`'s constructor
+parameter count, because `control` and `peers` default to real implementations. The other asserts
+that `POST /api/server/stop` is among the probed routes, so a partial walk cannot pass. A 403 whose
+body does not name the header is reported with that body, and every side effect reached is
+reported in one failure.
+
+Evidence, run locally: `:inspector-daemon:test` ran 227 tests with 0 failures, and
+`check-web-static.js` passed 20/20. Ten breaks went red, and each file was restored from a backup
+copy:
+
+1. The check removed from `signals/request`: named with 409.
+2. The check removed from `server/stop`: 200, and the fake reported `ServerControl.exit`. The test
+   JVM survived.
+3. A new open `post(...)`: named with 200.
+4. A method-less `route { handle {} }`: reported as `ANY` with 200.
+5. The check added to markers: the allowlist assertion failed on 403.
+6. `routingRoot()` returning null: "the route scan found no non-GET routes".
+7. The guard weakened from `== "1"` to `!= null`: all eight routes were named on the
+   `X-Inspector-Control: 0` probe only. The fakes reported exit, spawn and MCP probe together.
+8. A seventh constructor parameter: "new dependency: fake it here if it has side effects".
+9. The refusal message no longer naming the header: every route was named with the body
+   `{"error":"forbidden"}`.
+10. `server/stop` renamed: "the route scan missed POST /api/server/stop".
+
+Not shown: a CI run, or a full `./gradlew build`. The iOS and Android targets did not run, because
+only daemon code changed.
+
+**What the allowlist accepts.** No preflight is needed for a cross-site `text/plain` POST, and the
+markers route reads the body without checking `Content-Type`. So any web page can add a marker to a
+live session, including one claiming `source:"user"`. The recorded decision accepts that: a marker
+is not a weapon. It is written down here so nobody later mistakes `source` for proof of who
+dropped a marker.
+
 ### Phase A — web checks and shared mirror cases in CI
 
 **Status, 2026-10-18: done.** CI run 39082730859 on PR #81 went green on all three jobs: the new
@@ -1049,6 +1100,10 @@ decision or a known trap:
 - ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
   or only in the tool description (phase E).~~ **Announced in both the release notes and
   `DAEMON.md` §8** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn). The tool description states the rule without a version.
+- **Needs the maintainer: two security-boundary gaps, tracked privately.** Found while building
+  phase C. The detail, the options and their breakage risks are in a private security advisory.
+  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. Decide
+  both before §6's bulk endpoints are built.
 
 ---
 
