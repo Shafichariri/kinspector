@@ -3,10 +3,11 @@ id: KIN-26
 title: >-
   Export bug: KIN-23's explain test pushes McpTest.kt past its file budget, so
   :repo-checks fails
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:28'
+updated_date: '2026-10-18 19:30'
 labels:
   - 'item:export-md-query-once'
 dependencies:
@@ -34,3 +35,9 @@ Found by the architect while designing the signals item, confirmed by the conduc
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Commit 1e9fb3a. Test moved unchanged to inspector-daemon/src/test/kotlin/dev/inspector/daemon/mcp/ExplainToolTest.kt (package dev.inspector.daemon.mcp). Shared helpers mcpExchange/mcpCallTool/mcpSession are internal in McpTestSupport.kt; McpTest's private exchange/callTool/session now delegate to them. McpTest.kt 830 -> 784; budgets.txt entry tightened 815 -> 784 by -Dinspector.budgets.tighten=true (the ratchet fails a file below its budget). ExplainToolTest uses refusing MarkerPoster/SignalPuller fakes so it can never reach a daemon on 8099. Moved test proven to run: changing its id argument to port9999 failed it, restored.
+<!-- SECTION:NOTES:END -->
