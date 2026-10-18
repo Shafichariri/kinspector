@@ -26,8 +26,11 @@ stdio — `McpServer.run` blocks on `input.readLine()` and stops at EOF — so a
 spawned would have no client on its pipes and would exit at once or hang holding an empty one. The
 editor owns that lifecycle. The two operations that mean something are `POST /api/mcp/probe`, which
 spawns a throwaway server, handshakes, reports the tool count and stops it, and killing a wedged one
-through the ordinary peer kill so the editor respawns it. `McpControlTest` asserts the probe leaves
-nothing behind.
+through the ordinary peer kill so the editor respawns it. `McpControlTest` (in
+`PeerRegistryTest.kt`) asserts that probing requires the header and spawns nothing without it, and
+that a probe reports a tool count or a reason. That a probe leaves no process behind rests on its
+`finally { process.destroyForcibly() }` and is not pinned by a test; `ROADMAP.md` §3 → Guards
+carries it.
 
 **Peers are identified by argv token, never by command-line substring.** `PeerArgv.MAIN_CLASS`
 is matched against `ProcessHandle` arguments by exact equality. Substring matching is what makes
@@ -70,6 +73,30 @@ cannot put a custom header on a WebSocket handshake, so this header cannot guard
 `/ingest`. Two security-boundary gaps found while building phase C are tracked privately and are
 open decisions for the maintainer; do not build a fix for either without that decision.
 
+**Control routes are gated by one route-scoped plugin, and the coverage test, not the gate, catches
+a route left outside it.** `controlGated { }` in `http/ControlGate.kt` installs the `ControlGate`
+plugin on each route its block registers, and the plugin refuses a call without
+`X-Inspector-Control: 1` with the same 403 and the same body the eight per-route checks gave. It is
+installed on the routes themselves and adds no node of its own, and that is load-bearing. The first
+version hung the gated routes under a shared transparent child node, which left paths and templates
+unchanged and still changed behaviour. When nothing matches, Ktor 3.5.0 keeps a later failure over
+the one it holds if the later one is of higher quality or deeper, but only while every selector on
+its trail is constant or transparent. The transparent node counted towards that depth, so the gated
+subtree's path failure sat one level deeper than the open `GET /api/sessions` failing on its method;
+wherever that subtree was resolved second, which is a matter of registration order,
+`PUT /api/sessions` answered 404 instead of 405, and so did three other paths. Every guard stayed
+green; the base-against-head route matrix found it. `ControlGateTest` case 9 and
+`WrongMethodStatusTest` pin it. A nested `controlGated` reaches a route twice, and the plugin is
+installed only when absent, because a second install throws. A response from the plugin's `onCall`
+stops the handler only because Ktor 3.5.0's routing wrapper checks `isHandled` before invoking each
+handler. That is a dependency on Ktor internals, so revisit it on a Ktor upgrade; `ControlGateTest`
+counts handler runs and fails if it stops holding. What the gate cannot do is notice a control route
+registered outside it, or added to a node that already had a handler. `ControlHeaderCoverageTest`
+walks every registered route, and it is what catches that. The reverse is as quiet: a gated route
+registered first, then an open route landing on the same node, gates the open one too.
+`ControlHeaderCoverageTest`'s allowlist check catches that for the marker route, and
+`ReadRoutesOpenTest` catches it for every GET.
+
 **A posted marker says who dropped it, and `source` is not decoration.** `MarkerSource.USER`
 existed with no caller until the web UI grew the button: every marker in every archive said `app`
 or `agent`. A marker left by an agent working through a session is a different claim from one a
@@ -105,3 +132,29 @@ the *protocol* date, and the first attempt at this fix shadowed the property wit
 
 **`inspector mcp` owns stdout.** Anything printed there that is not a JSON-RPC frame
 desynchronises the client. Diagnostics go to stderr.
+
+**The daemon's packages are layers, and an import scan holds them because `internal` cannot.**
+Kotlin's `internal` is module-wide, so to the compiler `archive/`, `service/`, `http/`, `mcp/` and
+`usb/` are one visibility domain, and a package boundary enforces nothing by itself.
+`DaemonLayersTest` in `:repo-checks` reads the imports and the inline qualified names instead.
+`archive/` imports no other layer and `service/` imports `archive/`. `http/` may also import
+`io.ktor`. `mcp/` reads `archive/` and `service/` and never Ktor. `usb/` imports no daemon package,
+because the bridge goes through the daemon's own `WS /ingest`. The root package holds `Main.kt`
+alone. The adapters read `archive/` directly rather than only through `service/`, because the strict
+version needs a pass-through wrapper for every repository method, which is a second copy of each. "A
+rule both adapters serve lives in `service/` or `archive/`, never in a route or tool body." Two
+places break that today, recorded here and not fixed. `GET …/signals` sorts by `mono` descending and
+clamps its limit to 1..1000 in the route, while the MCP `list_signals` goes through
+`SessionRepository.querySignals` and filters differently: the route matches `tag` with
+`equalsIgnoreCase`, the tool uses the filter grammar. And the session delete and clear loops live in
+`http/SessionRoutes.kt`. Every mechanism in the scan must find something to check, so an import
+reader or a name matcher that stops matching fails instead of reporting a clean tree.
+
+**A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization
+quotes a class's serial name in `MissingFieldException`, and a serial name defaults to the fully
+qualified class name. The replay and signal-pull routes echo that message into their 400 body, and
+the `config.json` reader prints it to stderr, so moving `ReplayRequest`, `SignalPullRequest` or
+`DaemonConfig.FileConfig` to another package would change what a caller reads, with no other
+symptom. Each carries `@SerialName` with the name it had before phase D, and a comment saying not to
+"correct" it to the current package. They are the only three daemon-owned types ever decoded;
+encode-only types never write their serial name. `SerialNameTest` pins all three.

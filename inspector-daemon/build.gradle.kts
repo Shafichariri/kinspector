@@ -29,8 +29,13 @@ dependencies {
     testImplementation(project(":inspector-stream"))
 }
 
+// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly. Read by
+// `McpToolsListGoldenTest`, the only thing allowed to rewrite `mcp-tools-list.json`.
+private val regenerateMcp = providers.systemProperty("inspector.mcp.regenerate").orElse("false")
+
 tasks.test {
     useJUnitPlatform()
+    systemProperty("inspector.mcp.regenerate", regenerateMcp.get())
 }
 
 /*

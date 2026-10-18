@@ -45,6 +45,22 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | Path | Why it matters |
 |---|---|
 | `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
-| `inspector-daemon/.../Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
-| `inspector-daemon/.../Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
-| `inspector-daemon/.../SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
+| `inspector-daemon/.../http/InspectorDaemon.kt` | The daemon: the `127.0.0.1` bind that is the security boundary, the port pre-flight, stop and restart, and `module()`, which registers the route groups that sit beside it in `http/`. A route that changes something goes inside `controlGated { }` from `ControlGate.kt`. |
+| `inspector-daemon/.../service/Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
+| `inspector-daemon/.../service/Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
+| `inspector-daemon/.../archive/SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
+| `repo-checks/.../DaemonLayersTest.kt` | Holds the layer table below, from the imports and inline qualified names in the daemon's main sources. |
+
+## Layers
+
+Each package under `dev.inspector.daemon` is a layer. Kotlin's `internal` does not separate them,
+so `DaemonLayersTest` does; the reasoning is in `docs/decisions/daemon-and-mcp.md`.
+
+| Package | Holds | May import, beyond `kotlin.`, `kotlinx.serialization.`, `kotlinx.coroutines.`, `java.` and `dev.inspector.model.` |
+|---|---|---|
+| `archive/` | the on-disk archive: config, layout, reader, writer, retention | nothing else in the daemon |
+| `service/` | live sessions, live apps, replay, peers, MCP control, exports, `daemonVersion()` | `archive/` |
+| `http/` | the Ktor server, its route groups and the control gate | `archive/`, `service/`, `io.ktor.` |
+| `mcp/` | the MCP server and its tools | `archive/`, `service/` |
+| `usb/` | the USB bridge and the usbmuxd protocol | `javax.xml.`, `org.w3c.dom.`, `org.xml.sax.`; no daemon package, because the bridge goes through `WS /ingest` |
+| root | `Main.kt` alone, the composition root | anything |

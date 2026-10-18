@@ -1,5 +1,7 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.service.HOP_BY_HOP_HEADERS
+import dev.inspector.daemon.service.replayableHeaders
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.fail

@@ -7,8 +7,8 @@ import kotlin.test.fail
 /**
  * The file-size ratchet in `structure/budgets.txt`.
  *
- * `app.js`, `Server.kt`, `McpTools.kt` and the two overlay files each have a phase in ROADMAP §5
- * that splits them. Until it lands, a budgeted file may not grow. It may not quietly shrink
+ * `app.js` and the two overlay files each have a phase in ROADMAP §5 that splits them. Until it
+ * lands, a budgeted file may not grow. It may not quietly shrink
  * either: a budget left at the old size after a file lost 200 lines would let those 200 back in
  * unnoticed, so a smaller file fails until the budget is tightened to match. That is the
  * difference between a ratchet and a cap.

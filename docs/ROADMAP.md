@@ -496,6 +496,101 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
   **Decided 2026-10-18: the three become `internal`.** The guard is now §5 → Phase I.
 
+- **"A probe leaves no process behind" is a claim nothing tests.** *Ticket label:*
+  `item:guard-mcp-probe-cleanup`. Found during §5 → Phase D, and left alone because phase D allowed
+  no behaviour change. `docs/decisions/daemon-and-mcp.md` ("There is no 'start the MCP server'
+  endpoint") points here for it.
+
+  **For whom.** A web UI user on a Mac who presses the MCP probe in settings. Every press spawns a
+  real `inspector mcp`. If one outlived its probe, it would show up in the peer list as an `mcp`
+  process, which is exactly the kind of process that list warns people not to kill, because it
+  might be the editor's. A probe that leaks makes the daemon's own control panel lie about what is
+  connected.
+
+  **Why it is unguarded.** The whole property rests on one line in `ProcessMcpControl.probe`,
+  `finally { process.destroyForcibly() }`. `McpControlTest` (in `PeerRegistryTest.kt`) does test the
+  real control, but it runs in a Gradle worker. That worker's argv carries no `MainKt`, so
+  `commandLine()` returns null, the probe reports "this process cannot report its own command line",
+  and **nothing is ever spawned**. The test's own comment says either outcome is a pass. So the test
+  passes with the `finally` deleted, and it would pass with it deleted on every machine the suite
+  runs on.
+
+  **What adding it would take.** A production seam in `ProcessMcpControl`, so a test can hand the
+  probe a command to run in place of the one it derives from its own argv. The architect chooses
+  its shape. It has to stay off `InspectorDaemon`'s constructor, or phase C's parameter-count
+  tripwire goes red for a reason unrelated to side effects. That seam is a change to production code,
+  and it is why this could not ride along with phase D. Acceptance criteria:
+
+  - The child the probe started is not alive once `probe` returns, on the success path, on the
+    timeout path (the child never answers `tools/list`), and when writing to the child throws.
+  - **The stub child must ignore EOF.** The real MCP server stops when its stdin closes, and the
+    probe closes stdin before it reads anything. A test driving the real server would pass with the
+    `finally` deleted. Only a child that keeps running after EOF can tell a probe that kills it from
+    one that is lucky.
+  - Proven to fail when broken: delete the `destroyForcibly()` and the test goes red, naming the
+    surviving pid.
+  - The existing "either answers or explains why it cannot" test stays. It covers the case where the
+    command line cannot be built, which this one does not.
+
+  **Out of scope.** Changing what the probe reports, its timeout, or the `POST /api/mcp/probe`
+  route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
+  published, so there is no noop twin or golden file to carry.
+
+- **The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**
+  *Ticket label:* `item:signals-query-one-rule`. **Known violation, not yet fixed.**
+  `docs/decisions/daemon-and-mcp.md` now says "a rule both adapters serve lives in `service/` or
+  `archive/`, never in a route or tool body". The signal list is served by both adapters, and it
+  is not built that way:
+
+  - `GET /api/sessions/{id}/signals` (`inspector-daemon/.../http/SignalRoutes.kt`) reads the raw
+    signals and does its own work inside the route. It filters on a `tag` parameter with
+    `equals(ignoreCase = true)`, sorts by `mono` descending, and clamps `limit` to 1..1000.
+  - MCP `list_signals` goes through `SessionRepository.querySignals`, which applies the same sort
+    and the same clamp separately, and filters with the shared grammar.
+
+  The sort and the clamp agree today only because two copies happen to match. The layering scan
+  from phase D cannot see this: the route imports nothing it should not. What it breaks is the
+  rule that a route does not hold a rule.
+
+  **It is also a live defect on the web UI, not only a layering one.** `app.js`'s `loadSignals`
+  asks this route for `filter=<the current filter>&limit=2000`. The route reads neither `filter`
+  nor anything above 1000. So on the web:
+
+  - **A filter never reaches the signals.** `path:/v2` thins the calls and leaves every signal in
+    place between them. That is the defect fixed in the overlay in stage 2 of §1. The recorded
+    decision says "the web UI has always sent its filter to the signal route", which is true: it
+    sends it, and the route ignores it. The path view's skeleton fetch (`filter=tag:screen`) only
+    works because `app.js` filters the reply for screens on the client.
+  - **A session with more than 1000 signals loses its oldest**, with nothing on screen to say so.
+    That includes the screens the path view draws its route from.
+
+  Both predate phase D: the route on `main` is the same code, moved and not rewritten.
+
+  **The user and the problem.** A web UI user on a Mac who filters a session holding signals, and
+  an agent over MCP, who is promised the same answer the page shows. Today the two adapters run
+  different filters over one stream.
+
+  **Acceptance criteria, when it is fixed.**
+
+  - The route gets its rows from the same function `list_signals` uses, so the sort, the clamp and
+    the filter exist in one place, in `archive/` or `service/`.
+  - `tag=` keeps working. The grammar's `tag:` term is also exact and case-insensitive, so the
+    parameter can become that term without changing what it matches.
+  - The route still answers with a bare array, newest first. The export's `archiveSource` mirrors
+    that shape, and `render-web-ui-archive.js` holds it.
+  - A daemon test asks the route and `list_signals` for the same session and filter, and asserts
+    the same ids in the same order. It fails with the route's own sort put back.
+  - A filter typed in the web UI drops signals by the grammar's exclusion rule, checked by
+    `render-web-ui.js`.
+  - The limit is either raised to cover what `app.js` asks for, or `app.js` asks for what it can
+    get and pages. The item says which, and a session with more than 1000 signals is tested either
+    way, for the reason `HarTest` pins 1001 rows.
+
+  **Out of scope.** The filter grammar, which is frozen. MCP's argument names or its page shape.
+
+  Surfaces: daemon, web UI. No public API. It changes what a web UI user sees under a filter, so it
+  gets a release-notes line when it ships.
+
 ### Bugs found, not fixed
 
 - **`ExportMarkdown.kt:158` prints the query twice.** The line is
@@ -672,6 +767,7 @@ scheme.
 | 7 | Phase F — `app.js` and CSS split behind the manifest | M | before 1a |
 | 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 |
 | 9 | Phase H — split the two large overlay files | S | later |
+| 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D |
 
 E goes first because it is small and it is the only item where something is wrong today: an agent
 asking for a timeline gets an answer that disagrees with both UIs. C is next because it is small and
@@ -681,7 +777,8 @@ riskiest change to the web UI in this section, so it should happen with CI alrea
 the mirrors and audits it could break. G comes before D and F because every agent run for every
 later item pays for the 126 KB file, and because D and F each restate decisions. It is cheaper to
 restate them in their new home than to move them twice. H is last because nothing in §6 touches the
-overlay.
+overlay. The `McpTest.kt` split was added after it, out of phase D. It changes nothing anyone sees,
+and the ratchet stops the file growing until then.
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -1080,6 +1177,8 @@ them says.
 
 ### Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check
 
+*Ticket label:* `item:structure-phase-d`.
+
 **Audit findings 5 and 6.**
 
 **For whom.** Whoever builds §6. Stats, diff and findings are three services that the HTTP API and
@@ -1100,6 +1199,39 @@ in them are what make that structural rather than a matter of care. Decision 3 p
   still true, and their file references are updated.
 
 **Out of scope.** Any new endpoint or tool. Changing the archive layout.
+
+**Status, 2026-10-18: built; done once its PR is merged and CI is green.** It is on
+`shafic/structure-phase-d`, which is not pushed, so CI has not run. Tickets KIN-1 to KIN-9 are Done on
+QA evidence from two passes by a fresh verifier, the last at `753d9cf`; `c1f2a4a` only adds doc/KDoc text
+and a `Unit` return type, and QA did not re-run it (the engineer reports 247/0 daemon tests and 35/0
+repo-checks). What landed:
+
+- **Guards first (C1).** `MainClassTest`, `SerialNameTest`, a byte-for-byte `tools/list` golden,
+  `PeerKillIdentityTest` and `ReadRoutesOpenTest`, each proven red and green at base. `Daemon.kt` was
+  deleted as unreferenced.
+- **The moves (C2-C5).** `archive/`, `service/` and `http/` beside `mcp/` and `usb/`; `Main.kt` alone at
+  the root. Renames are 93-99% similar, and the test diff is import lines only. The three decoded
+  `@Serializable` types carry `@SerialName` pins, because kotlinx-serialization quotes the serial name in
+  a 400 body and in stderr.
+- **`DaemonLayersTest` (C6).** An import scan over rules L0-L6. It passes live with 0 violations, goes
+  red on real-file breaks including a split-line FQN, and goes red when its own parser is blinded.
+- **The splits (C7, C8).** `Server.kt` became `InspectorDaemon.kt` plus ten route-group files, with the
+  `Replayer` and `McpControl` kept lazy so no `HttpClient` thread exists until the first replay.
+  `McpTools.kt` became a `ToolGroup` plus seven files. The largest new file is 243 lines.
+- **One control gate (C9).** `ControlGate` replaces the eight header checks; exactly 8 routes are gated.
+
+**What the gate taught, KIN-9.** The first gate shape turned 405 into 404 on any path that also had a
+gated sub-route; the base-against-head route matrix found it on 45 rows. The gate now installs on each
+route, and all 36 affected rows are 405 again. The ticket's `createChild(ControlGateSelector)` design was
+replaced by this.
+
+**Evidence against base `1db168b`.** `tools/list` and an 88-frame transcript are identical. The
+855-row route matrix has 0 differing rows. The jar version reads through to MCP and HAR. Daemon tests are
+247 = 227 base + 20 new, with every base test present. The web probes pass with 164 checks (1 n/a) and 21.
+
+**Not verified.** The no-client-names check on the tickets: the term list is kept out of the repository,
+so QA cannot run it. The release steward scans what it can. `McpTest.kt` was not split, and is the
+"Later" item below.
 
 ### Phase F — `app.js` and CSS split behind the manifest
 
@@ -1182,6 +1314,28 @@ ratchet stops them growing in the meantime.
 `InspectorOverlay.kt` keeps its name. The ratchet records the new, smaller budgets.
 
 **Out of scope.** Any change to the list's behaviour or look.
+
+### Later — split `McpTest.kt`
+
+*Ticket label:* `item:structure-split-mcp-test`.
+
+**Left over from phase D. Later.** `McpTools.kt` was split by tool group, and its test file was
+not. `McpTest.kt` is 815 lines, and `structure/budgets.txt` lists it as deferred. Phase D could not
+split it, because its acceptance criterion was that every daemon test passes unchanged, and phase
+D added only five import lines to this file. Splitting the file would have moved every test in it.
+
+**For whom.** Whoever next adds or changes an MCP tool. The tools now live one group per file, and
+their tests are still in one file, so a change to one group means finding its tests in 815 lines.
+
+**Acceptance criteria.** The tests split along the same groups as the tools in `mcp/`, one test
+file per group, plus a shared file if the fixtures need one. The test count is the same before and
+after, stated in the change. Each test moves word for word, and the diff shows nothing reworded.
+The phase B ratchet records the new, smaller budgets, and the deferred line in
+`structure/budgets.txt` is removed.
+
+**Out of scope.** Changing what any test asserts. Adding tests, including the two §3 → Guards items
+that came out of phase D. Those are separate items, so that a move and a new check never share one
+diff.
 
 ### Deliberately not doing, in this pass
 
@@ -1300,6 +1454,20 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 What must still hold: the export still works offline (new pages either read the embedded archive
 or hide under `body.archive`); `fetch` is still called once in `app.js`; every new pane that sets
 `display` joins `auditHiddenPanes`; nothing new under 11px.
+
+**The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
+they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
+`inspector-daemon/.../http/SessionRoutes.kt` each refuse the active session, call
+`deleteSession` with their own `DeletionCause`, and build the deleted/kept reply. `POST
+/api/sessions/delete {ids}` is the second caller of the same rules: refuse the active session,
+refuse the `latest` alias, and answer per item. Copying them into a third route body would make
+three copies of the rule about which sessions may be deleted. Phase D's layering rule is written
+for rules both adapters serve ("a rule both adapters serve lives in `service/` or `archive/`, never
+in a route or tool body"), and deletion is HTTP only, but the reason behind it holds here too: two
+copies of a rule drift. So 1a extracts one session-deletion service, and all three routes call it. It was left in place during phase D on purpose: with one caller, an
+extraction is a move with nothing to prove it right, and phase D allowed no behaviour change. Any
+findings cache built later is removed through the same service, which is the "every deletion path"
+condition recorded under Findings.
 
 **Decided 2026-10-17: split into the shell and room for the list, each landing with its probes.**
 The acceptance criteria at the end of this paragraph apply to both halves.

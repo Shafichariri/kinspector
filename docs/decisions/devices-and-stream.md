@@ -40,8 +40,8 @@ target's compile, which is the only thing keeping the fact structural.
 have to move.** `adb reverse tcp:8099 tcp:8099` forwards the *device's* loopback to the same port
 on the machine running adb, so the app dials `127.0.0.1` from inside the phone and the daemon goes
 on listening on `127.0.0.1` on the host. Nothing is exposed to the network, so the security
-boundary in `Server.kt` is untouched. Verified end to end on a booted emulator, which speaks the
-same adb protocol as hardware: `127.0.0.1:8099` from inside the device was refused before the
+boundary in `http/InspectorDaemon.kt` is untouched. Verified end to end on a booted emulator,
+which speaks the same adb protocol as hardware: `127.0.0.1:8099` from inside the device was refused before the
 forward, answered `HTTP/1.1 200 OK` from the real daemon after it, and was refused again once the
 forward was removed — while `lsof` still showed the daemon bound to `127.0.0.1` alone and the
 `10.0.2.2` path kept working.

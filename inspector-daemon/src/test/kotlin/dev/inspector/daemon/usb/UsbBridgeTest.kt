@@ -1,8 +1,8 @@
 package dev.inspector.daemon.usb
 
-import dev.inspector.daemon.DaemonConfig
-import dev.inspector.daemon.InspectorDaemon
-import dev.inspector.daemon.SessionRepository
+import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.http.InspectorDaemon
+import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.clientInfo
 import dev.inspector.daemon.marker
 import dev.inspector.daemon.txn

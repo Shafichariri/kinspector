@@ -13,6 +13,13 @@ PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swa
 **Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is done**: CI on
 PR #82 went green on `build`, `release-swap` and `web`. `docs/ROADMAP.md` §5 has the detail.
 
+**Phase D (daemon packages; `Server.kt` and `McpTools.kt` split; layering check) is built, and done
+once its PR is merged and CI is green**: it is on `shafic/structure-phase-d`, not pushed, so CI has not
+run. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf`). The engineer reports
+247 daemon tests and 35 repo-checks tests passing at `c1f2a4a`; the verifier did not re-run that commit,
+and no full-repository count has been taken. Not verified: the no-client-names check, whose term list is
+kept out of the repository. `docs/ROADMAP.md` §5 has the detail.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
