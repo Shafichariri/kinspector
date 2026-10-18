@@ -20,14 +20,17 @@ run. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf
 and no full-repository count has been taken. Not verified: the no-client-names check, whose term list is
 kept out of the repository. `docs/ROADMAP.md` §5 has the detail.
 
-**Phase F (`app.js` and CSS split behind the manifest) is built, and done once its PR is merged and CI
-is green**: it is on `shafic/structure-phase-f`, not pushed, so CI has not run. Tickets KIN-10 to KIN-22
+**Phase F (`app.js` and CSS split behind the manifest) is done**: PR #88 merged to `main` as `1913cf7`,
+and CI run 39146369617 on that push passed `build`, `release-swap` and `web`. `repo` was red on that push,
+only on the commit-identity check: the merge commit was authored with the maintainer's work address by
+GitHub's merge dialog, not by anything in the branch. PR #89 has since made the check accept the
+maintainer's personal address; the dialog setting is the maintainer's to change. Tickets KIN-10 to KIN-22
 are Done on verifier evidence (last pass on `b733aa4`). Counts at `e065f11`, per module and not a
 full-repository total: `:inspector-daemon:test` 259, `:inspector-ui:jvmTest` 134,
 `:inspector-model:jvmTest` 159, repo-checks 35 (35/0 again after `b733aa4`). Web probes: live 164 passed,
 1 n/a, 42 notes and archive 21, both per-label identical to base `f574bda`; static checks 24. Headless
 Chrome 131: 16 configurations, served and exported under `file:`, computed-style, text and PNG hashes
-identical to base, 0 page errors. Not verified: Safari and Firefox, CI, Android host tests (no SDK), the
+identical to base, 0 page errors. Not verified: Safari and Firefox, Android host tests (no SDK), the
 no-client-names check, and how the page looks to a human. Six layout defects that predate the phase are
 listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP.md` §5 has the detail.
 
@@ -146,8 +149,10 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
-- **Phase F in Safari, Firefox and on CI.** Only Chrome 131 was driven, the branch is not pushed, the
-  Android host tests need an SDK this machine lacks, and the no-client-names term list is not here.
+- **The merge commits for PRs #84 to #91 carry a work address on `main`**, so the `repo` job was red on
+  each of those pushes. The cause is the merge dialog's author setting, not the branches. #89 relaxed the
+  check; it did not rewrite those commits or change the setting.
+- **Phase F in Safari and Firefox.** Only Chrome 131 was driven, the Android host tests need an SDK this machine lacks, and the no-client-names term list is not here.
   Nobody has looked at the split page: hash equality proves "identical to before", not "looks right".
 - **Six web UI layout defects found at base by UX, unfixed** (closed drawer focusable at 1000px and
   widening the page; endpoint cut at 400px; drawer close button over the header's last action at

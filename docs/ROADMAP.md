@@ -538,6 +538,9 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - **The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**
   *Ticket label:* `item:signals-query-one-rule`. **Known violation, not yet fixed.**
+  **Ordered 2026-10-18: second in the order from here** (§5 → "Order from here"), right after the
+  Markdown export bug. It is a live web UI defect: a filter a user types does not reach the
+  signals, and a long session loses its oldest screens without saying so.
   `docs/decisions/daemon-and-mcp.md` now says "a rule both adapters serve lives in `service/` or
   `archive/`, never in a route or tool body". The signal list is served by both adapters, and it
   is not built that way:
@@ -600,6 +603,22 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
   `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
   change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
+
+  *Ticket label:* `item:export-md-query-once`.
+
+  **Ordered 2026-10-18: first in the order from here** (§5 → "Order from here"). The maintainer's
+  call. It is a wrong fact in a file people hand to others, and the fix is one line and one test.
+
+  **The user and the problem.** Anyone who exports a session as Markdown and pastes a URL out of it,
+  often into a ticket or an agent's prompt. The URL they copy was never called.
+
+  **Acceptance criteria.** An `ExportMarkdown` test with a query-bearing row asserts the query
+  appears once on the **URL** line. It fails with the old line put back. A row with an empty query
+  (`?` and nothing after) renders as the web's `urlOf` does, per `docs/decisions/shared-rules.md`.
+  The release notes carry one line.
+
+  **Out of scope.** The HTML and JSON exports, which read `url` and are not affected. Any other
+  change to the Markdown layout. Surfaces: daemon only. No public API.
 - **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
   stable-sorted by `mono` alone, so two signals in one millisecond keep file order, and a signal and
   a call in one millisecond put the call first — whatever capture order `seq` recorded. That is the
@@ -667,6 +686,8 @@ tag cut before any of this existed.
 ## 5. Next: the structure and architecture pass — planned 2026-10-18
 
 **This comes first. Nothing in §6 starts until the items below marked "before §6" have landed.**
+*(Extended 2026-10-18: phases H and I and the `McpTest.kt` split now also come before §6, as do the
+two §3 defects. See "Order from here", below.)*
 This section was inserted on 2026-10-18 ahead of what had been §5. The daemon and web UI plan is §6
 now. Anything written before that date, including the review recorded inside that section, calls
 it §5.
@@ -737,6 +758,7 @@ They are recorded together here because several items depend on more than one of
 2. **`noop-ui`: `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`**
    in `:inspector-ui`. They are not mirrored into the noop. This closes the divergence recorded
    under §3 → Guards and unblocks the phase I item. **It is a public API removal**; see that item.
+   *Decided 2026-10-18: it may ship in a minor release.*
 3. **Stats and findings rules live in the daemon's `service/` layer**, not in `:inspector-model`.
    This matches §6's premise of no model change and no new `app.js` mirror.
 4. **A `:repo-checks` module holds the structural checks, with no detekt or ktlint.** It is a
@@ -764,10 +786,10 @@ scheme.
 | 4 | Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks | S | before §6 |
 | 5 | Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides | M | before §6 |
 | 6 | Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check | M | before §6 |
-| 7 | Phase F — `app.js` and CSS split behind the manifest (built 2026-10-18; done once PR merged and CI green) | M | before 1a |
-| 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 |
-| 9 | Phase H — split the two large overlay files | S | later |
-| 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D |
+| 7 | Phase F — `app.js` and CSS split behind the manifest **Done, 2026-10-18** (PR #88, merge `1913cf7`; `build`, `release-swap` and `web` green, `repo` red on the merge commit's author address only) | M | before 1a |
+| 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 *(superseded 2026-10-18: fifth in "Order from here", before §6)* |
+| 9 | Phase H — split the two large overlay files | S | later *(superseded 2026-10-18: fourth in "Order from here", before §6)* |
+| 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D *(superseded 2026-10-18: third in "Order from here", before §6)* |
 
 E goes first because it is small and it is the only item where something is wrong today: an agent
 asking for a timeline gets an answer that disagrees with both UIs. C is next because it is small and
@@ -779,6 +801,69 @@ later item pays for the 126 KB file, and because D and F each restate decisions.
 restate them in their new home than to move them twice. H is last because nothing in §6 touches the
 overlay. The `McpTest.kt` split was added after it, out of phase D. It changes nothing anyone sees,
 and the ratchet stops the file growing until then.
+
+*(The reasoning in the last three sentences is overturned for order, not for content, on
+2026-10-18. Nothing in §6 touches the overlay still holds. The maintainer chose to finish the
+structure pass before §6 rather than leave it trailing. See below.)*
+
+### Order from here — decided 2026-10-18
+
+The maintainer set this order on 2026-10-18. It runs across §3, §5 and §6, so it is recorded once,
+here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They are not in this table.
+
+| Order | Item | Where | Ticket label | Size |
+|---|---|---|---|---|
+| 1 | `ExportMarkdown.kt` prints the query twice | §3 → Bugs found | `item:export-md-query-once` | S |
+| 2 | The signals sort and clamp exist twice | §3 → Guards | `item:signals-query-one-rule` | S |
+| 3 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 4 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 5 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 6 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 7 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 8 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 9 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+
+§6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
+wait for the next one.
+
+**Why this order.** By value per hour. The two defects come first: each is small, and each shows a
+user something false today. The Markdown export prints a URL that was never called. The web UI
+shows signals a filter should have hidden, and silently drops the oldest past 1000. The `McpTest.kt`
+split, H and I come next, while the structure pass is still fresh. They are cheap now, and each one
+is a move that is easier to review on a quiet tree than under §6's diffs. I is last of the three
+because it is the only one that changes something a consumer sees (see its item). Then §6 in its own
+dependency order.
+
+**The security advisory comes last, and this overturns a recorded decision.** §5 → "Open questions
+only the human can answer" said: "Decide both before §6's bulk endpoints are built." The maintainer
+moved it after 1a, 1b and 2 on 2026-10-18. The consequence, stated plainly: **1a's bulk delete and
+bulk kill endpoints will be built before the advisory's fix is chosen.** What keeps that from
+becoming rework is an acceptance criterion on 1a: the architect designs those endpoints so the fix
+can land without rebuilding them. Phase C's header test still covers both endpoints from the day
+they exist, because it reads the route list from the server.
+
+The advisory item carries a ticket label so its progress is not held only in conversation. Ticket
+files are public. A ticket under it names the advisory and never describes the gaps, until the
+advisory itself is published.
+
+**The six web UI layout defects UX found at base `f574bda`** are folded into 1a and 1b as
+acceptance criteria, because those items rebuild the code each one lives in. None is a standalone
+item. Where each went:
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| (a) Closed drawer focusable and widening the page | 1b | 1b rebuilds the list/detail split |
+| (b) Endpoint cut away at 400px | 1b | 1b reworks the row and density |
+| (c) Drawer `✕` overlaps the header's last action | 1b | the detail header sits in the same split |
+| (d) Closed drawer's shadow shows as a strip | 1b | same drawer |
+| (e) Top bar and tab bar overflow at 400px | 1a | 1a rebuilds the top bar and moves its controls |
+| (f1) Session picker clipped at 1440px | 1a | the picker is top-bar chrome that 1a rebuilds |
+| (f2) `16 of 16 calls` wraps at 1000px | 1b | the count sits in the toolbar 1b makes one row |
+| (f3) Two counts that read as disagreeing | 1b | same toolbar and overview line |
+
+One condition on (a). It is the only one of the six that traps a keyboard user, and §6 lets 1b slip
+to 1.5. **If 1b slips, (a) comes out of 1b as its own item and goes ahead of 2.** It is small, and
+a keyboard trap should not wait a release for a redesign.
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -1277,9 +1362,13 @@ the working tree; `RestApiTest` holds the served half. F1 also fixes a measured 
 `PaletteParityTest` reported UP-TO-DATE on a CSS-only change, so palette drift passed an ordinary
 build.
 
-**Status, 2026-10-18: built; done once its PR is merged and CI is green.** It is on
-`shafic/structure-phase-f`, which is not pushed, so CI has not run. Tickets KIN-10 to KIN-22 are Done on
-QA evidence from fresh verifier runs, the last on the wording pass `b733aa4`. What landed, against base
+**Status, 2026-10-18: done.** PR #88 merged to `main` as `1913cf7`. CI run 39146369617 on that push
+passed `build`, `release-swap` and `web`. **`repo` was red on that push, and only on the commit-identity
+check**: GitHub's merge dialog authored the merge commit with the maintainer's work address, which
+nothing in the branch set. PR #89 (merged) has since made the check accept the maintainer's personal
+address; the setting that stops the dialog choosing the work address is the maintainer's to change, and is
+not changed. PRs #90 and #91 (team tooling and names) also merged. Tickets KIN-10 to KIN-22 are Done on QA
+evidence from fresh verifier runs, the last on the wording pass `b733aa4`. What landed, against base
 `f574bda`:
 
 - **F1 `8b20dcc`, manifest plumbing.** `web/scripts.txt` and `web/styles.txt`, with `index.html` holding
@@ -1316,27 +1405,21 @@ no dependency were added.
 Messaging between teammates then worked in the second panel (qa2 and arch2), while the task tools still
 did not reach them.
 
-**Not verified.** Safari and Firefox (Chrome only). CI (branch not pushed). Android host tests (no SDK on
+**Not verified.** Safari and Firefox (Chrome only). Android host tests (no SDK on
 this machine). The no-client-names check (term list kept out of the repository), so that DoD item is
 unticked on all of KIN-10 to KIN-22. How the page looks to a human: the hash comparison proves "identical
 to before", not "looks right".
 
-**Follow-up for the product-owner, not a ticket under phase F.** UX found six web UI layout defects at
-base, so phase F neither caused nor fixed them. Screenshots are in `$TMPDIR/ux-f/shots/`.
-
-1. The closed drawer is still focusable at 1000px, and it widens the page.
-2. The endpoint is cut off at 400px.
-3. The drawer's close button overlaps the header's last action at 1000px.
-4. A strip of the closed drawer's shadow shows.
-5. The top bar and tab bar overflow at 400px.
-6. Small items.
-
-Scope and order are the product-owner's. Item 6 needs itemising before it can be ticketed, and 1a, which
-rebuilds the rail and pages, may overtake some of them.
+**Six web UI layout defects UX found at base `f574bda`.** Phase F neither caused nor fixed them.
+*Placed 2026-10-18:* they are acceptance criteria under §6 → Web UI foundation now, (e) and (f1) in
+1a and the rest in 1b. The table of where each went, and why, is in §5 → "Order from here".
 
 ### Phase I — `noop-ui` golden file
 
-**Audit finding 9. Unblocked by decision 2. Does not gate §6.**
+*Ticket label:* `item:structure-phase-i`.
+
+**Audit finding 9. Unblocked by decision 2. Does not gate §6.** *(Scheduled 2026-10-18: fifth in
+"Order from here", so it lands before §6 starts, although nothing in §6 depends on it.)*
 
 **This changes public API for `:inspector-ui`, and needs the noop twin and golden-file treatment
 sized honestly.** `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`.
@@ -1348,7 +1431,10 @@ Guards called this "a decision rather than a tidy-up" for that reason. Two follo
 - `docs/INTEGRATION.md` gets a version bump and a changelog entry that says what to *do*: "if you
   referenced these, copy the colours you need". The recorded rule is that any change affecting a
   consumer gets one.
-- **Open for the human:** whether a removal from public API ships in a minor release.
+- ~~**Open for the human:** whether a removal from public API ships in a minor release.~~
+  **Decided 2026-10-18: yes, it may ship in a minor release.** The changelog entry above is what a
+  consumer gets in place of a major version, so it must say plainly that three public types are
+  gone and what to do instead.
 
 **Acceptance criteria.**
 
@@ -1368,9 +1454,12 @@ diff, which is on the "do not" list.
 
 ### Phase H — split the two large overlay files
 
+*Ticket label:* `item:structure-phase-h`.
+
 **Audit finding 10. Later.** `ListChrome.kt` (703 lines) and `InspectorList.kt` (758) are the
 overlay's list and its chrome. Nothing in §6 touches the overlay, so the work can wait. The phase B
-ratchet stops them growing in the meantime.
+ratchet stops them growing in the meantime. *(Scheduled 2026-10-18: fourth in "Order from here",
+before §6. It still does not have to wait; the maintainer chose not to let it.)*
 
 **For whom.** Whoever next changes the overlay's list.
 
@@ -1384,7 +1473,8 @@ ratchet stops them growing in the meantime.
 
 *Ticket label:* `item:structure-split-mcp-test`.
 
-**Left over from phase D. Later.** `McpTools.kt` was split by tool group, and its test file was
+**Left over from phase D. Later.** *(Scheduled 2026-10-18: third in "Order from here", before
+§6.)* `McpTools.kt` was split by tool group, and its test file was
 not. `McpTest.kt` is 815 lines, and `structure/budgets.txt` lists it as deferred. Phase D could not
 split it, because its acceptance criterion was that every daemon test passes unchanged, and phase
 D added only five import lines to this file. Splitting the file would have moved every test in it.
@@ -1421,15 +1511,21 @@ decision or a known trap:
 
 ### Open questions only the human can answer
 
-- Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
-  removes public API from every published version up to now (phase I).
+- ~~Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
+  removes public API from every published version up to now (phase I).~~ **Decided 2026-10-18 by the
+  maintainer: yes, a minor release.** Recorded in phase I.
 - ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
   or only in the tool description (phase E).~~ **Announced in both the release notes and
   `DAEMON.md` §8** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn). The tool description states the rule without a version.
 - **Needs the maintainer: two security-boundary gaps, tracked privately.** Found while building
   phase C. The detail, the options and their breakage risks are in a private security advisory.
-  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. Decide
-  both before §6's bulk endpoints are built.
+  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. ~~Decide
+  both before §6's bulk endpoints are built.~~ **Overturned 2026-10-18 by the maintainer: the fix is
+  chosen and built last, after 1a, 1b and 2.** *Ticket label:* `item:control-boundary-advisory`.
+  The consequence is that 1a's bulk delete and bulk kill endpoints are built before the fix is
+  chosen. 1a carries an acceptance criterion so the fix lands without rebuilding them. The details
+  stay in the advisory; tickets under this label name the advisory and never describe the gaps.
+  See "Order from here".
 
 ---
 
@@ -1449,16 +1545,21 @@ pass is §5, and phase F there must land before 1a in particular.
 Order is by dependency, not by appeal: the page shell comes first because every later item adds a
 screen, and building those into the current single page would mean building them twice.
 
-| Order | Item | Size | Ships in |
-|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 |
-| 2 | Endpoint latency stats | M | 1.5 |
-| 3 | Session diff | L | 1.5 |
-| 4 | Findings framework, and the payment-safety rules | L | 1.6 |
-| 5 | Sensitive-data detection — detect, never redact | M | 1.6 |
-| 6 | Web UI polish, against the finished screens | M | 1.7 |
-| — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK |
+| Order | Item | Size | Ships in | Scheduled 2026-10-18 |
+|---|---|---|---|---|
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | 6th in §5 → "Order from here" |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | 7th |
+| 2 | Endpoint latency stats | M | 1.5 | 8th |
+| — | The private security advisory's fix | not sized | not set | 9th, after 2 |
+| 3 | Session diff | L | 1.5 | not scheduled |
+| 4 | Findings framework, and the payment-safety rules | L | 1.6 | not scheduled |
+| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | not scheduled |
+| 6 | Web UI polish, against the finished screens | M | 1.7 | not scheduled |
+| — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
+
+*Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
+§6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
+a §6 item; it sits here because it now comes after 2.
 
 Both halves of the foundation stay in 1.4: the shell is what every later page is built into, and
 room for the list is the half a user notices on the screen they already use, so shipping the shell
@@ -1476,6 +1577,9 @@ starting: *truncated bodies* adds an acceptance criterion to the Session diff; *
 duplicate* gates the Findings row badge.
 
 ### Web UI foundation
+
+*Ticket label:* `item:web-foundation-shell` for 1a, the shell.
+*Ticket label:* `item:web-foundation-list-room` for 1b, room for the list.
 
 Two complaints from use drive it: actions on lists are one item at a time (killing five processes
 is five confirms), and the main page stacks seven bands — top bar, tabs, two toolbar rows, filter
@@ -1519,6 +1623,60 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 What must still hold: the export still works offline (new pages either read the embedded archive
 or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
 lists; every new pane that sets `display` joins `auditHiddenPanes`; nothing new under 11px.
+
+**1a must leave room for the security advisory's fix** *(added 2026-10-18)*. The maintainer
+scheduled that fix after 1a, 1b and 2 (§5 → "Order from here"), so the bulk endpoints are built
+before it is chosen. Acceptance criterion: the architect's design for `POST /api/peers/kill` and
+`POST /api/sessions/delete` states how the advisory's fix, under any of the options the advisory
+lists, lands without rebuilding either endpoint, and the architect reads the advisory to write it.
+The design note in this public repository names the advisory and does not describe the gaps.
+
+**The web UI layout defects found at base `f574bda`** *(placed 2026-10-18; where each went and why
+is in §5 → "Order from here")*. These are acceptance criteria, stated as what a render shows. Each
+check that can be automated goes into the probes and is proven to fail when broken.
+
+In **1a, the shell**:
+
+- **(e) Nothing in the top bar is out of reach at a 400px window.** At base the bar measured
+  scrollWidth 936 against 400: the session picker was clipped, and live, settings, restart, stop
+  and delete could not be reached. After 1a, the top bar's scrollWidth is at most the window width
+  at 400px, and every control it still holds can be reached by pointer and by keyboard. Restart and
+  stop leave it for Processes anyway.
+- **(e) Every tab is reachable at a 400px window.** At base the tab bar measured 704 against 400,
+  and screens, state, analytics and tap were hidden. The bar need not *show* every tab at that
+  width, but each must be reachable without resizing: visible, or behind one control that is. The
+  architect chooses which. "The tab bar is always drawn" (`docs/decisions/web-ui.md`) still holds.
+- **(f1) The session picker shows its whole label at 1440px**, or clips it with an ellipsis and the
+  full label as a tooltip. It is not cut off mid-text.
+
+In **1b, room for the list**:
+
+- **(a) A closed drawer is not focusable and does not widen the page.** At base, below 1200px, the
+  closed `#detail-pane` made the document 1646px wide at a 1000px window; Tab reached 13 controls
+  inside it, and the first one (`✕`) scrolled the window 646px sideways, half-opening the drawer
+  with no scrim. A trackpad swipe did the same. After 1b, at 1000px with the drawer closed, the
+  document's scrollWidth equals the window width, and a probe tabbing through the whole page never
+  lands focus inside the closed pane. That probe is new, and is proven to fail with the fix
+  removed. UX suggested clipping `#panes`'s overflow in the narrow block and `inert` or delayed
+  `visibility` on the closed pane; the architect chooses.
+- **(b) The endpoint survives at 400px.** At base, paths were cut to about four characters while
+  the clock, duration and byte columns kept full width, and the row
+  `POST auth.example.invalid /oauth/token` lost its whole path and its byte count. After 1b, at
+  400px, every row in the base session shows its path's last segment in full and its byte count.
+  The host and the clock give way before the path does. UX suggested dropping or shortening the clock column below about
+  520px.
+- **(c) The drawer's `✕` covers nothing.** At base, at 1000px, it sat over the header's last action
+  (`replay ▾` served, `copy for agent` in an export), so a click on that corner closed the drawer.
+  After 1b, the `✕` and every header action have disjoint boxes at 1000px, served and in an export.
+- **(d) A closed drawer casts no shadow.** At base a dark strip showed at the right edge, mostly in
+  light mode. After 1b the drawer's `box-shadow` applies only while it is open.
+- **(f2) The call count does not wrap at 1000px.** At base `16 of 16 calls` broke over two lines.
+- **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
+  top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
+  `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
+
+If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
+because it is a keyboard trap. See §5 → "Order from here".
 
 **The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
 they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
@@ -1567,6 +1725,8 @@ the archive probe opens each new page in an export and finds it either working f
 data or hidden under `body.archive`.
 
 ### Endpoint latency stats
+
+*Ticket label:* `item:endpoint-latency-stats`.
 
 - **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
   hex and long base64-ish segments become `{id}`, so `/users/123` and `/users/456` are one row.
