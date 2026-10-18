@@ -85,7 +85,7 @@ class AgentGuideTest {
     }
 
     @Test
-    fun every_module_in_settings_is_in_the_root_architecture_block() {
+    fun the_root_architecture_block_lists_exactly_the_modules_in_settings() {
         val includes = Regex("include\\(\"(:[^\"]+)\"\\)").findAll(File(RepoFiles.root, "settings.gradle.kts").readText())
             .map { it.groupValues[1] }.toList()
         if (includes.isEmpty()) fail("No include(\":…\") found in settings.gradle.kts; refusing to check nothing.")
@@ -93,12 +93,15 @@ class AgentGuideTest {
         val section = text.substringAfter("\n## Architecture\n", missingDelimiterValue = "")
         val block = Markdown.paragraphs(section).firstOrNull { it.fenced }
             ?: fail("The root AGENTS.md has no fenced block under ## Architecture.")
-        val listed = block.text.lines().map { it.trim().substringBefore(' ') }.toSet()
+        val listed = block.text.lines().map { it.trim().substringBefore(' ') }.filter { it.startsWith(":") }.toSet()
+        // Both directions: a module removed from the build but still listed is as stale as one missing.
         val missing = includes.filterNot { it in listed }
-        if (missing.isNotEmpty()) {
+        val gone = listed.filterNot { it in includes }
+        if (missing.isNotEmpty() || gone.isNotEmpty()) {
             fail(
-                "Modules in settings.gradle.kts but not in the root AGENTS.md Architecture block, which went stale " +
-                    "once before for lack of exactly this check: ${missing.joinToString()}"
+                "The root AGENTS.md Architecture block and settings.gradle.kts disagree; the block went stale once " +
+                    "before for lack of exactly this check. In settings, not listed: ${missing.joinToString().ifEmpty { "none" }}. " +
+                    "Listed, not in settings: ${gone.joinToString().ifEmpty { "none" }}."
             )
         }
     }

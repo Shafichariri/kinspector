@@ -10,11 +10,27 @@ package dev.inspector.repochecks
 object Markdown {
 
     class Paragraph(val text: String, val fenced: Boolean) {
-        /** Whitespace collapsed, so a paragraph re-wrapped at another width still compares equal. */
-        val normalised: String get() = text.trim().replace(WHITESPACE, " ")
+        /**
+         * The text with blockquote markers removed from each line. A decision pasted as a quote is
+         * still a decision, so this is what decision detection reads. List markers are left alone:
+         * a bullet that opens on bold text inside a decision file is part of a decision, not one.
+         */
+        val unquoted: String get() = text.lines().joinToString("\n") { it.replace(QUOTE, "") }
+
+        /**
+         * For comparing paragraphs: blockquote markers, then list markers, stripped from each line,
+         * and whitespace collapsed. A paragraph pasted as a quote, as a list item or re-wrapped at
+         * another width is still the same paragraph, and a copy that only looks different must not
+         * get past the one-copy check.
+         */
+        val normalised: String
+            get() = text.lines().joinToString(" ") { it.replace(QUOTE, "").replace(LIST, "") }
+                .trim().replace(WHITESPACE, " ")
     }
 
     private val WHITESPACE = Regex("\\s+")
+    private val QUOTE = Regex("^\\s*(>\\s?)+")
+    private val LIST = Regex("^\\s*([-*+]|\\d+[.)])\\s+")
     private val FENCE = Regex("^ {0,3}```")
     private val CODE_SPAN = Regex("`[^`\n]*`")
 
