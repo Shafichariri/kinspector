@@ -44,7 +44,7 @@ reachable at all.
 verbatim and skips `replayableHeaders`, so anything the UI leaves out is simply not sent — and its
 own hop-by-hop filtering never runs either. The edit form therefore seeds from *filtered* captured
 headers rather than the raw capture, or changing a body would quietly put the captured
-`Content-Length` and `Host` back on the request. `HOP_BY_HOP` in `app.js` mirrors
+`Content-Length` and `Host` back on the request. `HOP_BY_HOP` (the web UI's `hopByHop` block) mirrors
 `HOP_BY_HOP_HEADERS` in `Replay.kt`, and `mirror-cases/hopByHop.json` holds the two lists equal:
 `HopByHopMirrorTest` runs it against the daemon's, `check-web-static.js` against the page's.
 
@@ -111,7 +111,7 @@ that round trip for as long as it existed. `parseJsonTree` keeps each scalar's s
 object's entries in order, and `printJsonTree` reproduces `JSON.stringify(x, null, 2)`'s layout
 from it, so the tree, raw and copy are the captured bytes re-indented and nothing else. It is
 strict on purpose: anything `JSON.parse` rejects falls back to the text as it arrived.
-`check-web-static.js` lifts both functions out of the real `app.js` by their `jsonParser` anchors
+`check-web-static.js` lifts both functions, by their `jsonParser` anchors, out of whichever manifest file holds them
 and checks the ids, the order, the duplicates and the rejection cases, in CI, with nothing installed.
 
 **The JSON tree's hidden fields are a view, never an edit.** Copy, raw and every export read the

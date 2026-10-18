@@ -336,14 +336,16 @@ class ExportTest {
     @Test
     fun `refuses a manifest entry with no file`() {
         val dir = session { }
+        // Each ghost follows a real first entry, so the ghost is the only thing that cannot resolve
+        // however the page is split.
         val ghostJs = "js/42-ghost.js"
         val jsError = assertFailsWith<IllegalStateException> {
-            HtmlExport.render(build(dir), bundledWith(WebPage.SCRIPTS_MANIFEST to "js/00-app.js\n$ghostJs\n"))
+            HtmlExport.render(build(dir), bundledWith(WebPage.SCRIPTS_MANIFEST to "${WebPage.scripts().first()}\n$ghostJs\n"))
         }
         assertContains(jsError.message.orEmpty(), ghostJs)
         val ghostCss = "css/42-ghost.css"
         val cssError = assertFailsWith<IllegalStateException> {
-            HtmlExport.render(build(dir), bundledWith(WebPage.STYLES_MANIFEST to "css/00-tokens.css\n$ghostCss\n"))
+            HtmlExport.render(build(dir), bundledWith(WebPage.STYLES_MANIFEST to "${WebPage.styles().first()}\n$ghostCss\n"))
         }
         assertContains(cssError.message.orEmpty(), ghostCss)
     }
