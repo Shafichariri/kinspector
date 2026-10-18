@@ -76,9 +76,11 @@ range exits 2, because a check over no commits must not pass.
 A merge, squash or "Update branch" made on github.com takes its author email from the merging
 account on GitHub, not from any local git config. The merge dialog offers every verified address
 unless **Settings → Emails → "Keep my email addresses private"** is on, and then it offers only the
-noreply address. History on `main` shows the dialog picking another address on some merges and
-not on others. That setting is therefore part of this rule. If a web merge fails here, fix the
-setting, not the check. Do not exempt commits whose committer is `noreply@github.com` from the
+noreply address. History on `main` shows the dialog defaulting to the work address on #84 to #88.
+The maintainer chose, on 2026-10-18, to leave that setting off and pick their personal address in
+the dialog's author dropdown on every merge, so the check accepts that address as an author and a committer too. It
+still refuses the work address: that one names an employer in a public repository. If a web merge
+fails here, the dialog picked the wrong address; fix the pick, not the check. Do not exempt commits whose committer is `noreply@github.com` from the
 author check either: the push run is the only place a merge commit is checked at all, because a
 pull request's checks finish before its merge commit exists. Do not rewrite merges already on
 `main` to make them pass, per the paragraph on history in the root `AGENTS.md`. The check reads only the range a

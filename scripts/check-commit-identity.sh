@@ -3,15 +3,17 @@
 # Checks the commits in a range carry the maintainer's identity and no attribution trailers.
 #
 # The repository is public and GitHub lists commit authors as contributors, so a commit authored
-# by an agent's own identity, a personal address or a work address publishes that identity, and
-# history cannot be quietly rewritten after a push. AGENTS.md states the rule; this enforces it.
+# by an agent's own identity or a work address publishes that identity, and history cannot be
+# quietly rewritten after a push. AGENTS.md states the rule; this enforces it. The maintainer's
+# personal address is allowed as an author by their choice: it is what they pick in the web merge
+# dialog, so that a merge never defaults to the work address.
 #
 # Usage:
 #   check-commit-identity.sh <base> <head>     checks every commit in base..head, merges included
 #
 # Rules, per commit:
-#   author email     must be the maintainer's GitHub noreply address
-#   committer email  the same, or noreply@github.com (a merge or edit made on github.com)
+#   author email     the maintainer's GitHub noreply address or their personal address
+#   committer email  either of those, or noreply@github.com (a merge or edit made on github.com)
 #   message          no `Co-Authored-By:` or `Claude-Session:` line, in any case
 # Names are not checked: GitHub attributes by email, and a display name is not an identity.
 #
@@ -24,6 +26,7 @@
 set -euo pipefail
 
 MAINTAINER_EMAIL="3518471+Shafichariri@users.noreply.github.com"
+PERSONAL_EMAIL="shafichariri@gmail.com"
 WEB_FLOW_EMAIL="noreply@github.com"
 
 if [[ $# -ne 2 || -z "$1" || -z "$2" ]]; then
@@ -57,12 +60,13 @@ while IFS= read -r sha; do
   author="$(git log -1 --format='%ae' "$sha")"
   committer="$(git log -1 --format='%ce' "$sha")"
 
-  if [[ "$author" != "$MAINTAINER_EMAIL" ]]; then
-    echo "FAIL $short: author email is not the maintainer's noreply address"
+  if [[ "$author" != "$MAINTAINER_EMAIL" && "$author" != "$PERSONAL_EMAIL" ]]; then
+    echo "FAIL $short: author email is neither the maintainer's noreply nor their personal address"
     failures=$((failures + 1))
   fi
-  if [[ "$committer" != "$MAINTAINER_EMAIL" && "$committer" != "$WEB_FLOW_EMAIL" ]]; then
-    echo "FAIL $short: committer email is neither the maintainer's noreply address nor GitHub's"
+  if [[ "$committer" != "$MAINTAINER_EMAIL" && "$committer" != "$PERSONAL_EMAIL" \
+        && "$committer" != "$WEB_FLOW_EMAIL" ]]; then
+    echo "FAIL $short: committer email is not the maintainer's noreply or personal address, nor GitHub's"
     failures=$((failures + 1))
   fi
   # Read into a variable, not piped: under pipefail, `git log | grep -q` can lose the race when
