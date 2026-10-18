@@ -318,11 +318,59 @@ function auditWindowNames(sources) {
     : `yes (${decls.length} names, none of ${deny.size} browser globals)`;
 }
 
+/**
+ * Every stylesheet closes its own braces and comments, outside strings.
+ *
+ * Each `<link>` or `<style>` is parsed as a sheet of its own, and a sheet that ends inside a block or
+ * a comment is closed automatically by the parser — so the page still renders. Everything that reads
+ * the stylesheets as one text does not: the audits above, and the concatenation proof that the split
+ * moved nothing, would see that file swallow the next one. So equality of the joined text cannot
+ * show each file stands alone; this does.
+ *
+ * Scanned rather than parsed, as CSS tokenizes: a comment runs to the first closing star-slash, a
+ * string to its closing quote with `\` escaping the next character, and a string also ends at an
+ * unescaped newline, which is where CSS ends a bad string. Braces count only outside both.
+ */
+function auditCssClosesPerFile(sources) {
+  if (!sources.length) return 'NO - no stylesheets to read';
+  const offenders = [];
+  let blocks = 0;
+  for (const { file, text } of sources) {
+    let depth = 0;
+    let quote = null;
+    let comment = -1;
+    let stray = -1;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (comment >= 0) {
+        if (c === '*' && text[i + 1] === '/') { comment = -1; i++; }
+      } else if (quote) {
+        if (c === '\\') i++;
+        else if (c === quote || c === '\n') quote = null;
+      } else if (c === '/' && text[i + 1] === '*') { comment = i; i++; }
+      else if (c === '"' || c === "'") quote = c;
+      else if (c === '{') depth++;
+      else if (c === '}') {
+        if (depth === 0) { if (stray < 0) stray = i; } else if (--depth === 0) blocks++;
+      }
+    }
+    const lineOf = (i) => text.slice(0, i).split('\n').length;
+    if (comment >= 0) offenders.push(`${file} ends inside the comment opened on line ${lineOf(comment)}`);
+    else if (depth > 0) offenders.push(`${file} ends with ${depth} unclosed {`);
+    if (stray >= 0) offenders.push(`${file}:${lineOf(stray)} closes a } it never opened`);
+  }
+  if (!offenders.length && !blocks) return 'NO - found no rule blocks, so this checked nothing';
+  return offenders.length
+    ? `NO - ${offenders.join('; ')}`
+    : `yes (${blocks} top-level blocks in ${sources.length} file(s))`;
+}
+
 module.exports = {
   HarnessError,
   auditUseStrict,
   auditOneDeclarationPerName,
   auditWindowNames,
+  auditCssClosesPerFile,
   WINDOW_DENYLIST,
   auditMinTextSize,
   auditLongTokenWrap,

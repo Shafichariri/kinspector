@@ -12,10 +12,13 @@
  *   - every shared mirror case in `mirror-cases/`, against the functions lifted out of the real
  *     `app.js` by their `@mirror-begin`/`@mirror-end` anchors;
  *   - the scripts as classic scripts sharing one global scope: each file starts with `'use strict'`,
- *     no top-level name is declared twice, and none takes a browser global's name.
+ *     no top-level name is declared twice, and none takes a browser global's name;
+ *   - every stylesheet closing its own braces and comments, since the stylesheet audits read them
+ *     joined and a file left open would swallow the next one there and nowhere else.
  *
  * The scripts section prints last so the lines above it stay comparable with reports from before it
- * existed.
+ * existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet` it
+ * would push every later line down.
  *
  * Output is the same `label : value` shape as the other reports, ending `N checks, M failed`.
  * Exit 1 when a check fails; exit 2 when the harness cannot run at all — an anchor missing or
@@ -25,7 +28,7 @@
 const {
   HarnessError, auditHiddenPanes, auditMinTextSize, auditLongTokenWrap, auditDrawerCss,
   countNetworkPrimitives, NETWORK_EXPECTED, mirrorBlockNames,
-  auditUseStrict, auditOneDeclarationPerName, auditWindowNames,
+  auditUseStrict, auditOneDeclarationPerName, auditWindowNames, auditCssClosesPerFile,
 } = require('./lib/web-audits');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser } = require('./lib/mirror-runner');
@@ -39,7 +42,8 @@ const report = (label, value) => {
 
 function main() {
   const scripts = loadScripts();
-  const css = loadStyles().map((s) => s.text).join('\n');
+  const styles = loadStyles();
+  const css = styles.map((s) => s.text).join('\n');
 
   console.error('--- network call sites ---');
   const counts = countNetworkPrimitives(scripts);
@@ -81,6 +85,7 @@ function main() {
   report('use strict first', auditUseStrict(scripts));
   report('one declaration per name', auditOneDeclarationPerName(scripts));
   report('no browser global names', auditWindowNames(scripts));
+  report('css files close', auditCssClosesPerFile(styles));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

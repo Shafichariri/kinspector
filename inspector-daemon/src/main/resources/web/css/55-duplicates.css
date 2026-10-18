@@ -1,0 +1,42 @@
+/* duplicates: repeated requests */
+/* --- repeated requests -------------------------------------------------------------------- */
+
+/* A tint, not a status colour: the row's own status chip still owns the foreground, so this reads
+   as a second channel rather than as "this row is a 4xx". Selection stays distinguishable because
+   it is an inset bar plus a different background. */
+.row.duplicate { background: var(--dup-bg); }
+.row.duplicate.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
+
+.dup-badge {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+/* Fixed width and no shrink, so the path column stays the one that flexes. */
+.row .clock {
+  font-size: 11px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  width: 84px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.settings-field input {
+  width: 84px;
+  padding: 4px 6px;
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+

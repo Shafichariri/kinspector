@@ -10,7 +10,6 @@
 # the line. The entries below are the sizes measured when the ratchet was introduced (ROADMAP §5).
 
 2645 scripts/render-web-ui.js  # the live probe; raised by hand from 2612 in phase F1 for the slot expansion and per-file script loading; split after phase F, by the areas the web UI splits into
-1926 inspector-daemon/src/main/resources/web/css/00-tokens.css  # moved from web/style.css behind web/styles.txt in F1; F4 splits it into tokens plus one file per area and removes this line
 815 inspector-daemon/src/test/kotlin/dev/inspector/daemon/McpTest.kt  # phase D added 5 import lines and nothing else. Its split is deferred because D's criteria keep the tests unchanged. See ROADMAP.md §5 → "Later — split `McpTest.kt`".
 758 inspector-ui/src/commonMain/kotlin/dev/inspector/ui/InspectorList.kt  # phase H
 723 site/index.html  # the landing page: one hand-written file with its CSS inline, by design

@@ -1,0 +1,183 @@
+/* list: the list pane, the narrow-width drawer, the scope bar, rows and method badges */
+/* --- list --------------------------------------------------------------- */
+
+#list-pane, #detail-pane { overflow-y: auto; position: relative; }
+#list-pane { border-right: 1px solid var(--divider); }
+/* One column, so the divider has nothing to divide. */
+#panes.panes-wide #list-pane { border-right: 0; }
+
+/* The close control and the scrim exist only in drawer mode; as a column there is nothing to
+   close and nothing to dim. */
+.drawer-close { display: none; }
+.drawer-scrim { display: none; }
+
+/* --- narrow: the detail pane becomes a drawer ---------------------------- */
+
+/*
+  Two columns need roughly 1200px before the list starts lying about what it holds. At 1100 the
+  list had 524px against a detail pane that was showing the words "select a transaction", and 37
+  of 40 paths truncated — the pane was spending more than half the window to say nothing.
+
+  So below the breakpoint the list takes the width and the detail slides over it on demand. A
+  drawer rather than a swap to a separate screen: the row you came from stays visible behind it,
+  which is the thing that makes "which call was this?" answerable without closing anything.
+*/
+@media (max-width: 1199px) {
+  #panes,
+  #panes.panes-wide { grid-template-columns: 1fr; }
+  #list-pane { border-right: 0; }
+
+  #detail-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(640px, 88%);
+    z-index: 30;
+    background: var(--bg);
+    border-left: 1px solid var(--divider);
+    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
+    transform: translateX(101%);   /* past its own border, so no sliver shows */
+    transition: transform 140ms ease-out;
+  }
+  #panes.drawer-open #detail-pane { transform: translateX(0); }
+
+  /* Nothing to open a drawer *to* while the tag browser owns the pane. */
+  #panes.panes-wide #detail-pane { display: none; }
+
+  .drawer-close {
+    display: block;
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 1;
+  }
+
+  .drawer-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgb(0 0 0 / 0.32);
+  }
+  .drawer-scrim[hidden] { display: none; }
+}
+
+/* Prefers-reduced-motion is not a style preference — a pane that flies in can be genuinely
+   unpleasant, and the drawer is just as usable arriving instantly. */
+@media (prefers-reduced-motion: reduce) {
+  #detail-pane { transition: none; }
+}
+
+/* The shared path prefix, above the list rather than in it.
+
+   Sticky, because it is a claim about every row below it: scrolled away, the stripped paths in
+   those rows read as the whole path. `top: 0` inside #list-pane, which is the scrolling box. */
+.scope-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+}
+.scope-bar[hidden] { display: none; }
+.scope-label {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  border: 1px solid rgb(var(--accent-rgb) / 0.35);
+  background: rgb(var(--accent-rgb) / 0.12);
+  /* Left to right, clipping at the end. This was `direction: rtl`, under a comment saying the front
+     of a host identifies it — which is the part rtl clips. The label is `host · prefix` now, so the
+     end that goes first on a narrow bar is the least specific part of the prefix, and the whole
+     label is in the tooltip. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.scope-count { font-size: 11px; flex: 0 0 auto; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+}
+.row:hover { background: var(--bg-hover); }
+.row.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
+
+/* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
+   the path column lines up across rows whose verbs differ in length. */
+.row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
+.row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Only drawn on rows the scope bar does not cover, so this is never repetition — it is the one
+   row in a session that went somewhere else. */
+.row .host { font-size: 11px; flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .status { font-family: var(--mono); font-weight: 600; width: 40px; text-align: right; }
+/* First column: left-aligned so the codes line up where the eye starts, not where the row ends. */
+.row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
+.row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
+.row .attempt { font-size: 11px; color: var(--warn); }
+
+.s2 { color: var(--ok); } .b2 { background: var(--ok); }
+.s3 { color: var(--redirect); } .b3 { background: var(--redirect); }
+.s4 { color: var(--warn); } .b4 { background: var(--warn); }
+.s5 { color: var(--err); } .b5 { background: var(--err); }
+/* A transport failure is red. It was --neutral, which is now also the 3xx grey, and a call that
+   never got a response must not read as a routine redirect. The waterfall already drew it red. */
+.sx { color: var(--err); } .bx { background: var(--err); }
+
+/* Method colours.
+ *
+ * Deliberately a different hue family from the status colours above, which own green/amber/red.
+ * An amber PUT sitting next to an amber 404 reads as "this row is a 4xx" at a glance, which is
+ * the one thing the list must never get wrong. DELETE is the exception that keeps red, because
+ * destructive is exactly what red should mean here. */
+/* A filled badge, not just coloured text: a hue change alone is easy to miss while scanning, and
+ * scanning is the only thing this label is for.
+ *
+ * The tint is the same colour at low alpha rather than a solid fill with white text. Solid works
+ * for GET's blue and fails for PATCH's amber in the light theme, where white on amber is
+ * unreadable — one rule that holds for all five beats five exceptions. */
+.method {
+  font-weight: 700;
+  font-family: var(--mono);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.m-get { color: rgb(var(--m-get)); background: rgb(var(--m-get) / 0.18); }
+.m-post { color: rgb(var(--m-post)); background: rgb(var(--m-post) / 0.18); }
+.m-put { color: rgb(var(--m-put)); background: rgb(var(--m-put) / 0.18); }
+.m-patch { color: rgb(var(--m-patch)); background: rgb(var(--m-patch) / 0.18); }
+.m-delete { color: rgb(var(--m-delete)); background: rgb(var(--m-delete) / 0.18); }
+/* Unrecognised verbs stay flat and muted rather than borrowing a colour that means something. */
+.m-other { color: var(--fg-muted); }
+
+/* Markers render inline in the list so "what happened when I tapped checkout"
+   is answered visually rather than by comparing timestamps. */
+.marker-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--divider);
+  font-size: 11px;
+  color: var(--accent);
+}
+.marker-divider::before,
+.marker-divider::after { content: ""; height: 1px; background: var(--divider); flex: 1; }
+
+.empty { padding: 24px; text-align: center; }
+
