@@ -30,19 +30,48 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+usage() {
+  echo "usage: $0 [--terms-file F] [--range BASE..HEAD] [--branch NAME] [--require-terms]" >&2
+  exit 2
+}
+
+# A flag given without its value is a usage error, never a scan with that part quietly skipped:
+# `--range "$UNSET"` in a workflow would otherwise check no commit messages and still report.
+value_of() {
+  if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+    echo "ERROR: $1 needs a value." >&2
+    usage
+  fi
+}
+
 TERMS_FILE=""
 RANGE=""
 BRANCH=""
 REQUIRE_TERMS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --terms-file) TERMS_FILE="${2:-}"; shift 2 ;;
-    --range) RANGE="${2:-}"; shift 2 ;;
-    --branch) BRANCH="${2:-}"; shift 2 ;;
+    --terms-file) value_of "$@"; TERMS_FILE="$2"; shift 2 ;;
+    --range) value_of "$@"; RANGE="$2"; shift 2 ;;
+    --branch) value_of "$@"; BRANCH="$2"; shift 2 ;;
     --require-terms) REQUIRE_TERMS=1; shift ;;
-    *) echo "usage: $0 [--terms-file F] [--range BASE..HEAD] [--branch NAME] [--require-terms]" >&2; exit 2 ;;
+    *) usage ;;
   esac
 done
+
+# The range is validated before anything else, including the no-terms exit below, so a broken
+# range expression in the workflow shows up while the secret is still unset rather than later.
+shas=""
+if [[ -n "$RANGE" ]]; then
+  if ! shas="$(git rev-list "$RANGE" 2>/dev/null)"; then
+    echo "ERROR: cannot compute the range $RANGE -- is the history fetched?" >&2
+    exit 2
+  fi
+  # As in check-commit-identity.sh: a range with no commits checks no messages, and must not pass.
+  if [[ -z "$shas" ]]; then
+    echo "ERROR: $RANGE contains no commits; refusing to report that as a pass." >&2
+    exit 2
+  fi
+fi
 
 umask 077
 WORK="$(mktemp -d)"
@@ -74,7 +103,10 @@ found=0
 
 # Paths first. A matching path *is* the term, so such paths are counted and never printed, and
 # their content hits below are counted rather than listed for the same reason.
-git ls-files --cached --others --exclude-standard > "$WORK/paths"
+# `core.quotePath=false` on every listing: by default git prints a non-ASCII path octal-escaped
+# and quoted, so a term with an accent neither matched the path count nor stayed out of the
+# file:line list, where the escaped form spelled it out.
+git -c core.quotePath=false ls-files --cached --others --exclude-standard > "$WORK/paths"
 grep -i -F -f "$PATTERNS" "$WORK/paths" > "$WORK/named" || true
 paths=$(wc -l < "$WORK/named" | tr -d ' ')
 if [[ "$paths" -gt 0 ]]; then
@@ -87,7 +119,7 @@ fi
 # file:line survives `cut`; the matched line itself is discarded before anything is printed.
 # Exit 1 is "no match"; anything else is git failing, and a scan that failed is not a clean one.
 status=0
-git grep --untracked -I -n -i -F -f "$PATTERNS" > "$WORK/content" 2>/dev/null || status=$?
+git -c core.quotePath=false grep --untracked -I -n -i -F -f "$PATTERNS" > "$WORK/content" 2>/dev/null || status=$?
 if [[ $status -gt 1 ]]; then
   echo "ERROR: git grep failed (exit $status); nothing was scanned." >&2
   exit 2
@@ -113,10 +145,6 @@ fi
 
 # Commit messages in the range, by SHA only.
 if [[ -n "$RANGE" ]]; then
-  if ! shas="$(git rev-list "$RANGE" 2>/dev/null)"; then
-    echo "ERROR: cannot compute the range $RANGE -- is the history fetched?" >&2
-    exit 2
-  fi
   for sha in $shas; do
     message="$(git log -1 --format='%B' "$sha")"
     if grep -q -i -F -f "$PATTERNS" <<< "$message"; then
