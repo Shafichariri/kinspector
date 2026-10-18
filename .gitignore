@@ -28,3 +28,8 @@ DerivedData/
 # The landing page is hand-written too, and the same reasoning applies: name the one page, not the
 # folder, so a session render saved under site/ by mistake is still caught.
 !site/index.html
+
+# `--write-locks` also writes a lockfile for the settings script's version-catalog configuration,
+# which locks nothing (`empty=incomingCatalogForLibs0`). The real locks are each module's
+# `gradle.lockfile`; committing this one would be a second file that regenerates on every run.
+settings-gradle.lockfile

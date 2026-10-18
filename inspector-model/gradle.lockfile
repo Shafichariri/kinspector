@@ -1,0 +1,15 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+org.jetbrains.kotlin:kotlin-stdlib:2.3.20=androidRuntimeClasspath,iosArm64CompileKlibraries,iosSimulatorArm64CompileKlibraries,jvmRuntimeClasspath
+org.jetbrains.kotlinx:kotlinx-serialization-bom:1.11.0=androidRuntimeClasspath,jvmRuntimeClasspath
+org.jetbrains.kotlinx:kotlinx-serialization-core-iosarm64:1.11.0=iosArm64CompileKlibraries
+org.jetbrains.kotlinx:kotlinx-serialization-core-iossimulatorarm64:1.11.0=iosSimulatorArm64CompileKlibraries
+org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0=androidRuntimeClasspath,jvmRuntimeClasspath
+org.jetbrains.kotlinx:kotlinx-serialization-core:1.11.0=androidRuntimeClasspath,iosArm64CompileKlibraries,iosSimulatorArm64CompileKlibraries,jvmRuntimeClasspath
+org.jetbrains.kotlinx:kotlinx-serialization-json-iosarm64:1.11.0=iosArm64CompileKlibraries
+org.jetbrains.kotlinx:kotlinx-serialization-json-iossimulatorarm64:1.11.0=iosSimulatorArm64CompileKlibraries
+org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.11.0=androidRuntimeClasspath,jvmRuntimeClasspath
+org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0=androidRuntimeClasspath,iosArm64CompileKlibraries,iosSimulatorArm64CompileKlibraries,jvmRuntimeClasspath
+org.jetbrains:annotations:13.0=androidRuntimeClasspath,jvmRuntimeClasspath
+empty=
