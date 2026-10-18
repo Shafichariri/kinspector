@@ -79,18 +79,23 @@ plugin on each route its block registers, and the plugin refuses a call without
 `X-Inspector-Control: 1` with the same 403 and the same body the eight per-route checks gave. It is
 installed on the routes themselves and adds no node of its own, and that is load-bearing. The first
 version hung the gated routes under a shared transparent child node, which left paths and templates
-unchanged and still changed behaviour: Ktor reports the deepest failure it met while resolving, the
-transparent node counts towards that depth, so `PUT /api/sessions` failed on the path inside the
-gated subtree rather than on the method of the open `GET /api/sessions`, and four paths answered 404
-where they had always answered 405. Every guard stayed green; the base-against-head route matrix
-found it. `ControlGateTest` case 9 and `WrongMethodStatusTest` pin it. A nested `controlGated`
-reaches a route twice, and the plugin is installed only when absent, because a second install
-throws. A response from the plugin's `onCall` stops the handler only because Ktor 3.5.0's routing
-wrapper checks `isHandled` before invoking each handler. That is a dependency on Ktor internals, so
-revisit it on a Ktor upgrade; `ControlGateTest` counts handler runs and fails if it stops holding.
-What the gate cannot do is notice a control route registered outside it, or added to a node that
-already had a handler. `ControlHeaderCoverageTest` walks every registered route, and it is what
-catches that.
+unchanged and still changed behaviour. When nothing matches, Ktor 3.5.0 keeps a later failure over
+the one it holds if the later one is of higher quality or deeper, but only while every selector on
+its trail is constant or transparent. The transparent node counted towards that depth, so the gated
+subtree's path failure sat one level deeper than the open `GET /api/sessions` failing on its method;
+wherever that subtree was resolved second, which is a matter of registration order,
+`PUT /api/sessions` answered 404 instead of 405, and so did three other paths. Every guard stayed
+green; the base-against-head route matrix found it. `ControlGateTest` case 9 and
+`WrongMethodStatusTest` pin it. A nested `controlGated` reaches a route twice, and the plugin is
+installed only when absent, because a second install throws. A response from the plugin's `onCall`
+stops the handler only because Ktor 3.5.0's routing wrapper checks `isHandled` before invoking each
+handler. That is a dependency on Ktor internals, so revisit it on a Ktor upgrade; `ControlGateTest`
+counts handler runs and fails if it stops holding. What the gate cannot do is notice a control route
+registered outside it, or added to a node that already had a handler. `ControlHeaderCoverageTest`
+walks every registered route, and it is what catches that. The reverse is as quiet: a gated route
+registered first, then an open route landing on the same node, gates the open one too.
+`ControlHeaderCoverageTest`'s allowlist check catches that for the marker route, and
+`ReadRoutesOpenTest` catches it for every GET.
 
 **A posted marker says who dropped it, and `source` is not decoration.** `MarkerSource.USER`
 existed with no caller until the web UI grew the button: every marker in every archive said `app`

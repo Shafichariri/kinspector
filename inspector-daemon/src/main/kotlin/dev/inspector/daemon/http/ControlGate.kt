@@ -42,10 +42,13 @@ private val ControlGate = createRouteScopedPlugin("ControlGate") {
  * Registers [build]'s routes behind the control gate, by installing it on each route [build] adds.
  *
  * On the routes themselves, and never on a node of its own above them. A gate node would move the
- * gated routes into a subtree beside their open siblings, and Ktor reports the deepest failure it
- * met while resolving: `PUT /api/sessions` then failed on the path one level further down that
- * subtree instead of on the method of the open `GET /api/sessions`, and answered 404 where it had
- * always answered 405. With no node added, the route tree is the one the daemon had before the gate.
+ * gated routes into a subtree beside their open siblings. When nothing matches, Ktor 3.5.0 keeps a
+ * later failure over the one it holds if the later one is of higher quality *or* deeper, but only
+ * while every selector on its trail is constant or transparent. The transparent gate node made the
+ * gated subtree's path failure one level deeper than the open `GET /api/sessions` failing on its
+ * method, so whenever that subtree was resolved second, `PUT /api/sessions` answered 404 where it had
+ * always answered 405. Which subtree came second was registration order. With no node added, the
+ * route tree is the one the daemon had before the gate.
  *
  * The routes are found by comparing the handler nodes under this one before and after [build]. A
  * route added to a node that already had a handler is not new and is not gated; nothing here can
@@ -53,10 +56,18 @@ private val ControlGate = createRouteScopedPlugin("ControlGate") {
  * `ControlHeaderCoverageTest`, which walks every route Ktor registered, is what catches a control
  * route left outside the gate, not this file.
  *
+ * The reverse goes wrong just as quietly. A node that gets its *first* handler inside [build] (a
+ * bare `handle { }` on the receiver, say) is new, so it gets the plugin, and Ktor then gates every
+ * route below it, open ones included. Register with `post`, `delete` and the like, which create a
+ * fresh method node for each route.
+ *
  * A route already gated, by a `controlGated` nested inside this one, keeps its one install: a
  * second would throw `DuplicatePluginException`, hence the check.
+ *
+ * It returns nothing on purpose. Returning the receiver let `controlGated { }.post("/x") { }`
+ * compile, and that registers an open route that reads as a gated one.
  */
-internal fun Route.controlGated(build: Route.() -> Unit): Route {
+internal fun Route.controlGated(build: Route.() -> Unit) {
     val parent = this as RoutingNode
     val before: MutableSet<RoutingNode> = Collections.newSetFromMap(IdentityHashMap())
     before += parent.getAllRoutes()
@@ -65,5 +76,4 @@ internal fun Route.controlGated(build: Route.() -> Unit): Route {
     for (route in added) {
         if (route.pluginOrNull(ControlGate) == null) route.install(ControlGate)
     }
-    return this
 }
