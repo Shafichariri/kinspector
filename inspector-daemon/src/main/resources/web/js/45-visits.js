@@ -176,10 +176,13 @@ function waterfallGroups() {
       dim: !visitInRange(visit),
     };
     if (group.rows.length) {
-      const starts = group.rows.map((t) => t.mono);
-      const ends = group.rows.map((t) => t.mono + (t.ms ?? 0));
-      group.from = Math.min(...starts);
-      group.to = Math.max(...ends);
+      group.from = Infinity;
+      group.to = -Infinity;
+      for (const t of group.rows) {
+        const end = t.mono + (t.ms ?? 0);
+        if (t.mono < group.from) group.from = t.mono;
+        if (end > group.to) group.to = end;
+      }
     } else {
       group.from = group.segment.from;
       group.to = group.segment.from;

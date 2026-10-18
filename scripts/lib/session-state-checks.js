@@ -378,4 +378,4 @@ async function checkSessionState(sources) {
   ];
 }
 
-module.exports = { checkSessionState };
+module.exports = { checkSessionState, runFile };

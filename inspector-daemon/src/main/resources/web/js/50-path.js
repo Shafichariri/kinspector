@@ -85,9 +85,10 @@ function renderPath() {
   if (hidden.calls + hidden.signals) header.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
 
   const colour = screenColours();
-  const lastMono = Math.max(
-    ...[...state.allTransactions, ...state.allSignals, ...state.markers].map((x) => x.mono),
-  );
+  let lastMono = -Infinity;
+  for (const rows of [state.allTransactions, state.allSignals, state.markers]) {
+    for (const x of rows) if (x.mono > lastMono) lastMono = x.mono;
+  }
   // Tag colours go out in the order tags first happened, not the order they are drawn in.
   for (const s of [...state.allSignals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
   const metro = el('div', 'pv-metro');

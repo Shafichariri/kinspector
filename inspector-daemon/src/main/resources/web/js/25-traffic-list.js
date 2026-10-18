@@ -244,7 +244,8 @@ function hiddenByFilter({ signals = true, ranged = false, screens = true } = {})
   }
   // Each list is the newest rows of what it holds, so it is whole from its oldest row up, or whole
   // outright when it is as long as the route says.
-  const wholeFrom = (rows, total) => (rows.length && rows.length < (total ?? 0) ? Math.min(...rows.map((r) => r.mono)) : -Infinity);
+  const oldest = (rows) => rows.reduce((m, r) => (r.mono < m ? r.mono : m), Infinity);
+  const wholeFrom = (rows, total) => (rows.length && rows.length < (total ?? 0) ? oldest(rows) : -Infinity);
   const floor = Math.max(wholeFrom(state.transactions, state.matched), wholeFrom(state.allTransactions, state.sessionTotal));
   return {
     calls: Math.max(0, count(state.allTransactions, floor) - count(state.transactions, floor)),

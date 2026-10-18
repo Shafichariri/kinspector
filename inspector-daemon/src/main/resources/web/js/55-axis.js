@@ -27,16 +27,24 @@ const SCREEN_COLOURS = [
   '#6aa9ff', '#c08cff', '#59c98a', '#ffb454', '#ff7b8a', '#4fd1c5', '#f6c945', '#9aa7ff',
 ];
 
-/** The wall-clock span of the session, and the `mono` window it maps onto. */
+/**
+ * The wall-clock span of the session, and the `mono` window it maps onto.
+ *
+ * A loop, never `Math.min(...monos)`: spreading a row array into an argument list throws a
+ * RangeError somewhere past 110,000 rows, and this runs before anything is drawn, so a long
+ * session drew a blank page stuck at "connecting…". No row array is spread into a call anywhere
+ * in `web/js`; `check-web-static.js`'s `no argument spread` holds it.
+ */
 function sessionWindow() {
-  const monos = [
-    ...state.allTransactions.map((t) => t.mono),
-    ...state.allSignals.map((s) => s.mono),
-    ...state.markers.map((m) => m.mono),
-  ];
-  if (!monos.length) return null;
-  const from = Math.min(...monos);
-  const to = Math.max(...monos);
+  let from = Infinity;
+  let to = -Infinity;
+  for (const rows of [state.allTransactions, state.allSignals, state.markers]) {
+    for (const row of rows) {
+      if (row.mono < from) from = row.mono;
+      if (row.mono > to) to = row.mono;
+    }
+  }
+  if (from === Infinity) return null;
   return { from, to, span: Math.max(1, to - from) };
 }
 
@@ -85,7 +93,7 @@ function renderAxis() {
     if (matching.has(txn.id)) b.hit++;
     if (txn.error || (txn.status ?? 0) >= 400) b.bad++;
   }
-  const tallest = Math.max(1, ...buckets.map((b) => b.all));
+  const tallest = buckets.reduce((n, b) => (b.all > n ? b.all : n), 1);
   const bw = AXIS_W / AXIS_BUCKETS;
 
   for (let i = 0; i < AXIS_BUCKETS; i++) {

@@ -113,7 +113,8 @@ async function transactionBundle(txn) {
     lines.push(absent !== null ? absent : clip(body, BUNDLE_BODY_CAP));
   }
 
-  lines.push('', `## Around it (±${fmtMs(BUNDLE_NEAR_MS)})`, ...nearbyLines(txn.mono));
+  lines.push('', `## Around it (±${fmtMs(BUNDLE_NEAR_MS)})`);
+  for (const line of nearbyLines(txn.mono)) lines.push(line);
   lines.push(
     '',
     '## Read more (MCP server "inspector")',

@@ -210,6 +210,21 @@ one has overtaken drops its answer rather than writing it (`callLoad`, `signalLo
 answer two loads out of order, and a slow unfiltered read that landed last put every row back under
 the filter just typed (`older call load dropped`, `older signal load dropped`).
 
+**No row array is spread into an argument list.** Every argument is a stack slot, so
+`Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
+enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls
+were read past the clamp, a 160,000-call session threw in `sessionWindow` before anything was
+drawn: no rows, no axis, and the dot stuck at "connecting…". Minimum and maximum are loops now, in
+the axis, the waterfall, the timeline, a run's row, the path and the stretch note. Spreading into an
+array literal, `[...a, ...b]`, is not a call and is fine. `check-web-static.js`'s long session
+section holds it twice: `no argument spread` reads every script, with comments and strings blanked,
+for a `...` whose innermost bracket is a call's `(`; and `axis window 200k` to `path 200k` run those
+functions out of the real files over 200,000 rows. Each was proven red with each file's spreads put
+back. What jsdom cannot show — rows and the axis drawn and the dot at "connected" on a real
+160,016-call session in headless Chrome, red at `a86dde2` and green after — is recorded in KIN-37's
+notes. Holding that many rows at all is a cost this does not settle; `item:web-transactions-paged`
+owns whether the whole-session read is capped.
+
 **A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
 list always did; the waterfall, the path and the timeline did not. Under a filter that matched
 nothing the waterfall said "no calls to lay out" beside a header counting sixteen, the path called

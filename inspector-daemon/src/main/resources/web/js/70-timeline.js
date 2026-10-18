@@ -104,9 +104,12 @@ function renderTimeline() {
   // Spans are scaled against the session's own duration, not a fixed divisor. A fixed one
   // made a cache snapshot held for 230ms draw narrower than an instantaneous screen event,
   // which reads as the opposite of what it means.
-  const monos = entries.map((e) => e.mono);
-  const first = monos.length ? Math.min(...monos) : 0;
-  const last = monos.length ? Math.max(...monos) : 0;
+  let first = entries.length ? Infinity : 0;
+  let last = entries.length ? -Infinity : 0;
+  for (const e of entries) {
+    if (e.mono < first) first = e.mono;
+    if (e.mono > last) last = e.mono;
+  }
   const span = Math.max(1, last - first);
   for (const run of timelineRuns(entries)) {
     const collapsible = run.entries.length >= RUN_THRESHOLD;
@@ -147,9 +150,12 @@ function runRow(run, { expanded = false } = {}) {
   node.appendChild(el('span', 'tl-name', first.name));
   node.appendChild(el('span', 'tl-run-count mono', `\u00d7${run.entries.length}`));
 
-  const monos = run.entries.map((entry) => entry.mono);
-  const from = Math.min(...monos);
-  const to = Math.max(...monos);
+  let from = Infinity;
+  let to = -Infinity;
+  for (const entry of run.entries) {
+    if (entry.mono < from) from = entry.mono;
+    if (entry.mono > to) to = entry.mono;
+  }
   const held = el('span', 'tl-mono muted mono', from === to ? `${from}ms` : `${from}\u2013${to}ms`);
   held.title = expanded
     ? 'collapse these observations'
