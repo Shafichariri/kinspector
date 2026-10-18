@@ -4,7 +4,7 @@ title: 'Phase D acceptance evidence: base against head comparison'
 status: To Do
 assignee: []
 created_date: '2026-10-18 10:51'
-updated_date: '2026-10-18 10:52'
+updated_date: '2026-10-18 12:21'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -44,3 +44,9 @@ The route matrix runs on inert fakes, so stop and restart touch nothing real and
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Scope clarifications from the verify panel (2026-10-18): AC #4 is measured under `serve --no-usb`. Under default `serve` the USB bridge owns one HttpClient (HttpClient-1-SelectorManager) at base and head alike; the replayer's client still appears only on first replay. AC #5's import-only rule applies to pre-existing test files (`--diff-filter=M`); new test files are additions by design 0.A.
+<!-- SECTION:NOTES:END -->
