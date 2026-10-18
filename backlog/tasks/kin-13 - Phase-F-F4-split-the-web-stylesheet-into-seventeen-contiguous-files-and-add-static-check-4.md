@@ -3,9 +3,11 @@ id: KIN-13
 title: >-
   Phase F F4: split the web stylesheet into seventeen contiguous files and add
   static check 4
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 13:30'
+updated_date: '2026-10-18 14:17'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -71,3 +73,30 @@ Concatenation equality does not prove each sheet is the same (QA objection 6): a
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built in 4eace25 (local, not pushed). Evidence in $TMPDIR/kin13/.
+
+Cut: the 17 slices of the table, from F1's file (cmp-identical to 8b20dcc css/00-tokens.css and to base f574bda style.css). Every boundary falls on a blank line or a section comment between rules. Script: kin13/split.js.
+
+Proof (kin13/prove.js, output kin13/proof.txt): each file's first line is a one-line header comment; the 17 bodies concatenated in styles.txt order = 61736 bytes, F1 file 61736 bytes, 'IDENTICAL: byte for byte'.
+
+@media pairs: 750-758 with 771 (35-list); reduced-motion 814 (35-list, overrides 771's transition), 1135 (40-detail, .copy-field 1112), 1924 (80-json-tree, .jt-act 1876); .pv-visit 453 with 504 (20-path); --stop-bg 1039/1040 (40-detail).
+DISCREPANCY for the reviewer: the 771 block also overrides #panes (172) and #panes.panes-wide (184) grid-template-columns, which are in 10-panes.css, not 35-list.css. So 'every @media block is in the same file as every rule it overrides' is false for that one block under the approved table. The cascade is still identical (contiguous, original order; concatenation proof). No contiguous cut under the 600-line budget can satisfy it: 10-panes would have to run 170-929. Implemented the table as approved; F5's decision wording ('an @media block stays in the file of the rules it overrides') needs to account for this.
+
+Static check 4 (auditCssClosesPerFile, scripts/lib/web-audits.js), printed in --- scripts ---: 'css files close : yes (475 top-level blocks in 17 file(s))'; F1's single file gives the same 475. 24 checks, 0 failed. First 20 lines diff-identical to kin10/static-base.txt; whole output = F3's plus that line (kin13/static-before.txt vs static-after.txt).
+Red: unclosed { appended to 25-axis.css -> 'NO - css/25-axis.css ends with 1 unclosed {', exit 1. Unclosed comment -> 'NO - css/25-axis.css ends inside the comment opened on line 48', exit 1. Restored output cmp-identical.
+
+PaletteParityTest: tokens from 00-tokens.css; new test 'no checked token is declared outside the tokens file'. Red, plain ./gradlew :inspector-ui:jvmTest, no --rerun: (1) --m-get 154 161 172 -> 1 2 3 in 00-tokens.css: 'dark --m-get differs between the web and the overlay', 134 tests, 1 failed. (2) ':root { --m-get: 154 161 172; }' appended to 35-list.css: 'declared outside css/00-tokens.css, where this test cannot see it win the cascade: --m-get in css/35-list.css', 1 failed. Each restored -> green. Logs kin13/palette-red1.log, palette-red2.log.
+
+Budget: css/00-tokens.css line removed; no new entries; largest CSS file 40-detail.css 231 lines.
+
+Probes against kin10/probe on 8231: live 'checks: 164 passed, 0 failed, 1 n/a, 0 unclassified, 42 notes'; archive 'checks: 21 passed, 0 failed', 'every file inlined: yes - 20 script(s) and 17 stylesheet(s)'. Per label vs base (kin10/labels.py): 209/209 and 25/25 lines, identical sequence True. Stylesheet audit lines identical to F3's report.
+
+Gradle: :inspector-model:jvmTest :inspector-daemon:test :repo-checks:test :inspector-ui:jvmTest BUILD SUCCESSFUL (159 / 259 / 35 / 134 tests, 0 failed).
+Not run: Chrome CDP diff (QA's harness), iOS/Android targets.
+
+Conductor, 2026-10-18: criterion #1 ('every @media block in the same file as every rule it overrides') cannot hold for the 1199px block at original line 771, which also overrides #panes / #panes.panes-wide (lines 172, 184, in 10-panes.css); no contiguous cut under the 600-line budget fixes it. The rule that guarantees the cascade, and the one UX's objection asked for, is: styles.txt order is the cascade, the files are contiguous slices of the original in original order, and an @media block never loads before a rule it overrides. That holds here (771 loads after 172/184). F5 writes the decision paragraph in those terms; QA judges criterion #1 against this restatement and reports the exception explicitly.
+<!-- SECTION:NOTES:END -->

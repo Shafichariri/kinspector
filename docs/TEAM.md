@@ -167,6 +167,11 @@ The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
   `disallowedTools`, `effort` and body, but **not** its `hooks`, `memory` or `omitClaudeMd`, so the
   write block and the private term list would silently vanish; `product-owner` and
   `delivery-tracker` — they own human gates and state that exists only after a phase.
+- **The three roster roles list `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate` in `tools`.**
+  A teammate gets exactly its definition's `tools`, so without them it cannot message the others
+  or read the shared task list, and a "team" is three isolated reports relayed by the lead. That
+  is how phase F's council and panel ran on 2026-10-18: every member said it had no message tool.
+  Writes stay refused by the two hooks below whatever `tools` says.
 - **`.claude/hooks/team-read-only.js`** (PreToolUse on Write/Edit). A teammate cannot write files;
   it sends proposed text to the lead, who routes it to the owning role afterwards. Bash writes are
   outside what the hook sees, as with the strategist's.

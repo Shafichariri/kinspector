@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 13:30'
-updated_date: '2026-10-18 13:32'
+updated_date: '2026-10-18 13:51'
 labels:
   - 'item:structure-phase-f'
 dependencies: []
@@ -89,3 +89,43 @@ After this commit QA re-runs phase D's route matrix base against head.
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built in local commit 8b20dcc (not pushed). Ready for QA.
+
+Runs (JDK 21 from the IDE jbr; jsdom 29.1.1 in \$TMPDIR via NODE_PATH; probe fixture served by a head daemon on 8231):
+- ./gradlew :inspector-daemon:test --rerun :inspector-ui:jvmTest --rerun :repo-checks:test --rerun -> BUILD SUCCESSFUL; daemon 259 tests, ui 133, repo-checks 35, 0 failures.
+- node scripts/check-web-static.js -> byte-identical to base f574bda (diff empty), "20 checks, 0 failed".
+- render-web-ui.js -> "checks: 164 passed, 0 failed, 1 n/a, 0 unclassified, 42 notes", exit 0. Per label (label + verdict) vs base: 209 lines each, identical sequence.
+- render-web-ui-archive.js -> "checks: 21 passed, 0 failed". Per label vs base: identical, with base "app.js inlined" mapped to "every file inlined".
+
+Red proofs, each plain ./gradlew :inspector-daemon:test (no rerun flag), restored after:
+- ghost js/05-ghost.js in scripts.txt: (a) "web/scripts.txt lists 'js/05-ghost.js', which is not on the built classpath"; (b) "... which is not in the folder"
+- ghost css/05-ghost.css in styles.txt: (a) and (b), same wording for styles.txt
+- unlisted js/42-x.js: (b) "web/js/42-x.js is in the folder but web/scripts.txt does not list it"
+- unlisted css/42-x.css: (b) "web/css/42-x.css is in the folder but web/styles.txt does not list it"
+- js/sub/x.js: (b) "web/js/sub/x.js is in the folder but web/scripts.txt does not list it"
+- "# js/00-app.js" (commented out, file kept): (b) "web/scripts.txt lists no files | web/js/00-app.js is in the folder but web/scripts.txt does not list it" (104 tests fail: the daemon refuses to start on an empty manifest)
+- duplicate line: (d) "web/scripts.txt lists the same file twice: [js/00-app.js]"
+- two lines swapped (js/05-x.js before js/00-app.js): (d) "web/scripts.txt is not in ascending order: 'js/05-x.js' before 'js/00-app.js'"
+- trailing space: (c) "'js/00-app.js ' has stray whitespace", plus (a) and (b)
+- leftover web/app.js: (e) "web/ holds something other than the shell ... but was: <[..., app.js]>"
+PaletteParityTest, no --rerun: --m-get set to "1 2 3" in the dark block of 00-tokens.css -> ":inspector-ui:jvmTest" ran (not UP-TO-DATE), "dark --m-get differs between the web and the overlay", BUILD FAILED; restored -> FROM-CACHE, green. With the provider removed: "inspector.webStyles is not set".
+Archive probe, each a real regression through a rebuilt daemon and a fresh export:
+- inliner drops the last script: "every file inlined : NO - 0 code script(s), scripts.txt lists 1; script 1 is not js/00-app.js"
+- leftover <script src> in index.html: "NO - 2 code script(s), scripts.txt lists 1; script 1 is not js/00-app.js; a <script src> is left in the document"
+- @import url("extra.css") at the top of 00-tokens.css: "NO - <style> 1 contains @import; <style> 1 contains url("
+- restored: "yes - 1 script(s) and 1 stylesheet(s), each its file, in manifest order", 21 passed.
+Live probe loader: a listed js/00-bad.js before 00-app.js with a SyntaxError -> "errors : script js/00-bad.js: SyntaxError: Unexpected token '='", exit 1, and 164 still passed (the next file ran); same with a load-time throw -> "Error: boom at load". Slot removed from index.html -> exit 2 "index.html holds <!-- inspector:scripts --> 0 time(s), not once".
+
+Done differently, for QA to judge:
+- Routes are one constant GET per listed file, not a GET /js/{f} parameter route. With {f}, PUT answered 404 (Ktor 3.5.0 prefers the 404 over a method failure behind a parameter segment; PUT /api/sessions/{id}/summary is 404 at base for the same reason). Constants keep PUT on a served file at 405, as /app.js was. Consequence: in F1 PUT /js/00-core.js is 404 because 00-core.js is not listed yet; RestApiTest asserts 405 on every listed file and 405-if-listed-else-404 for js/00-core.js, so it holds through F3.
+- WebManifestTest reads the source folder through -Dinspector.webRoot, a declared @InputDirectory added to inspector-daemon/build.gradle.kts (not in the ticket's file list), because AGENTS.md/CLAUDE.md are excluded from the jar and (e) is about the folder.
+- ExportTest and the archive probe search @import/url( only in inline <style>s (disputed item 2); <script src>/<link rel=stylesheet> over the whole document minus the data.
+- Inlined files carry no added newline inside <style>/<script>, so each inline text equals its file exactly.
+- GET / still answers bare text/html (bytes, as before). Its body differs from base only by the two tags and one HTML comment that named app.js.
+- The served index fails with 500 rather than 404 if index.html were missing from the jar (servedIndex throws).
+Not done here: QA's route matrix (#21), Chrome CDP comparison, CI. The client-name scan printed "NOT RUN — no terms" on this machine.
+<!-- SECTION:NOTES:END -->

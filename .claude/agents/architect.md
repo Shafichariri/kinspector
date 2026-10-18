@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Architecture and structure guardian for Inspector. Use before building a roadmap item (to produce a design and file-level plan) and after (to review a diff against module boundaries, noop twins, golden API files, model/web UI mirrors, the efficiency contract and production safety). Records new non-obvious decisions in docs/decisions/.
-tools: Read, Grep, Glob, Bash, Edit
+tools: Read, Grep, Glob, Bash, Edit, SendMessage, TaskList, TaskGet, TaskUpdate
 effort: high
 color: blue
 ---

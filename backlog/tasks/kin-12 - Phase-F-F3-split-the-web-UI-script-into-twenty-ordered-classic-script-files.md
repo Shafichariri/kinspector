@@ -1,9 +1,11 @@
 ---
 id: KIN-12
 title: 'Phase F F3: split the web UI script into twenty ordered classic-script files'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 13:30'
+updated_date: '2026-10-18 14:10'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -76,3 +78,36 @@ Load order: hoisting does not cross files. The only load-time references between
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built in local commit 4a23f77 (not pushed). Ready for QA. Scratch: $TMPDIR/kin12/ (blocks.js, plan.js, split.js, prove.js, loadtime.js, red.sh, red-a.log, red-b.log, reports).
+
+Cut: plan.js parses F2's 00-app.js (266f7bd) into 231 top-level blocks (column-0 declaration plus its blank/comment preamble; a '// @mirror-end' line closes the block before it) and assigns each by its declaration line against the design table (original line = F2 + 1). Section headers ('// --- api ---' etc.) travel with the declaration after them. Every mirror region landed in one file; no block straddled a range. Within each file blocks keep F2's order. Files: 00-core 255, 05-network 219, 10-json-tree 483, 15-session-data 168, 20-navigation 232, 25-traffic-list 420, 30-repeats-endpoints 136, 35-detail 277, 40-copy-export 372, 45-visits 261, 50-path 541, 55-axis 246, 60-browser 316, 65-browser-detail 341, 70-timeline 341, 75-replay 263, 80-settings 34, 85-processes 285, 90-sessions 146, 99-init 133.
+
+Proof (node prove.js f2-00-app.js <web>): 'F2 blocks: 231; head blocks: 231 in 19 files; multiset equal' / '99-init.js tail verbatim: yes (130 lines from F2 line 5300)' / 'proof: PASS'. Also checks header shape, F2 order within each file, each mirror closed in its file, bare fetch( and new WebSocket( only in 05-network.js. Proof proven red: one changed token in 35-detail.js -> 'multiset DIFFERS'; a line appended to 99-init.js -> 'tail verbatim: NO'.
+Load-time scan (loadtime.js, crude): the only non-function initializer naming a later declaration is source -> archiveSource, same file (hoisted); no column-0 statement outside 99-init.js.
+
+Runs (daemon installDist'ed from the tree on 8231 over $TMPDIR/kin10/probe, stopped after):
+- check-web-static.js: '23 checks, 0 failed'; head -20 cmp-identical to $TMPDIR/kin10/static-base.txt; 'use strict first : yes (20 file(s))', 'one declaration per name : yes (231 names in 20 file(s))'.
+- render-web-ui.js: 'checks: 164 passed, 0 failed, 1 n/a, 0 unclassified, 42 notes', errors none; per label+verdict vs kin10/ui-base.report: 209 lines, identical sequence.
+- render-web-ui-archive.js on a fresh export: 'checks: 21 passed, 0 failed', 'every file inlined : yes - 20 script(s) and 1 stylesheet(s), each its file, in manifest order'; per label vs archive-base.report: 25 lines identical.
+- ./gradlew :inspector-model:jvmTest :inspector-daemon:test :repo-checks:test :inspector-ui:jvmTest -> BUILD SUCCESSFUL; model 159, daemon 259, repo-checks 35, ui 133, 0 failures (ui UP-TO-DATE: no input of it changed).
+
+Red proofs (red.sh, each restored and diff-verified identical after):
+- load order, archiveSource moved to the end of 10-json-tree.js: static exit 0 (23, 0 failed); live probe exit 0 '164 passed' (expected); archive probe exit 1 'no page errors : NO - jsdomError: Uncaught [ReferenceError: archiveSource is not defined] | unhandled: api is not defined', 'checks: 10 passed, 6 failed'.
+- syntax error, 'const = ;' appended to 80-settings.js: live probe 'errors : script js/80-settings.js: SyntaxError: Unexpected token '=' | ... ReferenceError: applyEndpointLimit is not defined ...' and 'rows rendered : yes (16)' (99-init ran after it), exit 1, 162 passed 2 failed.
+- mirror end of duplicates moved into 35-detail.js: static exit 2 "harness: mirror block 'duplicates': @mirror-end must follow @mirror-begin in the same file".
+- stale copy of the duplicates block (key without status) in 80-settings.js: static exit 2 "harness: mirror block 'duplicates': 2 @mirror-begin and 2 @mirror-end, expected exactly one of each".
+- fetch( in listed 80-settings.js: static exit 1 'fetch : NO - 2, must be 1'; archive exit 1 'one network call site : NO - fetch 2, must be 1'.
+- fetch( in unlisted js/42-x.js: static exit 0 '23 checks, 0 failed'; WebManifestTest exit 1 '(b) the folder and the manifest disagree: web/js/42-x.js is in the folder but web/scripts.txt does not list it'.
+- export order, HtmlExport inlines scripts[1], scripts[0], rest: archive exit 1 'every file inlined : NO - script 1 is not js/00-core.js; script 2 is not js/05-network.js'.
+
+Done differently, for QA to judge:
+- F2's six-line file header comment ('Deliberately dependency-free ...') is kept, as a block of its own, at the top of 00-core.js after the one-line header, 'use strict' and blank line; prove.js counts it once. No decision file records that rule, so dropping it would have lost it.
+- ExportTest 'refuses a manifest entry with no file' hardcoded js/00-app.js as its real first entry and failed after the split; it now takes WebPage.scripts().first() / styles().first(). Not in the ticket's modified_files.
+- shared-rules.md:170 reads 'timelineEntries in its visits block', because timelineEntries sits inside the visits mirror block (mirror-runner's timeline rule lifts ['tagOf','visits']).
+- Left for F5 (comments naming files): WebPage.kt:41 and web-sources.js:28 still use js/00-app.js as an example; web AGENTS.md still says app.js.
+Not run: Chrome harness (QA's), CI, Android host. Client-name scan: 'NOT RUN — no terms' on this machine.
+<!-- SECTION:NOTES:END -->

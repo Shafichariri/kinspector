@@ -3,10 +3,11 @@ id: KIN-14
 title: >-
   Phase F F5: decisions, guides, comments and README for the manifest-split web
   UI
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 13:31'
-updated_date: '2026-10-18 13:32'
+updated_date: '2026-10-18 14:21'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -70,4 +71,24 @@ Already landed earlier in the item: exports.md (F1) and the mirror wording in sh
 
 <!-- SECTION:NOTES:BEGIN -->
 Maintainer, 2026-10-18 (via the conductor): the stale 'model <-> app.js mirrors' wording at docs/TEAM.md:17 is in scope here, under the same approval as .claude/agents/architect.md:39.
+
+Built in 90618e2 (local, not pushed). Docs and comments only; no code path changed.
+
+Runs: ./gradlew :repo-checks:test :inspector-model:jvmTest :inspector-daemon:test :inspector-ui:jvmTest --rerun -> BUILD SUCCESSFUL; 35 / 159 / 259 / 134 tests, 0 failures (counted from the XML results). node scripts/check-web-static.js -> '24 checks, 0 failed'. render-web-ui.js line count unchanged at its 2645 budget; site/index.html unchanged at 723.
+
+Done differently, for QA to judge:
+- AC #2: written in the conductor's restated terms (KIN-13 notes), not the ticket's title wording. The paragraph is headed 'web/styles.txt order is the cascade.' and states: contiguous slices in original order; an @media block never loads before a rule it overrides; same file where it can be (every prefers-reduced-motion block, the .pv-visit and --stop-bg pairs); the max-width 1199px block in 35-list.css named as the one that spans files (overrides #panes / #panes.panes-wide in 10-panes.css). The concatenation proof is described as done at the split, since it is a one-off script and not committed.
+- New web-ui.md paragraphs are placed first in the file, before the existing ones.
+- architect.md: line 3 (the description frontmatter, 'model/app.js mirrors') was also changed, to 'model/web UI mirrors', besides line 39 — same stale mention under the same approval. Line 39 now says the mirror is an @mirror-begin block in a file scripts.txt lists, checked by a case file in mirror-cases/.
+- Also reworded outside the ticket's file list: docs/TEAM.md:17 (approved in notes), scripts/check-web-static.js:13, scripts/lib/web-sources.js:28 and WebPage.kt:41 (examples now js/00-core.js), scripts/render-web-ui.js:2636 ('99-init.js sets a 1s interval').
+- FileBudgetTest KDoc: not every budget entry awaits a split (site/index.html is 'by design'), so it says each entry is over for the reason it gives, most often a split planned in ROADMAP §5.
+
+grep -rnI -E 'app\.js|style\.css' (excluding .git, build, node_modules, backlog, .gradle, .claude/worktrees, STATUS.md, implementation-plan.md, ROADMAP.md) -> 5 hits, each kept on purpose:
+- RestApiTest.kt:211-212 — asserts /app.js and /style.css now 404; the old paths are the subject.
+- WebManifestTest.kt:108 — explains why a leftover app.js/style.css in web/ must fail.
+- WebUiRoutes.kt:20 — history: PUT /app.js used to answer 405.
+- docs/decisions/signals.md:25 — history (runIdOf in app.js, v0.8.0-v1.3.0); the ticket says it stays.
+.claude/worktrees/ holds other checkouts (git-ignored) and is not this tree.
+
+STATUS.md, implementation-plan.md, ROADMAP.md: git diff empty. Client-name scan: NOT RUN — the terms are not on this machine.
 <!-- SECTION:NOTES:END -->
