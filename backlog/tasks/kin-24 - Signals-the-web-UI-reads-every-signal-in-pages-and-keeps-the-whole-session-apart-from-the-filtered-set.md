@@ -3,9 +3,11 @@ id: KIN-24
 title: >-
   Signals: the web UI reads every signal in pages and keeps the whole session
   apart from the filtered set
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 19:27'
+updated_date: '2026-10-18 19:42'
 labels:
   - 'item:signals-query-one-rule'
 dependencies: []
@@ -56,3 +58,11 @@ Web half of item:signals-query-one-rule, built first because it is safe against 
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built by Bob (engineer). Static: node scripts/check-web-static.js -> 29 checks, 0 failed (was 25; +4 under '--- signal pages ---'). Live probe on the CI fixture: 165 passed (was 164; +1 'signal tabs count', 19 signals); no other label changed. Archive probe: 26 passed (was 21; +5: signals sliced by limit, limit past total, offset past end, filter refused, signal tabs count all); only the banner's export timestamp differs. ci.yml UI 164->165, ARCHIVE 21->26; budgets.txt render-web-ui.js 2645->2657 by hand with reason. :inspector-daemon:test --rerun 263/0 failures; :repo-checks:test --rerun 35/0 (DecisionsTest, FileBudgetTest green).
+RED PROOFS. (1) 'if (page.length < 1000) return all' in place of the no-new-id stop: 'pages under a 500 clamp: NO - 500 ids, not the 1001 expected' and 'pages ignoring offset: NO - threw: more than 100 requests', exit 1. (2) dedupe line deleted: 'pages ignoring offset: NO - more than 100 requests' and 'pages repeat at a seam: NO - 1 id(s) returned twice', exit 1. (3) Anchor misspelt: harness exit 2 (main is async now; checked). (4) Live, loadSignals reading one page of limit=500, against a 1219-signal session (probe fixture + 1200 appended tap signals, served on 8232): 'signal tabs count: NO - the tabs count 500, the session holds 1219', exit 1; green on the same session reads 'yes (1219 ...)' through a route clamping at 1000. NOTE FOR QA: the CI fixture holds 19 signals, so this red is NOT visible in CI -- the 500-page break passes there. Reproduce with a >1000-signal session. (5) Archive, broken copies of the export: archiveSource returning the unsliced list -> 'signals sliced by limit' and 'signals offset past end' NO; filter refusal removed -> 'signals filter refused: NO - status 200'; pager limited to one page of 5 -> 'signal tabs count all: NO - 5 of 19' (each also fails 'every file inlined', as any edited copy does).
+AC5 grep: state.signals is read only at 50-path.js visits(...) and 70-timeline.js entries; other hits are writes (signalPages result, live push, reset) and syncAllSignals' unfiltered copy. Small adds beyond the list: the reset also clears allSignalsSessionId and screens; selectSignal's screens fallback and the extra ...state.screens spreads in sessionStartMono/lastMono went, since allSignals contains every screen. Client-name scan could not run here (no terms provided).
+<!-- SECTION:NOTES:END -->
