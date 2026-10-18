@@ -979,9 +979,31 @@ not pushed, so CI has not run. What landed:
 report in Gradle 9.5.1 and locks nothing. The command in `AGENTS.md` → Commands is the one that
 works.
 
+**Before merging phase B, the maintainer turns on GitHub → Settings → Emails → "Keep my email
+addresses private".** A merge made on github.com takes its author email from the merge dialog, and
+the dialog offers every verified address unless that setting is on. The dialog put a non-noreply
+author on the merges of #72, #73, #79 and #81–83. The push-to-`main` identity check reads the merge
+commit, so if phase B were merged the same way, its own merge would turn `main` red. Those six
+merges stay as they are: history on a public remote is not rewritten, and the check never reads
+them again.
+
+**After the first green run, add `repo` as a required check on `main`,** beside `build` and
+`release-swap`. Until it is required, a red identity or name check does not block a merge.
+
+**The Android locks have not been proven in CI yet.** They were written on a Mac with no Android
+SDK, because resolving `androidRuntimeClasspath` does not need one. The first CI `build` run, which
+has the SDK, is the first proof that they hold there too.
+
 **Still to do once the secret exists:** create `CLIENT_NAME_TERMS`, then add `--require-terms` to
 the push-to-`main` run. Until then the scan prints NOT RUN with a warning on every run, which is
 true, and never prints a pass.
+
+**Found by the locks, not fixed here: the stdlib is not the pinned Kotlin.** Six published modules
+(core, noop, ui, noop-ui, stream, noop-stream) and the daemon resolve `kotlin-stdlib:2.3.21`, while
+the pinned Kotlin is 2.3.20. Only `:inspector-model` resolves 2.3.20. Ktor 3.5.0's own modules ask
+for 2.3.21, and Gradle takes the higher version, so consumers of those modules get 2.3.21 whatever
+the pin says. The locks record this as it is. Whether to move the pin to 2.3.21 or to constrain the
+stdlib down is a decision for its own item, and it changes what consumers resolve.
 
 Evidence, run locally on macOS with no Android SDK:
 
