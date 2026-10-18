@@ -730,11 +730,11 @@ JSON string, where that escape means the same character to both parsers, so one 
 `render-web-ui.js` replaces, and both sides now refuse to proceed when a replacement misses.
 
 **All three exports read the raw readers, never `queryTransactions` or `SessionRepository.timeline()`.**
-The first clamps any limit to 1000 and the second to 2000. Until phase E the second also sorted calls
-before a marker at the same `mono`; it now orders through the shared `timeline()` but still clamps. The HAR route had asked for
-`Int.MAX_VALUE` rows from the first under a comment saying a quietly incomplete export was the thing
-to avoid, so every HAR of a session over 1000 calls was exactly that. It reads
-`filterTransactions` now, and `HarTest` pins it at 1001 rows.
+The first clamps any limit to 1000 and the second to 2000. Until phase E the second also sorted
+calls before a marker at the same `mono`; it now orders through the shared `timeline()` but still
+clamps. The HAR route had asked for `Int.MAX_VALUE` rows from the first under a comment saying a
+quietly incomplete export was the thing to avoid, so every HAR of a session over 1000 calls was
+exactly that. It reads `filterTransactions` now, and `HarTest` pins it at 1001 rows.
 
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
@@ -1175,7 +1175,8 @@ so a tied marker landed after its call there and before it in the list beside it
 could not see that, because the mirror was right and the tab did not call it — so
 `render-web-ui.js` checks the tie on the rendered tab as well. The MCP `timeline` and `explain`
 tools order through it too, never by a sort of their own, and `explain` splits before/after by
-position, not by `mono`. `McpTest` pins both against the live model.
+position, not by `mono`. `McpTest` compares the `timeline` tool with the live model entry by
+entry, and checks that a marker at the call's own millisecond lands in `explain`'s `before`.
 
 **A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
 the label and the grammar has **no escape inside the quotes**, so whether a label is expressible

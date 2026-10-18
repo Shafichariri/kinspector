@@ -442,17 +442,14 @@ class McpTools(
             since = txn.mono - window,
             until = txn.mono + window,
         )
-        // Split rather than one list: "what led to this" and "what it caused" are different
-        // questions, and a single window makes the reader do the splitting.
-        //
-        // Split by **position** in the shared order, not by `mono`. A marker dropped at the call's
-        // own millisecond sits before the call in that order, as both UIs draw it; a `mono < call`
-        // test would move it into `after` and report the marker that introduced the call as
-        // something the call caused. Unclamped for the same reason: a window cut at 2000 entries
-        // could lose the call itself, and then there is nothing to split around.
-        val at = context.indexOfFirst { it.kind == "txn" && it.id == txn.id }
-        val before = if (at < 0) emptyList() else context.subList(0, at).takeLast(EXPLAIN_CONTEXT_CAP)
-        val after = if (at < 0) emptyList() else context.subList(at + 1, context.size).take(EXPLAIN_CONTEXT_CAP)
+        // Unclamped, unlike the `timeline` tool. The window is cut oldest first, so with 2000 entries
+        // before the call a clamp drops the call and everything after it — `after` comes back
+        // empty, which reads as "nothing followed" on exactly the busiest windows.
+        val (before, after) = splitAround(context, txn.id)
+            ?: return ToolOutcome.Failed(
+                "call ${txn.id} was not found in its own context window; the session changed " +
+                    "while it was read — retry"
+            )
 
         if (txn.redacted.isNotEmpty()) {
             // Removed, not absent — otherwise the reader concludes no credentials were sent.
@@ -734,6 +731,29 @@ data class CurrentObservation(
  * answer fits in a reply; an unbounded window would defeat that on exactly the sessions where the
  * question is hardest.
  */
+/**
+ * Splits [context] around the call [txnId] into what led to it and what followed, each capped to
+ * the entries nearest the call.
+ *
+ * Split rather than one list: "what led to this" and "what it caused" are different questions, and
+ * a single window makes the reader do the splitting. Split by **position** in the shared order,
+ * never by `mono`: a marker dropped at the call's own millisecond sits before the call there, as
+ * both UIs draw it, and a `mono < call` test would report it as something the call caused.
+ *
+ * Null when the call is not in [context]. That is reachable — retention or a delete can remove the
+ * session between reading the call and reading its window — and two empty lists would read as
+ * "nothing happened either side", a confident answer about a session that was not there.
+ */
+internal fun splitAround(
+    context: List<TimelineEntry>,
+    txnId: String,
+): Pair<List<TimelineEntry>, List<TimelineEntry>>? {
+    val at = context.indexOfFirst { it.kind == "txn" && it.id == txnId }
+    if (at < 0) return null
+    return context.subList(0, at).takeLast(EXPLAIN_CONTEXT_CAP) to
+        context.subList(at + 1, context.size).take(EXPLAIN_CONTEXT_CAP)
+}
+
 private const val EXPLAIN_CONTEXT_CAP = 25
 
 /**

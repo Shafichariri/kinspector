@@ -5,6 +5,7 @@ import dev.inspector.daemon.mcp.McpTools
 import dev.inspector.daemon.mcp.MarkerPoster
 import dev.inspector.daemon.mcp.SignalPuller
 import dev.inspector.daemon.mcp.ToolOutcome
+import dev.inspector.daemon.mcp.splitAround
 import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -699,6 +700,55 @@ class McpTest {
 
         assertEquals("marker:m", labels("before").last(), "before: ${labels("before")}")
         assertFalse("marker:m" in labels("after"), "after: ${labels("after")}")
+    }
+
+    @Test
+    fun explain_places_same_millisecond_calls_by_position_and_signals_after_the_call() {
+        // What DAEMON.md §8 says about ties. A call recorded first precedes this one in the shared
+        // order and so led to it; a signal never precedes a call it ties with, whatever the file
+        // order, because the rule puts calls ahead of signals at one millisecond.
+        val id = session("2026-08-17T09-00-08_sametick_dev_debug") { writer ->
+            writer.append(signal(id = "tick0001", tag = SignalTags.STATE, name = "Early", mono = 500), null)
+            writer.append(txn("tickb001", path = "/b", mono = 500), null, null)
+            writer.append(txn("tickc001", path = "/c", mono = 500), null, null)
+        }
+        val explanation = Json.parseToJsonElement(
+            callTool("explain", """{"session":"$id","id":"tickc001"}"""),
+        ).jsonObject
+        val ids = { key: String ->
+            explanation.getValue(key).jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content }
+        }
+
+        assertEquals(listOf("tickb001"), ids("before"))
+        assertEquals(listOf("tick0001"), ids("after"))
+    }
+
+    @Test
+    fun explain_still_reports_what_followed_a_call_with_over_2000_entries_before_it() {
+        // The window is cut oldest first, so the timeline tool's 2000 clamp applied here would
+        // drop the call and everything after it, and `after` would read as "nothing followed".
+        val id = session("2026-08-17T09-00-07_crowded_dev_debug") { writer ->
+            repeat(2_100) { i ->
+                writer.append(signal(id = "w%04d".format(i), tag = SignalTags.STATE, name = "Chatty", mono = 1_000L + i), null)
+            }
+            writer.append(txn("late0001", path = "/late", mono = 3_200), null, null)
+            writer.append(signal(id = "after001", tag = SignalTags.STATE, name = "Settled", mono = 3_300), null)
+        }
+
+        val text = callTool("explain", """{"session":"$id","id":"late0001"}""")
+        val after = Json.parseToJsonElement(text).jsonObject.getValue("after").jsonArray
+
+        assertEquals(listOf("after001"), after.map { it.jsonObject.getValue("id").jsonPrimitive.content })
+    }
+
+    @Test
+    fun the_explain_split_refuses_a_window_that_lost_the_call() {
+        // Reachable when retention or a delete removes the session between reading the call and
+        // reading its window. Two empty lists would claim nothing happened either side.
+        val window = listOf(TimelineEntry.of(marker("m", mono = 100)), TimelineEntry.of(txn("othr0001", mono = 200)))
+
+        assertEquals(null, splitAround(window, "gone0001"))
+        assertEquals(listOf("m") to emptyList<TimelineEntry>(), splitAround(window, "othr0001")?.let { (b, a) -> b.map { it.label } to a })
     }
 
     @Test

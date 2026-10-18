@@ -510,9 +510,8 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   `onClick { tap; navigate() }` case `visits()` was fixed for. Fixing it changes every surface at
   once: the overlay, the `app.js` mirror, the exports and the shared mirror cases. It needs a total
   comparator (as `visits()` does with `seq ?: Long.MIN_VALUE`) and a decision about markers that
-  carry `seq`, which today are interleaved by `mono` with `<=` only. **Decided 2026-10-18: phase E
-  ships as "MCP equals the model"**, so MCP inherits this rather than diverging from it. Not
-  scheduled.
+  carry `seq`, which today are interleaved by `mono` with `<=` only. **Phase E ships as "MCP
+  equals the model"** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn), so MCP inherits this rather than diverging from it. Not scheduled.
 
 ### Open questions
 
@@ -837,9 +836,11 @@ Drift 4 and the `?` case get no line: they change only tie order and one edge of
 **Pending — not yet in any release.** When phase A ships, the `release-steward` puts this line in
 the release notes and in a daemon-only `INTEGRATION.md` entry ("download the new daemon; leave your
 coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. Phase E's MCP tie fix is
-announced too (decided below), right after the web-drift line, since it is the same rule on a third
-surface: *"MCP: `timeline` and `explain` place a marker dropped at the same millisecond as a call
-before that call, as both UIs do; in 1.3.0 and earlier it came after."*
+announced too (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn; see the open questions below), right after the web-drift line, since it is the
+same rule on a third surface: *"MCP: `timeline` and `explain` place a marker dropped at the same
+millisecond as a call before that call, as both UIs do; in 1.3.0 and earlier it came after."*
+"1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
+`release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
@@ -1036,8 +1037,8 @@ decision or a known trap:
 - Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
   removes public API from every published version up to now (phase I).
 - ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
-  or only in the tool description (phase E).~~ **Decided 2026-10-18: announced in both the release
-  notes and `DAEMON.md` §8.** The tool description states the rule without a version.
+  or only in the tool description (phase E).~~ **Announced in both the release notes and
+  `DAEMON.md` §8** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn). The tool description states the rule without a version.
 
 ---
 
