@@ -114,3 +114,24 @@ one commit, and the first legitimate edit to a decision would turn a permanent v
 a subagent loads a nested guide, and its imports, before it Reads a file there is unverified, so
 the role prompts name the decision files to Read rather than relying on it. The web guide sits in
 `resources/web/`, and the daemon build excludes it and its symlink from the jar.
+
+**Tickets sit under roadmap items; they never replace them.** `docs/ROADMAP.md` stays the only
+place that says *what* is next and in what order. `backlog/` (Backlog.md, one markdown file per
+ticket, label `item:<slug>`) holds the *how*: the work units the `architect` splits an agreed
+design into, and the bugs QA finds while verifying them. This reopens the rule that the agent team
+adds no tracking document, for one reason: an item that spans several builds had its progress only
+in conversation, so a session that ended mid-item lost it. What keeps the two lists from drifting
+is what that rule protected: tickets carry no priority, a ticket without an item is not filed, and
+only the `delivery-tracker` closes one, with the `qa-verifier`'s evidence. Ticket files are public,
+so the `release-steward`'s hygiene scan covers them. `.claude/hooks/backlog-guard.js` enforces who
+may write; nothing in `:repo-checks` pins it yet. The role table is in `docs/TEAM.md` → "Tickets".
+
+**Agent teams run only in three phases, and teammates are read-only.** Teammates message each
+other, which subagents cannot, so they are worth a full context window each only where reviewers
+should argue: `design-council`, `verify-panel` and `root-cause`. Teammates share one working tree
+with no worktree isolation, and a teammate does not receive a definition's `hooks`, `memory` or
+`omitClaudeMd` — so the `engineer`, the `business-strategist` and the `release-steward` are never
+teammates, and a named Agent call outside a declared phase is refused rather than quietly becoming
+a team. `.claude/hooks/team-guard.js` holds the rosters and the cap of three live teammates;
+`team-read-only.js` refuses teammate writes. Nothing in `:repo-checks` pins either yet. See
+`docs/TEAM.md` → "Agent teams".

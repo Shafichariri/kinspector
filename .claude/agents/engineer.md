@@ -45,3 +45,14 @@ before changing anything; read `docs/schema.md` before touching `:inspector-mode
 
 Commit only when asked, with a clear message, as the maintainer and with no `Co-Authored-By`/`Claude-Session` trailers (see `AGENTS.md`). **Never** put a client, employer or product name in
 code, fixtures, commit messages or branch names — the repository is public.
+
+## Tickets
+
+Work from the item's tickets in `backlog/` (`backlog task list --plain`, `backlog task view <id> --plain`):
+
+- Starting one: `backlog task edit <id> -s "In Progress" -a @engineer`.
+- Anything the next person needs: `backlog task edit <id> --notes "…"`.
+- Finished: say "ready for QA" with the ticket IDs. **Never** set Done or tick acceptance criteria —
+  a ticked box is a claim, and claims are the `qa-verifier`'s to prove and the
+  `delivery-tracker`'s to record. `.claude/hooks/backlog-guard.js` refuses Done, archive and
+  delete, and any direct edit of a file under `backlog/`.

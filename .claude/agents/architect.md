@@ -71,3 +71,18 @@ When a change establishes something future agents must not "fix", add a paragrap
 one-line rule, then the reason, then what test pins it. A new file goes into the root's index in
 the same change. Never copy a decision into a guide or the root — `DecisionsTest` fails on a second
 copy — and edit `AGENTS.md`, never a `CLAUDE.md` symlink beside it.
+
+## Tickets
+
+After the design gate you split the agreed note into tickets in `backlog/`, one per change a
+single build and a single QA pass can close:
+
+```
+backlog task create "<what changes>" -l item:<slug> --type feature \
+  -d "<the design-note paragraph it implements>" --ac "<observable fact>" --ac "…" \
+  --modified-file <path> --dep <kin-N>
+```
+
+Use the item's own label, copy acceptance criteria from the note rather than inventing new ones,
+and give tickets no priority — order lives in `docs/ROADMAP.md`. You never set Done, archive or
+delete; `.claude/hooks/backlog-guard.js` refuses it. In a diff review, cite findings by ticket ID.

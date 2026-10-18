@@ -1,0 +1,19 @@
+project_name: "Inspector"
+default_status: "To Do"
+statuses: ["To Do", "In Progress", "Done"]
+labels: []
+date_format: yyyy-mm-dd
+max_column_width: 20
+auto_open_browser: false
+default_port: 6420
+remote_operations: false
+auto_commit: false
+filesystem_only: false
+bypass_git_hooks: false
+check_active_branches: true
+active_branch_days: 30
+task_prefix: "kin"
+definition_of_done:
+  - "Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output"
+  - "Each new guard was proven in both directions: broken, seen failing, restored"
+  - "No client, employer or product name in the ticket, the diff, or the commit message"

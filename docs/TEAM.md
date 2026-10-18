@@ -5,19 +5,20 @@ Eight Claude Code subagents, defined in `.claude/agents/`, that work the backlog
 (`.claude/skills/roadmap-cycle/SKILL.md`).
 
 Every role starts from `AGENTS.md`, the index, and reads the `docs/decisions/` files for the
-modules it touches. The team adds **no new tracking documents**: the backlog stays in `ROADMAP.md`
-and the state of the project stays in `docs/STATUS.md` (it moved there from `AGENTS.md` → "Where
-we are" in phase G; the phase table stayed in "Where we are"), so there is still exactly one copy of
-each.
+modules it touches. **What** is next and in what order lives only in `ROADMAP.md`;
+the state of the project lives only in `docs/STATUS.md` (it moved there from `AGENTS.md` → "Where
+we are" in phase G; the phase table stayed in "Where we are"). The one addition is `backlog/` —
+tickets that are the **how** under each roadmap item, never a second list of what (see
+[Tickets](#tickets)).
 
 | Role | Owns | Writes | Asks for |
 |---|---|---|---|
-| `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` | Decisions only the human can make |
-| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
-| `engineer` | Building one designed item, with tests | code and tests | A design note before starting |
+| `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` (read-only on tickets) | Decisions only the human can make |
+| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
+| `engineer` | Building one designed item, with tests | code and tests; ticket status up to In Progress | A design note before starting |
 | `qa-verifier` | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
 | `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
-| `delivery-tracker` | What is actually done | roadmap item state; `docs/STATUS.md` and the phase table in `AGENTS.md` | QA evidence before marking anything done |
+| `delivery-tracker` | What is actually done | roadmap item state; closing tickets and filing bug tickets; `docs/STATUS.md` and the phase table in `AGENTS.md` | QA evidence before marking anything done |
 | `release-steward` | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
 | `business-strategist` | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
 
@@ -50,16 +51,69 @@ Each file's frontmatter carries more than a prompt, and each choice has a reason
 
 ## Flow of one item
 
+Gray is a subagent working alone, purple is a team phase where teammates argue, amber is you.
+
+```mermaid
+flowchart TD
+    plan(["New plan or request"]) --> po["product-owner<br/>items, criteria, order"]
+    po --> g1{{"You pick what goes first"}}
+    g1 --> design{"Crosses surfaces, or API,<br/>schema or boundary?"}
+    design -- "yes" --> council["design-council team<br/>architect · ux-reviewer · qa-verifier"]
+    design -- "no" --> arch["architect<br/>design note"]
+    council --> g2{{"You approve the design"}}
+    arch --> g2
+    g2 --> split["architect<br/>splits note into tickets"]
+    split --> eng["engineer<br/>builds ticket by ticket"]
+    eng --> verify["verify-panel team or QA + architect<br/>evidence per ticket"]
+    verify -- "Failed" --> bug["delivery-tracker<br/>files a bug ticket"]
+    bug --> eng
+    verify -- "clean" --> ux["ux-reviewer<br/>renders and looks (UI items)"]
+    ux --> track["delivery-tracker<br/>closes tickets, then the item"]
+    track --> rel["release-steward<br/>docs, hygiene scan incl. backlog/"]
+    rel --> done(["Commit as the maintainer, if asked"])
+
+    defect(["Debug a defect"]) --> rc["root-cause team<br/>architect + qa per hypothesis"]
+    rc --> g3{{"You accept the cause"}}
+    g3 --> po
+
+    classDef team fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef gate fill:#FAEEDA,stroke:#854F0B,color:#412402
+    classDef sub fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    class council,verify,rc team
+    class g1,g2,g3 gate
+    class po,arch,split,eng,bug,ux,track,rel sub
 ```
-plan ─► product-owner ─► architect (design) ─► [human gate if API/schema/boundary]
-                                   │
-                                   ▼
-               engineer ─► qa-verifier + architect (review) ─┐
-                  ▲                                          │ failed → back to engineer
-                  └──────────────────────────────────────────┘
-                                   │ clean
-                                   ▼
-               ux-reviewer (UI items) ─► delivery-tracker ─► release-steward
+
+Who owns which record — the strategist sits off the delivery line, and its work never enters the
+repository:
+
+```mermaid
+flowchart TD
+    you{{"You: priority, approvals"}} --> lead["Main session<br/>conducts roadmap-cycle"]
+    lead --> strat["business-strategist<br/>market, pricing"]
+    lead --> po["product-owner<br/>what, why, order"]
+    lead --> arch["architect<br/>design, splits tickets"]
+    lead --> tracker["delivery-tracker<br/>done, with evidence"]
+    strat -.-> private[("Private notes<br/>outside the repo")]
+    strat -- "paid features" --> po
+    subgraph repo["Committed, public"]
+        roadmap[("docs/ROADMAP.md<br/>what and order")]
+        tickets[("backlog/<br/>how, per item")]
+        roadmap -. "item:slug" .- tickets
+    end
+    po --> roadmap
+    arch --> tickets
+    tracker --> tickets
+    tracker --> roadmap
+
+    classDef gate fill:#FAEEDA,stroke:#854F0B,color:#412402
+    classDef own fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef biz fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef plain fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    class you gate
+    class po,arch,tracker own
+    class strat,private biz
+    class lead,roadmap,tickets plain
 ```
 
 Think of it as a newsroom: the product owner is the editor choosing stories, the architect is the
@@ -68,12 +122,131 @@ the reader panel, the tracker keeps the published record honest, the release ste
 what goes to print, and the business strategist sells the ads — and keeps the rate card off the
 public noticeboard.
 
+## Agent teams
+
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is on in `.claude/settings.json`. The roles above still run as
+subagents; three of them can also run as **teammates** — full sessions that message each other —
+in three phases of `roadmap-cycle` where the point is for reviewers to argue:
+
+| Phase | Replaces | Roster | Why a team and not subagents |
+|---|---|---|---|
+| design-council | Mode B step 1, for items crossing surfaces or touching API, schema or the boundary | `architect`, `ux-reviewer`, `qa-verifier` | QA writes how each criterion will be proven *before* the build, and UX objects before the code exists |
+| verify-panel | Mode B steps 5–6 | `qa-verifier`, `architect`, `ux-reviewer` (UI items) | Each tries to break the others' "Verified" — the thing parallel subagents cannot do |
+| root-cause | new Mode E, `debug <defect>` | `architect`, `qa-verifier` × hypotheses | Competing hypotheses, each trying to disprove the rest; avoids anchoring on the first plausible story |
+
+What `team-guard.js` decides each time Claude calls the Agent tool:
+
+```mermaid
+flowchart TD
+    call(["Claude calls Agent"]) --> named{"Has a name?<br/>(and no isolation, not a fork)"}
+    named -- "no" --> sub["Runs as a subagent<br/>max 4 at once, no nesting"]
+    named -- "yes" --> never{"engineer, product-owner,<br/>delivery-tracker, release-steward<br/>or business-strategist?"}
+    never -- "yes" --> r1["Refused: call again<br/>without a name"]
+    never -- "no" --> tag{"Prompt has team-phase tag<br/>and role is on its roster?"}
+    tag -- "no" --> r2["Refused: add the tag,<br/>or run as a subagent"]
+    tag -- "yes" --> cap{"Fewer than 3<br/>live teammates?"}
+    cap -- "no" --> r3["Refused: shut one down<br/>or wait for the phase"]
+    cap -- "yes" --> mate["Teammate spawned<br/>debates, read-only, no ticket writes"]
+
+    classDef ok fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef no fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
+    classDef team fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    class sub ok
+    class r1,r2,r3 no
+    class mate team
+```
+
+The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
+
+- **`.claude/hooks/team-guard.js`** (PreToolUse on `Agent`). With teams on, any *named* Agent call
+  launches a teammate, and Claude names subagents on its own — so an ordinary step could quietly
+  become a team. The guard allows a teammate only for a declared phase (`[team-phase: …]` in the
+  prompt), only from that phase's roster, and at most `INSPECTOR_TEAM_MAX` (3) live at once.
+- **Never teammates:** `engineer` — teammates share one working tree with no worktree isolation;
+  `business-strategist` and `release-steward` — a teammate receives a definition's `tools`, `model`,
+  `disallowedTools`, `effort` and body, but **not** its `hooks`, `memory` or `omitClaudeMd`, so the
+  write block and the private term list would silently vanish; `product-owner` and
+  `delivery-tracker` — they own human gates and state that exists only after a phase.
+- **`.claude/hooks/team-read-only.js`** (PreToolUse on Write/Edit). A teammate cannot write files;
+  it sends proposed text to the lead, who routes it to the owning role afterwards. Bash writes are
+  outside what the hook sees, as with the strategist's.
+- **`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`** — subagents cannot spawn subagents, which is what
+  the conductor rule already asks; **`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4`** (default 20).
+- **`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`** — current models get the Task tools only on opt-in, and
+  without them teammates coordinate by message alone instead of through the shared task list.
+
+What a team costs: every teammate loads the project context — `AGENTS.md` and the decision files
+its role reads — into its own context window, so a three-member phase pays for it three more times. Teams need an interactive session — under `claude -p` or the
+Agent SDK, named calls run as ordinary subagents. `/resume` does not bring in-process teammates back;
+after a resume, tell the lead to spawn fresh ones. To switch teams off, set the variable to `0` in
+`.claude/settings.local.json`; the guards stand down by themselves.
+
+## Tickets
+
+`backlog/` is a [Backlog.md](https://github.com/MrLesk/Backlog.md) project: one markdown file per
+ticket, IDs `KIN-N`, statuses To Do / In Progress / Done. It is committed, so tickets travel with
+the branch — and are public.
+
+```mermaid
+flowchart LR
+    item["Roadmap item<br/>item:slug · product-owner"] --> todo["To Do<br/>architect creates"]
+    todo --> prog["In Progress<br/>engineer builds"]
+    prog --> qa{"qa-verifier<br/>evidence per criterion"}
+    qa -- "Verified" --> done["Done<br/>delivery-tracker closes"]
+    qa -- "Failed" --> bug["bug ticket, same item<br/>delivery-tracker files"]
+    bug --> prog
+    done --> itemdone(["Item Done when every<br/>item:slug ticket is Done"])
+
+    classDef sub fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    classDef owner fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef no fill:#FAECE7,stroke:#993C1D,color:#4A1B0C
+    classDef ok fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    class item owner
+    class todo,prog,qa sub
+    class bug no
+    class done,itemdone ok
+```
+
+The rules that keep it from becoming a second backlog:
+
+- **Every ticket hangs under a roadmap item**, labelled `item:<slug>` with the slug the item names
+  under its heading. A defect found outside any item goes to the `product-owner` first.
+- **No priority on tickets.** Order lives in `ROADMAP.md`; dependencies between tickets use `--dep`.
+- **Tickets come after the design gate**, split by the `architect` from the agreed note, so a
+  rejected design leaves no orphans.
+- **Only the `delivery-tracker` closes**, ticking only criteria the `qa-verifier` showed Verified,
+  with the evidence in `--final-summary`. A roadmap item is Done when all its tickets are.
+- **Definition of Done** (in `backlog/config.yml`, added to every ticket): QA evidence per
+  criterion, every guard proven both ways, no client, employer or product name anywhere.
+- **Public:** the `release-steward`'s hygiene scan covers `backlog/`. Commercial work never
+  becomes a ticket.
+
+Who may change tickets — enforced by `.claude/hooks/backlog-guard.js` on Bash and on direct file
+edits:
+
+| Role | Tickets |
+|---|---|
+| `architect` | create and edit; never Done, archive or delete |
+| `engineer` | move to In Progress, add notes; never Done, archive or delete |
+| `delivery-tracker`, main session | anything, including Done and bug tickets |
+| `product-owner`, `qa-verifier`, `ux-reviewer`, `release-steward`, `business-strategist`, every teammate | read-only — they report ticket text, the tracker files it |
+
+Ticket files change only through the CLI, except for the `delivery-tracker` and the main session,
+so an Edit cannot sidestep the rules. The hook reads command text: it stops honest mistakes, not
+an agent set on writing a file some other way.
+
+**Setup on a new machine:** `npm i -g backlog.md` (or `brew install backlog-md`). Then
+`backlog board` in the terminal, or `backlog browser` for the web board on 127.0.0.1:6420. The
+`backlog` folder's own `decisions/` and `docs/` are unused — decisions live in `docs/decisions/`.
+
 ## Using it
 
 - **Hand over a plan:** "take this plan" with the plan pasted or a path → `roadmap-cycle` Mode A.
   It stops after intake and asks what goes first.
 - **Build an item:** "build *<roadmap item name>*" → Mode B.
-- **Status:** "where are we" → Mode C.
+- **Debug a defect:** "debug *<defect>*" → Mode E, the root-cause team phase.
+- **Status:** "where are we" → Mode C, roadmap and board together. Or look yourself:
+  `backlog board`.
 - **Money:** "use the business-strategist" — it interviews you first, and keeps its output out of
   the repository.
 - Any single role can be called directly, e.g. "use the ux-reviewer on the web UI".

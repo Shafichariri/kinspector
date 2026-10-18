@@ -3,10 +3,58 @@
     "GIT_AUTHOR_NAME": "Shafichariri",
     "GIT_AUTHOR_EMAIL": "3518471+Shafichariri@users.noreply.github.com",
     "GIT_COMMITTER_NAME": "Shafichariri",
-    "GIT_COMMITTER_EMAIL": "3518471+Shafichariri@users.noreply.github.com"
+    "GIT_COMMITTER_EMAIL": "3518471+Shafichariri@users.noreply.github.com",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "INSPECTOR_TEAM_MAX": "3"
   },
   "attribution": {
     "commit": "",
     "sessionUrl": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/team-guard.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/team-read-only.js\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/backlog-guard.js\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/backlog-guard.js\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(backlog task list *)",
+      "Bash(backlog task view *)",
+      "Bash(backlog search *)",
+      "Bash(backlog board *)"
+    ]
   }
 }
