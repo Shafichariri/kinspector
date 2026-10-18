@@ -2,6 +2,7 @@ package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionWriter
+import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.daemon.service.Har
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO

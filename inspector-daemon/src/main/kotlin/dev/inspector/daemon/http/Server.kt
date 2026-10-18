@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.http
 
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.DeletionCause

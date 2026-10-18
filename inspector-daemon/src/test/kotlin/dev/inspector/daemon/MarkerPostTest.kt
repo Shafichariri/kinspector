@@ -2,6 +2,7 @@ package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionWriter
+import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.MarkerSource

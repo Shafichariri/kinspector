@@ -1,6 +1,8 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.http.InspectorDaemon
+import dev.inspector.daemon.http.PortUnavailableException
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.Path

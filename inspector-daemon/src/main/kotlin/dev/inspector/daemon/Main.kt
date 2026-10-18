@@ -5,6 +5,8 @@ import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionSummary
 import dev.inspector.daemon.archive.TransactionPage
+import dev.inspector.daemon.http.InspectorDaemon
+import dev.inspector.daemon.http.PortUnavailableException
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
 import dev.inspector.daemon.usb.UsbBridge

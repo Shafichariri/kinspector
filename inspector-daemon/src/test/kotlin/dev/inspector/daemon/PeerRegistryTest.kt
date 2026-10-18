@@ -2,6 +2,7 @@ package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.InspectorDaemonJson
+import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.daemon.service.KillOutcome
 import dev.inspector.daemon.service.McpControl
 import dev.inspector.daemon.service.McpInfo

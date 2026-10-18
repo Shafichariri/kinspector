@@ -4,6 +4,7 @@ import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionWriter
+import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.stream.StreamSink
 import dev.inspector.stream.StreamState
 import io.ktor.client.HttpClient
