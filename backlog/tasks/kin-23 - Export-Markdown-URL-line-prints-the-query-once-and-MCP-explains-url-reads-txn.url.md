@@ -3,9 +3,11 @@ id: KIN-23
 title: >-
   Export: Markdown URL line prints the query once, and MCP explain's url reads
   txn.url
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 19:18'
+updated_date: '2026-10-18 19:19'
 labels:
   - 'item:export-md-query-once'
 dependencies: []
@@ -41,3 +43,17 @@ ExportMarkdown.kt:158 builds the URL line as txn.url + (txn.query?.let { "?$it" 
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built by engineer (bob). Fix: ExportMarkdown URL line -> inlineCode(txn.url); ExplainTool CallLine.url -> txn.url.
+Tests: ExportTest "the URL line carries the query once", "the URL line has no question mark without a query", "an empty query is one question mark, as the web UI draws it"; McpTest explain_reports_the_full_url_with_port_and_query.
+Red proofs (new tests run against the old lines, 70 tests in the two classes, 3 failed):
+- carries the query once: expected <- **URL:** `https://api.example.com/v2/users/me?a=1&b=2`> but was <- **URL:** `https://api.example.com/v2/users/me?a=1&b=2?a=1&b=2`>
+- empty query: expected <...me?`> but was <- **URL:** `https://api.example.com/v2/users/me??`>
+- explain: expected <https://api.example.com:8080/v2/users/me?a=1> but was <https://api.example.com/v2/users/me>
+- null query: passes on old and new (AC #2 asks for no failure; it pins the no-? case).
+Green: ./gradlew :inspector-daemon:test --rerun -> BUILD SUCCESSFUL, 263 tests, 0 failures, 0 errors, 0 skipped.
+AC #6 (release notes): not written in this build; release notes are cut by the release-steward at release time. The line is in the description: "Daemon: the Markdown export's URL line no longer repeats the query string, and MCP explain reports the full URL, port and query included."
+<!-- SECTION:NOTES:END -->
