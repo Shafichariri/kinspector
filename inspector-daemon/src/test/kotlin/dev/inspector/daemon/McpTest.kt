@@ -725,7 +725,7 @@ class McpTest {
 
     @Test
     fun explain_still_reports_what_followed_a_call_with_over_2000_entries_before_it() {
-        // The window is cut oldest first, so the timeline tool's 2000 clamp applied here would
+        // The timeline tool's clamp keeps the oldest 2000, so applied here it would
         // drop the call and everything after it, and `after` would read as "nothing followed".
         val id = session("2026-08-17T09-00-07_crowded_dev_debug") { writer ->
             repeat(2_100) { i ->

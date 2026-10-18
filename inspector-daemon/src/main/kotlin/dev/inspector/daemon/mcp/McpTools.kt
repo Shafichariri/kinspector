@@ -442,7 +442,7 @@ class McpTools(
             since = txn.mono - window,
             until = txn.mono + window,
         )
-        // Unclamped, unlike the `timeline` tool. The window is cut oldest first, so with 2000 entries
+        // Unclamped, unlike the `timeline` tool. Its clamp keeps the oldest 2000, so with 2000 entries
         // before the call a clamp drops the call and everything after it — `after` comes back
         // empty, which reads as "nothing followed" on exactly the busiest windows.
         val (before, after) = splitAround(context, txn.id)
@@ -725,13 +725,6 @@ data class CurrentObservation(
 )
 
 /**
- * How many context lines either side of the call `explain` returns.
- *
- * A busy five seconds can hold hundreds of state observations. The point of this tool is that its
- * answer fits in a reply; an unbounded window would defeat that on exactly the sessions where the
- * question is hardest.
- */
-/**
  * Splits [context] around the call [txnId] into what led to it and what followed, each capped to
  * the entries nearest the call.
  *
@@ -754,6 +747,13 @@ internal fun splitAround(
         context.subList(at + 1, context.size).take(EXPLAIN_CONTEXT_CAP)
 }
 
+/**
+ * How many context lines either side of the call `explain` returns.
+ *
+ * A busy five seconds can hold hundreds of state observations. The point of this tool is that its
+ * answer fits in a reply; an unbounded window would defeat that on exactly the sessions where the
+ * question is hardest.
+ */
 private const val EXPLAIN_CONTEXT_CAP = 25
 
 /**
