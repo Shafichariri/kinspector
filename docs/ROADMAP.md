@@ -709,10 +709,21 @@ navigate() }` case that `visits()` was fixed for.
 **Out of scope.** Changing the tool's arguments, its default limit or its oldest-first order. An MCP
 `path` tool, which §3 already defers.
 
-**Status, 2026-10-18: built on `shafic/structure-phase-e`, stacked on phase A, not pushed.** The
-2,000 clamp is **kept**: `timeline()` is now `timelineWindow()` plus the clamp, and `explain` reads
-the unclamped window and splits it by position. Signal ties ship as "MCP equals the model", which
-still ignores `seq`; that is recorded under §3 → Bugs found, not fixed, rather than fixed here.
+**Status, 2026-10-18: built, pending CI. Not done.** On `shafic/structure-phase-e`, stacked on phase
+A, not pushed, so no CI run has happened. The 2,000 clamp is **kept**: `timeline()` is now
+`timelineWindow()` plus the clamp, and `explain` reads the unclamped window and splits it by
+position. Signal ties ship as "MCP equals the model", which still ignores `seq`; that is recorded
+under §3 -> Bugs found, not fixed, rather than fixed here.
+
+Evidence, from two independent QA passes run locally: `:inspector-daemon:test` 224 and
+`:inspector-model:jvmTest` 159, 0 failures. Five breaks each went red: the old sort (timeline test),
+the daemon's `thenBy seq` (timeline test), the old `mono` split (explain test), a clamped `explain`
+(over-2000 test), and `splitAround` returning empty instead of null (refusal test). The built MCP
+binary was driven over JSON-RPC against a hand-built tie archive and its order matched the model.
+`DAEMON.md` §8 "1.3.0 and earlier" was checked against the `v1.3.0` tag.
+
+Not shown: a CI run; a full `./gradlew build`; the iOS and Android targets, which were not run
+because only daemon code changed. Phase E is done when CI is green on a pushed branch.
 
 ### Phase C — every control route refuses without the header, by test
 
