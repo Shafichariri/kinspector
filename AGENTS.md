@@ -1297,11 +1297,22 @@ nothing. That validates the whole graph against the lock without downloading one
 building a sibling's klib. Gradle 9.5.1 does fail on a stale entry ("Did not resolve … which is
 part of the dependency lock state"), once something asks it in a way that surfaces it.
 
+With the configuration cache on, which it is by default here, that failure arrives headed
+`Configuration cache state could not be cached: field __lockedGraphs__ …`, with the lock message
+two lines further down. It reads like a cache incompatibility and is not one. The resolution runs
+while the cache entry is written, so this is where the error surfaces. Marking the task
+`notCompatibleWithConfigurationCache()` would only move the same failure to execution time.
+Nothing automated proves this read still validates the lock, only the manual proofs recorded in
+ROADMAP §5 phase B. Re-run the stale-entry proof after any Gradle upgrade.
+
 **`:inspector-model`'s dependency rule is asked of its lockfile, because STRICT cannot hold it.**
 A lock regenerated after adding a dependency is perfectly consistent. Measured: kotlinx-datetime
 added to the model with its lock regenerated, and STRICT resolved green. So `DependencyLockTest`
-holds every module in `inspector-model/gradle.lockfile` to an allowlist with a reason per entry:
-serialization, what serialization is built on, and the stdlib.
+holds every module in `inspector-model/gradle.lockfile` to an allowlist with a reason per entry.
+The allowlist holds serialization-json, serialization-core and the serialization BOM, the stdlib,
+and `org.jetbrains:annotations`, which the stdlib brings on the JVM and Android. The lockfile covers
+only the locked graphs, the runtime classpaths and the iOS klibs, so a JVM-only `compileOnly`
+dependency would not appear in it.
 
 **A twin without a golden file drifts, and `stream` did for eleven releases.**
 `StreamSink.lastError` existed in `:inspector-stream` from before v0.1.0 and never in
@@ -1807,10 +1818,12 @@ The stream pair has its own golden file, and the same friction:
 - **Prove guards in both directions.** A guard only ever seen passing is not a guard.
 - Comments explain *why*, especially where the obvious approach is wrong.
 - `:inspector-model` may depend only on kotlinx-serialization. Keep it that way. `:repo-checks`
-  enforces it.
+  enforces it for what the model resolves at runtime and links on iOS.
 - **No deferred-work markers in source.** Unfinished work goes in `docs/ROADMAP.md`. `NoTodoTest`
-  fails on the uppercase markers in any tracked file except Markdown.
-- **A file over 600 lines needs a budget, and budgets only tighten.** `structure/budgets.txt` is a
+  fails on the uppercase markers in any file git tracks or would track, except Markdown.
+- **A source file over 600 lines needs a budget, and budgets only tighten.** "Source" means `.kt`,
+  `.kts`, `.js`, `.css`, `.html`, `.sh` and `.swift`, tracked or untracked-but-not-ignored, and
+  `FileBudgetTest` holds it. `structure/budgets.txt` is a
   ratchet, not a cap: a budgeted file fails when it grows, and it also fails when it *shrinks*,
   until the budget is lowered to match. A budget left at the old size would let the lost lines
   back in unnoticed. Regenerating only lowers or removes. Raising a budget or adding a file is a
@@ -1879,9 +1892,18 @@ work where the local config holds another address.
 `scripts/check-commit-identity.sh <base> <head>` enforces this over every commit in a range, merges
 included, and CI's `repo` job runs it over what a pull request adds and what a push to `main`
 brings. It names the commit and the failing field, never the address. An empty or uncomputable
-range exits 2, because a check over no commits must not pass. A merge made on github.com takes its
-author email from the merging account's settings on GitHub, not from any local git config, so those
-settings are part of this rule. If a web merge fails here, fix the setting, not the check.
+range exits 2, because a check over no commits must not pass.
+
+A merge, squash or "Update branch" made on github.com takes its author email from the merging
+account on GitHub, not from any local git config. The merge dialog offers every verified address
+unless **Settings → Emails → "Keep my email addresses private"** is on, and then it offers only the
+noreply address. History on `main` shows the dialog picking another address on some merges and
+not on others. That setting is therefore part of this rule. If a web merge fails here, fix the
+setting, not the check. Do not exempt commits whose committer is `noreply@github.com` from the
+author check either: the push run is the only place a merge commit is checked at all, because a
+pull request's checks finish before its merge commit exists. Do not rewrite merges already on
+`main` to make them pass, per the paragraph above on history. The check reads only the range a
+push brings, so it never sees them again.
 
 `gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
 compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
