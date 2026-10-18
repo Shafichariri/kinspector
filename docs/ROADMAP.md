@@ -596,7 +596,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 ### Bugs found, not fixed
 
-- **`ExportMarkdown.kt:158` prints the query twice.** The line is
+- ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
   `inlineCode(txn.url + (txn.query?.let { "?$it" } ?: ""))`, but `NetworkTransaction.url` already
   includes the query (`docs/decisions/shared-rules.md` records that web's `urlOf` mirrors that, empty `?` included). Every
   call with a query string shows `…/path?a=1?a=1` in the Markdown export's **URL** line. Found while
@@ -605,6 +605,15 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
 
   *Ticket label:* `item:export-md-query-once`.
+
+  **Done, 2026-10-18** (KIN-23, QA at `2b1b650`). The Markdown URL line is `inlineCode(txn.url)` and
+  nothing else. The same cause was in MCP `explain`: `ExplainTool.kt` hand-built `CallLine.url` as
+  scheme, host and path, which dropped the query and a non-default port, the defect
+  `docs/decisions/capture.md` already records. It reads `txn.url` now. Red proofs against the old
+  lines: `…?a=1&b=2?a=1&b=2`, `…me??`, and an `explain` url without port or query. 263 daemon tests,
+  0 failures. Exporting a real session changed exactly 8 URL lines. HAR, Replayer, the overlay and
+  the web `urlOf` already read the shared rule. **Release-notes line still owed**, listed under
+  phase A's pending daemon-only `INTEGRATION.md` entry below.
 
   **Ordered 2026-10-18: first in the order from here** (§5 → "Order from here"). The maintainer's
   call. It is a wrong fact in a file people hand to others, and the fix is one line and one test.
@@ -813,7 +822,7 @@ here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They ar
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 1 | `ExportMarkdown.kt` prints the query twice | §3 → Bugs found | `item:export-md-query-once` | S |
+| 1 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
 | 2 | The signals sort and clamp exist twice | §3 → Guards | `item:signals-query-one-rule` | S |
 | 3 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
 | 4 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
@@ -1085,6 +1094,9 @@ announced too (decided by the agent team on 2026-10-18 under the maintainer's de
 same rule on a third surface: *"MCP: `timeline` and `explain` place a marker dropped at the same
 millisecond as a call before that call, as both UIs do, and `explain` counts an earlier call at
 that millisecond as leading to it; in 1.3.0 and earlier both came after."*
+The Markdown-export fix (`item:export-md-query-once`, done 2026-10-18) owes a third line in the same
+entry: *"Daemon: the Markdown export's URL line no longer repeats the query string, and MCP explain
+reports the full URL, port and query included."*
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
