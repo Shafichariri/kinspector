@@ -73,29 +73,54 @@ function showSessionLabel() {
   document.title = meta ? `${meta.appId} · inspector` : 'inspector';
 }
 
+/**
+ * The list, its markers and the whole-session copy, then the signals, for the filter as it stands.
+ *
+ * The filter and the session are read **once**, here, and handed down: a load that read
+ * `state.filter` again after an await could fetch half its answer for one filter and half for the
+ * next. And a load that a newer one has overtaken drops its answer rather than writing it — typing
+ * fires one load per pause, and the daemon is free to answer them out of order, so without
+ * `callLoad` a slow unfiltered read landing last put every row back under the filter just typed.
+ */
 async function loadTransactions() {
   // An export of nothing would be a 404 with a filename; offer it only when there is a session.
   $('export-host').hidden = !!ARCHIVE || !state.sessionId;
   // With no session there is nothing to load, and the empty list is the only thing that can
   // say what the page is waiting for.
   if (!state.sessionId) { renderListEmpty(); return; }
-  const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
+  const load = ++state.callLoad;
+  const isLatest = () => load === state.callLoad;
+  const filter = state.filter;
+  const id = encodeURIComponent(state.sessionId);
+  const q = new URLSearchParams({ filter, limit: '2000' });
+  let page = null;
+  let error = null;
   try {
-    const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
+    page = await api(`/api/sessions/${id}/transactions?${q}`);
+  } catch (e) {
+    error = e;
+  }
+  if (!isLatest()) return;
+  if (page) {
     state.transactions = page.items;
     state.matchTotal = page.total;
     showFilterError(null);
-  } catch (e) {
+  } else {
     // Parser messages are written to be shown verbatim, so show them verbatim.
-    showFilterError(e.message);
+    showFilterError(error.message);
     state.transactions = [];
     state.matchTotal = null;
   }
   renderCounts();
-  state.markers = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/markers`).catch(() => []);
-  state.recording = await api('/api/recording').catch(() => []);
-  await syncAllTransactions();
-  await loadSignals();
+  const markers = await api(`/api/sessions/${id}/markers`).catch(() => []);
+  const recording = await api('/api/recording').catch(() => []);
+  if (!isLatest()) return;
+  state.markers = markers;
+  state.recording = recording;
+  await syncAllTransactions(filter, isLatest);
+  if (!isLatest()) return;
+  await loadSignals(filter);
+  if (!isLatest()) return;
   renderMarkers();
   markerFormState();
   renderList();
@@ -110,17 +135,29 @@ async function loadTransactions() {
  * session, and everything that describes the session — tabs and their counts, tag browsers, the
  * glance, the axis, `screens` — reads that, so a filter never makes a tab or a screen disappear.
  *
+ * `filter` is the one `loadTransactions` read, or the filter as it stands when called on its own.
+ * Loads are counted by `signalLoad` apart from `callLoad`, because a pull reloads the signals alone:
+ * an older signal load that lands after a newer one is dropped, as an older list load is.
+ *
  * Failures are swallowed to an empty list on purpose: a daemon older than this page has no
  * signal routes, and the traffic view must keep working against one rather than going blank.
  */
-async function loadSignals() {
+async function loadSignals(filter = state.filter) {
   if (!state.sessionId) return;
-  const id = encodeURIComponent(state.sessionId);
-  state.signals = await signalPages(api, state.sessionId, state.filter).catch(() => []);
-  await syncAllSignals();
+  const load = ++state.signalLoad;
+  const isLatest = () => load === state.signalLoad;
+  const sessionId = state.sessionId;
+  const id = encodeURIComponent(sessionId);
+  const signals = await signalPages(api, sessionId, filter).catch(() => []);
+  if (!isLatest()) return;
+  state.signals = signals;
+  await syncAllSignals(filter, isLatest);
+  if (!isLatest()) return;
   // Taken from the whole session, so the skeleton ignores the filter without a request of its own.
   state.screens = state.allSignals.filter((s) => tagOf(s) === 'screen');
-  state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
+  const current = await api(`/api/sessions/${id}/current`).catch(() => []);
+  if (!isLatest()) return;
+  state.current = current;
 
   // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
   // session and the current view falls back rather than pointing at nothing.
@@ -138,13 +175,14 @@ async function loadSignals() {
  * Keeps `allSignals` in step with the current session, as `syncAllTransactions` does for calls:
  * free with no filter, one paged read per *session* with one. A pull invalidates it by clearing
  * `allSignalsSessionId`, since the rows it asked for are new and the cache would not have them.
+ * `filter` is the caller's, never re-read; `isLatest` says whether that load still stands.
  *
  * When the whole-session read fails, the filtered rows stand in so the tabs are not blank, but
  * they are **not** marked as the whole session: marking them would cache a filtered list as the
  * session until the filter was cleared, and every later load would trust it.
  */
-async function syncAllSignals() {
-  if (!state.filter) {
+async function syncAllSignals(filter, isLatest = () => true) {
+  if (!filter) {
     // A copy, not an alias — the live socket pushes into both.
     state.allSignals = state.signals.slice();
     state.allSignalsSessionId = state.sessionId;
@@ -153,9 +191,12 @@ async function syncAllSignals() {
   if (state.allSignalsSessionId === state.sessionId && state.allSignals.length) return;
   const sessionId = state.sessionId;
   try {
-    state.allSignals = await signalPages(api, sessionId, '');
+    const all = await signalPages(api, sessionId, '');
+    if (!isLatest()) return;
+    state.allSignals = all;
     state.allSignalsSessionId = sessionId;
   } catch {
+    if (!isLatest()) return;
     state.allSignals = state.signals.slice();
     state.allSignalsSessionId = null;
   }
@@ -217,10 +258,10 @@ async function signalPages(get, sessionId, filter) {
  * With no filter the rows just fetched already are the whole session, so the common case costs
  * nothing. With a filter active it costs one extra request per *session*, not per keystroke:
  * the endpoint inventory only grows when new traffic arrives, and the live socket appends to
- * both lists.
+ * both lists. `filter` and `isLatest` are the calling load's, as for `syncAllSignals`.
  */
-async function syncAllTransactions() {
-  if (!state.filter) {
+async function syncAllTransactions(filter, isLatest = () => true) {
+  if (!filter) {
     // A copy, not an alias — the live socket pushes into both, and sharing one array would
     // append every new row twice.
     state.allTransactions = state.transactions.slice();
@@ -228,14 +269,17 @@ async function syncAllTransactions() {
     return;
   }
   if (state.allSessionId === state.sessionId && state.allTransactions.length) return;
+  const sessionId = state.sessionId;
+  let all;
   try {
     const q = new URLSearchParams({ filter: '', limit: '2000' });
-    const page = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions?${q}`);
-    state.allTransactions = page.items;
+    all = (await api(`/api/sessions/${encodeURIComponent(sessionId)}/transactions?${q}`)).items;
   } catch {
     // Chips are a convenience. If this fails, fall back to what we have rather than taking the
     // list down with it.
-    state.allTransactions = state.transactions.slice();
+    all = state.transactions.slice();
   }
-  state.allSessionId = state.sessionId;
+  if (!isLatest()) return;
+  state.allTransactions = all;
+  state.allSessionId = sessionId;
 }

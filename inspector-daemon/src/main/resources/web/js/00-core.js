@@ -61,6 +61,10 @@ const state = {
   // looking for.
   allTransactions: [],
   allSessionId: null,
+  // How many list loads and signal loads have started. Each load keeps its own number and drops
+  // its answer once a newer one has started, because the daemon may answer them out of order.
+  callLoad: 0,
+  signalLoad: 0,
   // How many endpoint chips to show. 0 hides them.
   endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
   // App-state observations for this session as the daemon matched them against the filter, and

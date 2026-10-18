@@ -69,6 +69,7 @@ function sessionData(sources, api, state) {
 
 const sessionState = (filter) => ({
   sessionId: 'S', filter, signals: [], allSignals: [], allSignalsSessionId: null, screens: [], view: 'network',
+  transactions: [], allTransactions: [], allSessionId: null, markers: [], callLoad: 0, signalLoad: 0,
 });
 
 /**
@@ -93,10 +94,72 @@ async function checkWholeSignalsFailure(sources) {
     : `NO - ${cached ? `the filtered ${standIn} was cached as the session` : 'not cached'}, and the next load held ${after || 'nothing'}`;
 }
 
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Two signal loads overlapping: an unfiltered one still waiting on the daemon when a tag chip sets
+ * `tag:cache` and a second load answers first. The older answer, landing last, must not replace the
+ * newer one — and the filter it was asked for must be the one it reads, not `state.filter` re-read
+ * after the wait.
+ */
+async function checkSignalRace(sources) {
+  const rows = [{ id: 's1', tag: 'screen', mono: 1 }, { id: 'c1', tag: 'cache', mono: 2 }];
+  const api = signalRoute(rows, (filter) => (filter ? null : pause(50)));
+  const state = sessionState('');
+  const page = sessionData(sources, api, state);
+  await page.loadSignals();
+  const slow = page.loadSignals();
+  await pause(10);
+  state.filter = 'tag:cache';
+  await page.loadSignals();
+  await slow;
+  const ids = state.signals.map((s) => s.id).join(',');
+  return ids === 'c1'
+    ? 'yes (an unfiltered load landing after a tag:cache one left the signals at c1)'
+    : `NO - signals ${ids || 'empty'} under tag:cache, where c1 was due`;
+}
+
+/**
+ * The same for the list: an unfiltered read of the calls answering after the read for a filter the
+ * user typed since. Every page function the load draws through is a no-op here, and the signal
+ * route answers an empty list; what is checked is which answer `state.transactions` is left holding.
+ */
+async function checkCallRace(sources) {
+  const calls = [{ id: 't1', path: '/a', mono: 1 }, { id: 't2', path: '/b', mono: 2 }];
+  const api = async (path) => {
+    const url = new URL(path, 'http://stub.invalid');
+    if (!url.pathname.endsWith('/transactions')) return [];
+    const filter = url.searchParams.get('filter') || '';
+    if (!filter) await pause(50);
+    const items = filter ? calls.filter((t) => `path:${t.path}` === filter) : calls;
+    return { items, total: items.length };
+  };
+  const state = sessionState('');
+  const element = { hidden: false, textContent: '' };
+  const page = runFile(sources, 'js/15-session-data.js', {
+    state, api, ARCHIVE: null, tagOf: (s) => s.tag,
+    availableViews: () => [{ id: 'network' }], visibleTransactions: () => state.transactions,
+    renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, renderListEmpty() {},
+    showFilterError() {}, renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {},
+    $: () => element,
+  });
+  const slow = page.loadTransactions();
+  await pause(10);
+  state.filter = 'path:/b';
+  await page.loadTransactions();
+  await slow;
+  const ids = state.transactions.map((t) => t.id).join(',');
+  return ids === 't2'
+    ? 'yes (an unfiltered load landing after a path:/b one left the list at t2)'
+    : `NO - the list holds ${ids || 'nothing'} under path:/b, where t2 was due`;
+}
+
 async function checkSessionState(sources) {
   return [
     ['last capture whole', checkLastCapture(sources)],
     ['whole read failure', await checkWholeSignalsFailure(sources)],
+    ['older signal load dropped', await checkSignalRace(sources)],
+    ['older call load dropped', await checkCallRace(sources)],
   ];
 }
 

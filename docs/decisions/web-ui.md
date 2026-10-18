@@ -181,7 +181,10 @@ endpoint chips went on without them until the filter was cleared. The live probe
 refreshes` and `reconnect refreshes` play rows arriving in each gap under `tag:screen`. A
 whole-session read that fails leaves the filtered rows standing in and does not mark them as the
 session, or every later load would trust them; `check-web-static.js`'s `whole read failure` holds
-that. Both are read through `signalPages`, which asks the route for one page at
+that. Each load reads the filter once and hands it down, and a load a newer one has
+overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may answer
+two loads out of order, and a slow unfiltered read that landed last put every row back under the
+filter just typed. `older call load dropped` and `older signal load dropped` hold that. Both are read through `signalPages`, which asks the route for one page at
 a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
 never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
 shorter than asked would truncate again the day that clamp is lowered, and would never stop against
