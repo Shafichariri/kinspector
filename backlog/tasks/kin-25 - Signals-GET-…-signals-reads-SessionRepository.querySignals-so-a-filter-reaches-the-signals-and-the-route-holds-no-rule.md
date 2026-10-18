@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:27'
-updated_date: '2026-10-18 19:55'
+updated_date: '2026-10-18 21:01'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -59,5 +59,5 @@ Built by Bob (engineer). querySignals gains tag: String? = null, ANDed as Filter
 LABEL CHANGE vs a HEAD build on the same fixture: 'filter keeps route' yes (1 of 6 visits are stubs) -> yes (4 of 6 visits are stubs). That probe filters path:/no-such-endpoint-anywhere; visit lines read the filtered state.signals, the old route ignored the filter, so tap/state/cache signals kept three visits non-stub. path: now drops every signal. The route skeleton is identical.
 DEVIATION: 20-navigation.js offered the waterfall tab on state.transactions.length (the filtered calls). With the route honouring filter, tag:screen matches no calls and the tab vanished mid-filter, which the new 'filter tabs steady' check caught (NO - during ...network,path,all,cache,... without waterfall). Changed to state.allTransactions.length; renderWaterfall already renders an empty filter as 'no matching calls'. Recorded in web-ui.md beside the signals split. Not in the ticket's modified_files.
 RED PROOFS. (1) Route's old body put back (git show HEAD:SignalRoutes.kt): SignalQueryTest 4/4 fail; the comparison names it: 'route and list_signals diverged on filter 'tag:screen'', plus 400 expected/200, 1100 expected/1205, AND case returns all screens. (2) Route sorting page.items by ts: 2 fail, 'diverged on filter ''' (order reversed) and the tag case. (3) tag pasted as text 'tag:$it ' + filter: tag case fails, expected [] but was the four screens. (4) Live probe with the old route served: 'filter path drops: NO - 4 call rows, 15 signal rows', 'filter tag keeps: NO - 0 call rows, 15 signal rows, off the screen lane: analytics,tap,cache,...', 167 passed, exit 1. (5) 20-navigation.js reading state.signals (sed allSignals->signals, 3 sites): 'filter tabs steady: NO - during network,path,waterfall / network,path,all,waterfall,screen', exit 1. (6) Waterfall on state.transactions (before the deviation fix): 'filter tabs steady: NO', 168 passed. Each restored and re-run green (169, exit 0).
-McpToolsListGoldenTest and RestApiTest.signals_are_served_newest_first_and_filterable_by_tag pass untouched. Release notes line: 'Web UI: a filter now applies to signals on the timeline and path views, and a session with more than 1000 signals shows all of them.' Client-name scan: see commit report.
+McpToolsListGoldenTest and RestApiTest.signals_are_served_newest_first_and_filterable_by_tag pass untouched. Release notes line (reworded by KIN-30 to match docs/ROADMAP.md's owed lines): 'Web UI: a filter now applies to the signals loaded on the timeline and path views (rows arriving live follow the filter once item:web-live-rows-filtered lands), and a session with more than 1000 signals shows all of them.' Client-name scan: see commit report.
 <!-- SECTION:NOTES:END -->

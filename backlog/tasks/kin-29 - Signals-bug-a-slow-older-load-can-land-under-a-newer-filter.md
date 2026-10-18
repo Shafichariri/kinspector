@@ -1,10 +1,11 @@
 ---
 id: KIN-29
 title: 'Signals bug: a slow older load can land under a newer filter'
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 20:21'
+updated_date: '2026-10-18 21:01'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -32,3 +33,9 @@ Found by the verify panel (Charles) on KIN-24, head 5f6b610, with a vm harness (
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built by Bob (engineer), commit 35ee0b8. loadTransactions reads state.filter once and passes it to syncAllTransactions(filter, isLatest), loadSignals(filter) and so syncAllSignals(filter, isLatest); loadSignals(filter = state.filter) when called alone (pull, browser). state.callLoad and state.signalLoad (00-core.js) count loads; each load drops its answer after every await once a newer one started. Separate counters because a pull reloads signals alone and must not abort a list load's render. Static checks (session-state-checks.js runs 15-session-data.js in a vm, the race.js scenario adapted): 'older signal load dropped' and 'older call load dropped'. RED signal counter off (isLatest = () => true): 'older signal load dropped : NO - signals c1,s1 under tag:cache, where c1 was due'. RED call counter off: 'older call load dropped   : NO - the list holds t1,t2 under path:/b, where t2 was due'. Against the pre-KIN-29 file both NO, 33 checks 2 failed. GREEN 33 checks, 0 failed. Live probe unchanged (171). NOTE FOR QA: the panel's race.js as written seeds state without signalLoad, so against this code ++undefined is NaN and every load drops itself; add signalLoad: 0 to its state before re-running it. Filter pass-down has no separate red: with the counters in place a re-read of state.filter is unobservable, because every filter change starts a new load. Ready for QA.
+<!-- SECTION:NOTES:END -->
