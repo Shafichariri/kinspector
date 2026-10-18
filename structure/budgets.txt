@@ -12,7 +12,7 @@
 5431 inspector-daemon/src/main/resources/web/app.js  # one IIFE; phase F splits it behind web/scripts.txt
 2612 scripts/render-web-ui.js  # the live probe; split after phase F, by the areas app.js splits into
 1926 inspector-daemon/src/main/resources/web/style.css  # phase F splits it into tokens.css plus one file per area
-815 inspector-daemon/src/test/kotlin/dev/inspector/daemon/McpTest.kt  # phase D C4: +1 import line, after C2: +4 (follows McpTools.kt in phase D)
+815 inspector-daemon/src/test/kotlin/dev/inspector/daemon/McpTest.kt  # phase D added 5 import lines and nothing else. Its split is deferred because D's criteria keep the tests unchanged.
 758 inspector-ui/src/commonMain/kotlin/dev/inspector/ui/InspectorList.kt  # phase H
 723 site/index.html  # the landing page: one hand-written file with its CSS inline, by design
 703 inspector-ui/src/commonMain/kotlin/dev/inspector/ui/ListChrome.kt  # phase H

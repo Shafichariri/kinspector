@@ -47,7 +47,8 @@ actual fun defaultClientInfo(appId: String, appVersion: String, buildType: Strin
  * phone. A USB-attached phone gets there through its *own* loopback instead, because
  * `adb reverse tcp:8099 tcp:8099` forwards the device's `127.0.0.1:8099` to the same port on the
  * machine running adb. That is the whole of Android hardware support, and it costs the daemon
- * nothing: it keeps binding loopback only, so the security boundary in `Server.kt` is untouched.
+ * nothing: it keeps binding loopback only, so the security boundary in the daemon's
+ * `http/InspectorDaemon.kt` is untouched.
  *
  * This is the first thing that reads the emulator detection for a decision rather than for a
  * label, which is why fixing that detection came first. While it was wrong, every emulator
