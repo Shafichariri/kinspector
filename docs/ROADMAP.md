@@ -1200,6 +1200,39 @@ in them are what make that structural rather than a matter of care. Decision 3 p
 
 **Out of scope.** Any new endpoint or tool. Changing the archive layout.
 
+**Status, 2026-10-18: built; done once its PR is merged and CI is green.** It is on
+`shafic/structure-phase-d`, which is not pushed, so CI has not run. Tickets KIN-1 to KIN-9 are Done on
+QA evidence from two passes by a fresh verifier, the last at `753d9cf`; `c1f2a4a` only adds doc/KDoc text
+and a `Unit` return type, and QA did not re-run it (the engineer reports 247/0 daemon tests and 35/0
+repo-checks). What landed:
+
+- **Guards first (C1).** `MainClassTest`, `SerialNameTest`, a byte-for-byte `tools/list` golden,
+  `PeerKillIdentityTest` and `ReadRoutesOpenTest`, each proven red and green at base. `Daemon.kt` was
+  deleted as unreferenced.
+- **The moves (C2-C5).** `archive/`, `service/` and `http/` beside `mcp/` and `usb/`; `Main.kt` alone at
+  the root. Renames are 93-99% similar, and the test diff is import lines only. The three decoded
+  `@Serializable` types carry `@SerialName` pins, because kotlinx-serialization quotes the serial name in
+  a 400 body and in stderr.
+- **`DaemonLayersTest` (C6).** An import scan over rules L0-L6. It passes live with 0 violations, goes
+  red on real-file breaks including a split-line FQN, and goes red when its own parser is blinded.
+- **The splits (C7, C8).** `Server.kt` became `InspectorDaemon.kt` plus ten route-group files, with the
+  `Replayer` and `McpControl` kept lazy so no `HttpClient` thread exists until the first replay.
+  `McpTools.kt` became a `ToolGroup` plus seven files. The largest new file is 243 lines.
+- **One control gate (C9).** `ControlGate` replaces the eight header checks; exactly 8 routes are gated.
+
+**What the gate taught, KIN-9.** The first gate shape turned 405 into 404 on any path that also had a
+gated sub-route; the base-against-head route matrix found it on 45 rows. The gate now installs on each
+route, and all 36 affected rows are 405 again. The ticket's `createChild(ControlGateSelector)` design was
+replaced by this.
+
+**Evidence against base `1db168b`.** `tools/list` and an 88-frame transcript are identical. The
+855-row route matrix has 0 differing rows. The jar version reads through to MCP and HAR. Daemon tests are
+247 = 227 base + 20 new, with every base test present. The web probes pass with 164 checks (1 n/a) and 21.
+
+**Not verified.** The no-client-names check on the tickets: the term list is kept out of the repository,
+so QA cannot run it. The release steward scans what it can. `McpTest.kt` was not split, and is the
+"Later" item below.
+
 ### Phase F — `app.js` and CSS split behind the manifest
 
 **Audit finding 4. Must land before 1a**, because 1a adds a rail, hash routes and four pages. Adding

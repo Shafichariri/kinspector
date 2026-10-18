@@ -1,11 +1,11 @@
 ---
 id: KIN-5
 title: 'Phase D C8: split McpTools.kt into tool-group files'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:50'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -39,19 +39,19 @@ Every tool block moves character for character. `McpTest`'s imports (`McpServer`
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `mcp/McpTools.kt` keeps its public constructor, `descriptors(): JsonArray`, `acceptedArguments`, `unknownArgumentError`, `call()` with the `"unknown tool '$name'"` fallthrough, `ToolOutcome` and `McpJson`
-- [ ] #2 `ToolGroup.kt` and the seven files in the table exist under `mcp/`, and dispatch is derived from the same `Tool` list keyed by descriptor name, with no second list of tool names
-- [ ] #3 `git diff --color-moved=zebra --color-moved-ws=allow-indentation-change` shows every tool block as moved character for character
-- [ ] #4 C1's `McpToolsListGoldenTest` passes byte-identical without `-Dinspector.mcp.regenerate=true`, and `mcp-tools-list.json` has no diff
-- [ ] #5 `McpTest`'s imports of `McpServer`, `McpTools`, `MarkerPoster`, `SignalPuller`, `ToolOutcome` and `splitAround` still resolve in `dev.inspector.daemon.mcp`; `McpTest.kt` has no diff in this commit
-- [ ] #6 Every new file is under 600 lines, and the McpTools.kt entry is removed from `structure/budgets.txt` with `-Dinspector.budgets.tighten=true` in the same commit
-- [ ] #7 `DaemonLayersTest` reports 0 violations; `./gradlew :inspector-daemon:test :repo-checks:test` passes
+- [x] #1 `mcp/McpTools.kt` keeps its public constructor, `descriptors(): JsonArray`, `acceptedArguments`, `unknownArgumentError`, `call()` with the `"unknown tool '$name'"` fallthrough, `ToolOutcome` and `McpJson`
+- [x] #2 `ToolGroup.kt` and the seven files in the table exist under `mcp/`, and dispatch is derived from the same `Tool` list keyed by descriptor name, with no second list of tool names
+- [x] #3 `git diff --color-moved=zebra --color-moved-ws=allow-indentation-change` shows every tool block as moved character for character
+- [x] #4 C1's `McpToolsListGoldenTest` passes byte-identical without `-Dinspector.mcp.regenerate=true`, and `mcp-tools-list.json` has no diff
+- [x] #5 `McpTest`'s imports of `McpServer`, `McpTools`, `MarkerPoster`, `SignalPuller`, `ToolOutcome` and `splitAround` still resolve in `dev.inspector.daemon.mcp`; `McpTest.kt` has no diff in this commit
+- [x] #6 Every new file is under 600 lines, and the McpTools.kt entry is removed from `structure/budgets.txt` with `-Dinspector.budgets.tighten=true` in the same commit
+- [x] #7 `DaemonLayersTest` reports 0 violations; `./gradlew :inspector-daemon:test :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -62,3 +62,9 @@ C8 committed as e88af44. Golden byte-identical without regenerate; McpTest.kt an
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA: acceptedArguments and unknownArgumentError verbatim; one tools list; 1640 moved lines; mcp-tools-list.json untouched. DoD #2: no new guard in this ticket. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

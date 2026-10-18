@@ -3,11 +3,11 @@ id: KIN-2
 title: >-
   Phase D C2-C5: move daemon files into archive/, service/ and http/; Main.kt
   stays
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:50'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -42,20 +42,20 @@ Phase D, commits C2 to C5 (design note §1 "File → destination", §4 "Rename h
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Four commits in order C2 (archive/), C3 (service/), C4 (service/Version.kt), C5 (http/Server.kt), and `./gradlew :inspector-daemon:test :repo-checks:test` passes at each of them
-- [ ] #2 `git show -M` on C2, C3 and C5 reports every moved file as a rename with similarity of at least 90, and the rename commits change only `package` lines, `import` lines and the three `@SerialName` pins
-- [ ] #3 `DaemonConfig.FileConfig`, `ReplayRequest` and `SignalPullRequest` carry `@SerialName` equal to their pre-D FQNs with the pinned comment, and C1's `SerialNameTest` passes unchanged
-- [ ] #4 After C5 `inspector-daemon/src/main/kotlin/dev/inspector/daemon/` holds exactly one file, `Main.kt`, beside the directories `archive/`, `service/`, `http/`, `mcp/` and `usb/`; `usb/` has no diff
-- [ ] #5 `daemonVersion()` is declared in `service/Version.kt`; `mcp/McpServer.kt` and `mcp/McpTools.kt` change only that import, and no file under `mcp/` imports `dev.inspector.daemon.http`
-- [ ] #6 Every changed line in `git diff <base> -- inspector-daemon/src/test` (headers aside) matches `^[+-]import [A-Za-z0-9_.]+$`, with no `*` and no `as`, including `usb/UsbBridgeTest.kt`; no test file moves or is renamed
-- [ ] #7 `structure/budgets.txt` changes in the same commit as each change: hand raises to the measured count with the reason "# phase D Cn: +k import lines" (C2 Server.kt and McpTest.kt; C3 Server.kt, McpTest.kt if it grew), the C4 lowering of Server.kt done with `-Dinspector.budgets.tighten=true` plus McpTest.kt raised by its measured delta, and the C5 Server.kt entry's path hand-edited to `inspector-daemon/src/main/kotlin/dev/inspector/daemon/http/Server.kt`
-- [ ] #8 C1's `MainClassTest`, `McpToolsListGoldenTest`, `PeerKillIdentityTest` and `ReadRoutesOpenTest` pass unchanged at C5
+- [x] #1 Four commits in order C2 (archive/), C3 (service/), C4 (service/Version.kt), C5 (http/Server.kt), and `./gradlew :inspector-daemon:test :repo-checks:test` passes at each of them
+- [x] #2 `git show -M` on C2, C3 and C5 reports every moved file as a rename with similarity of at least 90, and the rename commits change only `package` lines, `import` lines and the three `@SerialName` pins
+- [x] #3 `DaemonConfig.FileConfig`, `ReplayRequest` and `SignalPullRequest` carry `@SerialName` equal to their pre-D FQNs with the pinned comment, and C1's `SerialNameTest` passes unchanged
+- [x] #4 After C5 `inspector-daemon/src/main/kotlin/dev/inspector/daemon/` holds exactly one file, `Main.kt`, beside the directories `archive/`, `service/`, `http/`, `mcp/` and `usb/`; `usb/` has no diff
+- [x] #5 `daemonVersion()` is declared in `service/Version.kt`; `mcp/McpServer.kt` and `mcp/McpTools.kt` change only that import, and no file under `mcp/` imports `dev.inspector.daemon.http`
+- [x] #6 Every changed line in `git diff <base> -- inspector-daemon/src/test` (headers aside) matches `^[+-]import [A-Za-z0-9_.]+$`, with no `*` and no `as`, including `usb/UsbBridgeTest.kt`; no test file moves or is renamed
+- [x] #7 `structure/budgets.txt` changes in the same commit as each change: hand raises to the measured count with the reason "# phase D Cn: +k import lines" (C2 Server.kt and McpTest.kt; C3 Server.kt, McpTest.kt if it grew), the C4 lowering of Server.kt done with `-Dinspector.budgets.tighten=true` plus McpTest.kt raised by its measured delta, and the C5 Server.kt entry's path hand-edited to `inspector-daemon/src/main/kotlin/dev/inspector/daemon/http/Server.kt`
+- [x] #8 C1's `MainClassTest`, `McpToolsListGoldenTest`, `PeerKillIdentityTest` and `ReadRoutesOpenTest` pass unchanged at C5
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -68,3 +68,9 @@ C5 is cda3226. KIN-2 ready for QA once the item is done.
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA: four commits, each green. Renames 93-99% similarity; only other changes are the 3 @SerialName pins and budgets. Pins checked live: replay with {} gives the same serial name as base, config stderr identical. Root holds only Main.kt, usb has no diff, Version.kt in place. Test diff is imports only (105 lines). Per-commit budgets: Server.kt 917>924>948>939, McpTest 810>814>815. DoD #2: no new guard in this ticket. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

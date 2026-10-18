@@ -3,11 +3,11 @@ id: KIN-1
 title: >-
   Phase D C1: guards before the move (peer argv, serial names, tools/list
   golden, kill identity, open reads)
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:49'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies: []
@@ -41,21 +41,21 @@ Phase D, commit C1 (design note revision 2, "Commit plan revised"). Guards land 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `MainClassTest` asserts the literal `PeerArgv.MAIN_CLASS == "dev.inspector.daemon.MainKt"` and that `Class.forName(PeerArgv.MAIN_CLASS, false, loader)` has a public static void `main(String[])`; editing the constant turns it red, restoring it turns it green
-- [ ] #2 `SerialNameTest` asserts the descriptors' `serialName` equal `dev.inspector.daemon.ReplayRequest`, `dev.inspector.daemon.SignalPullRequest` and `dev.inspector.daemon.DaemonConfig.FileConfig`, and passes at base
-- [ ] #3 `McpToolsListGoldenTest` compares the `tools/list` reply with `inspector-daemon/src/test/resources/mcp-tools-list.json`, generated at base; the file is rewritten only under `-Dinspector.mcp.regenerate=true`
-- [ ] #4 `PeerKillIdentityTest` spawns `sleep 30`; `ProcessHandlePeerRegistry().kill(pid, false)` is `Refused` with a reason containing "not an inspector process", the process is still alive afterwards, and teardown destroys it
-- [ ] #5 `ReadRoutesOpenTest` sends every GET in `routingRoot().getAllRoutes()` with no `X-Inspector-Control` header to a daemon on inert fakes, and none answers a 403 naming the header
-- [ ] #6 Each of the five guards is proven both ways at base (broken, seen failing, restored), with the red output recorded
-- [ ] #7 `inspector-daemon/src/main/kotlin/dev/inspector/daemon/Daemon.kt` is deleted and nothing referenced `DaemonPlaceholder`
-- [ ] #8 The five guards are new files; `git diff <base> --stat -- inspector-daemon/src/test` lists no pre-existing test file
-- [ ] #9 `./gradlew :inspector-daemon:test :repo-checks:test` passes
+- [x] #1 `MainClassTest` asserts the literal `PeerArgv.MAIN_CLASS == "dev.inspector.daemon.MainKt"` and that `Class.forName(PeerArgv.MAIN_CLASS, false, loader)` has a public static void `main(String[])`; editing the constant turns it red, restoring it turns it green
+- [x] #2 `SerialNameTest` asserts the descriptors' `serialName` equal `dev.inspector.daemon.ReplayRequest`, `dev.inspector.daemon.SignalPullRequest` and `dev.inspector.daemon.DaemonConfig.FileConfig`, and passes at base
+- [x] #3 `McpToolsListGoldenTest` compares the `tools/list` reply with `inspector-daemon/src/test/resources/mcp-tools-list.json`, generated at base; the file is rewritten only under `-Dinspector.mcp.regenerate=true`
+- [x] #4 `PeerKillIdentityTest` spawns `sleep 30`; `ProcessHandlePeerRegistry().kill(pid, false)` is `Refused` with a reason containing "not an inspector process", the process is still alive afterwards, and teardown destroys it
+- [x] #5 `ReadRoutesOpenTest` sends every GET in `routingRoot().getAllRoutes()` with no `X-Inspector-Control` header to a daemon on inert fakes, and none answers a 403 naming the header
+- [x] #6 Each of the five guards is proven both ways at base (broken, seen failing, restored), with the red output recorded
+- [x] #7 `inspector-daemon/src/main/kotlin/dev/inspector/daemon/Daemon.kt` is deleted and nothing referenced `DaemonPlaceholder`
+- [x] #8 The five guards are new files; `git diff <base> --stat -- inspector-daemon/src/test` lists no pre-existing test file
+- [x] #9 `./gradlew :inspector-daemon:test :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -66,3 +66,9 @@ C1 committed as 8c4f9a4. Daemon tests 227 -> 235 (+8), repo-checks 18. All five 
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA at base 8c4f9a4 and head. MainClassTest, SerialNameTest, McpToolsListGoldenTest, PeerKillIdentityTest and ReadRoutesOpenTest each proven red-then-green, at base and at head. Daemon.kt unreferenced and deleted. New files only. At C1: daemon tests 235/0, repo-checks 18/0. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

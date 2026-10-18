@@ -1,11 +1,11 @@
 ---
 id: KIN-3
 title: 'Phase D C6: DaemonLayersTest import scan holds the daemon''s layers'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:50'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -39,18 +39,18 @@ Rules: L0 a filesystem walk of `inspector-daemon/src/main/` compared with the `g
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `repo-checks/src/test/kotlin/dev/inspector/repochecks/DaemonLayersTest.kt` exists, built on a pure function `layerViolations(files)`, and encodes the layer table and rules L0 to L6 from the description
-- [ ] #2 Permanent synthetic cases each produce a violation: service imports `io.ktor.http.HttpStatusCode`; archive names `io.ktor…Route` inline; http imports mcp; mcp imports http; archive imports service; usb imports service; `import io.ktor.*` in service; a service file declaring `package …http`; an extra file in the root; a qualified name split across lines; a `.java` file; a file on disk that is not in git
-- [ ] #3 A clean synthetic tree gives 0 violations, an empty tree fails L6, and an input that breaks the L4 parser trips L6
-- [ ] #4 The live run over the repository reports 0 violations
-- [ ] #5 One-off proof for the roadmap criterion, shown red in the PR and then restored: adding `import io.ktor.http.HttpStatusCode` to a real file under `service/` fails the test, and adding `import dev.inspector.daemon.http.InspectorDaemon` to a real file under `mcp/` fails it
-- [ ] #6 `./gradlew :inspector-daemon:test :repo-checks:test` passes and the daemon test diff is unchanged by this commit
+- [x] #1 `repo-checks/src/test/kotlin/dev/inspector/repochecks/DaemonLayersTest.kt` exists, built on a pure function `layerViolations(files)`, and encodes the layer table and rules L0 to L6 from the description
+- [x] #2 Permanent synthetic cases each produce a violation: service imports `io.ktor.http.HttpStatusCode`; archive names `io.ktor…Route` inline; http imports mcp; mcp imports http; archive imports service; usb imports service; `import io.ktor.*` in service; a service file declaring `package …http`; an extra file in the root; a qualified name split across lines; a `.java` file; a file on disk that is not in git
+- [x] #3 A clean synthetic tree gives 0 violations, an empty tree fails L6, and an input that breaks the L4 parser trips L6
+- [x] #4 The live run over the repository reports 0 violations
+- [x] #5 One-off proof for the roadmap criterion, shown red in the PR and then restored: adding `import io.ktor.http.HttpStatusCode` to a real file under `service/` fails the test, and adding `import dev.inspector.daemon.http.InspectorDaemon` to a real file under `mcp/` fails it
+- [x] #6 `./gradlew :inspector-daemon:test :repo-checks:test` passes and the daemon test diff is unchanged by this commit
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -61,3 +61,9 @@ C6 committed as 730aceb. repo-checks 18 -> 35 (17 DaemonLayersTest cases). Live:
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA: pure layerViolations covers L0-L6, 17/17 synthetic cases; live run 0 violations. Real-file one-offs go red (L4 on service/Har.kt and mcp/McpServer.kt) plus 15+ further breaks including a split-line FQN; L6 blinding goes red. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

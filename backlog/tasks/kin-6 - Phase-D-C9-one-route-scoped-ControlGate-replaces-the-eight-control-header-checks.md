@@ -3,11 +3,11 @@ id: KIN-6
 title: >-
   Phase D C9: one route-scoped ControlGate replaces the eight control-header
   checks
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:51'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -36,22 +36,22 @@ The arbiter is `ControlHeaderCoverageTest`, unchanged. If it cannot pass unchang
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `http/ControlGate.kt` defines the route-scoped plugin and `Route.controlGated`, installing the plugin only when `pluginOrNull` is absent; exactly the eight routes named in the description are inside it; `requireControlHeader` no longer exists anywhere under `inspector-daemon/src/main`
-- [ ] #2 New `inspector-daemon/src/test/kotlin/dev/inspector/daemon/http/ControlGateTest.kt` (embeddedServer on port 0, a counter per handler) passes cases 1 to 3: no header gives 403 with a body naming the header and counter 0; value `0` gives 403 and counter 0; value `1` runs the handler and counter is 1
-- [ ] #3 ControlGateTest case 4: `controlGated` applied twice to one route throws nothing and both routes are gated
-- [ ] #4 ControlGateTest cases 5 and 5b: a gated POST /x/clear beside an ungated POST /x/{id} is refused; an ungated POST /x/clear beside a gated POST /x/{id} reaches the ungated handler
-- [ ] #5 ControlGateTest cases 6 and 7: an open GET /y beside a gated POST /y/z answers 200 with no header while the POST is refused; routes nested in `route("/n") {}` inside `controlGated` are refused
-- [ ] #6 ControlGateTest case 8: the refusal body and Content-Type equal literals measured at base from today's `respondError`
-- [ ] #7 Breaking the gate so it does not respond turns ControlGateTest case 1 red AND `ControlHeaderCoverageTest` red (through the `ServerControl.exit` fake); restored, both are green
-- [ ] #8 `ControlHeaderCoverageTest` passes with no diff and prints the same 8 routes, and C1's `ReadRoutesOpenTest` passes unchanged
-- [ ] #9 The set of (method, path) pairs from `routingRoot().getAllRoutes()` is identical before and after this commit
-- [ ] #10 `DaemonLayersTest` reports 0 violations; `./gradlew :inspector-daemon:test :repo-checks:test` passes
+- [x] #1 `http/ControlGate.kt` defines the route-scoped plugin and `Route.controlGated`, installing the plugin only when `pluginOrNull` is absent; exactly the eight routes named in the description are inside it; `requireControlHeader` no longer exists anywhere under `inspector-daemon/src/main`
+- [x] #2 New `inspector-daemon/src/test/kotlin/dev/inspector/daemon/http/ControlGateTest.kt` (embeddedServer on port 0, a counter per handler) passes cases 1 to 3: no header gives 403 with a body naming the header and counter 0; value `0` gives 403 and counter 0; value `1` runs the handler and counter is 1
+- [x] #3 ControlGateTest case 4: `controlGated` applied twice to one route throws nothing and both routes are gated
+- [x] #4 ControlGateTest cases 5 and 5b: a gated POST /x/clear beside an ungated POST /x/{id} is refused; an ungated POST /x/clear beside a gated POST /x/{id} reaches the ungated handler
+- [x] #5 ControlGateTest cases 6 and 7: an open GET /y beside a gated POST /y/z answers 200 with no header while the POST is refused; routes nested in `route("/n") {}` inside `controlGated` are refused
+- [x] #6 ControlGateTest case 8: the refusal body and Content-Type equal literals measured at base from today's `respondError`
+- [x] #7 Breaking the gate so it does not respond turns ControlGateTest case 1 red AND `ControlHeaderCoverageTest` red (through the `ServerControl.exit` fake); restored, both are green
+- [x] #8 `ControlHeaderCoverageTest` passes with no diff and prints the same 8 routes, and C1's `ReadRoutesOpenTest` passes unchanged
+- [x] #9 The set of (method, path) pairs from `routingRoot().getAllRoutes()` is identical before and after this commit
+- [x] #10 `DaemonLayersTest` reports 0 violations; `./gradlew :inspector-daemon:test :repo-checks:test` passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -62,3 +62,9 @@ C9 committed as 5d12bde. Daemon 244/0 (+9 ControlGateTest), repo-checks 35/0. Co
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA at 753d9cf: exactly 8 gated routes, requireControlHeader gone. ControlGateTest 11 cases green; a silent gate turns all red plus the coverage test. Case 8 literals re-measured at base with curl. Route set and full 71-line route tree identical to base. Note: the description's createChild(ControlGateSelector) mechanism was replaced by KIN-9's per-route install; the criteria do not depend on it. c1f2a4a (doc/KDoc and a Unit return type) was not re-run by QA; engineer reports 247/0 and 35/0. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -1,11 +1,11 @@
 ---
 id: KIN-7
 title: 'Phase D C10: update file references and record the three phase D decisions'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 10:51'
-updated_date: '2026-10-18 11:54'
+updated_date: '2026-10-18 12:40'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -41,20 +41,20 @@ The `McpTest.kt` line in `structure/budgets.txt` gets the reason text below. The
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `grep -rn 'Server.kt' docs inspector-daemon/AGENTS.md inspector-stream/src repo-checks/src` returns no line outside `docs/ROADMAP.md` that describes current code; `devices-and-stream.md` and `Platform.android.kt` name `http/InspectorDaemon.kt`, and the `Platform.android.kt` diff is comment lines only
-- [ ] #2 `FileBudgetTest.kt`'s KDoc no longer names `Server.kt` or `McpTools.kt` as files awaiting phase D
-- [ ] #3 `inspector-daemon/AGENTS.md` key-file rows point at `service/Har.kt`, `service/Export.kt` and `archive/SessionRepository.kt`, and it has a row for `http/InspectorDaemon.kt` and the layer table; every path in those rows exists
-- [ ] #4 The `McpControlTest` sentence in `docs/decisions/daemon-and-mcp.md` reads exactly as quoted in the description
-- [ ] #5 The kill-time identity re-check, the no "start MCP" endpoint decision and `ServerControl` as an interface are each still true of the moved code, with the file each now lives in recorded in the QA evidence
-- [ ] #6 `docs/decisions/daemon-and-mcp.md` has the three new paragraphs with the bold rules as titled in the description; the layers paragraph quotes the adapters rule and names both known violations; each names the test that pins it
-- [ ] #7 The `McpTest.kt` entry in `structure/budgets.txt` carries the reason "phase D added N import lines and nothing else. Its split is deferred because D's criteria keep the tests unchanged." with N the measured count
-- [ ] #8 `./gradlew :repo-checks:test :inspector-daemon:test` passes, including `DecisionsTest` and `AgentGuideTest`
+- [x] #1 `grep -rn 'Server.kt' docs inspector-daemon/AGENTS.md inspector-stream/src repo-checks/src` returns no line outside `docs/ROADMAP.md` that describes current code; `devices-and-stream.md` and `Platform.android.kt` name `http/InspectorDaemon.kt`, and the `Platform.android.kt` diff is comment lines only
+- [x] #2 `FileBudgetTest.kt`'s KDoc no longer names `Server.kt` or `McpTools.kt` as files awaiting phase D
+- [x] #3 `inspector-daemon/AGENTS.md` key-file rows point at `service/Har.kt`, `service/Export.kt` and `archive/SessionRepository.kt`, and it has a row for `http/InspectorDaemon.kt` and the layer table; every path in those rows exists
+- [x] #4 The `McpControlTest` sentence in `docs/decisions/daemon-and-mcp.md` reads exactly as quoted in the description
+- [x] #5 The kill-time identity re-check, the no "start MCP" endpoint decision and `ServerControl` as an interface are each still true of the moved code, with the file each now lives in recorded in the QA evidence
+- [x] #6 `docs/decisions/daemon-and-mcp.md` has the three new paragraphs with the bold rules as titled in the description; the layers paragraph quotes the adapters rule and names both known violations; each names the test that pins it
+- [x] #7 The `McpTest.kt` entry in `structure/budgets.txt` carries the reason "phase D added N import lines and nothing else. Its split is deferred because D's criteria keep the tests unchanged." with N the measured count
+- [x] #8 `./gradlew :repo-checks:test :inspector-daemon:test` passes, including `DecisionsTest` and `AgentGuideTest`
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -63,3 +63,9 @@ The `McpTest.kt` line in `structure/budgets.txt` gets the reason text below. The
 <!-- SECTION:NOTES:BEGIN -->
 C10 committed as fc72878. grep for Server.kt/McpTools.kt outside ROADMAP: none. Guide rows' paths all exist; layer table added under a '## Layers' heading plus a key-file row for DaemonLayersTest. Three decisions re-checked and still true (files listed in the proofs). McpTest.kt budget reason: N = 5 (815 - 810). Platform.android.kt diff is comment-only; :inspector-stream was not compiled here (no Android SDK). Not touched: the four ROADMAP lines, which the product owner routes. Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA: no stale references; FileBudgetTest KDoc and guide rows correct; McpControlTest sentence matches exactly; kill re-check, no start endpoint and ServerControl interface each proven live; three new paragraphs present; McpTest budget reason N=5; DecisionsTest and AgentGuideTest 5/0 each. DoD #2: no new guard in this ticket. DoD #3 (no client names) is NOT verified and left unticked: the term list is deliberately kept out of the repo, so it cannot be checked here by design; release-steward scans what it can.
+<!-- SECTION:FINAL_SUMMARY:END -->
