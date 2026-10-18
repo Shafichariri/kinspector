@@ -1,0 +1,152 @@
+# Decisions — web UI
+Owned by `inspector-daemon/src/main/resources/web/` and the probes in `scripts/`. Imported by the web guide.
+
+**The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
+a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are
+separated so a narrow bar loses the least specific part of the prefix, and the full label is the
+tooltip.
+
+**The web list's empty state says which of four things emptied it.** A time selection, a filter
+(with a `clear filter` button, because clearing it is the whole fix), a session with no calls,
+and no session at all. "Waiting for an app with inspector-stream to connect" is said only in the
+last case: on an archived session it sent people to check the app when the app had come and gone.
+
+**Nothing in the web UI is under 11px except a named list, and `render-web-ui.js` reads the
+stylesheet to hold it.** The method badge, `kbd` key caps and the three fold glyphs (`.jt-tw`,
+`.now-caret`, `.tl-twisty`) are the exceptions — shapes, or a badge sized to a fixed column —
+and each is named in `auditMinTextSize` rather than matched by pattern, so a new 10px caption fails
+the audit until someone decides it belongs on the list. The design pass named four selectors to
+raise; nine more were at 10px, and fixing only the four would have left the rule false on day one.
+
+**The tab bar is always drawn.** It used to hide when a session had only the traffic view, which
+made the bar appear and disappear between sessions and moved everything under it. The order control
+is a segmented pair rather than two more chips, because it arranges the list where the chips beside
+it filter it; `aria-pressed` on each half is checked against the visible state.
+
+**`querySelector` searches the whole subtree, and the replay panel anchored on that for two
+releases.** `runReplay` inserted its result with
+`pane.insertBefore(title, pane.querySelector('.section-title'))`. On a row with a redaction banner
+or an attempt chain the first match is a direct child and it works; on an **ordinary** row the
+first match is the one inside a `.dtab-panel`, a grandchild, and `insertBefore` throws
+`NotFoundError` before the request is even built. So replay failed on most rows and worked on
+exactly the interesting ones somebody reaches for when testing it by hand. It anchors on `.dtabs`
+now, which is a direct child. Nothing caught it because `render-web-ui.js` never pressed the
+button; it does now.
+
+**Replay is behind one `replay ▾` menu, and its Escape handler stops propagation.** The detail
+header ranks its actions: the two copies are quiet because they only read, and replay is the one
+outlined control because it sends. Escape inside the menu must not bubble — the page's own Escape
+clears the selection, so a bubbling Escape closed the menu *and* the whole detail pane. The
+replay probes open the menu before pressing an item, which is also what tests that the items are
+reachable at all.
+
+**A replay's `headers` map replaces the captured set entirely.** `Replayer` uses a sent map
+verbatim and skips `replayableHeaders`, so anything the UI leaves out is simply not sent — and its
+own hop-by-hop filtering never runs either. The edit form therefore seeds from *filtered* captured
+headers rather than the raw capture, or changing a body would quietly put the captured
+`Content-Length` and `Host` back on the request. `HOP_BY_HOP` in `app.js` mirrors
+`HOP_BY_HOP_HEADERS` in `Replay.kt`, and `mirror-cases/hopByHop.json` holds the two lists equal:
+`HopByHopMirrorTest` runs it against the daemon's, `check-web-static.js` against the page's.
+
+**A probe that presses a button must stub `fetch` itself, not rely on the guard it is testing.**
+The editor's malformed-header check presses **send**, because "the form refuses this" is only
+observable by trying. The first version relied on the guard being present to stop the request — so
+the one run where the guard was broken was the one run that sent something. Against an unreachable
+host that surfaced as the whole script dying; against a reachable one it would have fired a real
+edited request from a smoke test and reported a pass.
+
+**`render-web-ui.js` takes its verdict from its own report lines, and checks an exact count.** It
+exited 0 whatever it printed, so a run in which every line said NO was green to anything that read
+only the exit code — which is CI. Threading a result through a hundred probes would have been a
+rewrite; instead every line printed while reporting is classified as it goes: a value starting
+`yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped. A line that is information on
+purpose goes through `note()`, with a comment where it is printed saying why; anything else is
+*unclassified*, and an unclassified line fails any run with an expected count. That rule exists
+because the first version let information be the default: seven checks printed their verdict on an
+unclassified line or in the second half of a compound one, so QA set the detail pane's default tab
+to the wrong one and the run stayed green. **One check per line**, and nothing reaches the report
+without either a verdict or a declared reason not to have one. Any failure, any page error or a
+list that is not an exact mirror exits 1. The count is the other half: a probe whose selector
+stopped matching does not fail, it reports `n/a` or nothing, so `INSPECTOR_UI_EXPECT_CHECKS` pins
+how many must pass and CI sets it from `.github/workflows/ci.yml`. A change that adds or removes a
+check changes that number in the same commit. The archive probe does the same. Against a session
+of your own, with no expected count, unclassified lines are reported and not fatal, because probes
+fall into prose branches for data that session lacks. The probes that read a whole session page
+through the routes, which clamp a reply to 1000 rows.
+
+**The CI probe session is written by the daemon's own writer at CI time, and never committed.**
+`ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
+`writeSession` and `SessionWriter` like every daemon test. A committed archive would be a second
+copy of the on-disk format that nothing keeps current — the day a field is added it quietly stops
+exercising it while every probe goes on passing against the old shape. Its contents are chosen, not
+sampled, because a probe with nothing to look at says `n/a`: a shared prefix and a second host, a
+500, a retry chain, a redirect chain, a repeat that swept up a retry, a marker at exactly a call's
+`mono`, a full tie on chip count and recency, both cache payload shapes and a run of five identical
+observations. A second run replaces the probe session rather than appending to it — `SessionWriter`
+appends, and doubled rows would make every count depend on how often the task had run — and leaves
+anything else in the directory alone. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
+is there, so a fixture edit that loses one fails a unit test rather than turning a CI check into a
+skip. Every host is under `example.invalid`, so a replay that escaped its stub reaches nothing. CI
+serves it on port 8231, never 8099, and pins jsdom by exact version.
+
+**The snapshot now writes field values into the markup.** `input.value` and `textarea.value` are
+DOM *properties*; `outerHTML` serialises the `value` attribute and a textarea's text content. Every
+snapshot this script ever produced therefore showed the filter box, the settings fields and the
+replay editor empty — and the snapshot is the only thing anyone *looks* at.
+
+**The web UI keeps an unfiltered copy of the session, and two features depend on it.**
+`state.transactions` holds the rows the *daemon* matched against the current filter, so it is the
+wrong source for anything describing the session as a whole. `state.allTransactions` is the whole
+session; endpoint chips and duplicate detection both read it. Endpoint chips built from the
+filtered view would collapse to the one chip you just clicked, making every other endpoint a dead
+end, and duplicate highlighting would vanish under exactly the filter you applied to investigate
+it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
+filter is set, because then the rows already are the whole session.
+
+**The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
+turns every number into a double, so a 64-bit id `1234567890123456789` came back as
+`…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to
+the front of their object and keeps only the last of a duplicated key. `prettyJson` did exactly
+that round trip for as long as it existed. `parseJsonTree` keeps each scalar's source text and each
+object's entries in order, and `printJsonTree` reproduces `JSON.stringify(x, null, 2)`'s layout
+from it, so the tree, raw and copy are the captured bytes re-indented and nothing else. It is
+strict on purpose: anything `JSON.parse` rejects falls back to the text as it arrived.
+`check-web-static.js` lifts both functions out of the real `app.js` by their `jsonParser` anchors
+and checks the ids, the order, the duplicates and the rejection cases, in CI, with nothing installed.
+
+**The JSON tree's hidden fields are a view, never an edit.** Copy, raw and every export read the
+body, not the rows — a field that silently went missing from a copied body would be the viewer
+editing the evidence. Two more rules: the tree is never drawn for a **truncated** body, because a
+prefix that happens to parse would be presented as the whole; and its key handler stops `f`, `h`
+and the arrows from bubbling, because `f` also means "focus the filter box" to the page. The
+view-only copy and the key handling each have a check in `render-web-ui.js` that was proven to
+fail when the rule was broken; the truncation rule has none yet, because the script drives whatever
+session is on the machine and a truncated JSON body is rare there.
+
+**A stopped daemon's banner offers no restart, and the page keeps redialling.** The design pass
+proposed a `restart daemon` button on the banner; the process that would receive it is the one that
+just exited, so it could only ever fail. The banner says to run `inspector serve` instead, and that
+is enough because `ws.onclose` still redials every 3 s while stopped — it used to return early,
+which left a page that had stopped a daemon unable to notice it coming back without a reload.
+`render-web-ui.js` stubs the stop request (never the real daemon), checks one click only arms,
+and replays the page's own `onopen` to prove the banner, the dimming and the disabled controls all
+clear. "Last capture" names a row this page watched arrive from any session; failing that it says
+"newest row in this session", because the newest row of an old session is not the daemon's last
+capture and must not be presented as one.
+
+**The top bar has two dots and they mean different things.** `live` is whether the *list* follows
+new rows; the dot in the daemon group is whether the *page is connected*. They were one checkbox
+and one dot, which read as "the daemon is up" whichever it was describing. Pausing drops live rows
+rather than queueing them, so resuming re-reads the session — without that, a list resumed after a
+burst is missing the burst with nothing on screen to say so. The probe watches for the re-read.
+
+**`endedAt` and "is anything connected" are different questions, and `GET /api/recording` is the
+second one.** A session whose daemon was killed, or whose app vanished without a clean close, has
+no `endedAt` and no open connection either — so anything gating on `endedAt` offers a control that
+the daemon then refuses with a 409, on exactly the sessions where the app went away. Which is when
+somebody most wants to mark where it happened. The web UI's add-marker form asks the endpoint.
+
+**The list's display order is `orderedRows()`, and both rendering and `j`/`k` go through it.** If
+navigation computes its own sort, `j` moves up the screen the moment newest-first is on. Marker
+dividers are interleaved oldest-first and the whole sequence is then reversed, so a divider stays
+attached to the same rows; `scripts/render-web-ui.js` asserts the sequence is an exact mirror.

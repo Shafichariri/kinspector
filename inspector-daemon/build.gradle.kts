@@ -50,6 +50,13 @@ tasks.jar {
     }
 }
 
+// The web UI's agent guide sits beside the files it describes, so it lands in `resources/web/`.
+// Nothing would serve it — every route names its file — but Gradle follows the `CLAUDE.md` symlink
+// and copies both into the jar, which would change the shipped artefact for a note to agents.
+tasks.processResources {
+    exclude("web/AGENTS.md", "web/CLAUDE.md")
+}
+
 /*
  * Passes the mirror-cases folder to the test JVM *as a declared input*, path-sensitive relative to
  * the folder rather than absolute, so the test re-runs when a case changes and the build cache can

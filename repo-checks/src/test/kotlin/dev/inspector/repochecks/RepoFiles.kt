@@ -28,14 +28,12 @@ object RepoFiles {
     }
 
     /**
-     * Every text file. Symlinks are skipped (`CLAUDE.md` and `.cursorrules` point at `AGENTS.md`,
-     * which is read once under its own name), and so is anything holding a NUL byte, which is how
-     * git itself tells binary from text.
+     * Every path git lists, symlinks included, relative to the root with `/` separators.
      *
      * A git failure or an empty listing fails rather than returning nothing: every check below is
      * a loop over this list, and an empty loop passes.
      */
-    val text: List<TextFile> by lazy {
+    val paths: List<String> by lazy {
         val process = ProcessBuilder("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard")
             .directory(root)
             .redirectErrorStream(true)
@@ -44,7 +42,18 @@ object RepoFiles {
         if (!process.waitFor(60, TimeUnit.SECONDS) || process.exitValue() != 0) {
             fail("git ls-files failed in $root:\n$output")
         }
-        val files = output.split('\u0000').filter { it.isNotEmpty() }.distinct().mapNotNull { path ->
+        output.split('\u0000').filter { it.isNotEmpty() }.distinct()
+            .also { if (it.isEmpty()) fail("git ls-files listed nothing in $root; refusing to check nothing") }
+    }
+
+    /**
+     * Every text file. Symlinks are skipped (`CLAUDE.md` and `.cursorrules` point at `AGENTS.md`,
+     * and so does the `CLAUDE.md` beside every module's guide; each target is read once under its
+     * own name), and so is anything holding a NUL byte, which is how git itself tells binary from
+     * text. `AgentGuideTest` reads the symlinks from [paths], because this list cannot see them.
+     */
+    val text: List<TextFile> by lazy {
+        val files = paths.mapNotNull { path ->
             val file = File(root, path)
             // `--cached` lists a tracked file deleted from the working tree; there is nothing to read.
             if (Files.isSymbolicLink(file.toPath()) || !file.isFile) return@mapNotNull null

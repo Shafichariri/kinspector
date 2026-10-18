@@ -30,7 +30,7 @@ skipped, and QA run by the engineer it is checking is no longer independent.
    continued engineer conversation, which would review its own reasoning instead of the diff. Any **Failed** or blocking finding
    goes back to step 4; loop until clean.
 6. `ux-reviewer` → render and look, for UI items.
-7. `delivery-tracker` → update `docs/ROADMAP.md` state and `AGENTS.md` "Where we are".
+7. `delivery-tracker` → update `docs/ROADMAP.md` state, `docs/STATUS.md`, and the phase table in `AGENTS.md` "Where we are".
 8. `release-steward` → if consumer-visible: INTEGRATION.md bump + changelog; always: hygiene scan.
 9. Commit (as the maintainer, no attribution trailers — see `AGENTS.md`) and push only if the human asked for it; report the QA table and what stays unverified.
 

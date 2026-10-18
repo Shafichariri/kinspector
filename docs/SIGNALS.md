@@ -367,7 +367,7 @@ Ingest, on `SignalMsg`:
 > whole time. The signal path has the identical shape and will reproduce the identical bug. The
 > live payload needs its own test — extend `LiveTest`, do not rely on the REST path proving it.
 >
-> The standing rule from `AGENTS.md` applies verbatim: **the live path and the REST path are two
+> The standing rule from `docs/STATUS.md` applies verbatim: **the live path and the REST path are two
 > renderings of one row.** Any new field on `Signal` needs a check on both.
 
 New REST routes, following the existing shapes:
