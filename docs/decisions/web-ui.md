@@ -171,20 +171,9 @@ their counts, the tag browsers, the glance, the axis, tag colours, `sessionStart
 the agent bundle, "last capture" and `state.screens` all read it — a tab counted from the filtered
 list would shrink or vanish under a filter and claim the app recorded less than it did. The
 waterfall tab is offered from `allTransactions` for the same reason: once the route honoured
-`filter`, `tag:screen` matched no calls and the tab vanished mid-filter, and the waterfall already
-says "no matching calls" itself. `allSignals` is cached
-per session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
-rows it asked for are new. So do resuming the list and the socket opening again after the daemon was
-away (`forgetWholeSession`, both caches): the live socket is the only thing that keeps either copy
-current, so rows that arrived while nothing listened are in neither, and the tabs, the route and the
-endpoint chips went on without them until the filter was cleared. The live probe's `resume
-refreshes` and `reconnect refreshes` play rows arriving in each gap under `tag:screen`. A
-whole-session read that fails leaves the filtered rows standing in and does not mark them as the
-session, or every later load would trust them; `check-web-static.js`'s `whole read failure` holds
-that. Each load reads the filter once and hands it down, and a load a newer one has
-overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may answer
-two loads out of order, and a slow unfiltered read that landed last put every row back under the
-filter just typed. `older call load dropped` and `older signal load dropped` hold that. Both are read through `signalPages`, which asks the route for one page at
+`filter`, `tag:screen` matched no calls and the tab vanished mid-filter. `allSignals` is cached per
+session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
+rows it asked for are new. Both are read through `signalPages`, which asks the route for one page at
 a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
 never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
 shorter than asked would truncate again the day that clamp is lowered, and would never stop against
@@ -193,6 +182,38 @@ is why the seam is de-duplicated. A page that fails fails the whole read: a quie
 the defect the pager exists to fix. `check-web-static.js` lifts it by its `signalPages` anchors and
 runs it against stub routes — 1001 rows by 1000, a 500 clamp, `offset` ignored, a repeat across the
 seam — and was proven red with a `page.length < 1000` stop and with the de-duplication removed.
+
+The two cached copies go stale in three ways, and each is closed. Resuming the list and the socket
+opening again after the daemon was away clear both (`forgetWholeSession`): the live socket is the
+only thing that keeps either copy current, so rows that arrived while nothing listened are in
+neither, and the tabs, the route and the endpoint chips went on without them until the filter was
+cleared. The live probe's `resume refreshes` and `reconnect refreshes` play rows arriving in each
+gap under `tag:screen`. A whole-session read that fails leaves the filtered rows standing in and
+does not mark them as the session, or every later load would trust them (`whole read failure` in
+`check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
+one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
+answer two loads out of order, and a slow unfiltered read that landed last put every row back under
+the filter just typed (`older call load dropped`, `older signal load dropped`).
+
+**A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
+list always did; the waterfall, the path and the timeline did not. Under a filter that matched
+nothing the waterfall said "no calls to lay out" beside a header counting sixteen, the path called
+four visits in six "nothing recorded", and the timeline either said "no entries" or — with a marker
+in range, which the filter does not touch — nothing at all. Each now draws `filterNote`: emptied,
+"nothing matches the filter `…` — N calls and M signals hidden"; thinned, "N calls and M signals
+hidden by the filter `…`" above the rows, both with the list's own `clear filter` button. The counts
+are the whole session's rows less the filtered ones, within a brushed stretch where the pane brushes,
+and without `screen` signals on the path, which draws every screen whatever the filter. A visit the
+filter emptied reads "0 of N match", N counted from the same skeleton over the whole session, and
+"nothing recorded" is said only where nothing was. The timeline decides it is empty on calls and
+signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
+calls"; the waterfall as a whole never did, which is what this paragraph used to claim. The live
+probe's seven lines from `waterfall emptied` to `filter panes tabs` press each pane's button and
+check the tab bar never moves. Where the note sits is layout, which jsdom does not do, so it was checked in
+headless Chrome at 1440 and 400 wide: the timeline's empty note is above the timeline, which is a
+full-height box, and an empty timeline does not follow its foot under live tail, or the note
+scrolled out of sight; the thinned note is sticky inside the timeline, and the path's rides in one
+sticky box with the map.
 
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as

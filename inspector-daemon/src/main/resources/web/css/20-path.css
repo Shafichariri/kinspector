@@ -30,6 +30,8 @@
 .pv-dim { opacity: 0.4; }
 
 /* --- the map --- */
+/* The map and, under a filter, the note saying what it hid: one sticky box, so neither covers the other. */
+.pv-top { position: sticky; top: 0; z-index: 2; background: var(--bg); }
 .pv-metro {
   position: sticky;
   top: 0;

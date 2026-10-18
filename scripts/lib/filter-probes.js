@@ -122,4 +122,126 @@ async function probeWholeSessionRefresh(ctx) {
   return result;
 }
 
-module.exports = { probeWholeSessionRefresh, typeFilter, press };
+/** Whether `node` says what the filter took, names `filter`, and carries the list's clear control. */
+function namesFilter(node, filter) {
+  return Boolean(node) && [...node.querySelectorAll('code')].some((c) => c.textContent === filter)
+    && [...node.querySelectorAll('button')].some((b) => b.textContent === 'clear filter');
+}
+
+/**
+ * The waterfall, the path and the timeline under a filter that empties them and one that thins
+ * them. Each must say the filter did it, name it, and offer the list's `clear filter` — which is
+ * pressed, because the offer is only true if pressing it brings the rows back. "Nothing recorded"
+ * may appear only where the whole session recorded nothing; under a filter a visit reads "0 of N
+ * match", with N read off the same visit before the filter was typed. The timeline is judged empty
+ * on calls and signals alone, so a marker in range, which the filter does not touch, must not hide
+ * the note. The tab bar must not move throughout.
+ *
+ * Expected counts come from the daemon, not the page: the session's calls and signals, and how many
+ * calls the thinning filter matches.
+ */
+async function probeFilterPanes(ctx) {
+  const { doc, ORIGIN } = ctx;
+  const keys = ['waterfallEmptied', 'waterfallThinned', 'pathCounts', 'pathNote', 'timelineEmptied', 'timelineThinned', 'tabsSteady'];
+  const id = encodeURIComponent(doc.getElementById('session-picker').value);
+  const calls = (await ctx.sessionTransactions(id)).items || [];
+  const signals = await ctx.sessionSignals(id);
+  const tab = (view) => doc.querySelector(`#tabs .tab[data-view="${view}"]`);
+  if (!calls.length || !signals.length || !tab('waterfall') || !tab('path') || !tab('all')) {
+    return Object.fromEntries(keys.map((k) => [k, 'n/a (needs calls, signals and the waterfall, path and timeline tabs)']));
+  }
+  const nothing = 'path:/__inspector_probe_matches_nothing__';
+  const thin = `path:${calls[0].path}`;
+  const matched = await fetch(`${ORIGIN}/api/sessions/${id}/transactions?${new URLSearchParams({ filter: thin, limit: '1' })}`)
+    .then((r) => r.json()).then((page) => page.matched);
+  const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  const tabIds = () => [...doc.querySelectorAll('#tabs .tab')].map((t) => t.dataset.view).join(',');
+  const tabsBefore = tabIds();
+  const tabsDuring = [];
+  const open = async (view) => { await press(ctx, tab(view)); await pause(300); await ctx.settle(); };
+  const filtered = async (text) => { await typeFilter(ctx, text); tabsDuring.push(tabIds()); };
+  const clearIn = async (node) => {
+    const button = [...node.querySelectorAll('button')].find((b) => b.textContent === 'clear filter');
+    if (!button) return false;
+    await press(ctx, button);
+    await pause(300);
+    await ctx.settle();
+    await pause(300);
+    return doc.getElementById('filter').value === '';
+  };
+  const result = {};
+
+  // The waterfall: emptied, then thinned.
+  await open('waterfall');
+  await filtered(nothing);
+  let empty = doc.getElementById('waterfall-empty');
+  const wfEmptied = !empty.hidden && namesFilter(empty, nothing) && empty.textContent.includes(plural(calls.length, 'call'));
+  const wfText = empty.textContent;
+  const wfCleared = await clearIn(empty) && doc.querySelectorAll('#waterfall .wf-group').length > 0 && empty.hidden;
+  result.waterfallEmptied = wfEmptied && wfCleared
+    ? `yes ("${wfText}", and clearing brought the groups back)`
+    : `NO - shown ${!empty.hidden}, "${wfText}", cleared ${wfCleared}`;
+  await filtered(thin);
+  let note = doc.querySelector('#waterfall .filter-note');
+  const wfHidden = plural(calls.length - matched, 'call');
+  result.waterfallThinned = namesFilter(note, thin) && note.textContent.startsWith(`${wfHidden} hidden`)
+    ? `yes ("${note.textContent}")`
+    : `NO - ${note ? `"${note.textContent}"` : 'no note'}, ${wfHidden} hidden was due`;
+  await typeFilter(ctx, '');
+
+  // The path: what each visit recorded, then the same visits under a filter that matches nothing.
+  await open('path');
+  const recorded = [...doc.querySelectorAll('#path .pv-visit')].map((row) => {
+    const text = row.querySelector('.pv-stats')?.firstChild?.textContent || '';
+    return [...text.matchAll(/(\d+) \S+/g)].reduce((n, m) => n + Number(m[1]), 0);
+  });
+  await filtered(nothing);
+  const rows = [...doc.querySelectorAll('#path .pv-visit')];
+  const stops = [...doc.querySelectorAll('#path .pv-stop .pv-stop-stat')];
+  const wrong = rows.map((row, i) => {
+    const want = recorded[i] ? `0 of ${recorded[i]} match` : 'nothing recorded';
+    const stats = row.querySelector('.pv-stats')?.firstChild?.textContent;
+    const stop = stops[i]?.textContent;
+    return stats === want && stop === (recorded[i] ? want : 'nothing') && (!recorded[i] || !row.textContent.includes('nothing recorded'))
+      ? null : `visit ${i + 1}: "${stats}" / "${stop}", "${want}" was due`;
+  }).filter(Boolean);
+  const emptied = recorded.filter(Boolean).length;
+  result.pathCounts = rows.length === recorded.length && emptied > 0 && !wrong.length
+    ? `yes (${emptied} of ${rows.length} visits read "0 of N match", N as recorded)`
+    : `NO - ${rows.length} visits for ${recorded.length}; ${wrong.join('; ') || `${emptied} with anything recorded`}`;
+  note = doc.querySelector('#path .filter-note');
+  const pathText = note ? note.textContent : '';
+  const pathHidden = plural(calls.length, 'call');
+  const pathCleared = note ? await clearIn(note) && !doc.querySelector('#path .filter-note') : false;
+  result.pathNote = namesFilter(note, nothing) && pathText.startsWith(`${pathHidden} and`) && pathCleared
+    ? `yes ("${pathText}", and clearing took it away)`
+    : `NO - ${note ? `"${pathText}"` : 'no note'}, cleared ${pathCleared}`;
+
+  // The timeline: emptied with markers still drawn, then thinned.
+  await open('all');
+  await filtered(nothing);
+  empty = doc.getElementById('timeline-empty');
+  const markers = doc.querySelectorAll('#timeline [data-kind="marker"]').length;
+  const tlText = empty.textContent;
+  const tlEmptied = !empty.hidden && namesFilter(empty, nothing)
+    && tlText.includes(`${plural(calls.length, 'call')} and ${plural(signals.length, 'signal')} hidden`);
+  const tlCleared = await clearIn(empty) && empty.hidden && doc.querySelectorAll('#timeline [data-kind="txn"]').length > 0;
+  result.timelineEmptied = tlEmptied && tlCleared
+    ? `yes ("${tlText}", over ${plural(markers, 'marker')} in range, and clearing brought the rows back)`
+    : `NO - shown ${!empty.hidden}, "${tlText}", ${plural(markers, 'marker')} drawn, cleared ${tlCleared}`;
+  await filtered(thin);
+  note = doc.querySelector('#timeline .filter-note');
+  const tlHidden = `${plural(calls.length - matched, 'call')} and ${plural(signals.length, 'signal')} hidden`;
+  result.timelineThinned = namesFilter(note, thin) && note.textContent.startsWith(tlHidden)
+    ? `yes ("${note.textContent}")`
+    : `NO - ${note ? `"${note.textContent}"` : 'no note'}, "${tlHidden}" was due`;
+  await typeFilter(ctx, '');
+  await open('network');
+
+  result.tabsSteady = tabsDuring.every((ids) => ids === tabsBefore) && tabIds() === tabsBefore
+    ? `yes (${tabsBefore.split(',').length} tabs under ${tabsDuring.length} filters)`
+    : `NO - before ${tabsBefore}; during ${tabsDuring.join(' / ')}`;
+  return result;
+}
+
+module.exports = { probeWholeSessionRefresh, probeFilterPanes };

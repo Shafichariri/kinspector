@@ -221,6 +221,49 @@ function renderScopeBar() {
  * A session an app is attached to but has not called anything from, and an archived session that
  * recorded no calls, are both different claims and are worded as such.
  */
+/** The list's "clear filter" control, shared by every pane a filter can empty or thin. */
+function clearFilterButton() {
+  const clear = el('button', 'btn btn-sm', 'clear filter');
+  clear.type = 'button';
+  clear.addEventListener('click', () => {
+    $('filter').value = '';
+    applyFilter();
+  });
+  return clear;
+}
+
+/**
+ * How many calls and signals the session holds that the filter left out — within the brushed
+ * stretch when `ranged`, since a pane that brushes is not hiding what lies outside it, and without
+ * `screen` signals when `screens` is false, for the path, which draws every screen whatever the filter.
+ */
+function hiddenByFilter({ signals = true, ranged = false, screens = true } = {}) {
+  const count = (rows) => rows.filter((row) => !ranged || inRange(row.mono)).length;
+  const kept = (rows) => (screens ? rows : rows.filter((s) => tagOf(s) !== 'screen'));
+  return {
+    calls: Math.max(0, count(state.allTransactions) - count(state.transactions)),
+    signals: signals ? Math.max(0, count(kept(state.allSignals)) - count(kept(state.signals))) : 0,
+  };
+}
+
+/**
+ * What the filter took out of a pane, said in the pane, naming the filter and offering to clear
+ * it as the list's empty state does. `emptied` when nothing is left: a pane that went blank under a
+ * filter, or one reading "nothing recorded", says the app did nothing — which is false, and sends
+ * someone to debug the app instead of the query.
+ */
+function filterNote(node, hidden, emptied) {
+  const count = (n, noun) => (n ? `${n} ${noun}${n === 1 ? '' : 's'}` : null);
+  const what = [count(hidden.calls, 'call'), count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
+  node.replaceChildren();
+  node.append(emptied ? 'nothing matches the filter ' : `${what} hidden by the filter `);
+  node.appendChild(el('code', null, state.filter));
+  if (emptied && what) node.append(` — ${what} hidden`);
+  node.append(' — ');
+  node.appendChild(clearFilterButton());
+  return node;
+}
+
 function renderListEmpty() {
   const node = $('list-empty');
   node.replaceChildren();
@@ -229,13 +272,7 @@ function renderListEmpty() {
     node.textContent = 'no calls in the selected stretch';
   } else if (state.filter && inSession !== 0) {
     node.append('no calls match — ');
-    const clear = el('button', 'btn btn-sm', 'clear filter');
-    clear.type = 'button';
-    clear.addEventListener('click', () => {
-      $('filter').value = '';
-      applyFilter();
-    });
-    node.appendChild(clear);
+    node.appendChild(clearFilterButton());
   } else if (!state.sessionId) {
     node.textContent = 'waiting for an app with inspector-stream to connect';
   } else if ((state.recording || []).includes(state.sessionId)) {

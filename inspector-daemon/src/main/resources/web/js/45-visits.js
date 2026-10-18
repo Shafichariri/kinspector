@@ -199,8 +199,18 @@ function renderWaterfall() {
   const root = $('waterfall');
   root.innerHTML = '';
   const groups = waterfallGroups();
-  $('waterfall-empty').hidden = groups.length > 0;
-  if (!groups.length) return;
+  const empty = $('waterfall-empty');
+  empty.hidden = groups.length > 0;
+  const hidden = hiddenByFilter({ signals: false, ranged: true });
+  if (!groups.length) {
+    // Which of three things emptied it, as the list says: the brushed stretch, the filter, or a
+    // session with no calls. "No calls to lay out" beside a header counting sixteen was none of them.
+    if (state.timeRange && state.transactions.length) empty.textContent = 'no calls in the selected stretch';
+    else if (state.filter && hidden.calls) filterNote(empty, hidden, true);
+    else empty.textContent = 'no calls were recorded in this session';
+    return;
+  }
+  if (state.filter && hidden.calls) root.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
 
   for (const group of groups) {
     const block = el('div', `wf-group${group.dim ? ' wf-dim' : ''}${group.rows.length ? '' : ' wf-stub'}`);

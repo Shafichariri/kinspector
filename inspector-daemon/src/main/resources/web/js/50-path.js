@@ -79,6 +79,18 @@ function renderPath() {
     return;
   }
 
+  // Under a filter, each visit also carries how much it recorded, from the same skeleton over the
+  // whole session — so an emptied visit reads "0 of 9 match" rather than "nothing recorded".
+  if (state.filter) {
+    const whole = visits(state.screens, state.allTransactions, state.markers, state.allSignals, sessionStartMono());
+    if (whole.length === list.length) {
+      list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
+    }
+  }
+  const header = el('div', 'pv-top');
+  const hidden = state.filter ? hiddenByFilter({ screens: false }) : { calls: 0, signals: 0 };
+  if (hidden.calls + hidden.signals) header.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
+
   const colour = screenColours();
   const lastMono = Math.max(
     ...[...state.allTransactions, ...state.allSignals, ...state.markers].map((x) => x.mono),
@@ -93,7 +105,8 @@ function renderPath() {
     metro.appendChild(pathStop(visit, index, list, colour));
     log.appendChild(pathRow(visit, index, list, colour, lastMono));
   });
-  root.appendChild(metro);
+  header.appendChild(metro);
+  root.appendChild(header);
   root.appendChild(log);
 
   const fresh = state.pathFresh;
@@ -165,6 +178,12 @@ function tagColour(tag) {
 
 const segmentText = (segments) => segments.map((s) => `${s.count} ${s.key}`).join(' · ');
 
+/**
+ * What a visit with nothing to show says. "Nothing recorded" only when that is true: under a filter
+ * it is "0 of N match", N counted over the whole session by `renderPath`.
+ */
+const emptyVisitText = (visit, fallback) => (visit.recorded ? `0 of ${visit.recorded} match` : fallback);
+
 /** The segments as a thin bar, each kind as wide as its share, in its lane colour. */
 function segmentBar(segments) {
   const bar = el('span', 'pv-segbar');
@@ -224,7 +243,7 @@ function pathStop(visit, index, list, colour) {
     const more = segments.length - shown.length;
     stop.appendChild(el('span', 'pv-stop-stat muted', segmentText(shown) + (more ? ` +${more}` : '')));
   } else {
-    stop.appendChild(el('span', 'pv-stop-stat muted', 'nothing'));
+    stop.appendChild(el('span', 'pv-stop-stat muted', emptyVisitText(visit, 'nothing')));
   }
   const failed = visit.txns.filter(isFailure).length;
   if (failed) stop.appendChild(el('span', 'pv-stop-fail', `${failed} failed`));
@@ -286,7 +305,7 @@ function pathRow(visit, index, list, colour, lastMono) {
   const failed = visit.txns.filter(isFailure).length;
   const stats = el('span', 'pv-stats muted');
   stats.dataset.calls = String(visit.txns.length);
-  stats.textContent = segmentText(visitSegments(visit)) || 'nothing recorded';
+  stats.textContent = segmentText(visitSegments(visit)) || emptyVisitText(visit, 'nothing recorded');
   if (failed) stats.appendChild(el('span', 'pv-failed', ` · ${failed} failed`));
   head.appendChild(stats);
   if (!list.some((v) => v.screen)) {
@@ -299,7 +318,7 @@ function pathRow(visit, index, list, colour, lastMono) {
   row.appendChild(head);
 
   if (!visit.entries.length) {
-    row.appendChild(el('div', 'pv-nothing muted', state.filter ? '0 matching' : 'nothing recorded'));
+    row.appendChild(el('div', 'pv-nothing muted', visit.recorded ? 'hidden by the filter' : 'nothing recorded'));
     return row;
   }
   row.appendChild(open ? visitBody(visit, index, list) : visitChips(visit, index, list));

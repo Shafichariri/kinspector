@@ -81,15 +81,25 @@ function renderTimeline() {
   // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
   // call's `mono` is drawn before it. One stable sort over all three streams with markers added
   // last put a tied marker after the call it introduced — the opposite of the list beside it.
-  const entries = timelineEntries(
-    state.transactions.filter((txn) => inRange(txn.mono)),
-    state.markers.filter((marker) => inRange(marker.mono)),
-    state.signals.filter((signal) => inRange(signal.mono)),
-  );
+  const calls = state.transactions.filter((txn) => inRange(txn.mono));
+  const signals = state.signals.filter((signal) => inRange(signal.mono));
+  const entries = timelineEntries(calls, state.markers.filter((marker) => inRange(marker.mono)), signals);
 
   if (state.newestFirst) entries.reverse();
 
-  $('timeline-empty').hidden = entries.length > 0;
+  // Empty is counted on calls and signals, never markers: markers ignore the filter, so a marker in
+  // range hid the empty state of a pane the filter had emptied. And what the filter took out is
+  // said, emptied or only thinned, because rows that silently vanish read as rows never recorded.
+  const empty = $('timeline-empty');
+  const hidden = state.filter ? hiddenByFilter({ ranged: true }) : { calls: 0, signals: 0 };
+  const filtered = hidden.calls + hidden.signals > 0;
+  empty.hidden = calls.length + signals.length > 0;
+  if (!empty.hidden) {
+    if (filtered) filterNote(empty, hidden, true);
+    else empty.textContent = state.timeRange ? 'nothing in the selected stretch' : 'nothing was recorded in this session';
+  } else if (filtered) {
+    root.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
+  }
 
   // Spans are scaled against the session's own duration, not a fixed divisor. A fixed one
   // made a cache snapshot held for 230ms draw narrower than an instantaneous screen event,
@@ -110,7 +120,9 @@ function renderTimeline() {
 
   if (state.liveTail) {
     const pane = root.parentElement;
-    pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
+    // An empty timeline has nothing newest to follow, and its note sits above it: following the
+    // foot of the pane scrolled the note out of sight under whatever markers were left.
+    pane.scrollTop = state.newestFirst || !empty.hidden ? 0 : pane.scrollHeight;
   }
 }
 
