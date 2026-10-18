@@ -29,11 +29,14 @@ checkedProjects.filter { it != project }.forEach { evaluationDependsOn(it.path) 
  * knows it. Declared dependencies only (`dependencies`, not `allDependencies`): an inherited edge
  * would repeat once for every configuration extending the one it was written in. Self-edges are
  * dropped: AGP adds one per host-test classpath, which is plugin mechanics, not a module decision.
+ * So are AGP's `androidHostTest*` configurations: AGP copies the main edges into them only when an
+ * Android SDK is installed, so keeping them would make the golden file depend on the machine. CI
+ * (with an SDK) and a laptop without one disagreed on exactly these three lines.
  */
 private val structureLines: Provider<List<String>> = provider {
     checkedProjects.flatMap { p ->
         val published = if (p.pluginManager.hasPlugin("maven-publish")) "published" else "unpublished"
-        val edges = p.configurations.flatMap { c ->
+        val edges = p.configurations.filter { !it.name.startsWith("androidHostTest") }.flatMap { c ->
             c.dependencies.withType<ProjectDependency>().filter { it.path != p.path }.map { "edge ${p.path} -> ${it.path} ${c.name}" }
         }
         listOf("module ${p.path} $published") + edges
