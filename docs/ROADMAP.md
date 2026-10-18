@@ -1080,6 +1080,8 @@ them says.
 
 ### Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check
 
+*Ticket label:* `item:structure-phase-d`.
+
 **Audit findings 5 and 6.**
 
 **For whom.** Whoever builds §6. Stats, diff and findings are three services that the HTTP API and
