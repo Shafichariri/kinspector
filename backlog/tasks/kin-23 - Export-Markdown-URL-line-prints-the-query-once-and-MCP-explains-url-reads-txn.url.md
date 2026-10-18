@@ -7,7 +7,7 @@ status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:18'
-updated_date: '2026-10-18 19:24'
+updated_date: '2026-10-18 19:28'
 labels:
   - 'item:export-md-query-once'
 dependencies: []
@@ -58,6 +58,8 @@ Green: ./gradlew :inspector-daemon:test --rerun -> BUILD SUCCESSFUL, 263 tests, 
 AC #6 (release notes): not written in this build; release notes are cut by the release-steward at release time. The line is in the description: "Daemon: the Markdown export's URL line no longer repeats the query string, and MCP explain reports the full URL, port and query included."
 
 AC #6 deferred to the next release's notes, owned by the release-steward. The line is in the description. DoD #3 (no client names) left unticked: the hygiene scan is the release-steward's and has not been run on this ticket.
+
+Follow-up bug KIN-26: the explain test added in 2b1b650 pushes McpTest.kt to 830 lines against a budget of 815, so :repo-checks:test fails (FileBudgetTest). Only :inspector-daemon:test was run at the time.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
