@@ -203,11 +203,16 @@ function renderWaterfall() {
   empty.hidden = groups.length > 0;
   const hidden = hiddenByFilter({ signals: false, ranged: true });
   if (!groups.length) {
-    // Which of three things emptied it, as the list says: the brushed stretch, the filter, or a
-    // session with no calls. "No calls to lay out" beside a header counting sixteen was none of them.
-    if (state.timeRange && state.transactions.length) empty.textContent = 'no calls in the selected stretch';
-    else if (state.filter && hidden.calls) filterNote(empty, hidden, true);
-    else empty.textContent = 'no calls were recorded in this session';
+    // Which of three things emptied it, asked in this order: a filter that hid calls here, then a
+    // brushed stretch in a session with calls, and only then a session with none. The stretch used
+    // to be asked of the *filtered* calls, so a filter plus an empty stretch fell through to "no
+    // calls were recorded" of a session that had them. The note leads with calls, because the
+    // waterfall draws nothing else: under `tag:screen` "nothing matches" was false of six screens.
+    const sessionCalls = state.sessionTotal ?? state.allTransactions.length;
+    if (state.filter && hidden.calls) filterNote(empty, hidden, true, 'no calls match');
+    else if (state.timeRange && sessionCalls) empty.textContent = 'no calls in the selected stretch';
+    else if (!sessionCalls) empty.textContent = 'no calls were recorded in this session';
+    else empty.textContent = state.filter ? 'no calls match' : 'no calls to lay out';
     return;
   }
   if (state.filter && hidden.calls) root.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));

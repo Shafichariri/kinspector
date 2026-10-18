@@ -54,7 +54,7 @@ function availableViews() {
   // Grouping by screen needs both halves. With traffic but no screen signals it would be one
   // unnamed block, which the traffic tab already draws better. Asked of the whole session, not
   // the filtered calls: once the route honoured `filter`, `tag:screen` matched no calls and took
-  // the tab away mid-filter. The waterfall says "no matching calls" itself.
+  // the tab away mid-filter. The waterfall says itself that no calls match the filter.
   if (state.allTransactions.length && state.screens.length) {
     views.push({
       id: 'waterfall',

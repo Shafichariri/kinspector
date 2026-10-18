@@ -211,16 +211,6 @@ function renderScopeBar() {
   bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
 }
 
-/**
- * Why the list is empty, and what would fix it.
- *
- * Four different things empty this list and each has a different fix, so a single "no
- * transactions" sent people looking in the wrong place — most often at the app, when the cause
- * was a filter they had forgotten. The filter case gets a button, because clearing it is the
- * whole of the fix. "Waiting for an app" is said only where it is true: with no session at all.
- * A session an app is attached to but has not called anything from, and an archived session that
- * recorded no calls, are both different claims and are worded as such.
- */
 /** The list's "clear filter" control, shared by every pane a filter can empty or thin. */
 function clearFilterButton() {
   const clear = el('button', 'btn btn-sm', 'clear filter');
@@ -267,14 +257,15 @@ function hiddenByFilter({ signals = true, ranged = false, screens = true } = {})
  * What the filter took out of a pane, said in the pane, naming the filter and offering to clear
  * it as the list's empty state does. `emptied` when nothing is left: a pane that went blank under a
  * filter, or one reading "nothing recorded", says the app did nothing — which is false, and sends
- * someone to debug the app instead of the query.
+ * someone to debug the app instead of the query. `lead` opens the emptied note; a pane that draws
+ * only calls says "no calls match", since the filter may well have matched signals.
  */
-function filterNote(node, hidden, emptied) {
+function filterNote(node, hidden, emptied, lead = 'nothing matches') {
   const count = (n, noun) => (n ? `${n} ${noun}${n === 1 ? '' : 's'}` : null);
   const calls = count(hidden.calls, 'call');
   const what = [calls && hidden.atLeast ? `at least ${calls}` : calls, count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
   node.replaceChildren();
-  node.append(emptied ? 'nothing matches the filter ' : `${what} hidden by the filter `);
+  node.append(emptied ? `${lead} the filter ` : `${what} hidden by the filter `);
   node.appendChild(el('code', null, state.filter));
   if (emptied && what) node.append(` — ${what} hidden`);
   node.append(' — ');
@@ -282,6 +273,16 @@ function filterNote(node, hidden, emptied) {
   return node;
 }
 
+/**
+ * Why the list is empty, and what would fix it.
+ *
+ * Four different things empty this list and each has a different fix, so a single "no
+ * transactions" sent people looking in the wrong place — most often at the app, when the cause
+ * was a filter they had forgotten. The filter case gets a button, because clearing it is the
+ * whole of the fix. "Waiting for an app" is said only where it is true: with no session at all.
+ * A session an app is attached to but has not called anything from, and an archived session that
+ * recorded no calls, are both different claims and are worded as such.
+ */
 function renderListEmpty() {
   const node = $('list-empty');
   node.replaceChildren();

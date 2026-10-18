@@ -42,7 +42,7 @@ try {
 const vm = require('vm');
 const { loadScripts, loadStyles, loadIndexHtml, STYLES_SLOT, SCRIPTS_SLOT } = require('./lib/web-sources');
 const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
-const { probeWholeSessionRefresh, probeFilterPanes } = require('./lib/filter-probes');
+const { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText } = require('./lib/filter-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -927,6 +927,7 @@ function runScripts() {
   const filterCtx = { window, doc, ORIGIN, settle, sessionTransactions, sessionSignals, lastSocket: () => lastSocket };
   const wholeSession = await probeWholeSessionRefresh(filterCtx);
   const filterPanes = await probeFilterPanes(filterCtx);
+  const waterfallText = await probeWaterfallText(filterCtx);
 
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
@@ -2525,6 +2526,9 @@ function runScripts() {
   console.error('drop refreshes     :', wholeSession.dropRefresh, '(and after a drop nobody asked for)');
   console.error('waterfall emptied  :', filterPanes.waterfallEmptied);
   console.error('waterfall thinned  :', filterPanes.waterfallThinned);
+  console.error('waterfall stretch  :', waterfallText.stretchUnderFilter, '(a filter does not make an empty stretch read as an empty session)');
+  console.error('waterfall order    :', waterfallText.filterInStretch, '(a filter that hid calls in the stretch says so first)');
+  console.error('waterfall calls    :', waterfallText.callsMatch, '(tag:screen matched signals; no calls match)');
   console.error('path 0 of N match  :', filterPanes.pathCounts, '("nothing recorded" only where nothing was)');
   console.error('path filter note   :', filterPanes.pathNote);
   console.error('timeline emptied   :', filterPanes.timelineEmptied, '(markers ignore the filter and must not hide this)');

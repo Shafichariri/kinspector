@@ -165,8 +165,9 @@ a filter that kept only older calls it dated the session by the newest one the f
 keep. `check-web-static.js`'s `last capture whole` holds it.
 
 Signals are split the same way. `state.signals` is what the daemon matched against the filter, and
-only two readers take it: the timeline tab's entries and the path view's `visits(...)` call, the two
-places a filter is meant to thin signals. `state.allSignals` is the whole session, and the tabs and
+only three readers take it: the timeline tab's entries and the path view's `visits(...)` call, the
+two places a filter is meant to thin signals, and `hiddenByFilter`, which counts what the filter
+took out of them. `state.allSignals` is the whole session, and the tabs and
 their counts, the tag browsers, the glance, the axis, tag colours, `sessionStartMono`, id lookups,
 the agent bundle, "last capture" and `state.screens` all read it — a tab counted from the filtered
 list would shrink or vanish under a filter and claim the app recorded less than it did. The
@@ -214,7 +215,9 @@ list always did; the waterfall, the path and the timeline did not. Under a filte
 nothing the waterfall said "no calls to lay out" beside a header counting sixteen, the path called
 four visits in six "nothing recorded", and the timeline either said "no entries" or — with a marker
 in range, which the filter does not touch — nothing at all. Each now draws `filterNote`: emptied,
-"nothing matches the filter `…` — N calls and M signals hidden"; thinned, "N calls and M signals
+"nothing matches the filter `…` — N calls and M signals hidden", or on the waterfall, which draws
+only calls, "no calls match the filter `…`" — under `tag:screen` "nothing matches" was false of the
+six screens it matched; thinned, "N calls and M signals
 hidden by the filter `…`" above the rows, both with the list's own `clear filter` button. Hidden
 calls are the route's own two numbers, `sessionTotal` less `matched` — never a difference of the rows
 held, because the filtered list stops at the clamp: on a 3016-call session that read "1000 calls
@@ -228,9 +231,13 @@ without `screen` signals on the path, which draws every screen whatever the filt
 filter emptied reads "0 of N match", N counted from the same skeleton over the whole session, and
 "nothing recorded" is said only where nothing was. The timeline decides it is empty on calls and
 signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
-calls"; the waterfall as a whole never did, which is what this paragraph used to claim. The live
-probe's seven lines from `waterfall emptied` to `filter panes tabs` press each pane's button and
-check the tab bar never moves. Where the note sits is layout, which jsdom does not do, so it was checked in
+calls"; the waterfall as a whole never did, which is what this paragraph used to claim. An emptied
+waterfall asks in a fixed order: a filter that hid calls in range, then a brushed stretch in a session
+with calls, and "no calls were recorded" only of a session with none — the stretch was asked of the
+filtered calls, so a filter plus an empty stretch called a session with calls empty. The live
+probe's lines from `waterfall emptied` to `filter panes tabs` press each pane's button and
+check the tab bar never moves; `waterfall stretch`, `waterfall order` and `waterfall calls` hold
+the order and the wording, the stretch set through `setTimeRange`, which the brush calls. Where the note sits is layout, which jsdom does not do, so it was checked in
 headless Chrome at 1440 and 400 wide: the timeline's empty note is above the timeline, which is a
 full-height box, and an empty timeline does not follow its foot under live tail, or the note
 scrolled out of sight; the thinned note is sticky inside the timeline, and the path's rides in one

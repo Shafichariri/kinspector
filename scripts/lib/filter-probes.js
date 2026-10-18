@@ -263,4 +263,64 @@ async function probeFilterPanes(ctx) {
   return result;
 }
 
-module.exports = { probeWholeSessionRefresh, probeFilterPanes };
+/**
+ * Which of its texts an emptied waterfall picks, in the order the reader needs them: a filter that
+ * hid calls says so first; then a brushed stretch, while the session has calls, says the stretch is
+ * empty; and "no calls were recorded" only where the session recorded none. And emptied by a filter
+ * that kept signals — `tag:screen` — it says no *calls* match, since it draws nothing else.
+ *
+ * The stretch is set through `setTimeRange`, the function the axis brush calls; a brush needs a
+ * layout jsdom does not do. The empty stretch sits inside the widest gap between two calls, and
+ * the full one spans every call, both read from the daemon.
+ */
+async function probeWaterfallText(ctx) {
+  const { window, doc } = ctx;
+  const keys = ['stretchUnderFilter', 'filterInStretch', 'callsMatch'];
+  const id = encodeURIComponent(doc.getElementById('session-picker').value);
+  const monos = ((await ctx.sessionTransactions(id)).items || []).map((t) => t.mono).sort((a, b) => a - b);
+  const tab = doc.querySelector('#tabs .tab[data-view="waterfall"]');
+  let gap = null;
+  for (let i = 1; i < monos.length; i++) {
+    if (monos[i] - monos[i - 1] > 2 && (!gap || monos[i] - monos[i - 1] > gap.to - gap.from)) {
+      gap = { from: monos[i - 1] + 1, to: monos[i] - 1 };
+    }
+  }
+  if (!tab || !gap || typeof window.setTimeRange !== 'function') {
+    return Object.fromEntries(keys.map((k) => [k, 'n/a (needs the waterfall tab and two calls with a gap between them)']));
+  }
+  const nothing = 'path:/__inspector_probe_matches_nothing__';
+  const empty = doc.getElementById('waterfall-empty');
+  const shown = () => (empty.hidden ? '(hidden)' : `"${empty.textContent}"`);
+  const result = {};
+  try {
+    await press(ctx, tab);
+    await pause(300);
+    await ctx.settle();
+    await typeFilter(ctx, nothing);
+
+    window.setTimeRange(gap);
+    await pause(100);
+    result.stretchUnderFilter = !empty.hidden && empty.textContent === 'no calls in the selected stretch'
+      ? `yes (${shown()}, a stretch with no calls under a filter matching none)`
+      : `NO - ${shown()}, where "no calls in the selected stretch" was due`;
+
+    window.setTimeRange({ from: monos[0], to: monos[monos.length - 1] });
+    await pause(100);
+    result.filterInStretch = !empty.hidden && namesFilter(empty, nothing) && empty.textContent.startsWith('no calls match the filter')
+      ? `yes (${shown()}, the filter hid calls inside the stretch)`
+      : `NO - ${shown()}, where the filter note was due`;
+
+    window.setTimeRange(null);
+    await typeFilter(ctx, 'tag:screen');
+    result.callsMatch = !empty.hidden && namesFilter(empty, 'tag:screen') && empty.textContent.startsWith('no calls match the filter')
+      ? `yes (${shown()})`
+      : `NO - ${shown()}, where "no calls match the filter tag:screen …" was due`;
+  } finally {
+    window.setTimeRange(null);
+    await typeFilter(ctx, '');
+    await press(ctx, doc.querySelector('#tabs .tab[data-view="network"]'));
+  }
+  return result;
+}
+
+module.exports = { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText };
