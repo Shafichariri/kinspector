@@ -12,7 +12,8 @@
  *   - every shared mirror case in `mirror-cases/`, against the functions lifted out of the real
  *     web UI by their `@mirror-begin`/`@mirror-end` anchors;
  *   - the scripts as classic scripts sharing one global scope: each file starts with `'use strict'`,
- *     no top-level name is declared twice, and none takes a browser global's name;
+ *     no top-level name is declared twice, and none takes a browser global's name — of the names a
+ *     column-0 line heuristic can read, not a parse, so some declarations escape both;
  *   - every stylesheet closing its own braces and comments, since the stylesheet audits read them
  *     joined and a file left open would swallow the next one there and nowhere else;
  *   - no `@media` rule loading before a plain rule with the same selector that sets the same

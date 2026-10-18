@@ -270,19 +270,23 @@ function declaresAgain(rest) {
 }
 
 /**
- * Every top-level name each script declares: `[{ file, line, name }]`.
+ * The top-level names this can read in each script: `[{ file, line, name }]`.
  *
  * Read by layout, not by a parse, because the checks run with nothing installed. Every file is
  * written with its top level at column 0 and everything nested indented, which is what lets a
- * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. A form
- * whose names this cannot read on that line — destructuring, two names in one `let` on its first
- * line, or a second declaration after a `;` or `}` on the same line, as `const a = 1; const b = 2;`
- * or `function a() {} function b() {}`, block comments between the two included — is refused rather
- * than skipped. Three shapes are missed
- * silently, and `web-ui.md` says so where it cites these checks: a top-level declaration written
- * indented; one that follows a block comment on the same line; and the second name of a declaration
- * whose first line ends inside brackets, as `let a = f(1,` continued by `2), ok = 3`, because the
- * comma that introduces it is on a line this does not read.
+ * column-0 `function`, `const`, `let`, `var` or `class` stand for a top-level declaration. This is a
+ * line heuristic over column-0 lines, not a JavaScript parser, so some declarations escape it and
+ * checks 2 and 3 never see them; `web-ui.md` says so where it cites these checks. Among the known
+ * misses: a declaration written indented; one after a block comment on the same line; the later
+ * names of a declaration whose first line ends inside brackets, as `let a = f(1,` continued by
+ * `2), ok = 3`; and one after a regex literal, a leading statement or a leading `}` on the same
+ * line, as `const R = /\(/; const b = 2;` or `f(); const b = 2;`.
+ *
+ * A form whose names cannot be read off its line — destructuring, two names in one `let` on its
+ * first line, or a second declaration after a `;` or `}` on a column-0 line, as
+ * `const a = 1; const b = 2;` or `function a() {} function b() {}`, block comments between the two
+ * included — is refused rather than skipped when the scan can see it; the misses above include
+ * second declarations it cannot.
  */
 function topLevelDeclarations(sources) {
   const found = [];
@@ -301,7 +305,7 @@ function topLevelDeclarations(sources) {
 }
 
 /**
- * No top-level name is declared twice, in one file or across two.
+ * No top-level name [topLevelDeclarations] reads is declared twice, in one file or across two.
  *
  * Without the IIFE every top-level `function` is a property of `window`, and a second declaration
  * of the same name silently replaces the first wherever it was called from — which is also what a
@@ -347,7 +351,8 @@ const WINDOW_DENYLIST = [
 ];
 
 /**
- * No top-level name is one of [WINDOW_DENYLIST] or an own property of Node's `globalThis`.
+ * No top-level name [topLevelDeclarations] reads is one of [WINDOW_DENYLIST] or an own property of
+ * Node's `globalThis`.
  *
  * Node's `globalThis` is read at check time rather than copied into a list, so a built-in a newer
  * engine adds is refused without anybody remembering to add it. It is a proxy for the browser's

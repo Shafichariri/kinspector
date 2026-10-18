@@ -20,11 +20,12 @@ implicit global does not throw there — so the static check is the guard, not t
 nothing else in `web/`), static checks 1–3 in `check-web-static.js` (`'use strict'` is the first
 statement of every file, no top-level name is declared in two files, none is on the named list of
 browser `Window` members or an own property of Node's `globalThis` — which is where `Map`, `atob` and
-`encodeURIComponent` are refused; checks 2 and 3 read declarations at column 0, so a top-level one
-written indented, after a block comment on the same line, or as the second name of a `let` whose
-first line ends inside brackets is not seen, while a second declaration after a `;` or `}` on a
-column-0 line, block comments between the two included, is refused as unreadable rather than
-missed), both probes loading each file as its own
+`encodeURIComponent` are refused; checks 2 and 3 read top-level names with a line heuristic over
+column-0 lines, not a JavaScript parser, so some declarations escape them — among them one written
+indented, one after a block comment on the same line, the later names of a declaration whose first
+line ends inside brackets, and one after a regex literal, a leading statement or a leading `}` on
+the same line — and a second declaration after a `;` or `}` on a column-0 line, block comments
+between the two included, is refused as unreadable when the scan can see it), both probes loading each file as its own
 script in manifest order so a redeclared name or an early call into a later file fails as it would in a browser, and the archive
 probe's `every file inlined`.
 
@@ -40,17 +41,17 @@ them in one file, and it holds only because `styles.txt` lists `35-list.css` aft
 So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 5
 (`media overrides load last`: across every file in `styles.txt` order, no selector inside an
 `@media` block has a later plain rule with the same selector text that sets a property of the same
-name or one whose name is the other's followed by `-`, as `border` and `border-right` (custom
+name or one name followed by `-` at the start of the other, as `border` and `border-right` (custom
 properties only by equal name); it prints how many such pairs, earlier or later, it compared, and fails when that is none —
 proven red by renaming `35-list.css` to `08-list.css` ahead of `10-panes.css`) and by static check 4 (`css files close`: each file closes its
 own braces and comments, which a joined read cannot see — a file that swallowed the next would still
 join to the same text, and break only once served as its own `<link>`). Check 5 matches by text and
 by name, not by the cascade, and walks `@media` and no other at-rule. What it misses is not listed
 in full; among the misses are a different selector competing on specificity, the same compound written in another order (`.panes-wide#panes`),
-longhands of one shorthand that do not prefix each other (`border-style` and `border-right`, `inset`
+longhands of one shorthand where neither name followed by `-` starts the other (`border-style` and `border-right`, `inset`
 and `top`), and anything inside `@supports`, `@layer` or `@container`; and among its false reports
-are a pair that does not compete because one name is the other's followed by `-` without being its
-shorthand (`border` and `border-radius`), and an `@media` declaration marked `!important`. None of
+are a pair that does not compete though one name followed by `-` is at the start of the other,
+because the shorter is not its shorthand (`border` and `border-radius`), and an `@media` declaration marked `!important`. None of
 those shapes is in the stylesheet today; the misses are still the author's to see.
 **`@media` against `@media` order is not checked at all**: check 5 never compares two `@media`
 rules, so one that loads before another `@media` rule overriding it passes. That case is live in
