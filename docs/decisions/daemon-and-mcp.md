@@ -142,12 +142,18 @@ Kotlin's `internal` is module-wide, so to the compiler `archive/`, `service/`, `
 because the bridge goes through the daemon's own `WS /ingest`. The root package holds `Main.kt`
 alone. The adapters read `archive/` directly rather than only through `service/`, because the strict
 version needs a pass-through wrapper for every repository method, which is a second copy of each. "A
-rule both adapters serve lives in `service/` or `archive/`, never in a route or tool body." Two
-places break that today, recorded here and not fixed. `GET …/signals` sorts by `mono` descending and
-clamps its limit to 1..1000 in the route, while the MCP `list_signals` goes through
-`SessionRepository.querySignals` and filters differently: the route matches `tag` with
-`equalsIgnoreCase`, the tool uses the filter grammar. And the session delete and clear loops live in
-`http/SessionRoutes.kt`. Every mechanism in the scan must find something to check, so an import
+rule both adapters serve lives in `service/` or `archive/`, never in a route or tool body." One
+place breaks that today, recorded here and not fixed: the session delete and clear loops live in
+`http/SessionRoutes.kt`. The signal listing was the other until `item:signals-query-one-rule`.
+`GET …/signals` sorted by `mono`, clamped its limit and matched `tag` with `equalsIgnoreCase` in the
+route body and ignored `filter`, while `list_signals` used the grammar through
+`SessionRepository.querySignals`. Both now read `querySignals`, the one place signals are filtered,
+sorted and clamped. The route keeps only its parameters, its default limit of 100, the 400 carrying
+the parser's message and the bare-array reply. Its `tag=` is ANDed in as a constructed `TagTerm`,
+never pasted into the filter text, because a tag value holding `|` or whitespace would otherwise
+rewrite the query. `SignalQueryTest` pins it: the route and the tool return the same ids in the same
+order across eight filters, on a session whose `mono` ties are written out of archive order and whose
+`ts` runs against `mono`. Every mechanism in the scan must find something to check, so an import
 reader or a name matcher that stops matching fails instead of reporting a clean tree.
 
 **A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization

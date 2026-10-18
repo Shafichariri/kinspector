@@ -4,6 +4,7 @@ import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.LiveApps
 import dev.inspector.daemon.service.SignalProviderException
 import dev.inspector.daemon.service.SignalPullRequest
+import dev.inspector.model.FilterParseException
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Signal
 import io.ktor.http.ContentType
@@ -18,19 +19,22 @@ import kotlinx.serialization.builtins.ListSerializer
 internal fun Route.signalRoutes(repository: SessionRepository, liveApps: LiveApps) {
     get("/api/sessions/{id}/signals") {
         val dir = call.resolveSession(repository) ?: return@get
+        // Parameters only. Filtering, the newest-first order and the clamp live in
+        // querySignals, which list_signals reads too; a rule here would be a second copy of it.
+        val filter = call.request.queryParameters["filter"].orEmpty()
         val tag = call.request.queryParameters["tag"]
         val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
-        val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 100)
-            .coerceIn(1, 1000)
-        // Newest first, ordered by the device's monotonic clock — never by wall clock.
-        val rows = repository.readSignals(dir)
-            .filter { tag == null || it.tag.equals(tag, ignoreCase = true) }
-            .sortedByDescending { it.mono }
-            .drop(offset)
-            .take(limit)
-        call.respondJson(
-            InspectorJson.encodeToString(ListSerializer(Signal.serializer()), rows)
-        )
+        val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
+        try {
+            val page = repository.querySignals(dir, filter, offset, limit, tag)
+            // A bare array, not the page: the web UI and the export's archiveSource read that shape.
+            call.respondJson(
+                InspectorJson.encodeToString(ListSerializer(Signal.serializer()), page.items)
+            )
+        } catch (e: FilterParseException) {
+            // The parser's message names the fix; pass it through untouched.
+            call.respondError(HttpStatusCode.BadRequest, e.message ?: "invalid filter")
+        }
     }
 
     get("/api/sessions/{id}/signals/{signalId}") {

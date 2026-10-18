@@ -166,7 +166,10 @@ only two readers take it: the timeline tab's entries and the path view's `visits
 places a filter is meant to thin signals. `state.allSignals` is the whole session, and the tabs and
 their counts, the tag browsers, the glance, the axis, tag colours, `sessionStartMono`, id lookups,
 the agent bundle, "last capture" and `state.screens` all read it — a tab counted from the filtered
-list would shrink or vanish under a filter and claim the app recorded less than it did. It is cached
+list would shrink or vanish under a filter and claim the app recorded less than it did. The
+waterfall tab is offered from `allTransactions` for the same reason: once the route honoured
+`filter`, `tag:screen` matched no calls and the tab vanished mid-filter, and the waterfall already
+says "no matching calls" itself. `allSignals` is cached
 per session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
 rows it asked for are new. Both are read through `signalPages`, which asks the route for one page at
 a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —

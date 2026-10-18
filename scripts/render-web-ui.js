@@ -855,6 +855,74 @@ function runScripts() {
   }
   const timelineTie = await probeTimelineTie();
 
+  /**
+   * A filter reaches the timeline's signals by the grammar's exclusion rule, and only there.
+   *
+   * The route ignored `filter` until KIN-25, so the timeline drew every signal whatever was typed.
+   * Now `path:` drops every signal and `tag:screen` drops every call and every other tag, while the
+   * tab bar still describes the whole session — a tab that vanished under a filter would be a view
+   * of the session nobody could get back to without clearing it. The path term is one of the
+   * session's own calls, so it matches at least one wherever this runs.
+   */
+  async function probeFilterOnTimeline() {
+    const na = (why) => ({ pathDrops: `n/a (${why})`, tagKeeps: `n/a (${why})`, restores: `n/a (${why})`, tabsSteady: `n/a (${why})` });
+    const allTab = doc.querySelector('#tabs .tab[data-view="all"]');
+    if (!allTab) return na('no timeline tab');
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const call = ((await sessionTransactions(sessionId)).items || [])[0];
+    if (!call) return na('no calls in this session');
+    await click(allTab);
+    await new Promise((r) => setTimeout(r, 400));
+    const input = doc.getElementById('filter');
+    const tabIds = () => [...doc.querySelectorAll('#tabs .tab')].map((t) => t.dataset.view).join(',');
+    const drawn = () => {
+      const kids = [...doc.getElementById('timeline').children];
+      const signals = kids.filter((n) => n.dataset.kind === 'signal' || n.dataset.kind === 'run');
+      return {
+        calls: kids.filter((n) => n.dataset.kind === 'txn').length,
+        signals: signals.length,
+        offLane: signals.filter((n) => n.dataset.lane !== 'screen').map((n) => n.dataset.tag),
+      };
+    };
+    const type = async (text) => {
+      input.value = text;
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      await settle();
+      await new Promise((r) => setTimeout(r, 300));
+    };
+    const tabsBefore = tabIds();
+    const before = drawn();
+    const tabsDuring = [];
+
+    const pathTerm = `path:${call.path}`;
+    await type(pathTerm);
+    const byPath = drawn();
+    tabsDuring.push(tabIds());
+    await type('tag:screen');
+    const byTag = drawn();
+    tabsDuring.push(tabIds());
+    await type('');
+    const after = drawn();
+    const tabsAfter = tabIds();
+
+    return {
+      pathDrops: byPath.calls > 0 && byPath.signals === 0
+        ? `yes (${pathTerm}: ${byPath.calls} call rows, no signal rows)`
+        : `NO - ${pathTerm}: ${byPath.calls} call rows, ${byPath.signals} signal rows`,
+      tagKeeps: byTag.calls === 0 && byTag.signals > 0 && byTag.offLane.length === 0
+        ? `yes (${byTag.signals} signal rows, all in the screen lane, no calls)`
+        : `NO - ${byTag.calls} call rows, ${byTag.signals} signal rows, off the screen lane: ${byTag.offLane.join(',') || 'none'}`,
+      restores: after.calls === before.calls && after.signals === before.signals
+        ? `yes (${after.calls} calls, ${after.signals} signal rows back)`
+        : `NO - ${after.calls}/${after.signals} back, ${before.calls}/${before.signals} before`,
+      tabsSteady: tabsDuring.every((ids) => ids === tabsBefore) && tabsAfter === tabsBefore
+        ? `yes (${tabsBefore.split(',').length} tabs throughout)`
+        : `NO - before ${tabsBefore}; during ${tabsDuring.join(' / ')}; after ${tabsAfter}`,
+    };
+  }
+  const filterOnTimeline = await probeFilterOnTimeline();
+
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
   await click(doc.querySelector('#tabs .tab[data-view="network"]'));
@@ -2443,6 +2511,10 @@ function runScripts() {
   note('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
   console.error('traffic + signals  :', signalProbe.merged);
   console.error('marker at a tie    :', timelineTie, "(before the call at its millisecond, as timeline() places it)");
+  console.error('filter path drops  :', filterOnTimeline.pathDrops, '(a path: term excludes every signal)');
+  console.error('filter tag keeps   :', filterOnTimeline.tagKeeps, '(tag:screen excludes every call and every other tag)');
+  console.error('filter clear back  :', filterOnTimeline.restores);
+  console.error('filter tabs steady :', filterOnTimeline.tabsSteady, '(the tabs describe the whole session)');
   note('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
