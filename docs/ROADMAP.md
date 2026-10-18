@@ -820,9 +820,11 @@ that the record already calls wrong.
 count now counts calls, not rows; an expanded run of signals no longer collapses during live tail;
 a marker dropped at the same millisecond as a call is drawn before it, as the overlay always has."*
 Drift 4 and the `?` case get no line: they change only tie order and one edge of the duplicate key.
-**Pending: nothing has shipped, so this line is not yet in any release notes. Release note when this ships** (phase A merges and is released), by the `release-steward`. No `INTEGRATION.md` entry, because nothing changes for a consuming app. If the maintainer decides to
-announce phase E's MCP tie fix (an open question below), it belongs right after this line, since it
-is the same rule on a third surface.
+**Pending — not yet in any release.** When phase A ships, the `release-steward` puts this line in
+the release notes and in a daemon-only `INTEGRATION.md` entry ("download the new daemon; leave your
+coordinates alone"), as v40, v48 and v56 did for web-UI-only changes. If the maintainer decides to
+announce phase E's MCP tie fix (an open question below), it goes right after this line, since it is
+the same rule on a third surface.
 
 ### Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks
 
