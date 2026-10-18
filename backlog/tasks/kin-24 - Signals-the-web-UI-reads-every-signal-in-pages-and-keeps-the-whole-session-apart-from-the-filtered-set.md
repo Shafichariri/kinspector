@@ -1,0 +1,58 @@
+---
+id: KIN-24
+title: >-
+  Signals: the web UI reads every signal in pages and keeps the whole session
+  apart from the filtered set
+status: To Do
+assignee: []
+created_date: '2026-10-18 19:27'
+labels:
+  - 'item:signals-query-one-rule'
+dependencies: []
+modified_files:
+  - inspector-daemon/src/main/resources/web/js/15-session-data.js
+  - inspector-daemon/src/main/resources/web/js/00-core.js
+  - inspector-daemon/src/main/resources/web/js/05-network.js
+  - inspector-daemon/src/main/resources/web/js/20-navigation.js
+  - inspector-daemon/src/main/resources/web/js/40-copy-export.js
+  - inspector-daemon/src/main/resources/web/js/45-visits.js
+  - inspector-daemon/src/main/resources/web/js/50-path.js
+  - inspector-daemon/src/main/resources/web/js/55-axis.js
+  - inspector-daemon/src/main/resources/web/js/65-browser-detail.js
+  - inspector-daemon/src/main/resources/web/js/70-timeline.js
+  - inspector-daemon/src/main/resources/web/js/85-processes.js
+  - inspector-daemon/src/main/resources/web/js/90-sessions.js
+  - scripts/lib/mirror-runner.js
+  - scripts/check-web-static.js
+  - scripts/render-web-ui.js
+  - scripts/render-web-ui-archive.js
+  - .github/workflows/ci.yml
+  - structure/budgets.txt
+  - docs/decisions/web-ui.md
+  - docs/decisions/shared-rules.md
+type: feature
+ordinal: 24000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Web half of item:signals-query-one-rule, built first because it is safe against the current route (which supports offset and ignores filter, so nothing a user sees changes in this ticket). (1) A new function signalPages(get, id, filter) in 15-session-data.js, between // @mirror-begin signalPages and // @mirror-end signalPages, registered as a NON_RULE_BLOCK like jsonParser. It asks /api/sessions/{id}/signals?filter=&offset=&limit=1000 page by page, newest first, dedupes by id (a live row arriving mid-read shifts a newest-first page by one, so the seam can repeat a row), and stops at an EMPTY page or a page that adds no new id, never at a short page: stopping at page.length < 1000 would silently truncate again the day the server clamp in SessionRepository.querySignals is lowered, and would loop forever against a source that ignores offset. Any page failing fails the whole read (a silently partial list is the defect being fixed); loadSignals keeps its catch-to-empty for daemons older than the page. (2) state.allSignals beside state.signals, mirroring allTransactions (docs/decisions/web-ui.md: 'state.transactions holds the rows the daemon matched against the current filter, so it is the wrong source for anything describing the session as a whole'). Unfiltered: one paged read, state.signals = allSignals.slice() (a copy: the live socket pushes into both). Filtered: state.signals is a paged read with the filter, allSignals is cached per session as syncAllTransactions does, and a signal pull (65-browser-detail.js) invalidates that cache before it reloads. state.screens = allSignals filtered to tag screen, so the second tag:screen request goes away. (3) Every reader of state.signals moves to allSignals EXCEPT the two that must honour the filter: renderTimeline's entries (70-timeline.js) and the path view's visit contents (50-path.js, the visits(...) call). Moving: tagsInSession, signalsForTag and the timeline-tab check (20-navigation.js), the session glance and the id lookup (65-browser-detail.js), sessionWindow, the band, the anchor and the hidden check (55-axis.js), sessionStartMono (45-visits.js; its 'one gap left' comment closes and is rewritten), the window and tagColour order (50-path.js), spanEndsFor and the id lookup (70-timeline.js), nearbyLines (40-copy-export.js), lastCapture (85-processes.js), the reset (90-sessions.js), the live push (05-network.js, into both, as transactions do). (4) archiveSource's signals branch honours offset and limit by slicing (no clamp of its own) and refuses a non-empty filter with 400, as its transactions branch and its own doc comment already say. (5) Record in docs/decisions/web-ui.md, extending 'The web UI keeps an unfiltered copy of the session': the same split for signals and why the tabs read the whole session, and that the pager stops at an empty page, not a short one. In docs/decisions/shared-rules.md change 'state.screens is fetched with tag:screen whatever the filter is' to say it is taken from the whole session. No public API, wire or schema change; daemon unchanged.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 scripts/check-web-static.js runs the real signalPages lifted by its anchors against stubs: a 1001-signal session served 1000 per page returns all 1001 ids, newest first, each once; a server clamping at 500 still returns all 1001; a source that ignores offset terminates with each id once; a row repeated across the page seam appears once. Proven failing with a 'page.length < 1000' stop (the 500 stub) and with the dedupe removed.
+- [ ] #2 render-web-ui.js: the signal tabs' counts sum to the probe's own sessionSignals() length for the session, proving loadSignals reads the whole session through the pager. Proven failing with loadSignals reading one page of limit=500.
+- [ ] #3 render-web-ui-archive.js, in the opened export: GET …/signals?offset=0&limit=N is a bare array, newest first, of min(N, total) rows; an offset past the end is []; a non-empty filter is a 400; and the signal tabs' counts sum to archive.signals.length. ARCHIVE_EXPECT_CHECKS in ci.yml moves by the number added.
+- [ ] #4 Against the current route nothing visible changes: every existing render-web-ui.js and render-web-ui-archive.js check passes, and UI_EXPECT_CHECKS moves only by the checks this ticket adds.
+- [ ] #5 No reader of state.signals remains outside renderTimeline's entries and the path view's visits(...) call (grep in the review).
+- [ ] #6 web-ui.md and shared-rules.md carry the paragraphs above; DecisionsTest passes; structure/budgets.txt raises render-web-ui.js by hand with the reason on the line.
+<!-- AC:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+<!-- DOD:END -->
