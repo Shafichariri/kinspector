@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
 import kotlinx.serialization.Serializable
 import kotlin.io.path.Path
 

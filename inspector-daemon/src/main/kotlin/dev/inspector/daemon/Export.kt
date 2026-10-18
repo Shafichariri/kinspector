@@ -1,5 +1,8 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.SessionRepository
+import dev.inspector.daemon.archive.SessionSummary
+import dev.inspector.daemon.archive.TimelineEntry
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction

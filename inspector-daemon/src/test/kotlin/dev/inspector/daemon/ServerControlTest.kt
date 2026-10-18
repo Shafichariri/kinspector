@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get

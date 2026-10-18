@@ -1,6 +1,7 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.archive
 
 import dev.inspector.model.SignalTags
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.nio.file.Path
 import kotlin.io.path.Path
@@ -133,6 +134,11 @@ data class DaemonConfig(
     }
 
     @Serializable
+    // Pinned to the name this class had before phase D. kotlinx-serialization quotes the serial
+    // name in MissingFieldException, and the route echoes that message into a 400 body (for
+    // FileConfig, to stderr). Moving the class must not change what a caller reads. Do not
+    // "correct" this to the current package.
+    @SerialName("dev.inspector.daemon.DaemonConfig.FileConfig")
     data class FileConfig(
         val port: Int? = null,
         val maxSessions: Int? = null,

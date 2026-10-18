@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.Path

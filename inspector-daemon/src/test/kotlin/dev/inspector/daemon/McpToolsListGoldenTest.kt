@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
 import java.io.ByteArrayOutputStream

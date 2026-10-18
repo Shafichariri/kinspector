@@ -1,5 +1,7 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal

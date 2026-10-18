@@ -1,5 +1,6 @@
 package dev.inspector.daemon
 
+import dev.inspector.daemon.archive.DaemonConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

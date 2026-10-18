@@ -1,4 +1,4 @@
-package dev.inspector.daemon
+package dev.inspector.daemon.archive
 
 import dev.inspector.model.Filter
 import dev.inspector.model.FilterContext
