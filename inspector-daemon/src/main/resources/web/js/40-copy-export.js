@@ -58,7 +58,7 @@ function bundleHeader() {
 
 function nearbyLines(mono) {
   const near = [
-    ...state.signals.map((s) => ({ mono: s.mono, text: `${s.tag} ${s.name}` })),
+    ...state.allSignals.map((s) => ({ mono: s.mono, text: `${s.tag} ${s.name}` })),
     ...state.markers.map((m) => ({ mono: m.mono, text: `marker "${m.label}"` })),
     ...state.allTransactions
       .filter((t) => t.mono !== mono)

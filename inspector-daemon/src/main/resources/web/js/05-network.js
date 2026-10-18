@@ -73,7 +73,16 @@ function archiveSource(archive) {
         const blob = (archive.signalData || {})[decodeURIComponent(m[1])];
         return blob ? reply(200, bytesOf(blob)) : refuse(404, `no payload for signal ${m[1]}`);
       }
-      if (/^\/api\/sessions\/[^/]+\/signals$/.test(p)) return reply(200, signals);
+      if (/^\/api\/sessions\/[^/]+\/signals$/.test(p)) {
+        if (url.searchParams.get('filter')) {
+          return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
+        }
+        // Sliced as asked, with no clamp of its own: the page reads signals a page at a time, and
+        // an export that ignored `offset` would be answering a different question from the daemon.
+        const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+        const limit = url.searchParams.has('limit') ? Math.max(0, Number(url.searchParams.get('limit')) || 0) : signals.length;
+        return reply(200, signals.slice(offset, offset + limit));
+      }
       if (/^\/api\/sessions\/[^/]+\/current$/.test(p)) return reply(200, archive.current || []);
       if (/^\/api\/sessions\/[^/]+\/markers$/.test(p)) return reply(200, archive.markers || []);
       return refuse(404, `not in this export: ${p}`);
@@ -172,6 +181,7 @@ function connectLive() {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
       state.signals.push(message.signal);
+      if (state.allSignalsSessionId === state.sessionId) state.allSignals.push(message.signal);
       if (tagOf(message.signal) === 'screen') {
         state.screens.push(message.signal);
         if (state.view === 'path') loadScreenPayloads().then(renderPath);

@@ -81,10 +81,10 @@ function renderPath() {
 
   const colour = screenColours();
   const lastMono = Math.max(
-    ...[...state.allTransactions, ...state.signals, ...state.markers, ...state.screens].map((x) => x.mono),
+    ...[...state.allTransactions, ...state.allSignals, ...state.markers].map((x) => x.mono),
   );
   // Tag colours go out in the order tags first happened, not the order they are drawn in.
-  for (const s of [...state.signals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
+  for (const s of [...state.allSignals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
   const metro = el('div', 'pv-metro');
   metro.setAttribute('role', 'list');
   metro.setAttribute('aria-label', 'Screens visited');

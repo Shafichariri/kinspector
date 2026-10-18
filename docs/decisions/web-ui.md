@@ -161,6 +161,23 @@ end, and duplicate highlighting would vanish under exactly the filter you applie
 it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
 filter is set, because then the rows already are the whole session.
 
+Signals are split the same way. `state.signals` is what the daemon matched against the filter, and
+only two readers take it: the timeline tab's entries and the path view's `visits(...)` call, the two
+places a filter is meant to thin signals. `state.allSignals` is the whole session, and the tabs and
+their counts, the tag browsers, the glance, the axis, tag colours, `sessionStartMono`, id lookups,
+the agent bundle, "last capture" and `state.screens` all read it — a tab counted from the filtered
+list would shrink or vanish under a filter and claim the app recorded less than it did. It is cached
+per session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
+rows it asked for are new. Both are read through `signalPages`, which asks the route for one page at
+a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
+never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
+shorter than asked would truncate again the day that clamp is lowered, and would never stop against
+a source that ignores `offset`. A row arriving mid-read shifts every newest-first page by one, which
+is why the seam is de-duplicated. A page that fails fails the whole read: a quietly partial list is
+the defect the pager exists to fix. `check-web-static.js` lifts it by its `signalPages` anchors and
+runs it against stub routes — 1001 rows by 1000, a 500 clamp, `offset` ignored, a repeat across the
+seam — and was proven red with a `page.length < 1000` stop and with the de-duplication removed.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

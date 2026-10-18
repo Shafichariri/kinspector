@@ -31,7 +31,7 @@ const SCREEN_COLOURS = [
 function sessionWindow() {
   const monos = [
     ...state.allTransactions.map((t) => t.mono),
-    ...state.signals.map((s) => s.mono),
+    ...state.allSignals.map((s) => s.mono),
     ...state.markers.map((m) => m.mono),
   ];
   if (!monos.length) return null;
@@ -48,7 +48,7 @@ function sessionWindow() {
  */
 function screenSegments(win) {
   if (!win) return [];
-  const list = visits(state.screens, state.allTransactions, state.markers, state.signals);
+  const list = visits(state.screens, state.allTransactions, state.markers, state.allSignals);
   if (!list.some((v) => v.screen)) return [];
   const colour = screenColours();
   return list
@@ -65,7 +65,7 @@ function renderAxis() {
   // Every view built from transactions on a clock, which the waterfall is: brushing already
   // narrows it, so hiding the control that does the brushing would be the odd choice.
   const onTimeView = ['all', 'network', 'waterfall', 'path'].includes(state.view);
-  host.hidden = !onTimeView || !win || state.allTransactions.length + state.signals.length < 2;
+  host.hidden = !onTimeView || !win || state.allTransactions.length + state.allSignals.length < 2;
   if (host.hidden) return;
 
   const svg = $('axis-svg');
@@ -151,7 +151,7 @@ function renderAxisFoot(win) {
   const clock = (mono) => {
     // `mono` is the device's monotonic clock and means nothing by itself. Anchor it to the
     // wall-clock time of the nearest row that carries both, which every row does.
-    const anchor = state.allTransactions[0] || state.signals[0];
+    const anchor = state.allTransactions[0] || state.allSignals[0];
     if (!anchor) return '';
     const at = Date.parse(anchor.ts);
     if (!Number.isFinite(at)) return '';

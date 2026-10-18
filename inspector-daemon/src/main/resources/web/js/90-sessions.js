@@ -97,6 +97,9 @@ async function afterSessionChange() {
     state.transactions = [];
     state.allTransactions = [];
     state.signals = [];
+    state.allSignals = [];
+    state.allSignalsSessionId = null;
+    state.screens = [];
     state.current = [];
     state.markers = [];
     renderList();

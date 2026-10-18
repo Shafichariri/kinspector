@@ -888,6 +888,9 @@ function runScripts() {
         ? 'yes'
         : `NO - first tab is '${ids[0]}'`,
       labels: tabs.map((t) => t.querySelector('.tab-label')?.textContent).join(', '),
+      // What the signal tabs claim the session holds, summed; checked against the daemon's own rows.
+      signalTabTotal: tabs.filter((t) => !BUILT_IN_VIEWS.includes(t.dataset.view))
+        .reduce((sum, t) => sum + Number(t.querySelector('.tab-count')?.textContent ?? NaN), 0),
       // Drawn whatever the session holds; it used to vanish with a single view and move the page.
       alwaysShown: !doc.getElementById('tabs').hidden ? 'yes' : 'NO - the tab bar is hidden',
       // Exactly one separator, on the first tab that is a tag rather than a traffic view.
@@ -2473,6 +2476,15 @@ function runScripts() {
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
   note('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session', '(that they render is "unknown tag renders")');
   console.error('traffic tab first  :', tabProbe.trafficFirst);
+  /*
+   * The tabs count the whole session, which the page reads through its pager. The probe's own
+   * reader pages independently, so a page that read one clamped page would come up short here on
+   * any session bigger than that page.
+   */
+  const everySignal = await sessionSignals(encodeURIComponent(doc.getElementById('session-picker').value));
+  console.error('signal tabs count  :', tabProbe.signalTabTotal === everySignal.length
+    ? `yes (${everySignal.length}, every signal in the session)`
+    : `NO - the tabs count ${tabProbe.signalTabTotal}, the session holds ${everySignal.length}`);
   console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
   console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');

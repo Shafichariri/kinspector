@@ -77,7 +77,7 @@ function renderTimeline() {
   const root = $('timeline');
   root.innerHTML = '';
 
-  const ends = spanEndsFor(state.signals);
+  const ends = spanEndsFor(state.allSignals);
   // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
   // call's `mono` is drawn before it. One stable sort over all three streams with markers added
   // last put a tied marker after the call it introduced — the opposite of the list beside it.
@@ -269,8 +269,7 @@ async function selectSignal(id) {
   state.selectedSignalId = id;
   state.selectedId = null;
   const signal =
-    state.signals.find((s) => s.id === id) ||
-    state.screens.find((s) => s.id === id) ||
+    state.allSignals.find((s) => s.id === id) ||
     state.current.find((s) => s.id === id);
   if (!signal) return;
 

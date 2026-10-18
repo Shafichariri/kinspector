@@ -16,10 +16,10 @@ const TAG_LABELS = { screen: 'screens' };
 // @mirror-begin tagOf
 const tagOf = (signal) => String(signal.tag).toLowerCase();
 // @mirror-end tagOf
-const signalsForTag = (tag) => state.signals.filter((signal) => tagOf(signal) === tag);
+const signalsForTag = (tag) => state.allSignals.filter((signal) => tagOf(signal) === tag);
 
 function tagsInSession() {
-  const tags = [...new Set(state.signals.map(tagOf))];
+  const tags = [...new Set(state.allSignals.map(tagOf))];
   const rank = (tag) => {
     const at = TAB_ORDER.indexOf(tag);
     return at === -1 ? TAB_ORDER.length : at;
@@ -44,7 +44,7 @@ function availableViews() {
     title: 'The screens the user moved through, and what happened on each',
   });
   // Merging is only worth a tab when there is something to merge with the traffic.
-  if (state.signals.length) {
+  if (state.allSignals.length) {
     views.push({
       id: 'all',
       label: 'timeline',

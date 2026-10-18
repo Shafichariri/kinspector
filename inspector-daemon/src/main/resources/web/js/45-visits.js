@@ -128,14 +128,14 @@ function screenColours() {
 }
 
 /**
- * The earliest `mono` this page holds for the session, unfiltered as far as it can be: every
- * call, every marker and every screen. Signals other than screens are only held filtered, so a
- * session whose launch stretch held nothing but those can still lose its launch column under a
- * filter; that is the one gap left, and it needs a signal-only launch to show.
+ * The earliest `mono` this page holds for the session, unfiltered: every call, every marker and
+ * every signal, screens among them. It read the filtered signals until the page kept a whole-session
+ * copy of them, so a launch stretch holding nothing but non-screen signals lost its column under a
+ * filter that dropped them.
  */
 function sessionStartMono() {
   let start = null;
-  for (const item of [...state.allTransactions, ...state.markers, ...state.screens, ...state.signals]) {
+  for (const item of [...state.allTransactions, ...state.markers, ...state.allSignals]) {
     if (start === null || item.mono < start) start = item.mono;
   }
   return start;

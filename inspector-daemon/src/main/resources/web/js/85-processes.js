@@ -78,7 +78,7 @@ function showStoppedBanner() {
  */
 function lastCapture() {
   if (state.lastCaptureTs) return { ts: state.lastCaptureTs, what: 'last capture' };
-  const newest = [...state.transactions, ...state.signals]
+  const newest = [...state.transactions, ...state.allSignals]
     .map((r) => r.ts)
     .filter(Boolean)
     .sort()

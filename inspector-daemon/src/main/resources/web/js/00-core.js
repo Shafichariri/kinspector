@@ -63,12 +63,20 @@ const state = {
   allSessionId: null,
   // How many endpoint chips to show. 0 hides them.
   endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
-  // App-state observations for this session, and the latest per (tag, name).
+  // App-state observations for this session as the daemon matched them against the filter, and
+  // the latest per (tag, name). Only the timeline tab's entries and the path view's visit lines
+  // read `signals`; they are the two places a filter is meant to thin signals.
   signals: [],
   current: [],
+  // Every signal in the session, ignoring the filter, and the session it belongs to — the same
+  // split as `allTransactions`, for the same reason: tabs, their counts, the tag browsers, the
+  // glance and the axis describe the session, and a filter that emptied a tab would make the tab
+  // claim the app recorded nothing.
+  allSignals: [],
+  allSignalsSessionId: null,
   // Every `screen` signal in the session, ignoring the filter: the skeleton `visits()` is built
-  // from. `signals` is filtered by the daemon, and a transaction term such as `path:` drops every
-  // signal — screens included — so a route drawn from it vanished the moment a filter was typed.
+  // from. Taken from `allSignals`; a transaction term such as `path:` drops every signal, screens
+  // included, so a route drawn from the filtered list vanished the moment a filter was typed.
   screens: [],
   // Screen payloads as the text that was captured, by signal id, for the path view's "same
   // payload" note on a repeated screen. Text rather than parsed: comparing and summarising the

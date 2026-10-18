@@ -105,25 +105,21 @@ async function loadTransactions() {
 /**
  * Signals and the current-state panel.
  *
+ * Two lists, as for transactions. `signals` is what the daemon matched against the filter, and
+ * only the timeline tab's entries and the path view's visit lines read it. `allSignals` is the whole
+ * session, and everything that describes the session — tabs and their counts, tag browsers, the
+ * glance, the axis, `screens` — reads that, so a filter never makes a tab or a screen disappear.
+ *
  * Failures are swallowed to an empty list on purpose: a daemon older than this page has no
  * signal routes, and the traffic view must keep working against one rather than going blank.
  */
 async function loadSignals() {
   if (!state.sessionId) return;
   const id = encodeURIComponent(state.sessionId);
-  const q = new URLSearchParams({ filter: state.filter, limit: '2000' });
-  const page = await api(`/api/sessions/${id}/signals?${q}`).catch(() => null);
-  state.signals = Array.isArray(page) ? page : [];
-  const isScreen = (s) => tagOf(s) === 'screen';
-  if (!state.filter) {
-    state.screens = state.signals.filter(isScreen);
-  } else {
-    // The skeleton ignores the filter. One more request per filter change, not per live row:
-    // the live socket appends screens as they arrive.
-    const q2 = new URLSearchParams({ filter: 'tag:screen', limit: '2000' });
-    const all = await api(`/api/sessions/${id}/signals?${q2}`).catch(() => null);
-    state.screens = (Array.isArray(all) ? all : state.signals).filter(isScreen);
-  }
+  state.signals = await signalPages(api, state.sessionId, state.filter).catch(() => []);
+  await syncAllSignals();
+  // Taken from the whole session, so the skeleton ignores the filter without a request of its own.
+  state.screens = state.allSignals.filter((s) => tagOf(s) === 'screen');
   state.current = await api(`/api/sessions/${id}/current`).catch(() => []);
 
   // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
@@ -137,6 +133,60 @@ async function loadSignals() {
   applyView();
   if ($('detail').hidden) renderSessionGlance();
 }
+
+/**
+ * Keeps `allSignals` in step with the current session, as `syncAllTransactions` does for calls:
+ * free with no filter, one paged read per *session* with one. A pull invalidates it by clearing
+ * `allSignalsSessionId`, since the rows it asked for are new and the cache would not have them.
+ */
+async function syncAllSignals() {
+  if (!state.filter) {
+    // A copy, not an alias — the live socket pushes into both.
+    state.allSignals = state.signals.slice();
+    state.allSignalsSessionId = state.sessionId;
+    return;
+  }
+  if (state.allSignalsSessionId === state.sessionId && state.allSignals.length) return;
+  state.allSignals = await signalPages(api, state.sessionId, '').catch(() => state.signals.slice());
+  state.allSignalsSessionId = state.sessionId;
+}
+
+// @mirror-begin signalPages
+/**
+ * Every signal the route returns for [filter], newest first, each once, read a page at a time.
+ *
+ * The route clamps a page (to 1000 today), so one request for "all of them" silently got the
+ * newest thousand. Two stop rules, and the obvious one is not among them:
+ *
+ * - **An empty page, or a page that adds no id not already held** — never a *short* page. Stopping
+ *   at `page.length < limit` truncates again the day the server's clamp is lowered below the limit
+ *   asked for, and against a source that ignores `offset` it never stops at all.
+ * - **Dedupe by id.** A live row arriving mid-read shifts every newest-first page by one, so the
+ *   last row of one page comes back as the first of the next.
+ *
+ * Any page failing fails the whole read: a silently partial list is the defect this exists to fix.
+ * The offset advances by what the page held, not by the limit asked for, for the clamp's sake.
+ */
+async function signalPages(get, sessionId, filter) {
+  const limit = 1000;
+  const seen = new Set();
+  const all = [];
+  for (let offset = 0; ;) {
+    const q = new URLSearchParams({ filter: filter || '', offset: String(offset), limit: String(limit) });
+    const page = await get(`/api/sessions/${encodeURIComponent(sessionId)}/signals?${q}`);
+    if (!Array.isArray(page)) throw new Error('the signal route did not answer with a list');
+    let added = 0;
+    for (const signal of page) {
+      if (seen.has(signal.id)) continue;
+      seen.add(signal.id);
+      all.push(signal);
+      added++;
+    }
+    if (added === 0) return all;
+    offset += page.length;
+  }
+}
+// @mirror-end signalPages
 
 /**
  * Keeps `allTransactions` in step with the current session.
