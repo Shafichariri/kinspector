@@ -10,6 +10,7 @@ import dev.inspector.daemon.mcp.MarkerPoster
 import dev.inspector.daemon.mcp.SignalPuller
 import dev.inspector.daemon.mcp.ToolOutcome
 import dev.inspector.daemon.mcp.splitAround
+import dev.inspector.daemon.service.daemonVersion
 import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json

@@ -5,7 +5,7 @@ import dev.inspector.daemon.service.ExportMarkdown
 import dev.inspector.daemon.service.HtmlExport
 import dev.inspector.daemon.service.SessionExport
 import dev.inspector.daemon.service.SessionExportDocument
-import dev.inspector.daemon.daemonVersion
+import dev.inspector.daemon.service.daemonVersion
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SignalPage
 import dev.inspector.daemon.archive.TimelineEntry

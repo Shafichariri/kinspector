@@ -30,6 +30,7 @@ import dev.inspector.daemon.service.SessionExportDocument
 import dev.inspector.daemon.service.SessionManager
 import dev.inspector.daemon.service.SignalProviderException
 import dev.inspector.daemon.service.SignalPullRequest
+import dev.inspector.daemon.service.daemonVersion
 import dev.inspector.daemon.service.webResource
 import dev.inspector.model.Bye
 import dev.inspector.model.FilterParseException
@@ -918,16 +919,6 @@ class InspectorDaemon(
  * constant happened to be called.
  */
 private val KNOWN_MARKER_SOURCES = setOf(MarkerSource.APP, MarkerSource.AGENT, MarkerSource.USER)
-
-/**
- * The daemon's own version, or `unknown`.
- *
- * Read from the jar manifest, which `:inspector-daemon`'s build stamps. A daemon run from a
- * classes directory — every test, and `gradlew run` — has no manifest to read, so this says so
- * rather than inventing a number that would then travel inside an exported HAR.
- */
-internal fun daemonVersion(): String =
-    Har::class.java.`package`?.implementationVersion ?: "unknown"
 
 /** Long enough for CIO to write the response before the engine is torn down under it. */
 private const val RESPONSE_FLUSH_MILLIS = 150L

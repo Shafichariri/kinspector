@@ -1,6 +1,6 @@
 package dev.inspector.daemon.mcp
 
-import dev.inspector.daemon.daemonVersion
+import dev.inspector.daemon.service.daemonVersion
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
