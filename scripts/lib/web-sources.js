@@ -25,7 +25,7 @@ const WEB = path.join(__dirname, '..', '..', 'inspector-daemon', 'src', 'main', 
 const STYLES_SLOT = '<!-- inspector:styles -->';
 const SCRIPTS_SLOT = '<!-- inspector:scripts -->';
 
-/** A manifest's entries in order, e.g. `['js/00-app.js']`. */
+/** A manifest's entries in order, e.g. `['js/00-core.js', 'js/05-network.js', …]`. */
 function manifest(name) {
   return fs.readFileSync(path.join(WEB, name), 'utf8')
     .split('\n')

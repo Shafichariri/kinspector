@@ -90,7 +90,7 @@ private fun runKeyOf(entry: TimelineEntry): String? =
  * Grouping happens on the list as it will be drawn, so in newest-first order a run's members are
  * newest first too and [TimelineRun.first] is the *latest*, not the earliest. Anything that must
  * mean the same thing in both orders — the span, the id — reads [TimelineRun.earliest] instead.
- * `app.js` carries a mirror of the grouping; keep them in step.
+ * The web UI's `timelineRuns` block carries a mirror of the grouping; keep them in step.
  */
 fun timelineRuns(entries: List<TimelineEntry>): List<TimelineRun> {
     val runs = ArrayList<MutableList<TimelineEntry>>()
@@ -115,8 +115,8 @@ fun timelineRuns(entries: List<TimelineEntry>): List<TimelineRun> {
  * expressible while ascending. Reversing the finished sequence keeps every divider attached to the
  * same rows: read downward in newest-first and a divider *below* a row still means that row
  * happened after the marker. Sorting descending instead would attach each divider to the rows
- * before it, which is the same pixels saying the opposite thing. `app.js` carries a mirror of this
- * for the web UI; keep them in step.
+ * before it, which is the same pixels saying the opposite thing. The web UI's `visits` block
+ * carries a mirror of this, as `timelineEntries`; keep them in step.
  *
  * A marker at exactly a transaction's `mono` is placed **before** it — `<=`, not `<`. A marker is
  * dropped at the moment something is about to happen, so the boundary belongs on the side of the

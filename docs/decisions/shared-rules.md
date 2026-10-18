@@ -95,9 +95,10 @@ colours its dot muted when there is no call yet rather than asking `forStatus(nu
 that has made no request would show a failure.
 
 The web UI's tokens and `InspectorColors` are one palette, and **`PaletteParityTest` enforces it**:
-it reads `style.css` and fails naming the token when either side drifts, proven in both
-directions. It replaced a "keep them in step" comment that held only as long as every change
-remembered both files.
+it reads `web/css/00-tokens.css`, declared as a test input so a CSS-only change re-runs it, and
+fails if a token it checks is declared in any other file `web/styles.txt` lists; it fails naming
+the token when either side drifts, proven in both directions. It replaced a "keep them in step"
+comment that held only as long as every change remembered both files.
 
 The method renders as a **tinted badge**, not coloured text: `MethodBadge` in the overlay, `.method`
 plus `.m-*` on the web. Both tint at 0.18 alpha of the text colour rather than filling solid with

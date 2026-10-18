@@ -10,7 +10,7 @@
  *   - the stylesheet audits: `[hidden]` overrides, nothing under 11px, long tokens wrap, the drawer;
  *   - the JSON tree's parser;
  *   - every shared mirror case in `mirror-cases/`, against the functions lifted out of the real
- *     `app.js` by their `@mirror-begin`/`@mirror-end` anchors;
+ *     web UI by their `@mirror-begin`/`@mirror-end` anchors;
  *   - the scripts as classic scripts sharing one global scope: each file starts with `'use strict'`,
  *     no top-level name is declared twice, and none takes a browser global's name;
  *   - every stylesheet closing its own braces and comments, since the stylesheet audits read them

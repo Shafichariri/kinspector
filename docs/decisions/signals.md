@@ -27,7 +27,7 @@ v1.3.0, so an expanded run on the web collapsed under the reader during live tai
 `mirror-cases/timelineRuns.json` now carries the newest-first cases.
 
 **The overlay can enumerate providers and the host cannot, which is the whole of stage 4.** A
-daemon learns a provider's name only when one answers, so `app.js` infers the set from what a
+daemon learns a provider's name only when one answers, so the web UI infers the set from what a
 session already holds and says in its own comment that it is guessing — conservatively, to avoid
 firing fifty doomed requests at an app. In-process there is nothing to infer:
 `Inspector.signalProviders()` **is** the registry. Two consequences the host can never have: a pull
@@ -130,7 +130,7 @@ and if it was pushed at app start and the session is now twenty minutes old that
 confidently wrong. Drawing it only for `request` rows would leave the common case — pushed,
 possibly long ago — as the one with nothing said about it.
 
-**`app.js` does not share `signalGroups`, and that is not yet a mirror to keep in step.** The web's
+**The web UI does not share `signalGroups`, and that is not yet a mirror to keep in step.** The web's
 `browserGroups` does the same `(tag, name)` grouping *and* expands a cache snapshot's `items[]` into
 one row per entry, which is payload-shaped work the overlay does not do. They agree on the grouping
 and differ in what they group; converging them is in `ROADMAP.md` rather than claimed here.
@@ -142,7 +142,7 @@ only one that makes the two comparable. Payloads are not drawn: a row cannot sho
 usefully at 360dp and a truncated one is worse than none.
 
 `InspectorColors.forTag` borrows existing tokens for its lanes, in the same hues as the `.lane-*`
-rules in `style.css` (which are literals, and not identical shades). Screen reads `accent` and
+rules in the web stylesheets (which are literals, and not identical shades). Screen reads `accent` and
 session reads `clientError`: they read GET and PATCH until those moved to grey and teal, and a grey
 screen lane would be indistinguishable from an unknown tag. Borrowing hues does not contradict the
 method-colour rule in `shared-rules.md`, which is about avoiding the *status* hues: a 3dp stripe down a row with

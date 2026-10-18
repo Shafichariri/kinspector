@@ -61,7 +61,7 @@ private fun isScreen(signal: Signal) = signal.tag.lowercase() == SignalTags.SCRE
  * either: pass the earliest `mono` of the unfiltered session as [sessionStart]. Without it, a filter
  * matching nothing at launch removed the launch column — which a probe caught on the first run.
  *
- * `app.js` carries a mirror; keep them in step.
+ * The web UI's `visits` block carries a mirror; keep them in step.
  */
 fun visits(
     screens: List<Signal>,

@@ -38,7 +38,7 @@ object WebPage {
 
     /**
      * A manifest's entries in order. A line that is blank or starts with `#` is skipped; any other
-     * line is an entry **exactly as written**. Trimming here would make `js/00-app.js ` resolve,
+     * line is an entry **exactly as written**. Trimming here would make `js/00-core.js ` resolve,
      * and the stray space would then be a fact `WebManifestTest` could not see — so it is kept, the
      * file does not resolve, and the test names the whitespace.
      */

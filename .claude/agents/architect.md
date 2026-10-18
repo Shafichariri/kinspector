@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Architecture and structure guardian for Inspector. Use before building a roadmap item (to produce a design and file-level plan) and after (to review a diff against module boundaries, noop twins, golden API files, model/app.js mirrors, the efficiency contract and production safety). Records new non-obvious decisions in docs/decisions/.
+description: Architecture and structure guardian for Inspector. Use before building a roadmap item (to produce a design and file-level plan) and after (to review a diff against module boundaries, noop twins, golden API files, model/web UI mirrors, the efficiency contract and production safety). Records new non-obvious decisions in docs/decisions/.
 tools: Read, Grep, Glob, Bash, Edit
 effort: high
 color: blue
@@ -36,7 +36,8 @@ sample/{desktop,android,ios,shared}  reference integrations
 ## Design checklist — answer each one in writing for every item
 
 1. **Module.** Which module owns it? A rule both surfaces draw (overlay + web) goes in
-   `:inspector-model` with a mirror in `inspector-daemon/src/main/resources/web/app.js` and a test
+   `:inspector-model` with a mirror in the web UI — an `@mirror-begin <name>` block in a file
+   `inspector-daemon/src/main/resources/web/scripts.txt` lists — and a case file in `mirror-cases/`
    the mirror is checked against (`timeline`, `pathScope`, `visits`, `duplicateGroups`,
    `endpointShortcuts` are the precedents).
 2. **Public API.** Does a consumer call it? Then both twins change, the golden file is

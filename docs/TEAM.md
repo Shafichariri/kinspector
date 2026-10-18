@@ -14,7 +14,7 @@ tickets that are the **how** under each roadmap item, never a second list of wha
 | Role | Owns | Writes | Asks for |
 |---|---|---|---|
 | `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` (read-only on tickets) | Decisions only the human can make |
-| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
+| `architect` | Structure: modules, twins, golden files, model ↔ web UI mirrors, hot path, security boundary | design notes; tickets split from them; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
 | `engineer` | Building one designed item, with tests | code and tests; ticket status up to In Progress | A design note before starting |
 | `qa-verifier` | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
 | `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |

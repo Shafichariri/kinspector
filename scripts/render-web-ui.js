@@ -2633,7 +2633,7 @@ function runScripts() {
   writeSnapshot('Static snapshot of the live UI (rendered from the real web UI against a real session). ');
 
   // The snapshot is written, but jsdom is still running a window: `pretendToBeVisual` drives a
-  // requestAnimationFrame loop and app.js sets a 1s interval to repaint ages. Two live timer
+  // requestAnimationFrame loop and 99-init.js sets a 1s interval to repaint ages. Two live timer
   // handles, neither of which belongs to a page that has already been serialised — and enough to
   // keep node from exiting, so every caller had to notice the report had stopped and kill the
   // process. Closing the window clears them.

@@ -96,7 +96,7 @@ Multiplatform 1.11+ dropped the Intel simulator, so no CMP app can target it.
 |---|---|
 | `docs/decisions/capture.md` | Ktor and OkHttp capture, the tee, redaction, what Ktor cannot see. |
 | `docs/decisions/signals.md` | Signals in the overlay: runs, providers, the now strip, ages, payloads. |
-| `docs/decisions/shared-rules.md` | Model rules `app.js` mirrors, the filter grammar, the palette. |
+| `docs/decisions/shared-rules.md` | Model rules the web UI mirrors, the filter grammar, the palette. |
 | `docs/decisions/overlay.md` | The Compose overlay: chrome, detail, JSON tree, ellipsis, insets, tests. |
 | `docs/decisions/web-ui.md` | The browser UI and its probes. |
 | `docs/decisions/exports.md` | HAR, Markdown and HTML exports. |

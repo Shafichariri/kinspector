@@ -22,7 +22,8 @@ import kotlinx.serialization.json.jsonObject
  * box with `HOP_BY_HOP` filtered out, because a sent header map replaces the captured set and the
  * daemon's own filtering never runs on it. A name in one list and not the other would put a
  * captured `Content-Length` back on an edited request. `scripts/check-web-static.js` runs the same
- * file against `app.js`; `MirrorCasesTest` in the model owns the rest of the directory.
+ * file against the web UI's `@mirror-begin hopByHop` block; `MirrorCasesTest` in the model owns the
+ * rest of the directory.
  */
 class HopByHopMirrorTest {
 

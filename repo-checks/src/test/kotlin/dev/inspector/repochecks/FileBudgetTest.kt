@@ -7,11 +7,10 @@ import kotlin.test.fail
 /**
  * The file-size ratchet in `structure/budgets.txt`.
  *
- * `app.js` and the two overlay files each have a phase in ROADMAP §5 that splits them. Until it
- * lands, a budgeted file may not grow. It may not quietly shrink
- * either: a budget left at the old size after a file lost 200 lines would let those 200 back in
- * unnoticed, so a smaller file fails until the budget is tightened to match. That is the
- * difference between a ratchet and a cap.
+ * Each budgeted file is over the limit for the reason its entry gives, most often a split planned in
+ * ROADMAP §5. Meanwhile it may not grow. It may not quietly shrink either: a budget left at the
+ * old size after a file lost 200 lines would let those 200 back in unnoticed, so a smaller file
+ * fails until the budget is tightened to match. That is the difference between a ratchet and a cap.
  *
  * Tightening (`-Dinspector.budgets.tighten=true`) only ever lowers or removes a budget, and touches
  * nothing else in `structure/`. Raising one, or adding a new file to the

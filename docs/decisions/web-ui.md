@@ -1,6 +1,42 @@
 # Decisions — web UI
 Owned by `inspector-daemon/src/main/resources/web/` and the probes in `scripts/`. Imported by the web guide.
 
+**The web UI is ordered classic scripts listed in `web/scripts.txt`, and the daemon is the only
+thing that turns the list into served tags.** `index.html` keeps no list; it has two slots, and
+`WebPage` expands them — into `<script src>` and `<link>` tags for `GET /`, and into one inlined
+`<script>` or `<style>` per file for an export (see `exports.md`). Nothing serves or fetches the
+manifests themselves. The files share top-level declarations rather than a namespace object or ES
+modules, because classic scripts share one global lexical scope: a call into another file resolves
+when it runs, as it did inside the one file they were cut from, so the split could be checked as
+pure relocation. A namespace object would have rewritten every cross-file reference, and
+destructuring it at load captures `undefined` from any file not loaded yet. The cost is the
+load-time rule, because hoisting does not cross files: **only `99-init.js` runs anything at load.**
+Every other file only declares, and a constant built at load reads nothing from a later file —
+`source` and `archiveSource` share `05-network.js` for exactly that reason, and moving
+`archiveSource` later turns the archive probe red while the live probe stays green, since only an
+export takes that branch. `'use strict'` is per file now, and **jsdom does not enforce it** — an
+implicit global does not throw there — so the static check is the guard, not the probes. Pinned by
+`WebManifestTest` (each manifest and its folder agree both ways, entries numbered and ascending,
+nothing else in `web/`), static checks 1–3 in `check-web-static.js` (`'use strict'` is the first
+statement of every file, no top-level name is declared in two files, none is on the named list of
+browser `Window` members), both probes loading each file as its own script in manifest order so a
+redeclared name or an early call into a later file fails as it would in a browser, and the archive
+probe's `every file inlined`.
+
+**`web/styles.txt` order is the cascade.** The seventeen files are contiguous slices of the one
+stylesheet they were cut from, in its original order, so loading them in manifest order is that
+stylesheet — proven at the split by concatenating them without their one-line headers and comparing
+byte for byte. The rule a new rule or a move must keep: **an `@media` block never loads before a
+rule it overrides.** Keep it in the same file as those rules, after them, wherever that can be
+done; every `prefers-reduced-motion` block is, and so are the `.pv-visit` and `--stop-bg` pairs.
+The `max-width: 1199px` block in `35-list.css` is the one that spans files: it also overrides
+`#panes` and `#panes.panes-wide` in `10-panes.css`, no contiguous cut under the 600-line budget puts
+them in one file, and it holds only because `styles.txt` lists `35-list.css` after `10-panes.css`.
+So reordering the manifest is a cascade change, never a tidy-up. Pinned by static check 4 (`css
+files close`: each file closes its own braces and comments, which the concatenation cannot see — a
+file that swallowed the next would still concatenate to the same bytes, and break only once served
+as its own `<link>`) and by the concatenation proof.
+
 **The web scope pill reads `host · prefix` and clips at the end.** It was `direction: rtl` under
 a comment saying the front of a host identifies it — which is the end rtl clips. The two parts are
 separated so a narrow bar loses the least specific part of the prefix, and the full label is the
