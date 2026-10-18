@@ -281,6 +281,7 @@ new bounded queue here must do the same.
 :inspector-noop-stream KMP  No-op stream sink. Release builds.
 :inspector-stream    KMP  WebSocket sink to the daemon.
 :inspector-daemon    JVM  Archive, REST, live WS, web UI, CLI.   MCP is Phase 3.
+:repo-checks         JVM  Build-only structural checks over the repo. Never published.
 sample/desktop       JVM  Runnable reference integration.
 ```
 
@@ -1268,6 +1269,40 @@ Adding a module the consuming app calls into, without its twin, breaks `-Pinspec
 compilation and pushes users into `if (BuildConfig.DEBUG)` guards around their own wiring —
 which is the exact thing the noop artifacts exist to prevent.
 
+"Every real module" means every *published* module a consumer calls into, and `NoopTwinTest` in
+`:repo-checks` holds it in that meaning: the published set must equal the pairs in
+`structure/twins.txt` plus its exemptions, each exemption with its reason. There is one.
+`:inspector-model` needs no twin because both members of the core pair `api` it, so it ships in
+either build and there is nothing to swap, and it holds no capture code. `:inspector-daemon`,
+`:repo-checks` and the samples never publish, so the rule does not reach them. A check that read
+"every module" literally would have failed on day one.
+
+**Dependency locks cover what a consumer receives, and nothing else.** Each published module
+locks its `jvmRuntimeClasspath`, `androidRuntimeClasspath` and both `ios*CompileKlibraries` in a
+`gradle.lockfile`. The daemon locks its `runtimeClasspath`, which is the release zip. All of them
+are `LockMode.STRICT`, so a deleted lockfile fails instead of silently unlocking. Locking is not
+`lockAllConfigurations()`, because the Kotlin/Native bundle and `compose.desktop.currentOs` resolve
+per host, so a lock written on one machine fails on the next. Test classpaths are not locked
+either, because no consumer sees them. Regenerate on macOS, the only host where the iOS graphs are
+real, with the command under Commands.
+
+**`resolveLockedConfigurations` is load-bearing, and the obvious way to write it checks nothing.**
+Nothing else in a library build resolves a main runtime classpath: the jars, the publications and
+the tests all read other configurations. Without this task, wired into `check`, the locks above
+would be read by nobody. The first version resolved `incoming.resolutionResult.rootComponent`, as
+"graph only" suggests. **It passed with a new runtime dependency and with a stale lock entry**:
+the resolution result hands back the graph and drops lock validation. Only an artifact resolution
+rethrows those failures. So the task resolves an artifact view whose `componentFilter` selects
+nothing. That validates the whole graph against the lock without downloading one artifact or
+building a sibling's klib. Gradle 9.5.1 does fail on a stale entry ("Did not resolve … which is
+part of the dependency lock state"), once something asks it in a way that surfaces it.
+
+**`:inspector-model`'s dependency rule is asked of its lockfile, because STRICT cannot hold it.**
+A lock regenerated after adding a dependency is perfectly consistent. Measured: kotlinx-datetime
+added to the model with its lock regenerated, and STRICT resolved green. So `DependencyLockTest`
+holds every module in `inspector-model/gradle.lockfile` to an allowlist with a reason per entry:
+serialization, what serialization is built on, and the stdlib.
+
 **A twin without a golden file drifts, and `stream` did for eleven releases.**
 `StreamSink.lastError` existed in `:inspector-stream` from before v0.1.0 and never in
 `:inspector-noop-stream`, so an app that surfaced the reason its daemon connection failed compiled
@@ -1679,7 +1714,17 @@ open inspector-ui/build/screenshots/list-dark.png # ... what that render produce
 ./gradlew build -Pinspector=off                   # release swap
 ./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
 ./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
+./gradlew :repo-checks:test                       # module graph, twins, locks, markers, file budgets
+./gradlew :repo-checks:test -Dinspector.structure.regenerate=true   # ... rewrite structure/ (budgets only ever tighten)
+# regenerate every gradle.lockfile, on macOS, after a deliberate dependency change:
+./gradlew resolveLockedConfigurations :inspector-daemon:dependencies --configuration runtimeClasspath --write-locks
+./scripts/check-commit-identity.sh origin/main HEAD                 # your commits, before pushing
+./scripts/check-client-names.sh --terms-file <your terms> --range origin/main..HEAD --branch "$(git branch --show-current)"
 ```
+
+`./gradlew dependencies --write-locks` from the root looks like the regenerate command and is not.
+In Gradle 9.5.1 it runs only the root project's report, which has no configurations, and writes
+nothing a module locks.
 
 Cutting a daemon release — the tag is the trigger, and the only thing that ships this way:
 
@@ -1753,14 +1798,23 @@ The stream pair has its own golden file, and the same friction:
 
 - **Pinned versions.** Kotlin 2.3.20, Ktor 3.5.0, Compose MP 1.11.1, AGP 9.2.1, Gradle 9.5.1,
   JDK 21. All were verified present in the local Gradle cache before pinning. Do not bump
-  casually.
+  casually. The `gradle.lockfile`s enforce it: any change to what resolves, direct or
+  transitive, fails `check` until the locks are regenerated on purpose.
 - **Trust the pinned source over blog posts.** Ktor's plugin surface drifted across 2.x/3.x.
   Sources are in the Gradle cache; read them.
 - **Tests define correctness, not APIs.** Where Ktor behaviour is uncertain, write the assertion
   first and pick whichever hook makes it pass.
 - **Prove guards in both directions.** A guard only ever seen passing is not a guard.
 - Comments explain *why*, especially where the obvious approach is wrong.
-- `:inspector-model` may depend only on kotlinx-serialization. Keep it that way.
+- `:inspector-model` may depend only on kotlinx-serialization. Keep it that way. `:repo-checks`
+  enforces it.
+- **No deferred-work markers in source.** Unfinished work goes in `docs/ROADMAP.md`. `NoTodoTest`
+  fails on the uppercase markers in any tracked file except Markdown.
+- **A file over 600 lines needs a budget, and budgets only tighten.** `structure/budgets.txt` is a
+  ratchet, not a cap: a budgeted file fails when it grows, and it also fails when it *shrinks*,
+  until the budget is lowered to match. A budget left at the old size would let the lost lines
+  back in unnoticed. Regenerating only lowers or removes. Raising a budget or adding a file is a
+  hand edit with the reason on the line.
 
 ---
 
@@ -1792,17 +1846,42 @@ History was scrubbed once already, with `filter-branch` across every commit, bef
 went public. Doing that again after a push is not a cleanup — the old objects survive on the remote
 and in every clone — so the check belongs before the commit, not after.
 
+`scripts/check-client-names.sh` is that check. Run it locally with `--terms-file` before
+committing. CI's `repo` job runs it too, with the terms from the `CLIENT_NAME_TERMS` secret, and
+that catches a match **before merge, not before publication**: by the time CI sees a branch, it is
+on a public remote. The script reports file and line, a count of matching paths, the SHA of a
+matching commit message, and the fact that the branch name matches. It never prints the matched
+text, because GitHub masks only a secret's whole value, so one term out of a list would print in
+clear in a public log.
+
+**A scan with no terms says NOT RUN, and NOT RUN is never a pass.** A fork's pull request gets no
+secrets, and an unset secret arrives empty. In both cases the script prints `NOT RUN` and a
+`::warning::`, then exits 0. It never prints "clean" or "0 matches". `--require-terms` makes that
+case exit 1. CI does not pass it yet, because the secret has not been created and `main` would go
+red. Add it to the push-to-`main` run once the secret exists.
+
 **The terms to grep for are deliberately not listed in this file.** Writing them here would publish
 exactly the list of things that were removed, which defeats the removal. They live in the
 maintainer's local notes; ask if you do not have them. Commit author identity is the GitHub noreply
 address for the same reason — check it stays that way if you ever configure git in a fresh clone.
 
-**Agents commit as the maintainer and add no attribution trailers.** Author and committer are
-`Shafichariri <3518471+Shafichariri@users.noreply.github.com>` — never an agent's own identity
-and never a personal or work address. No `Co-Authored-By:` or `Claude-Session:` lines in commit
-messages, whatever a tool's default says: GitHub lists commit authors as repository contributors,
-and four commits authored as `Claude <noreply@anthropic.com>` put an AI account on that list.
-Check `git config user.email` before the first commit in a fresh clone or a cloud session.
+**Agents commit as the maintainer and add no attribution trailers.** The author email is
+`3518471+Shafichariri@users.noreply.github.com`, never an agent's own identity and never a
+personal or work address. The committer email is the same, or `noreply@github.com` when the commit
+was made on github.com, as a pull request merge is. Only emails are checked: GitHub attributes by
+email, and a display name identifies nobody. No `Co-Authored-By:` or `Claude-Session:` lines in
+commit messages, whatever a tool's default says. GitHub lists commit authors as repository
+contributors, and four commits authored as `Claude <noreply@anthropic.com>` put an AI account on
+that list. Check `git config user.email` before the first commit in a fresh clone or a cloud
+session; a per-commit `-c user.email=…` or the `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL` variables
+work where the local config holds another address.
+
+`scripts/check-commit-identity.sh <base> <head>` enforces this over every commit in a range, merges
+included, and CI's `repo` job runs it over what a pull request adds and what a push to `main`
+brings. It names the commit and the failing field, never the address. An empty or uncomputable
+range exits 2, because a check over no commits must not pass. A merge made on github.com takes its
+author email from the merging account's settings on GitHub, not from any local git config, so those
+settings are part of this rule. If a web merge fails here, fix the setting, not the check.
 
 `gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is
 compressed binary, stock Gradle, unmodified since the first commit. Ignore it; investigate anything
@@ -1831,6 +1910,10 @@ else a scan turns up.
 | `inspector-core/.../BodyCapture.kt` | The tee. The byte-identical guarantee lives here. |
 | `inspector-model/.../Filter.kt` | Filter grammar, frozen for v1. |
 | `scripts/check-release-clean.sh` | Production-safety enforcement. |
+| `repo-checks/` | Build-only, never published. JUnit 5 checks over the repository itself — module graph, noop twins, lockfiles, markers, file budgets — run by `./gradlew build`. |
+| `structure/` | The goldens `:repo-checks` reads: `modules.txt` (generated), `twins.txt` and `budgets.txt` (hand-edited, each exemption and budget with its reason). |
+| `*/gradle.lockfile` | Dependency goldens for every published module and the daemon. Regenerate on macOS; see Commands. |
+| `scripts/check-commit-identity.sh`, `scripts/check-client-names.sh` | CI's `repo` job. The name scan is also the check to run locally before committing. |
 | `inspector-stream/.../Transport.kt` | How `StreamSink` reaches the host: dialling `/ingest`, or — on a physical iPhone — listening on the phone's loopback for the USB bridge. |
 | `inspector-daemon/.../usb/UsbBridge.kt` | The iOS counterpart of `adb reverse`: polls usbmuxd, dials the app's port, relays into the daemon's own `/ingest`. `Usbmux.kt` and `Plist.kt` beside it are the protocol. |
 | `.github/workflows/release.yml` | Tag-triggered. Publishes the daemon zip (smoke-tested first) and the library to GitHub Packages. Two jobs, two runners — the library half needs macOS for the iOS klibs. |

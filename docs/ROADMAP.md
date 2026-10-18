@@ -648,8 +648,10 @@ They are recorded together here because several items depend on more than one of
    build-only module and is never published. *Touches a recorded decision; see the phase B item.*
 5. **The client-name terms are held as a repository secret for CI**, and are never written into
    the repository. This keeps the recorded rule that the terms are not listed anywhere in the
-   repo, and moves the check from "before the commit, if remembered" to every push. *Has a trap;
-   see the phase B item.*
+   repo. CI catches a match **before merge, not before publication**: a branch CI can see is
+   already on a public remote. So "the check belongs before the commit" stays the primary rule,
+   with `scripts/check-client-names.sh --terms-file` run locally, and CI is the net under it.
+   *Has a trap; see the phase B item.*
 6. **The MCP `timeline` fix is approved as a bug fix.** An agent will see a different order at
    same-millisecond ties. That is the correction, not a regression.
 
@@ -942,6 +944,79 @@ staying what the docs say. Also the maintainer, who today enforces every rule be
 
 **Out of scope.** detekt and ktlint (decision 4). A build-wide formatter. Scanning history, which is
 already public. As recorded, the check belongs before the commit.
+
+**Status, 2026-10-18: built, pending CI. Not done.** It is on `shafic/structure-phase-b`, which is
+not pushed, so CI has not run. What landed:
+
+- `:repo-checks`, a build-only JVM module with no `maven-publish`. Its 8 JUnit 5 tests run in
+  `./gradlew build`: the module graph against `structure/modules.txt`; the twins against
+  `structure/twins.txt`, with `:inspector-model` the one exemption and its reason; a non-empty
+  lockfile for every published module and the daemon; the model's lockfile against a
+  serialization-and-stdlib allowlist; no markers outside Markdown; and the file budgets in
+  `structure/budgets.txt`.
+- A `gradle.lockfile` in each of the seven published modules and the daemon, `LockMode.STRICT`,
+  checked in `check` by `resolveLockedConfigurations`. The Android locks were generated here
+  without an Android SDK, because resolving `androidRuntimeClasspath` does not need one.
+- `scripts/check-commit-identity.sh` and `scripts/check-client-names.sh`, run by a new CI `repo`
+  job on ubuntu with no JDK.
+- The landing page's sponsor-link marker moved into §3's table. It was the one live marker, and it
+  served as the marker check's first red run.
+
+**Two deviations from the design, each smaller than the guarantee it keeps.**
+
+1. **`resolveLockedConfigurations` does not use `resolutionResult.rootComponent`.** Measured: with
+   it, a runtime dependency added to core and a stale lock entry both **passed**. Only the missing
+   lockfile failed, because STRICT throws that before resolution. The graph result drops lock
+   validation. The task resolves an artifact view that selects no component instead, which keeps
+   the design's property of no downloads and no sibling builds, and adds the guarantee.
+2. **Proof 3b's break was replaced.** Removing `ktor-network` from `:inspector-stream` leaves every
+   locked graph byte-identical, because it also arrives transitively. That break could not go red
+   whatever the guard did. The question it was asking, whether Gradle 9.5.1 fails on a stale entry,
+   was answered by removing `ktor-client-okhttp` from stream's `androidMain` instead. It does fail
+   ("Did not resolve … which is part of the dependency lock state").
+
+`./gradlew dependencies --write-locks`, the design's regenerate command, runs only the root's
+report in Gradle 9.5.1 and locks nothing. The command in `AGENTS.md` → Commands is the one that
+works.
+
+**Still to do once the secret exists:** create `CLIENT_NAME_TERMS`, then add `--require-terms` to
+the push-to-`main` run. Until then the scan prints NOT RUN with a warning on every run, which is
+true, and never prints a pass.
+
+Evidence, run locally on macOS with no Android SDK:
+
+- `:repo-checks:test` ran 8 tests with 0 failures.
+- Every non-Android `check` passed, plus `resolveLockedConfigurations`: 834 tests, 0 failures. That
+  covers JVM and iOS-simulator tests for model, core, ui and stream, the noop JVM tests, the daemon's
+  227 and `:repo-checks`. The four `testAndroidHostTest` tasks and `:sample:android` need the SDK
+  and did not run.
+- `check-web-static.js` passed 20/20.
+- `:repo-checks:test` and `resolveLockedConfigurations` also pass under `-Pinspector=off`.
+
+Every listed proof went red, and each file was restored from a backup copy:
+
+- The module graph went red on an added edge and on a removed one.
+- The twin check went red on `maven-publish` added to `:repo-checks`, on it removed from
+  `:inspector-noop-ui`, and on a blank exemption reason.
+- The locks went red on core's OkHttp moved to `implementation`, on a stale entry, on a deleted
+  lockfile, and on a hand-edited version with the configuration cache warm. The lockfile is a
+  cache input, so the cache was discarded.
+- The model allowlist went red on kotlinx-datetime after its lock was regenerated and STRICT
+  resolved it green.
+- The marker check went red on the real `site/index.html:688` and on one planted in a `.kt`.
+- The budgets went red on Server.kt growing, on it shrinking, on an untracked 601-line file, and on
+  a deleted entry.
+- Commit identity went red on a foreign author, a foreign committer, three trailer spellings, a
+  GitHub-committed commit with a foreign author, and an empty range (exit 2). It passed a
+  GitHub-committed merge authored by the maintainer.
+- The name scan, with `Wormholy` as its only term, exited 1 listing `AGENTS.md:11` and printed the
+  term nowhere. An empty term list printed NOT RUN and exited 0, or 1 under `--require-terms`.
+
+Also red: the daemon's lock through `distZip`, a budget entry for a missing file, a regenerate run
+that would have raised a budget, and a `git ls-files` failure.
+
+Not shown: a CI run; the Android host tests; the `repo` job itself, including the `env:`-based
+range expressions, which only GitHub evaluates.
 
 ### Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides
 
