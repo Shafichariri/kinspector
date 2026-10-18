@@ -79,7 +79,7 @@ not on others. That setting is therefore part of this rule. If a web merge fails
 setting, not the check. Do not exempt commits whose committer is `noreply@github.com` from the
 author check either: the push run is the only place a merge commit is checked at all, because a
 pull request's checks finish before its merge commit exists. Do not rewrite merges already on
-`main` to make them pass, per the paragraph above on history. The check reads only the range a
+`main` to make them pass, per the paragraph on history in the root `AGENTS.md`. The check reads only the range a
 push brings, so it never sees them again.
 
 `gradle/wrapper/gradle-wrapper.jar` throws false positives on short alphabetic patterns: it is

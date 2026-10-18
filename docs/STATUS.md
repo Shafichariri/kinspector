@@ -94,7 +94,7 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   the daemon stayed bound to `127.0.0.1` alone. The other direction too: a replay from the host came
   back with `resignedHeaders` that only the app's `ReplaySigner` on the phone produces, so a
   `SignRequest` crossed the cable and its answer returned. Killing a linked app and relaunching it
-  reconnects in about a second — after the TIME_WAIT fix below; before it, 25 seconds of
+  reconnects in about a second — after the TIME_WAIT fix in `docs/decisions/devices-and-stream.md`; before it, 25 seconds of
   `EADDRINUSE`.
 
 - **Phase A's web checks, run locally (2026-10-18, three independent QA passes).**
@@ -157,4 +157,4 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   judged it.
 - **Android + iOS sample shells**, to finally see the overlay on a device. Needs an Android app
   module and an Xcode project; the UI module already compiles for both.
-- ~~**Stretch:** HAR export.~~ Built — `GET /api/sessions/{id}/har`, see the rule below.
+- ~~**Stretch:** HAR export.~~ Built — `GET /api/sessions/{id}/har`, see the rule in `docs/decisions/exports.md`.

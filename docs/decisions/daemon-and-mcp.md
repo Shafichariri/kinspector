@@ -61,7 +61,7 @@ and bulk delete. `POST /api/sessions/{id}/markers` is the only
 allowlist entry. Any new entry widens what a web page can do to the daemon, so it is a
 `ROADMAP.md` decision, not a line added to make a test pass. Every side effect is an inert fake,
 so a broken guard shows up as a wrong status rather than an exited test JVM. A scan that finds no
-routes fails. **Revisit on a Ktor upgrade**, like `rawContent` above: the test depends on
+routes fails. **Revisit on a Ktor upgrade**, like `rawContent` in `capture.md`: the test depends on
 `getAllRoutes`, on `lineage()`, and on `webSocket` putting its handler below the GET node under
 header selectors, which is how the two handshakes are recognised as GET and printed as exempt.
 

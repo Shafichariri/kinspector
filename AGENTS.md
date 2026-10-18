@@ -52,7 +52,7 @@ Nobody should be told to "open the desktop app".
 
 The lettered rows are **capture mechanisms** and are lettered independently of Phase 4, which is
 signals. Two numbering schemes met here and the collision is historical; `implementation-plan.md`
-owns the phases, and the letters only ever appear in the capture roadmap below.
+owns the phases, and the letters only ever appear in the capture roadmap in `docs/decisions/capture.md`.
 
 Counts, Verified and Not verified are in `docs/STATUS.md`. It is not in context: read it before
 claiming anything is verified.

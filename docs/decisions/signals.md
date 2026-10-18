@@ -100,7 +100,7 @@ rather than a highlight over an unchanged list. Anyone wanting both writes the `
 so a chip list built from the constants would be a list of the tags *this build* knows about —
 which is not a fact about the app being debugged. The same goes for every section of the filters
 sheet: endpoints, methods and markers are whatever this session holds. *(The ordering argument that
-used to follow — tags before markers on a 360dp strip — went with the strip; see below.)*
+used to follow — tags before markers on a 360dp strip — went with the strip; see the scrollable-strip paragraph in `overlay.md`.)*
 
 **A signal's payload is rendered from `Signal.data`, and the truncated case is not the element.**
 `Recorder.emit` cuts the *encoded* payload at `maxPayloadBytes` and keeps the prefix as a
@@ -145,5 +145,5 @@ usefully at 360dp and a truncated one is worse than none.
 rules in `style.css` (which are literals, and not identical shades). Screen reads `accent` and
 session reads `clientError`: they read GET and PATCH until those moved to grey and teal, and a grey
 screen lane would be indistinguishable from an unknown tag. Borrowing hues does not contradict the
-method-colour rule above, which is about avoiding the *status* hues: a 3dp stripe down a row with
+method-colour rule in `shared-rules.md`, which is about avoiding the *status* hues: a 3dp stripe down a row with
 no status cannot be confused with a tinted badge in a fixed column.

@@ -129,7 +129,7 @@ and only the port was missing. Found when replay could not connect to the sample
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
 Revisit on upgrade. The same upgrade must recheck `ControlHeaderCoverageTest`'s route walk, which
-is public API but leans on the shape of Ktor's route tree (see the control-header paragraph below).
+is public API but leans on the shape of Ktor's route tree (see the control-header paragraph in `daemon-and-mcp.md`).
 
 **Redaction is OFF by default.** This is a debugging tool for debuggable builds whose capture
 code cannot reach production. A debugger that hides the auth header is useless when the bug *is*
