@@ -1069,6 +1069,18 @@ real. That check is what makes this item compatible with the decision rather tha
 **Out of scope.** Rewriting, merging or dropping any decision during the move. Changing what any of
 them says.
 
+**Found while building it, and left for later because the move must not reword anything:**
+
+- The `Formatting.kt` row, now in `inspector-ui/AGENTS.md`, still says it holds `pathScope`, which
+  moved to `:inspector-model`.
+- `docs/STATUS.md` → "Also outstanding" still lists the Android and iOS sample shells, which exist.
+- The `release.yml` row in the root's Key files says two jobs; the workflow has three.
+- Two paragraphs in `docs/decisions/repository.md` open on an antecedent that stayed in the root:
+  "`scripts/check-client-names.sh` is that check" and "`check-commit-identity.sh` … enforces this".
+- The root came in at about 14.8 KB against a 13.5 KB target, because the sections the design kept
+  add up to more than the target. Status churn has STATUS.md to go to, but a new root section will
+  need something moved out first.
+
 ### Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check
 
 **Audit findings 5 and 6.**

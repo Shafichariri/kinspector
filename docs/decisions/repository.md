@@ -98,3 +98,17 @@ Two conventions `:repo-checks` holds, moved out of the root so it stays under it
   back in unnoticed. `-Dinspector.budgets.tighten=true` only lowers or removes, and never touches
   `modules.txt`. Raising a budget or adding a file is a
   hand edit with the reason on the line.
+
+**`AGENTS.md` is an index, and each decision lives once, in `docs/decisions/`.** The root used to
+hold every decision, 149 KB loaded into every agent run, most of it about modules the run never
+touched. It now holds what every run needs plus an index of eleven area files, and each module has
+an `AGENTS.md`, with a `CLAUDE.md` symlink, that names its decision files and `@`-imports them.
+"One copy" survives the split only because `DecisionsTest` fails on a second copy, whether a pasted
+paragraph or a copied lead with a reworded body; and the root stays small only because
+`AgentGuideTest` holds it under 15,000 bytes and refuses an import in it, which would load a file
+into every run while the budget still read green. The move itself was proven word for word by a
+one-off script over the commit pair, not by a permanent check: "equals the removed block" holds for
+one commit, and the first legitimate edit to a decision would turn a permanent version red. Whether
+a subagent loads a nested guide, and its imports, before it Reads a file there is unverified, so
+the role prompts name the decision files to Read rather than relying on it. The web guide sits in
+`resources/web/`, and the daemon build excludes it and its symlink from the jar.
