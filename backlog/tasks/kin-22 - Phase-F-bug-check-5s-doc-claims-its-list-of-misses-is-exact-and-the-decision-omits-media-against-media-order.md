@@ -3,10 +3,11 @@ id: KIN-22
 title: >-
   Phase F bug: check 5's doc claims its list of misses is exact, and the
   decision omits @media-against-@media order
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 15:35'
+updated_date: '2026-10-18 15:47'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -41,3 +42,11 @@ Reproduction (QA probe: $TMPDIR/qa3/probe5.js; each shape passed to auditMediaOv
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Engineer, commit f05603b. CHOICE checks 2/3: REFUSE. declaresAgain now skips blanks and block comments after the ';'/'}' (DECLARES_AGAIN). RED/GREEN (copy of tree, 'const a = 1; /* x */ const stop = 2;' appended to js/50-path.js): fixed audit exit 2 'harness: js/50-path.js:542: cannot read the names declared by: const a = 1; /* x */ const stop = 2;'; HEAD's audit exit 0 '232 names'; line removed exit 0 '25 checks, 0 failed'. Unit: 'function a() {} /* x */ /* y */ function b() {}' refused; 'const a = 1; /* x */' and 'const a = 1; // const b' still read as one name. CHECK 5 WORDING: doc comment and web-ui.md say 'among the misses'/'among its false reports', no completeness claim; both state @media-against-@media order is never compared and name the 35-list.css reduced-motion/1199px #detail-pane pair, held by review and one file. Prefix wording now 'one whose name is the other's followed by -'. CSS: comment only, above the reduced-motion block. STATIC: full output byte-identical to pre-change (not just first 24 lines), 25 checks, 0 failed. PROBES (fixture, daemon 8231, jsdom 29.1.1): live 'checks: 164 passed, 0 failed, 1 n/a, 0 unclassified, 42 notes'; archive 'checks: 21 passed, 0 failed'; export contains the new CSS comment. GRADLE --rerun: daemon 259/0, repo-checks 35/0, ui jvmTest 134/0. QA probe5.js unchanged in behaviour (no code change to check 5). check-client-names.sh not run (no terms here).
+
+QA at f05603b: AC#1-#4 Verified; KIN-21 AC#2 now Verified. QA found the checks 2/3 text in web-ui.md and topLevelDeclarations' doc still absolute ('is refused'; 'Three shapes are missed silently'): regex literals (const R = /\(/; const stop = 2;), a leading } on a continuation line, and a leading statement (kinA(); const stop = 2;) escape the scan, identically at 76b6c99. Conductor, 2026-10-18: fixed here by framing, not by listing more shapes - the scan is a column-0 line heuristic, not a JavaScript parser; the doc says so once, gives the known misses as examples ('among them'), and makes no absolute claim. No further shape-hunting on this ticket.
+<!-- SECTION:NOTES:END -->
