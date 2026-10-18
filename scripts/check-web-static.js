@@ -19,11 +19,14 @@
  *   - no `@media` rule loading before a plain rule with the same selector that sets the same
  *     property, which is how the cascade between files depends on `styles.txt` order;
  *   - the signal pager, `signalPages`, against stub routes that clamp, ignore `offset` or shift a
- *     row across a page seam.
+ *     row across a page seam;
+ *   - the session data under a filter: which list "last capture" dates the session by, and which
+ *     answer survives when two loads overlap or a whole-session read fails.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
- * it would push every later line down. The signal pages section came after it, on the same rule.
+ * it would push every later line down. The signal pages section came after it, on the same rule,
+ * and the session state section after that.
  *
  * Output is the same `label : value` shape as the other reports, ending `N checks, M failed`.
  * Exit 1 when a check fails; exit 2 when the harness cannot run at all — an anchor missing or
@@ -38,6 +41,7 @@ const {
 } = require('./lib/web-audits');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
+const { checkSessionState } = require('./lib/session-state-checks');
 
 const results = [];
 const report = (label, value) => {
@@ -96,6 +100,9 @@ async function main() {
 
   console.error('--- signal pages ---');
   for (const [label, value] of await checkSignalPages(scripts)) report(label, value);
+
+  console.error('--- session state ---');
+  for (const [label, value] of await checkSessionState(scripts)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

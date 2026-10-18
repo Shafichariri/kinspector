@@ -159,7 +159,10 @@ session; endpoint chips and duplicate detection both read it. Endpoint chips bui
 filtered view would collapse to the one chip you just clicked, making every other endpoint a dead
 end, and duplicate highlighting would vanish under exactly the filter you applied to investigate
 it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
-filter is set, because then the rows already are the whole session.
+filter is set, because then the rows already are the whole session. The stopped banner's "newest
+row in this session" reads it too, with `allSignals`. It used to read the filtered calls, and under
+a filter that kept only older calls it dated the session by the newest one the filter happened to
+keep. `check-web-static.js`'s `last capture whole` holds it.
 
 Signals are split the same way. `state.signals` is what the daemon matched against the filter, and
 only two readers take it: the timeline tab's entries and the path view's `visits(...)` call, the two
