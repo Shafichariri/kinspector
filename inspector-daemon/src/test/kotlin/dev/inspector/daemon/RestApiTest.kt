@@ -225,12 +225,9 @@ class RestApiTest {
         assertEquals(404, http.get(url("/js/..%2f..%2findex.html")).status.value)
         assertEquals(404, http.get(url("/css/..%2f..%2findex.html")).status.value)
         // A wrong method on a served file is 405, not 404 (KIN-9), on every file either list names.
-        // `js/00-core.js` is named on purpose: it is the first script once the split lands, and
-        // until then it is unlisted, so it must give the unlisted answer rather than a 405.
         for (file in WebPage.scripts() + WebPage.styles()) {
             assertEquals(405, http.put(url("/$file")).status.value, "PUT /$file")
         }
-        assertEquals(if ("js/00-core.js" in WebPage.scripts()) 405 else 404, http.put(url("/js/00-core.js")).status.value)
     }
 
     @Test

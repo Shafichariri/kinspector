@@ -59,7 +59,7 @@ class WebManifestTest {
             if (!folder.isDirectory) return@flatMap listOf("web/${manifest.folder}/ does not exist")
             val listed = entries(manifest)
             // Recursive, so `js/sub/x.js` is a file the folder holds and the manifest does not.
-            val onDisk = folder.walkTopDown().filter { it.isFile }
+            val onDisk = folder.walkTopDown().filter { it.isFile && it.name != FINDER_METADATA }
                 .map { "${manifest.folder}/" + it.relativeTo(folder).invariantSeparatorsPath }
                 .toSortedSet()
             listOfNotNull(if (listed.isEmpty()) "web/${manifest.name} lists no files" else null) +
@@ -104,9 +104,22 @@ class WebManifestTest {
     @Test
     fun the_web_root_holds_only_the_shell_the_manifests_and_their_folders() {
         val expected = setOf("index.html", "scripts.txt", "styles.txt", "js/", "css/", "AGENTS.md", "CLAUDE.md")
-        val actual = root.listFiles().orEmpty().map { if (it.isDirectory) "${it.name}/" else it.name }.toSet()
+        val actual = root.listFiles().orEmpty().filter { it.name != FINDER_METADATA }
+            .map { if (it.isDirectory) "${it.name}/" else it.name }.toSet()
         // A leftover `app.js` or `style.css` here would ship in the jar, and anything still reading
         // the old path would pass against a stale copy.
         assertEquals(expected, actual, "(e) web/ holds something other than the shell, the manifests and js/ css/")
+    }
+
+    private companion object {
+        /**
+         * The one name both folder checks skip. Finder writes it into any folder it opens, so without
+         * this the build goes red on a Mac for looking at `web/`. Skipped by exact name, not as a
+         * dotfile: any other hidden file is something somebody put there, and still fails. Gradle's
+         * default excludes keep it out of the jar, so it is never a file the page could load — and out
+         * of this task's input fingerprint, which is why one turned the build red only when the test
+         * re-ran for some other reason.
+         */
+        const val FINDER_METADATA = ".DS_Store"
     }
 }

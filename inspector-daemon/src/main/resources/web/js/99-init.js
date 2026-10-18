@@ -1,4 +1,4 @@
-/* init: key handling, wiring and start-up; the only code that runs at load */
+/* init: key handling, wiring and start-up; the only file that runs anything at load, beside other files' constants */
 'use strict';
 
 document.addEventListener('keydown', (e) => {

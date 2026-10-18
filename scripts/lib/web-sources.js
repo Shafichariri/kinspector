@@ -25,10 +25,15 @@ const WEB = path.join(__dirname, '..', '..', 'inspector-daemon', 'src', 'main', 
 const STYLES_SLOT = '<!-- inspector:styles -->';
 const SCRIPTS_SLOT = '<!-- inspector:scripts -->';
 
-/** A manifest's entries in order, e.g. `['js/00-core.js', 'js/05-network.js', …]`. */
+/**
+ * A manifest's entries in order, e.g. `['js/00-core.js', 'js/05-network.js', …]`.
+ *
+ * Split where Kotlin's `lines()` splits — `\r\n`, `\n` or a lone `\r` — so a manifest saved with CRLF
+ * endings gives the same entries here as in the daemon, rather than every entry ending in `\r`.
+ */
 function manifest(name) {
   return fs.readFileSync(path.join(WEB, name), 'utf8')
-    .split('\n')
+    .split(/\r\n|\n|\r/)
     .filter((line) => !(line.trim() === '' || line.trimStart().startsWith('#')));
 }
 
