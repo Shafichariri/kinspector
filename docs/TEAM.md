@@ -167,11 +167,18 @@ The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
   `disallowedTools`, `effort` and body, but **not** its `hooks`, `memory` or `omitClaudeMd`, so the
   write block and the private term list would silently vanish; `product-owner` and
   `delivery-tracker` — they own human gates and state that exists only after a phase.
-- **The three roster roles list `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate` in `tools`.**
-  A teammate gets exactly its definition's `tools`, so without them it cannot message the others
-  or read the shared task list, and a "team" is three isolated reports relayed by the lead. That
-  is how phase F's council and panel ran on 2026-10-18: every member said it had no message tool.
-  Writes stay refused by the two hooks below whatever `tools` says.
+- **A teammate is spawned in the foreground, and the guard refuses one that is not.** The Agent
+  tool backgrounds by default, and a backgrounded named agent is not an in-process teammate. Measured
+  on 2026-10-18 with the same `qa-verifier` and `architect` definitions: in the foreground each had
+  `SendMessage`, `TaskList`, `TaskGet` and `TaskUpdate`, read the lead's task list, claimed a task,
+  and exchanged messages within its turn; in the background each had `SendMessage` alone, no task
+  list, and a message reached it only by resuming it after its turn ended. Every team phase in
+  phase F had been spawned in the background, which is why its members reported missing tools and
+  the lead relayed their findings. Spawn all members of a phase in **one message** with
+  `run_in_background: false`, so they run at once and the lead waits for the phase. The three
+  roster roles also list `SendMessage` and the Task tools in `tools`; the docs say an in-process
+  teammate gets them injected anyway, so the list is belt and braces, not the fix. Writes stay
+  refused by the two hooks below whatever `tools` says.
 - **`.claude/hooks/team-read-only.js`** (PreToolUse on Write/Edit). A teammate cannot write files;
   it sends proposed text to the lead, who routes it to the owning role afterwards. Bash writes are
   outside what the hook sees, as with the strategist's.

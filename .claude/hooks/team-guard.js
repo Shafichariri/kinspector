@@ -97,6 +97,19 @@ process.stdin.on('end', () => {
     deny(`\`${type}\` is not on the ${phase} roster (${roster.join(', ')}). ${retry}`);
   }
 
+  // The Agent tool backgrounds by default, and a backgrounded named agent is not an in-process
+  // teammate: measured 2026-10-18, it gets no TaskList/TaskGet/TaskUpdate however its `tools`
+  // reads, and messages reach it only by resuming it after its turn ends. The foreground spawn of
+  // the same definition got the task tools and live messaging. So a teammate must say so.
+  if (ti.run_in_background !== false) {
+    deny(
+      'a teammate must be spawned in the foreground: pass `run_in_background: false`. The Agent ' +
+        'tool backgrounds by default, and a background agent gets no shared task list and receives ' +
+        'messages only after its turn ends. Spawn every member of the phase in one message so ' +
+        'they run at once.',
+    );
+  }
+
   const max = Number.parseInt(process.env.INSPECTOR_TEAM_MAX ?? '3', 10) || 3;
   const sid = String(call.session_id ?? '');
   const configPath = path.join(os.homedir(), '.claude', 'teams', `session-${sid.slice(0, 8)}`, 'config.json');

@@ -77,6 +77,10 @@ conductor; every gate above still stops for the human.
 - A named Agent call launches a teammate. Spawn teammates **only** for a phase below, with
   `[team-phase: <phase>]` on the first line of each prompt; everything else is a subagent — call
   Agent without `name`.
+- Spawn every member of a phase **in one message, each with `run_in_background: false`**. A
+  backgrounded teammate gets no shared task list and receives messages only after its turn ends;
+  the guard refuses it. Tell each member the others' names, and that if a first message is refused
+  as unreachable, the other member has not started yet: wait briefly (`sleep 10` in Bash) and retry.
 - Rosters: **design-council** — `architect`, `ux-reviewer`, `qa-verifier`; **verify-panel** —
   `qa-verifier`, `architect`, `ux-reviewer` (UI items only); **root-cause** — `architect`,
   `qa-verifier` (one `qa-verifier` per hypothesis is fine).
