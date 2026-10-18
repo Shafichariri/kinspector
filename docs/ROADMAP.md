@@ -709,8 +709,8 @@ navigate() }` case that `visits()` was fixed for.
 **Out of scope.** Changing the tool's arguments, its default limit or its oldest-first order. An MCP
 `path` tool, which §3 already defers.
 
-**Status, 2026-10-18: built, pending CI. Not done.** On `shafic/structure-phase-e`, stacked on phase
-A, not pushed, so no CI run has happened. The 2,000 clamp is **kept**: `timeline()` is now
+**Status, 2026-10-18: done.** CI on PR #82 (stacked on phase A) went green on `build`,
+`release-swap` and `web`, which covers the full `./gradlew build`, iOS and Android. The 2,000 clamp is **kept**: `timeline()` is now
 `timelineWindow()` plus the clamp, and `explain` reads the unclamped window and splits it by
 position. Signal ties ship as "MCP equals the model", which still ignores `seq`; that is recorded
 under §3 -> Bugs found, not fixed, rather than fixed here.

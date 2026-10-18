@@ -58,8 +58,8 @@ was run. A branch-wide total of 897 was computed by arithmetic, never measured, 
 PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swap` (macOS: full
 `./gradlew build`, Android host tests, `-Pinspector=off`). `docs/ROADMAP.md` §5 has the detail.
 
-**Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is built and pending CI.**
-`docs/ROADMAP.md` §5 has the detail. It is not "done" until CI has run on a pushed branch.
+**Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is done**: CI on
+PR #82 went green on `build`, `release-swap` and `web`. `docs/ROADMAP.md` §5 has the detail.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -165,8 +165,7 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 - **The Gradle cache carrying over between checkout paths** for the mirror-case test inputs is
   unproven.
-- **Phase E's CI has never run**, and the branch is not pushed. Full `./gradlew build`, iOS and Android
-  were not run; only daemon code changed. Signal ties still ignore `seq`, in the model and so in MCP.
+- **Signal ties still ignore `seq`**, in the model and so in MCP (recorded under ROADMAP §3).
 - **The Auth0 adapter in `docs/INTEGRATION.md` §11 compiles but has never run.** It is now
   written against the real `auth0-android` 3.12.0 sources (read out of the Gradle cache) and
   compile-checked against that jar plus OkHttp 4.12.0 and Gson, so the types and the
