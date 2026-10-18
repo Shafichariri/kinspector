@@ -1,9 +1,11 @@
 ---
 id: KIN-3
 title: 'Phase D C6: DaemonLayersTest import scan holds the daemon''s layers'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:50'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -51,3 +53,11 @@ Rules: L0 a filesystem walk of `inspector-daemon/src/main/` compared with the `g
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C6 committed as 730aceb. repo-checks 18 -> 35 (17 DaemonLayersTest cases). Live: 0 violations. Proven: real-file breaks in service/ and mcp/ (AC #5), blind reader and blind matcher trip L6, an ignored file trips L0. Files read directly, not via RepoFiles.text, because archive/SessionLayout.kt holds a NUL byte and RepoFiles.text skips such files. Interpretation: 'nothing may import the root' is enforced as L4 refusing dev.inspector.daemon.X / dev.inspector.daemon.* from any non-root layer. An import line the reader cannot parse is itself an L4 violation, so nothing is skipped silently.
+
+Ready for QA.
+<!-- SECTION:NOTES:END -->

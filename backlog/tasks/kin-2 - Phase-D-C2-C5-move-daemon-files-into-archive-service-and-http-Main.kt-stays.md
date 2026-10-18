@@ -3,9 +3,11 @@ id: KIN-2
 title: >-
   Phase D C2-C5: move daemon files into archive/, service/ and http/; Main.kt
   stays
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:50'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -56,3 +58,13 @@ Phase D, commits C2 to C5 (design note §1 "File → destination", §4 "Rename h
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C2 8e47dc8 (archive/), C3 7894a6f (service/), C4 dfb310f (service/Version.kt), C5 <see next note> (http/Server.kt). Each green: daemon 235, repo-checks 18. Renames 93-99% similarity. Moves done by a script that git-mv's, rewrites the package line, and adds only the imports the compiler reports unresolved (existing dev.inspector.daemon.X imports rewritten in place). Found: Retention collides with the default import kotlin.annotation.Retention, so moving it out of a file's package would rebind silently rather than fail; every file using it got an explicit import (checked the C3 names against java.lang and kotlin default packages: no other collision). SessionLayout.kt holds a literal NUL char at base (line 66), so git shows it as binary; use git diff --text to review it. Test diff vs 1db168b: pre-existing files import-only (105 lines at C5); the C1 guard files changed only by imports since C1. Interpretation: 'C1 guards pass unchanged' read under decision A, i.e. import lines only.
+
+C5 is cda3226. KIN-2 ready for QA once the item is done.
+
+Ready for QA.
+<!-- SECTION:NOTES:END -->

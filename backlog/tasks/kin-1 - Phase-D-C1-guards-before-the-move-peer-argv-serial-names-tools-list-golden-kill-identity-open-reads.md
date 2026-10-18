@@ -3,9 +3,11 @@ id: KIN-1
 title: >-
   Phase D C1: guards before the move (peer argv, serial names, tools/list
   golden, kill identity, open reads)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:49'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies: []
@@ -56,3 +58,11 @@ Phase D, commit C1 (design note revision 2, "Commit plan revised"). Guards land 
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C1 committed as 8c4f9a4. Daemon tests 227 -> 235 (+8), repo-checks 18. All five guards proven both ways at base; proofs in the session scratchpad phase-d-proofs.md under KIN-1. Deviation: inspector-daemon/build.gradle.kts gained a systemProperty forward for inspector.mcp.regenerate (Gradle's -D lands on the Gradle daemon, not the test JVM; same pattern as inspector.api.regenerate in inspector-core). Without it AC #3's regenerate switch could not reach the test. ReadRoutesOpenTest probes 23 GET routes.
+
+Ready for QA.
+<!-- SECTION:NOTES:END -->

@@ -1,9 +1,11 @@
 ---
 id: KIN-7
 title: 'Phase D C10: update file references and record the three phase D decisions'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:51'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -55,3 +57,9 @@ The `McpTest.kt` line in `structure/budgets.txt` gets the reason text below. The
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C10 committed as fc72878. grep for Server.kt/McpTools.kt outside ROADMAP: none. Guide rows' paths all exist; layer table added under a '## Layers' heading plus a key-file row for DaemonLayersTest. Three decisions re-checked and still true (files listed in the proofs). McpTest.kt budget reason: N = 5 (815 - 810). Platform.android.kt diff is comment-only; :inspector-stream was not compiled here (no Android SDK). Not touched: the four ROADMAP lines, which the product owner routes. Ready for QA.
+<!-- SECTION:NOTES:END -->

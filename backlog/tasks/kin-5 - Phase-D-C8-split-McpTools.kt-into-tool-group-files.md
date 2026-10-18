@@ -1,9 +1,11 @@
 ---
 id: KIN-5
 title: 'Phase D C8: split McpTools.kt into tool-group files'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:50'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -52,3 +54,11 @@ Every tool block moves character for character. `McpTest`'s imports (`McpServer`
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C8 committed as e88af44. Golden byte-identical without regenerate; McpTest.kt and mcp-tools-list.json no diff; daemon 235/0, repo-checks 35/0, DaemonLayersTest 0. Proven: swapping two groups in McpTools.tools turns the golden red. Design choices worth knowing: (1) Tool(descriptor) { run }: the descriptor is the only argument in parentheses and run is a trailing lambda, so each descriptor block moved byte for byte, closing brace included; (2) ToolContext is an internal abstract class the archive-reading groups extend, so tool bodies still read repository/config/resolve(args) unchanged; (3) explain is an internal extension on TransactionTools in ExplainTool.kt, so its body moved verbatim, and bodyNote went from private to internal so the extension can call it; (4) the dangling KDoc above CurrentObservation ('Posting a marker needs the daemon...') moved onto MarkerPoster, which it describes; (5) two KDoc links fixed ([addMarker] -> [MarkerTools], [McpTools.requestSignal] -> [SignalTools.requestSignal]); (6) MarkerTools takes only the poster, since add_marker reads no archive.
+
+Ready for QA.
+<!-- SECTION:NOTES:END -->

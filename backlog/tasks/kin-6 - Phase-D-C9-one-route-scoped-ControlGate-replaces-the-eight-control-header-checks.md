@@ -3,9 +3,11 @@ id: KIN-6
 title: >-
   Phase D C9: one route-scoped ControlGate replaces the eight control-header
   checks
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-18 10:51'
+updated_date: '2026-10-18 11:54'
 labels:
   - 'item:structure-phase-d'
 dependencies:
@@ -52,3 +54,11 @@ The arbiter is `ControlHeaderCoverageTest`, unchanged. If it cannot pass unchang
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+C9 committed as 5d12bde. Daemon 244/0 (+9 ControlGateTest), repo-checks 35/0. ControlHeaderCoverageTest: no diff in C9, same 8 routes. Route set from getAllRoutes identical before/after (32 entries, runtime dump). Proven: a silent gate turns ControlGateTest 1-8 and ControlHeaderCoverageTest red (exit fake reached); dropping the install-once check throws DuplicatePluginException. Deviations: ControlGate and CONTROL_REFUSAL are private to ControlGate.kt (only controlGated needs them). Case 8 literals measured from a daemon built at e88af44, not at 1db168b: the refusal code is byte-identical between them, and building base would have meant a checkout outside this worktree. ControlGateTest's server starts outside runBlocking, because one started inside it hangs setUp; the test's KDoc says why.
+
+Ready for QA.
+<!-- SECTION:NOTES:END -->
