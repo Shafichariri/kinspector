@@ -7,6 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 15:22'
+updated_date: '2026-10-18 15:35'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -44,3 +45,11 @@ Reproductions:
 - [ ] #5 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #6 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Engineer, commit 526dab7. CHOICES: checks 2/3 REFUSE (HarnessError, exit 2) a second declaration after ';' or '}' on a column-0 line (new declaresAgain in topLevelDeclarations); no line in web/js trips it (static run exit 0, 231 names as before). Check 5: STATE THE RULE EXACTLY, code not extended. web-ui.md and the auditMediaOverrideOrder / propertiesOverlap docs now say: same selector text (whitespace collapsed, nothing else normalised), overlap by name prefix with shorthand/longhand not resolved, custom properties only when equal, @media the only at-rule walked (nested @media included). Missed: other selectors on specificity, reordered compounds (.panes-wide#panes), non-prefix longhands (border-style/border-right, inset/top), @supports/@layer/@container. False reds: border vs border-radius, !important in the @media rule. A scan with the audit's own readers found none of those shapes in today's CSS (no other at-rule; no !important inside @media; no reordered compound; only prefix pairs are custom properties, which compare by equality). CHECK 5 COUNT: pairs = (@media selector, plain rule earlier or later) with same selector and overlapping property; fails at 0. Green: 'media overrides load last : yes (11 pair(s) compared, 15 @media selector(s) in 17 file(s))', '25 checks, 0 failed'. RED (copy in $TMPDIR/kin21/copy; '\s*:/g' -> '\s*=/g' in declaredProperties + css/35-list.css -> css/08-list.css after 05-base.css in styles.txt), exit 1: 'media overrides load last : NO - compared no @media rule with a plain rule setting the same property, so this checked nothing' / '25 checks, 1 failed'. Same copy with HEAD's audit: exit 0, 'yes (15 @media selector(s) in 17 file(s))' (the reported false green). Reader restored, rename kept: exit 1, '#panes in @media (max-width: 1199px) at css/08-list.css:26 loads before css/10-panes.css:7; ...'. Both restored: exit 0, '11 pair(s) compared'. CHECKS 2/3 RED (appended to js/50-path.js in the copy): 'const kinA = 1; const stop = 2;' -> exit 2, 'harness: js/50-path.js:542: cannot read the names declared by: const kinA = 1; const stop = 2;'; 'function kinB(){} function Map(){}' -> exit 2, 'harness: js/50-path.js:542: cannot read the names declared by: function kinB(){} function Map(){}'. With HEAD's audit both exit 0 ('232 names'). Restored: exit 0; copy diffs clean against the tree. FIRST 24 LINES: baseline from HEAD (stash) in $TMPDIR/kin21/static-before.txt; head -24 diff empty; whole output differs only on the check-5 line. PROBES (fixture via writeProbeFixture, daemon on 8231, jsdom 29.1.1): live 'checks: 164 passed, 0 failed, 1 n/a, 0 unclassified, 42 notes' exit 0; archive 'checks: 21 passed, 0 failed' exit 0. GRADLE (--rerun): :inspector-daemon:test 259/0 failures, :repo-checks:test 35/0, :inspector-ui:jvmTest 134/0, BUILD SUCCESSFUL. check-client-names.sh NOT RUN here: no terms available (CLIENT_NAME_TERMS unset).
+
+QA at 526dab7: AC#1, #3, #4 Verified; AC#2 Failed (completeness claim in check 5's doc comment) — follow-up in KIN-22.
+<!-- SECTION:NOTES:END -->
