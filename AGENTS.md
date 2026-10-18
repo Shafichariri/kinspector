@@ -775,7 +775,8 @@ session is on the machine and a truncated JSON body is rare there.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
-Revisit on upgrade.
+Revisit on upgrade. The same upgrade must recheck `ControlHeaderCoverageTest`'s route walk, which
+is public API but leans on the shape of Ktor's route tree (see the control-header paragraph below).
 
 **`InspectorBackHandler` is `expect`/`actual`, not Compose Multiplatform's `BackHandler`.** Do not
 "simplify" it back. CMP's common `BackHandler` resolves a dispatcher owner from the composition
@@ -793,6 +794,26 @@ listens on loopback with no authentication, so any page the developer has open c
 web page. A custom header forces a CORS preflight, and this server answers none, so only its own
 page gets through. Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the
 MCP tools post markers without it, and a marker is not a weapon.
+
+`ControlHeaderCoverageTest` pins this from the server's own route tree rather than from a list in
+the test. It walks every endpoint Ktor registered, sends every non-GET one a request with no header
+and one with `X-Inspector-Control: 0`, and expects from both a 403 whose body names the header — so
+a 403 from anything other than the guard does not count, and a future control gate must keep the
+header's name in its refusal. A route with no method selector answers any method, so it is probed
+too. GET is exempt wholesale, so the test also rests on no GET route ever changing anything. A new
+control route is covered by being registered, which matters because `ROADMAP.md` §6 adds bulk kill
+and bulk delete. `POST /api/sessions/{id}/markers` is the only
+allowlist entry. Any new entry widens what a web page can do to the daemon, so it is a
+`ROADMAP.md` decision, not a line added to make a test pass. Every side effect is an inert fake,
+so a broken guard shows up as a wrong status rather than an exited test JVM. A scan that finds no
+routes fails. **Revisit on a Ktor upgrade**, like `rawContent` above: the test depends on
+`getAllRoutes`, on `lineage()`, and on `webSocket` putting its handler below the GET node under
+header selectors, which is how the two handshakes are recognised as GET and printed as exempt.
+
+**"Exempt" there is a fact about the header, not a claim that those routes are safe.** A browser
+cannot put a custom header on a WebSocket handshake, so this header cannot guard `/api/live` or
+`/ingest`. Two security-boundary gaps found while building phase C are tracked privately and are
+open decisions for the maintainer; do not build a fix for either without that decision.
 
 **A stopped daemon's banner offers no restart, and the page keeps redialling.** The design pass
 proposed a `restart daemon` button on the banner; the process that would receive it is the one that
