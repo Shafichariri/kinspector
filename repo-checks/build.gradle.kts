@@ -1,6 +1,7 @@
 /*
  * Structural checks over the repository itself: the module graph, the noop twins, the dependency
- * locks, deferred-work markers and the file-size ratchet. Tests only, no main source set.
+ * locks, deferred-work markers, the file-size ratchet, and the decision files and agent guides.
+ * Tests only, no main source set.
  *
  * Never published, and that is checked rather than assumed: there is no `maven-publish` here, and
  * `NoopTwinTest` fails if one appears, because a published module without a twin breaks
