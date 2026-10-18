@@ -3,10 +3,11 @@ id: KIN-19
 title: >-
   Phase F bug: PaletteParityTest re-implements the manifest parse that WebPage
   claims to be the only reader of
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 14:52'
+updated_date: '2026-10-18 15:05'
 labels:
   - 'item:structure-phase-f'
 dependencies:
@@ -34,3 +35,9 @@ Found by the verify panel (S4). PaletteParityTest.kt:34 parses the manifest itse
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Engineer, commit c4f34bb. PaletteParityTest reads every *.css in web/css/ via -Dinspector.webCss (WebCssArgument in inspector-ui/build.gradle.kts, the folder declared @InputDirectory, RELATIVE); the manifest parse copy and the styles.txt input are gone. WebPage.entries is now the only Kotlin manifest parser (WebManifestTest calls it), so WebPage's KDoc is true unchanged. shared-rules.md palette paragraph updated. Proofs, no --rerun: (1) --m-get in 00-tokens.css dark block set to '1 2 3' -> ':inspector-ui:jvmTest FAILED', 'the dark palette matches the web tokens[jvm] FAILED', 'java.lang.AssertionError: dark --m-get differs between the web and the overlay'; restored. (2) '.kin19 { --m-get: 154 161 172; }' appended to 35-list.css -> 'no checked token is declared outside the tokens file[jvm] FAILED', 'declared outside css/00-tokens.css, where this test cannot see it win the cascade: --m-get in css/35-list.css'; restored -> BUILD SUCCESSFUL, tests=3 failures=0 (FROM-CACHE: same inputs as the green run before the breaks).
+<!-- SECTION:NOTES:END -->
