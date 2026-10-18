@@ -113,8 +113,11 @@ const state = {
   browserFacets: {},
   browserKey: null,
   browserObservation: null,
-  // How many rows the daemon's text filter matched, before the axis narrows it further.
-  matchTotal: null,
+  // The route's two counts, which no list the page holds can stand in for: a page stops at the
+  // route's clamp of 1000 rows. `sessionTotal` is every call in the session, `matched` is how many
+  // the text filter matched — before the axis narrows it further.
+  sessionTotal: null,
+  matched: null,
   // Which face of the transaction detail is showing. Remembered across selections: comparing
   // request bodies down a list means picking the same tab on every row otherwise.
   detailTab: 'res',

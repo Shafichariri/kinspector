@@ -276,6 +276,95 @@ async function checkAfterSessionChange(sources) {
     : `NO - allSessionId ${state.allSessionId}, allSignalsSessionId ${state.allSignalsSessionId}, callLoad ${state.callLoad} (was 4), signalLoad ${state.signalLoad} (was 7)`;
 }
 
+/**
+ * A session past the route's 1000-row clamp: 3016 calls, 1200 of them to `/v3/shop/bulk`, over two
+ * screens — `Old` from the start, `New` from call 2500. The route stub clamps a page as the daemon
+ * does and answers `total` and `matched` as it does. Run through the real load, then asked what
+ * the filter notes and the path say. The rows a load holds stop at the clamp, so a count taken
+ * from them is a count of the clamp: the session total less the filter's matches is the answer,
+ * and where only held rows can answer — a brushed stretch — the note says "at least".
+ */
+async function checkPastTheClamp(sources) {
+  const calls = Array.from({ length: 3016 }, (_, i) => ({
+    id: `t${String(i).padStart(4, '0')}`, mono: i, host: 'shop.invalid',
+    path: i % 2 === 0 && i < 2400 ? '/v3/shop/bulk' : '/v3/shop/stock',
+  }));
+  const screens = [
+    { id: 'old', tag: 'screen', name: 'Old', mono: 0 },
+    { id: 'new', tag: 'screen', name: 'New', mono: 2500 },
+  ];
+  const callApi = callRoute(calls);
+  const signalApi = signalRoute(screens);
+  const api = async (path) => {
+    const pathname = new URL(path, 'http://stub.invalid').pathname;
+    if (pathname.endsWith('/transactions')) return callApi(path);
+    if (pathname.endsWith('/signals')) return signalApi(path);
+    return [];
+  };
+  const element = { hidden: false, textContent: '' };
+  const node = () => {
+    const parts = [];
+    return {
+      parts, replaceChildren() { parts.length = 0; }, append(...xs) { parts.push(...xs.map(String)); },
+      appendChild(child) { parts.push(child.textContent || ''); return child; },
+      get textContent() { return parts.join(''); },
+    };
+  };
+  const el = (tag, cls, text) => ({ textContent: text || '', addEventListener() {} });
+  const state = { ...sessionState(''), timeRange: null, recording: [] };
+  const page = runFile(sources, ['js/15-session-data.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js'], {
+    state, api, el, ARCHIVE: null, tagOf: (x) => String(x.tag).toLowerCase(),
+    availableViews: () => [{ id: 'network' }],
+    renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, showFilterError() {},
+    renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {}, $: () => element,
+  });
+  // The files declare their own renderers over the stubs; drawing is not what is checked here.
+  for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState']) {
+    page[name] = () => {};
+  }
+  const lines = [];
+  const note = (hidden) => page.filterNote(node(), hidden, false).textContent;
+
+  state.filter = 'path:/v3/shop/bulk';
+  await page.loadTransactions();
+  let hidden = page.hiddenByFilter({ signals: false });
+  let text = note(hidden);
+  lines.push(['hidden past the clamp', text.startsWith('1816 calls hidden')
+    ? `yes ("${text.slice(0, 40)}…", 3016 calls less 1200 matched, with ${state.transactions.length} rows held)`
+    : `NO - "${text.slice(0, 40)}", where 1816 calls hidden was due (3016 less 1200 matched)`]);
+
+  state.timeRange = { from: 0, to: 500 };
+  hidden = page.hiddenByFilter({ signals: false, ranged: true });
+  text = note(hidden);
+  state.timeRange = null;
+  lines.push(['stretch past the clamp', hidden.calls > 0 && text.startsWith('at least ')
+    ? `yes ("${text.slice(0, 40)}…", a stretch older than the matches held)`
+    : `NO - "${text.slice(0, 40)}" (${hidden.calls} calls) for a stretch the rows held cannot count; "at least" was due`]);
+
+  state.filter = 'path:/nothing';
+  await page.loadTransactions();
+  hidden = page.hiddenByFilter({ signals: false });
+  text = note(hidden);
+  lines.push(['hidden when none match', text.startsWith('3016 calls hidden')
+    ? `yes ("${text.slice(0, 40)}…")`
+    : `NO - "${text.slice(0, 40)}", where 3016 calls hidden was due`]);
+
+  let got;
+  if (typeof page.countRecorded !== 'function') {
+    got = 'no countRecorded in js/50-path.js';
+  } else {
+    const list = page.visits(state.screens, state.transactions, [], state.signals, page.sessionStartMono());
+    page.countRecorded(list);
+    // A top-level `const`, so it lives in the scripts' shared scope rather than on the context.
+    const emptyVisitText = vm.runInContext('emptyVisitText', page);
+    got = list.map((visit) => emptyVisitText(visit, 'nothing recorded')).join(' / ');
+  }
+  lines.push(['path N past the clamp', got === '0 of 2500 match / 0 of 516 match'
+    ? `yes ("${got}", N over every call)`
+    : `NO - "${got}", where "0 of 2500 match / 0 of 516 match" was due`]);
+  return lines;
+}
+
 async function checkSessionState(sources) {
   return [
     ['last capture whole', checkLastCapture(sources)],
@@ -285,6 +374,7 @@ async function checkSessionState(sources) {
     ['whole calls read failure', await checkWholeCallsFailure(sources)],
     ...(await checkForgetInFlight(sources)),
     ['session change forgets', await checkAfterSessionChange(sources)],
+    ...(await checkPastTheClamp(sources)),
   ];
 }
 

@@ -55,7 +55,7 @@ function sessionLabel(meta) {
  * `17/17` above a list of five — a number that is true of a query nobody can see.
  */
 function renderCounts() {
-  const total = state.matchTotal;
+  const total = state.sessionTotal;
   if (total === null || total === undefined) {
     $('counts').textContent = '';
     return;
@@ -103,13 +103,15 @@ async function loadTransactions() {
   if (!isLatest()) return;
   if (page) {
     state.transactions = page.items;
-    state.matchTotal = page.total;
+    state.sessionTotal = page.total;
+    state.matched = page.matched;
     showFilterError(null);
   } else {
     // Parser messages are written to be shown verbatim, so show them verbatim.
     showFilterError(error.message);
     state.transactions = [];
-    state.matchTotal = null;
+    state.sessionTotal = null;
+    state.matched = null;
   }
   renderCounts();
   const markers = await api(`/api/sessions/${id}/markers`).catch(() => []);
@@ -221,9 +223,26 @@ function forgetWholeSession() {
   state.signalLoad++;
 }
 
-// @mirror-begin signalPages
+// @mirror-begin routePages
+/** Every signal the route returns for [filter], newest first, each once: `routePages` over a bare array. */
+async function signalPages(get, sessionId, filter) {
+  return routePages(get, `/api/sessions/${encodeURIComponent(sessionId)}/signals`, filter, (page) => {
+    if (!Array.isArray(page)) throw new Error('the signal route did not answer with a list');
+    return page;
+  });
+}
+
+/** Every call the route returns for [filter], newest first, each once: `routePages` over `{ items }`. */
+async function transactionPages(get, sessionId, filter) {
+  return routePages(get, `/api/sessions/${encodeURIComponent(sessionId)}/transactions`, filter, (page) => {
+    if (!page || !Array.isArray(page.items)) throw new Error('the transaction route did not answer with a page');
+    return page.items;
+  });
+}
+
 /**
- * Every signal the route returns for [filter], newest first, each once, read a page at a time.
+ * Every row a paged route returns for [filter], newest first, each once, read a page at a time;
+ * `rowsOf` takes the rows out of one answer.
  *
  * The route clamps a page (to 1000 today), so one request for "all of them" silently got the
  * newest thousand. Two stop rules, and the obvious one is not among them:
@@ -237,37 +256,39 @@ function forgetWholeSession() {
  * Any page failing fails the whole read: a silently partial list is the defect this exists to fix.
  * The offset advances by what the page held, not by the limit asked for, for the clamp's sake.
  */
-async function signalPages(get, sessionId, filter) {
+async function routePages(get, route, filter, rowsOf) {
   const limit = 1000;
   const seen = new Set();
   const all = [];
   for (let offset = 0; ;) {
     const q = new URLSearchParams({ filter: filter || '', offset: String(offset), limit: String(limit) });
-    const page = await get(`/api/sessions/${encodeURIComponent(sessionId)}/signals?${q}`);
-    if (!Array.isArray(page)) throw new Error('the signal route did not answer with a list');
+    const page = rowsOf(await get(`${route}?${q}`));
     let added = 0;
-    for (const signal of page) {
-      if (seen.has(signal.id)) continue;
-      seen.add(signal.id);
-      all.push(signal);
+    for (const row of page) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      all.push(row);
       added++;
     }
     if (added === 0) return all;
     offset += page.length;
   }
 }
-// @mirror-end signalPages
+// @mirror-end routePages
 
 /**
  * Keeps `allTransactions` in step with the current session.
  *
- * With no filter the rows just fetched already are the whole session, so the common case costs
- * nothing. With a filter active it costs one extra request per *session*, not per keystroke:
- * the endpoint inventory only grows when new traffic arrives, and the live socket appends to
- * both lists. `filter` and `isLatest` are the calling load's, as for `syncAllSignals`.
+ * With no filter the rows just fetched usually are the whole session, so the common case costs
+ * nothing. With a filter active — or a session past the route's clamp, where the rows fetched are
+ * only the newest 1000 — it costs one paged read per *session*, not per keystroke: the endpoint
+ * inventory only grows when new traffic arrives, and the live socket appends to both lists. It is
+ * paged because the path counts what each visit recorded from this copy, and a copy stopped at the
+ * clamp made every visit older than the newest 1000 calls read as having recorded less, or nothing.
+ * `filter` and `isLatest` are the calling load's, as for `syncAllSignals`.
  */
 async function syncAllTransactions(filter, isLatest = () => true) {
-  if (!filter) {
+  if (!filter && state.transactions.length >= (state.sessionTotal ?? 0)) {
     // A copy, not an alias — the live socket pushes into both, and sharing one array would
     // append every new row twice.
     state.allTransactions = state.transactions.slice();
@@ -278,8 +299,7 @@ async function syncAllTransactions(filter, isLatest = () => true) {
   const sessionId = state.sessionId;
   let all;
   try {
-    const q = new URLSearchParams({ filter: '', limit: '2000' });
-    all = (await api(`/api/sessions/${encodeURIComponent(sessionId)}/transactions?${q}`)).items;
+    all = await transactionPages(api, sessionId, '');
   } catch {
     // Chips are a convenience. If this fails, fall back to what we have rather than taking the
     // list down with it — but not marked as the session, as `syncAllSignals` does not mark its

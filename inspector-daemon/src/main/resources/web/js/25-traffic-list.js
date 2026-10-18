@@ -236,13 +236,30 @@ function clearFilterButton() {
  * How many calls and signals the session holds that the filter left out — within the brushed
  * stretch when `ranged`, since a pane that brushes is not hiding what lies outside it, and without
  * `screen` signals when `screens` is false, for the path, which draws every screen whatever the filter.
+ *
+ * Calls are counted from the route's own numbers, the session total less the filter's matches,
+ * never from the rows held: the filtered list stops at the route's clamp of 1000 rows, so a
+ * difference of two lists was a difference of two clamps — "1000 calls hidden" where 3016 were, and
+ * no note at all for a filter matching 1200. A brushed stretch has no route number, so there the
+ * held rows are counted, only from the oldest row at which every list holding them is still whole,
+ * and `atLeast` says that some of the stretch lay below it. Signals are read whole and need neither.
  */
 function hiddenByFilter({ signals = true, ranged = false, screens = true } = {}) {
-  const count = (rows) => rows.filter((row) => !ranged || inRange(row.mono)).length;
+  const stretch = ranged && state.timeRange;
+  const count = (rows, floor = -Infinity) => rows.filter((row) => row.mono >= floor && (!stretch || inRange(row.mono))).length;
   const kept = (rows) => (screens ? rows : rows.filter((s) => tagOf(s) !== 'screen'));
+  const signalCount = signals ? Math.max(0, count(kept(state.allSignals)) - count(kept(state.signals))) : 0;
+  if (!stretch && state.sessionTotal !== null && state.matched !== null) {
+    return { calls: Math.max(0, state.sessionTotal - state.matched), signals: signalCount, atLeast: false };
+  }
+  // Each list is the newest rows of what it holds, so it is whole from its oldest row up, or whole
+  // outright when it is as long as the route says.
+  const wholeFrom = (rows, total) => (rows.length && rows.length < (total ?? 0) ? Math.min(...rows.map((r) => r.mono)) : -Infinity);
+  const floor = Math.max(wholeFrom(state.transactions, state.matched), wholeFrom(state.allTransactions, state.sessionTotal));
   return {
-    calls: Math.max(0, count(state.allTransactions) - count(state.transactions)),
-    signals: signals ? Math.max(0, count(kept(state.allSignals)) - count(kept(state.signals))) : 0,
+    calls: Math.max(0, count(state.allTransactions, floor) - count(state.transactions, floor)),
+    signals: signalCount,
+    atLeast: floor > -Infinity && (!stretch || state.timeRange.from < floor),
   };
 }
 
@@ -254,7 +271,8 @@ function hiddenByFilter({ signals = true, ranged = false, screens = true } = {})
  */
 function filterNote(node, hidden, emptied) {
   const count = (n, noun) => (n ? `${n} ${noun}${n === 1 ? '' : 's'}` : null);
-  const what = [count(hidden.calls, 'call'), count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
+  const calls = count(hidden.calls, 'call');
+  const what = [calls && hidden.atLeast ? `at least ${calls}` : calls, count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
   node.replaceChildren();
   node.append(emptied ? 'nothing matches the filter ' : `${what} hidden by the filter `);
   node.appendChild(el('code', null, state.filter));

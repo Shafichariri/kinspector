@@ -168,6 +168,10 @@ function connectLive() {
     if (message.type === 'txn') {
       state.transactions.push(message.txn);
       if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
+      // The list takes the row as one more match, so both counts move and what the filter hides
+      // stays what it was.
+      if (state.sessionTotal !== null) state.sessionTotal++;
+      if (state.matched !== null) state.matched++;
       renderList();
       renderWaterfall();
       renderPath();

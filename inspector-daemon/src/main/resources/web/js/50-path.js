@@ -79,14 +79,7 @@ function renderPath() {
     return;
   }
 
-  // Under a filter, each visit also carries how much it recorded, from the same skeleton over the
-  // whole session — so an emptied visit reads "0 of 9 match" rather than "nothing recorded".
-  if (state.filter) {
-    const whole = visits(state.screens, state.allTransactions, state.markers, state.allSignals, sessionStartMono());
-    if (whole.length === list.length) {
-      list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
-    }
-  }
+  if (state.filter) countRecorded(list);
   const header = el('div', 'pv-top');
   const hidden = state.filter ? hiddenByFilter({ screens: false }) : { calls: 0, signals: 0 };
   if (hidden.calls + hidden.signals) header.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
@@ -125,6 +118,17 @@ function renderPath() {
     pill.textContent = `new visit: ${newest.screen ? newest.screen.name : 'unnamed'} ↓`;
     pill.hidden = false;
   }
+}
+
+/**
+ * Under a filter, each visit also carries how much it recorded, from the same skeleton over the
+ * whole session — so an emptied visit reads "0 of 9 match" rather than "nothing recorded". The
+ * whole-session copies are read past the route's clamp, so N counts every call the visit holds.
+ */
+function countRecorded(list) {
+  const whole = visits(state.screens, state.allTransactions, state.markers, state.allSignals, sessionStartMono());
+  if (whole.length !== list.length) return;
+  list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
 }
 
 const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');

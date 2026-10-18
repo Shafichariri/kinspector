@@ -173,15 +173,19 @@ list would shrink or vanish under a filter and claim the app recorded less than 
 waterfall tab is offered from `allTransactions` for the same reason: once the route honoured
 `filter`, `tag:screen` matched no calls and the tab vanished mid-filter. `allSignals` is cached per
 session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
-rows it asked for are new. Both are read through `signalPages`, which asks the route for one page at
-a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
+rows it asked for are new. Both are read through `routePages` — as `signalPages`, and the
+whole-session calls as `transactionPages` — which asks the route for one page at a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
 never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
 shorter than asked would truncate again the day that clamp is lowered, and would never stop against
 a source that ignores `offset`. A row arriving mid-read shifts every newest-first page by one, which
 is why the seam is de-duplicated. A page that fails fails the whole read: a quietly partial list is
-the defect the pager exists to fix. `check-web-static.js` lifts it by its `signalPages` anchors and
-runs it against stub routes — 1001 rows by 1000, a 500 clamp, `offset` ignored, a repeat across the
-seam — and was proven red with a `page.length < 1000` stop and with the de-duplication removed.
+the defect the pager exists to fix. `check-web-static.js` lifts it by its `routePages` anchors and
+runs both shapes against stub routes — 1001 rows by 1000, a 500 clamp, `offset` ignored, a repeat
+across the seam — and was proven red with a `page.length < 1000` stop and with the de-duplication
+removed. The whole-session calls are paged under a filter, and without one when the list's page is
+short of the session total, because the path counts what each visit recorded from that copy: stopped
+at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
+list itself still stops at the clamp; that is `item:web-transactions-paged`.
 
 The two cached copies go stale in three ways, and each is closed. Resuming the list and the socket
 opening again after the daemon was away clear both (`forgetWholeSession`): the live socket is the
@@ -211,9 +215,16 @@ nothing the waterfall said "no calls to lay out" beside a header counting sixtee
 four visits in six "nothing recorded", and the timeline either said "no entries" or — with a marker
 in range, which the filter does not touch — nothing at all. Each now draws `filterNote`: emptied,
 "nothing matches the filter `…` — N calls and M signals hidden"; thinned, "N calls and M signals
-hidden by the filter `…`" above the rows, both with the list's own `clear filter` button. The counts
-are the whole session's rows less the filtered ones, within a brushed stretch where the pane brushes,
-and without `screen` signals on the path, which draws every screen whatever the filter. A visit the
+hidden by the filter `…`" above the rows, both with the list's own `clear filter` button. Hidden
+calls are the route's own two numbers, `sessionTotal` less `matched` — never a difference of the rows
+held, because the filtered list stops at the clamp: on a 3016-call session that read "1000 calls
+hidden" where 3016 were, and drew no note for a filter matching 1200. A brushed stretch has no route
+number, so there the held rows are counted from the oldest mono at which both lists are still whole,
+and the note says "at least" when the stretch reaches below it (`hidden past the clamp`,
+`stretch past the clamp`, `hidden when none match` and `path N past the clamp` in
+`check-web-static.js`, over a 3016-call stub clamped as the daemon clamps). Hidden signals are the
+whole session's rows less the filtered ones, within a brushed stretch where the pane brushes, and
+without `screen` signals on the path, which draws every screen whatever the filter. A visit the
 filter emptied reads "0 of N match", N counted from the same skeleton over the whole session, and
 "nothing recorded" is said only where nothing was. The timeline decides it is empty on calls and
 signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching

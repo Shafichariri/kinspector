@@ -18,11 +18,12 @@
  *     joined and a file left open would swallow the next one there and nowhere else;
  *   - no `@media` rule loading before a plain rule with the same selector that sets the same
  *     property, which is how the cascade between files depends on `styles.txt` order;
- *   - the signal pager, `signalPages`, against stub routes that clamp, ignore `offset` or shift a
- *     row across a page seam;
+ *   - the pager, `routePages`, as `signalPages` and as `transactionPages`, against stub routes that
+ *     clamp, ignore `offset` or shift a row across a page seam;
  *   - the session data under a filter: which list "last capture" dates the session by, and which
  *     answer survives when two loads overlap, a whole-session read fails, or the page forgets the
- *     whole session while a read is in flight.
+ *     whole session while a read is in flight; and what the filter notes and the path count on a
+ *     session past the route's clamp.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
