@@ -637,6 +637,156 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   carry `seq`, which today are interleaved by `mono` with `<=` only. **Phase E ships as "MCP
   equals the model"** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn), so MCP inherits this rather than diverging from it. Not scheduled.
 
+*The four entries below were found on 2026-10-18, outside any item: the first by the architect and
+QA while verifying `item:export-md-query-once`, the other three by the architect while designing
+`item:signals-query-one-rule`. Placed by the product owner the same day. Three are items and one is
+not worth doing. Where each sits in the order is in §5 → "Order from here".*
+
+- **The web traffic list stops at 1000 calls and does not say so.** *Ticket label:*
+  `item:web-transactions-paged`. **Ordered 2026-10-18: third in the order from here**, straight
+  after the signals item whose pager fixes it.
+
+  `loadTransactions` and `syncAllTransactions` (`web/js/15-session-data.js`) ask for `limit=2000`.
+  `SessionRepository.queryTransactions` clamps every page to 1000. So on any session over 1000 calls:
+
+  - **The count reads `1000 of 4210 calls`** with no filter set. That is exactly the shape a filter
+    produces, so the reader concludes something is filtering and goes looking for it.
+  - **Endpoint chips and repeat marks miss every call older than the newest 1000.** Both read
+    `state.allTransactions`, and `docs/decisions/web-ui.md` ("The web UI keeps an unfiltered copy of
+    the session") records that copy as *the whole session*. Past 1000 calls it is not, so the
+    decision is false on the sessions long enough to need it.
+
+  It is the same class as the signals item, and as the HAR export that stopped at 1000 rows
+  (`docs/decisions/exports.md`, "All three exports read the raw readers"). Three times now a reader
+  asked for more than the clamp and trusted what came back.
+
+  **Why its own item and not folded into `item:signals-query-one-rule`.** That item is mid-build:
+  KIN-24 is in progress and KIN-25 is cut. Adding transactions to it would reopen its design gate
+  and hold a signals fix that is nearly done behind a new one. But the fix is the same, so it is
+  ordered straight after and must reuse what KIN-24 builds rather than write a second pager.
+
+  **The user and the problem.** A web UI user on a Mac with a long session: an app left running
+  through a test pass, or a live tail of an hour. The list, the count, the chips and the repeat marks
+  all describe the newest 1000 calls while claiming to describe the session.
+
+  **Acceptance criteria.**
+
+  - In a session of 1001 or more calls, `state.allTransactions` holds every call. The endpoint chips
+    count the oldest call and a repeat group that includes it is marked. A probe proves it on a
+    1001-call session and fails when the read is put back to one page.
+  - **One pager, not two.** Transactions are read through the function KIN-24 adds for signals
+    (`signalPages`, generalised or renamed as the architect chooses), and `check-web-static.js` runs
+    the same cases against it: a server clamping at 500, a source that ignores `offset`, a row
+    repeated across a page seam.
+  - **A count never reads as a filter that is not there.** Either the list draws every matching
+    call, or the architect sets a render ceiling and the count says so in words that cannot be taken
+    for a filter, such as `newest 1000 of 4210 shown`. The item's design says which, and why. With
+    no filter set, `1000 of 4210 calls` does not appear.
+  - An exported session of 1001 or more calls behaves the same offline, checked by
+    `render-web-ui-archive.js`.
+  - The daemon's clamp is unchanged. It protects the server; the page reads past it by paging.
+
+  **Out of scope.** The clamp itself. MCP's page shape. Virtualising the list, unless the ceiling
+  option needs it. Surfaces: web UI only. No public API. It changes what a user sees on a long
+  session, so it gets a release-notes line.
+
+- **Live rows ignore the filter until the next reload.** *Ticket label:*
+  `item:web-live-rows-filtered`. **Ordered 2026-10-18: fourth in the order from here**, conditional
+  on its size (see the end of this entry).
+
+  `ws.onmessage` in `web/js/05-network.js` pushes every live call into `state.transactions` and
+  every live signal into `state.signals`, whatever the filter. Type `status:5xx` with live on, and
+  every 200 that arrives is drawn under that filter, and the count goes up with it, until the filter
+  is edited or the page reloads. KIN-24 keeps signals consistent with calls here, so both stay wrong
+  together. Once `item:signals-query-one-rule` makes the filter reach signals on a reload, the live
+  socket is the only path by which anything escapes the filter.
+
+  **The constraint that shapes the fix.** The page must not decide whether a row matches. The
+  grammar is frozen and has one parser, in `:inspector-model`, and the export already records that
+  its filter is "disabled, not reimplemented" (`docs/decisions/exports.md`) because a JavaScript
+  evaluator would be a second parser, the drift this repository refuses. So the daemon answers:
+  the live message carries whether the row matches the page's filter, or a live row under a filter
+  triggers a throttled re-read of the filtered set. The architect chooses.
+
+  **The user and the problem.** A web UI user on a Mac who filters while watching live traffic,
+  which is the commonest way to watch for one failure. The list shows rows the filter excludes, so
+  the filter appears not to work at the moment it is most needed.
+
+  **Acceptance criteria.**
+
+  - With a filter set, a live call or signal the filter does not match does not appear in the
+    list, the timeline or a path visit's contents. One it does match appears without a reload.
+    `render-web-ui.js` drives one live row of each kind and fails with the push-everything line put
+    back.
+  - `state.allTransactions` and `state.allSignals` still receive every live row, so chips, repeat
+    marks, tab counts and the path skeleton still describe the whole session.
+  - No filter is evaluated in `web/js`. The match comes from the daemon.
+  - With no filter set, a live row costs no request.
+  - If the re-read option is chosen, it is throttled, and the design states the most requests a
+    burst of 100 live rows can cause.
+  - Pausing is unchanged: it still drops rows and re-reads on resume (`docs/decisions/web-ui.md`).
+
+  **Out of scope.** The filter grammar. The overlay, which filters in process on every change.
+  Surfaces: web UI, and the daemon's live route if the architect puts the match there. No public
+  API. Release-notes line when it ships.
+
+  **The condition on its place.** It is fourth because it shows a user something false today, the
+  same reason the maintainer put the two defects first. If the architect sizes it above S, it moves
+  to after phase I and stays ahead of 1a. A live bug is worth more than a structure move only while
+  it costs about the same.
+
+- **Row labels drop a non-default port.** *Ticket label:* `item:row-label-port`. **Ordered
+  2026-10-18: sixth in the order from here**, after the `McpTest.kt` split.
+
+  Two places build a call's label from host and path by hand:
+
+  - `SessionRepository.kt:62`, `label = "${txn.method} ${txn.host}${txn.path}"`. This is the label
+    on every MCP `timeline` entry, and `export.json` and the HTML export carry the same
+    `TimelineEntry`.
+  - `ExportMarkdown.kt:122`, the Markdown export's timeline table.
+
+  Neither has the port. Two local servers on `127.0.0.1:8080` and `127.0.0.1:9090` read as one
+  endpoint, and on a real session a call to `:9090` was labelled `GET 127.0.0.1/json`.
+  `docs/decisions/capture.md` ("Capture records the port, and `url` omits it only when it is the
+  default") records this exact defect for URLs. KIN-23 fixed the same cause in MCP `explain`.
+  Leaving the query out of a label is reasonable, because a label names an endpoint. Leaving the
+  port out is not, because the port is part of which server answered.
+
+  **The user and the problem.** An agent over MCP reading a timeline, and anyone handed a Markdown
+  export. Both are told that calls to two different servers went to one. On a phone, the common case
+  is a local mock server beside the real backend, which is exactly when the difference matters.
+
+  **Acceptance criteria.**
+
+  - Both labels show `host:port` when the port is not the scheme's default, and the bare host when
+    it is or when `port` is null, so archives written before the port existed read as before.
+  - **No third copy of the rule.** The labels get the default-port decision from `defaultPortFor`
+    in `:inspector-model`, the function `url` already uses, through one helper that both call sites
+    share. If the architect puts that helper in `:inspector-model`, it is a new public declaration
+    in a published module. That module has no twin and no golden file, but the item says so.
+  - A daemon test with calls on `:8080` and `:9090` asserts two different labels in the MCP
+    `timeline` output and in the Markdown table, and a call on `:443` over https has no port. It
+    fails with either old line put back. Its test goes in the split test files, not in
+    `McpTest.kt`.
+  - The label still has no query.
+
+  **Why after the split.** Its test belongs with the timeline tests, which the split moves. Landing
+  it first would add to the file being split, which is how KIN-26 happened.
+
+  **Out of scope.** The web UI and overlay rows, which draw the host separately and are not this
+  defect. Any other change to the label's shape. Surfaces: daemon, MCP, exports. An agent sees a
+  different label, so it gets a release-notes line.
+
+- **Two path-view tooltips drop an empty query's `?`.** **Not worth doing, 2026-10-18.**
+  `web/js/50-path.js:338` and `:458` test `txn.query ?` for truth, so a call to `/a?` shows `/a` in
+  the tooltip. `docs/decisions/shared-rules.md` records that `urlOf` keeps an empty `?`, but that
+  rule is about **URLs**, which are evidence: what was sent, copied and replayed. These two are
+  labels for a path chip, and a label may drop the query entirely, as `item:row-label-port` says.
+  Clicking either one selects the row, and the detail pane, the copies and every export show the URL
+  with its `?`. Making the tooltips agree would spread the empty-`?` rule to two more call sites
+  that carry no evidence. If someone edits those lines for another reason, `txn.query != null` is
+  the one-word change.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -824,16 +974,31 @@ here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They ar
 |---|---|---|---|---|
 | 1 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
 | 2 | The signals sort and clamp exist twice | §3 → Guards | `item:signals-query-one-rule` | S |
-| 3 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 4 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 5 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 6 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
-| 7 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
-| 8 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
-| 9 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| 3 | The web traffic list stops at 1000 calls *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | S |
+| 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed |
+| 5 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 6 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 7 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 8 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 10 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 11 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 12 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
 wait for the next one.
+
+**Three rows added 2026-10-18 by the product owner**, from defects found that day outside any item.
+The maintainer's order is unchanged: every one of the maintainer's rows keeps its place relative to
+the others, and the new rows only sit between them. Where an item elsewhere names its place in
+words ("second", "fourth", "6th in §5"), it names the place as the maintainer set it, before these
+rows were added. The tooltip defect found at the same time is in §3 as not worth doing.
+
+The reason for each place is the maintainer's own rule above: a defect that shows someone a false
+fact comes before a move that changes nothing anyone sees. The two web defects go straight after
+the signals item because they are in the same files and the same class, and the first reuses its
+pager. The port label is the exception and goes one step later, after the `McpTest.kt` split,
+because its test belongs in the files the split creates.
 
 **Why this order.** By value per hour. The two defects come first: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -1559,10 +1724,10 @@ screen, and building those into the current single page would mean building them
 
 | Order | Item | Size | Ships in | Scheduled 2026-10-18 |
 |---|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | 6th in §5 → "Order from here" |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | 7th |
-| 2 | Endpoint latency stats | M | 1.5 | 8th |
-| — | The private security advisory's fix | not sized | not set | 9th, after 2 |
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ 9th in §5 → "Order from here" |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ 10th |
+| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ 11th |
+| — | The private security advisory's fix | not sized | not set | ~~9th~~ 12th, after 2 |
 | 3 | Session diff | L | 1.5 | not scheduled |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 | not scheduled |
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 | not scheduled |
