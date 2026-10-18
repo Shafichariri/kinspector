@@ -23,6 +23,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.withCharset
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.application.pluginOrNull
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -30,6 +31,7 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.server.routing.RoutingRoot
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -162,6 +164,14 @@ class InspectorDaemon(
             throw PortUnavailableException(config.port, cause)
         }
     }
+
+    /**
+     * The route tree as Ktor holds it, for `ControlHeaderCoverageTest`.
+     *
+     * The test walks this rather than a list of paths it was told about, so a control route added
+     * without the header is found by being registered, not by somebody remembering to name it.
+     */
+    internal fun routingRoot(): RoutingRoot? = server?.application?.pluginOrNull(RoutingRoot)
 
     fun stop() {
         manager.closeAll()

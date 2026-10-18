@@ -41,3 +41,42 @@ tasks.jar {
         attributes("Implementation-Version" to project.version)
     }
 }
+
+/*
+ * Passes the mirror-cases folder to the test JVM *as a declared input*, path-sensitive relative to
+ * the folder rather than absolute, so the test re-runs when a case changes and the build cache can
+ * still be shared between checkouts at different paths. An absolute `systemProperty` would be an
+ * input that differs per machine, and a bare `inputs.dir` without it was what kept a changed case
+ * from being seen at all.
+ */
+class MirrorCasesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.mirrorCases=${dir.absolutePath}")
+}
+
+/*
+ * The mirror cases are read from the repository root at test time, so Gradle has to be told they
+ * are an input; see `inspector-model/build.gradle.kts` for why that is load-bearing.
+ */
+tasks.test {
+    jvmArgumentProviders += MirrorCasesArgument(rootProject.file("mirror-cases"))
+}
+
+/*
+ * Writes the session CI points the web UI probes at. A test-classpath `main`, so it is never part
+ * of the published daemon; see `ProbeFixture.kt` for why the fixture is written rather than
+ * committed.
+ *
+ *   ./gradlew :inspector-daemon:writeProbeFixture -Pinspector.probeDir=/tmp/probe
+ */
+tasks.register<JavaExec>("writeProbeFixture") {
+    description = "Writes the web UI probe session into -Pinspector.probeDir (default build/probe-fixture)."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass = "dev.inspector.daemon.ProbeFixtureKt"
+    val dir = providers.gradleProperty("inspector.probeDir")
+        .orElse(layout.buildDirectory.dir("probe-fixture").map { it.asFile.path })
+    argumentProviders += CommandLineArgumentProvider { listOf(dir.get()) }
+}

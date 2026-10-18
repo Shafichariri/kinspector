@@ -88,8 +88,8 @@ class ExportTest {
             it.append(marker("about to call", mono = 300))
         }
         val kinds = build(dir).timeline.map { "${it.kind}@${it.mono}" }
-        // The repository's own timeline() sorts stably by mono with calls first, which would put
-        // the marker after the very call it was dropped to introduce.
+        // A plain stable sort by mono with calls first — what the repository's timeline() did
+        // before phase E — would put the marker after the very call it was dropped to introduce.
         assertEquals(listOf("signal@100", "marker@300", "txn@300"), kinds)
     }
 

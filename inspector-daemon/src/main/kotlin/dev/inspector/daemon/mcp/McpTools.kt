@@ -154,7 +154,9 @@ class McpTools(
                     "oldest first, one compact line each. This is the tool that answers 'what " +
                     "was the app doing when this failed' — start from a marker and read " +
                     "forwards. Follow an id into get_signal or get_body for detail. " +
-                    "Same filter grammar as list_transactions plus tag: and name:.",
+                    "Same filter grammar as list_transactions plus tag: and name:. " +
+                    "Same-millisecond ties follow the shared timeline rule: a marker comes " +
+                    "before the call or signal at its instant.",
             ) {
                 put("session", sessionProperty())
                 put("filter", stringProperty("Filter expression. Empty matches everything."))
@@ -434,17 +436,20 @@ class McpTools(
             monos = sameEndpoint.map { it.mono }.sorted().take(50),
         )
 
-        val context = repository.timeline(
+        val context = repository.timelineWindow(
             sessionDir = dir,
             filterText = "",
             since = txn.mono - window,
             until = txn.mono + window,
-            limit = 2_000,
-        ).filter { it.id != txn.id }
-        // Split rather than one list: "what led to this" and "what it caused" are different
-        // questions, and a single window makes the reader do the splitting.
-        val before = context.filter { it.mono < txn.mono }.takeLast(EXPLAIN_CONTEXT_CAP)
-        val after = context.filter { it.mono >= txn.mono }.take(EXPLAIN_CONTEXT_CAP)
+        )
+        // Unclamped, unlike the `timeline` tool. Its clamp keeps the oldest 2000, so with 2000 entries
+        // before the call a clamp drops the call and everything after it — `after` comes back
+        // empty, which reads as "nothing followed" on exactly the busiest windows.
+        val (before, after) = splitAround(context, txn.id)
+            ?: return ToolOutcome.Failed(
+                "call ${txn.id} was not found in its own context window; the session changed " +
+                    "while it was read — retry"
+            )
 
         if (txn.redacted.isNotEmpty()) {
             // Removed, not absent — otherwise the reader concludes no credentials were sent.
@@ -718,6 +723,29 @@ data class CurrentObservation(
     val ageMsAtLastActivity: Long,
     val bytes: Long,
 )
+
+/**
+ * Splits [context] around the call [txnId] into what led to it and what followed, each capped to
+ * the entries nearest the call.
+ *
+ * Split rather than one list: "what led to this" and "what it caused" are different questions, and
+ * a single window makes the reader do the splitting. Split by **position** in the shared order,
+ * never by `mono`: a marker dropped at the call's own millisecond sits before the call there, as
+ * both UIs draw it, and a `mono < call` test would report it as something the call caused.
+ *
+ * Null when the call is not in [context]. That is reachable — retention or a delete can remove the
+ * session between reading the call and reading its window — and two empty lists would read as
+ * "nothing happened either side", a confident answer about a session that was not there.
+ */
+internal fun splitAround(
+    context: List<TimelineEntry>,
+    txnId: String,
+): Pair<List<TimelineEntry>, List<TimelineEntry>>? {
+    val at = context.indexOfFirst { it.kind == "txn" && it.id == txnId }
+    if (at < 0) return null
+    return context.subList(0, at).takeLast(EXPLAIN_CONTEXT_CAP) to
+        context.subList(at + 1, context.size).take(EXPLAIN_CONTEXT_CAP)
+}
 
 /**
  * How many context lines either side of the call `explain` returns.

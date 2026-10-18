@@ -12,9 +12,15 @@
  *
  * A sibling of `render-web-ui.js` rather than a mode of it: that script proxies `fetch` to a live
  * daemon and its probes are written against one, while this one forbids the network outright.
- * The report goes to stderr in the same `label : value` shape; exit 1 means a check said NO.
+ * The report goes to stderr in the same `label : value` shape, ending with how many checks ran;
+ * exit 1 means a check said NO, or that INSPECTOR_UI_EXPECT_CHECKS was set and a different number
+ * of checks ran — a probe that found nothing to look at reports `n/a` rather than failing, so the
+ * count is the only sign a check stopped running.
+ *
+ * Tested against jsdom 29.1.1, the version CI installs.
  */
 const fs = require('fs');
+const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
 
 let JSDOM, VirtualConsole;
 try {
@@ -74,6 +80,17 @@ const check = (label, ok, detail = '') => {
 };
 const note = (label, value) => console.error(`${label.padEnd(26)}: ${value}`);
 
+/** The closing line, and the exit code: any NO, or a check count other than the one expected. */
+function verdict() {
+  const passed = results.filter((r) => r.ok).length;
+  const failed = results.length - passed;
+  console.error(`checks: ${passed} passed, ${failed} failed`);
+  const expected = process.env.INSPECTOR_UI_EXPECT_CHECKS || undefined;
+  const countWrong = expected !== undefined && Number(expected) !== passed;
+  if (countWrong) console.error(`expected ${expected} passing checks, got ${passed}`);
+  return failed || countWrong ? 1 : 0;
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Two identical consecutive samples mean the render finished; see `settle` in render-web-ui.js. */
 async function settle(sample, timeoutMs = 4000) {
@@ -101,11 +118,35 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   console.error(`--- exported session ${archive.meta?.sessionId ?? '(no metadata)'} ---`);
   note('calls / signals / markers', `${txns.length} / ${archive.signals.length} / ${archive.markers.length}`);
 
-  // The code is the page's own: count the browser fetch calls in the inlined app.js.
-  const appJs = [...doc.querySelectorAll('script')].map((s) => s.textContent).find((t) => t.includes('const ARCHIVE = '));
-  const bareFetches = appJs ? (appJs.match(/(?<![.\w])fetch\(/g) || []).length : 0;
-  check('app.js inlined', !!appJs);
-  check('one network call site', bareFetches === 1, `${bareFetches} in app.js; every request must go through source.fetch`);
+  // The code is the page's own: count the network call sites across every inlined script, with the
+  // same counter `check-web-static.js` runs over the sources, so the two cannot disagree about what
+  // a call site is.
+  //
+  // Except the data. The export embeds the session as `window.INSPECTOR_ARCHIVE = <json>;`, and a
+  // captured body that mentions `fetch(` — any JavaScript the app downloaded, say — would count as a
+  // call site and fail an export that is perfectly sound. A script is skipped as data only when the
+  // text after the assignment *parses as JSON*: a JSON value cannot call anything, and anything
+  // appended to it, a call included, breaks the parse and puts the whole script back among the code.
+  // Matching on the prefix alone would let `window.INSPECTOR_ARCHIVE = {}; fetch(x)` through.
+  const isArchiveData = (text) => {
+    const m = text.match(/^\s*window\.INSPECTOR_ARCHIVE = ([\s\S]*?);?\s*$/);
+    if (!m) return false;
+    try { JSON.parse(m[1]); return true; } catch { return false; }
+  };
+  const scripts = [...doc.querySelectorAll('script')].map((s, i) => ({ file: `inline-${i}`, text: s.textContent }));
+  const dataScripts = scripts.filter(({ text }) => isArchiveData(text));
+  const inlined = scripts.filter((s) => !dataScripts.includes(s));
+  check('session data is data only', dataScripts.length === 1,
+    `${dataScripts.length} script(s) hold only the embedded session; ${inlined.length} counted as code`);
+  check('app.js inlined', inlined.some(({ text }) => text.includes('const ARCHIVE = ')));
+  const counts = countNetworkPrimitives(inlined);
+  const wrong = Object.entries(NETWORK_EXPECTED).filter(([name, want]) => counts[name] !== want);
+  check(
+    'one network call site', wrong.length === 0,
+    wrong.length
+      ? wrong.map(([name, want]) => `${name} ${counts[name]}, must be ${want}`).join('; ')
+      : `fetch ${counts.fetch}, WebSocket ${counts.webSocket}; every request must go through source.fetch`,
+  );
 
   // --- what renders ---
   const rows = doc.querySelectorAll('#list .row').length;
@@ -224,7 +265,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none');
 
   window.close();
-  process.exit(results.every((r) => r.ok) ? 0 : 1);
+  process.exit(verdict());
 })().catch((e) => {
   // A probe step that throws — a row it expected missing because nothing rendered — is a failure
   // to report, not a reason to hang: the page's timers would otherwise keep node alive forever.

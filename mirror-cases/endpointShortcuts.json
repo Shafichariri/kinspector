@@ -1,0 +1,130 @@
+{
+  "rule": "endpointShortcuts",
+  "cases": [
+    {
+      "name": "the busiest endpoint comes first",
+      "from": "EndpointsTest.the busiest endpoint comes first",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/orders", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/v1/holdings", "mono": 200},
+          {"id": "t2", "callId": "c2", "path": "/v1/holdings", "mono": 300},
+          {"id": "t3", "callId": "c3", "path": "/v1/holdings", "mono": 400},
+          {"id": "t4", "callId": "c4", "path": "/v1/orders", "mono": 500}
+        ]
+      },
+      "expect": [["holdings", 3], ["orders", 2]]
+    },
+    {
+      "name": "a newer endpoint does not jump ahead of a busier one",
+      "from": "EndpointsTest.a newer endpoint does not jump ahead of a busier one",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/holdings", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/v1/holdings", "mono": 200},
+          {"id": "t2", "callId": "c2", "path": "/v1/quotes", "mono": 9000}
+        ]
+      },
+      "expect": [["holdings", 2], ["quotes", 1]]
+    },
+    {
+      "name": "a tie on count breaks on the most recent call",
+      "from": "EndpointsTest.a tie breaks on the most recent call",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/alpha", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/v1/beta", "mono": 900}
+        ]
+      },
+      "expect": [["beta", 1], ["alpha", 1]]
+    },
+    {
+      "name": "a tie on count and recency breaks by segment",
+      "from": "EndpointsTest.a tie on both count and recency breaks alphabetically",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/beta", "mono": 500},
+          {"id": "t1", "callId": "c1", "path": "/v1/alpha", "mono": 500}
+        ]
+      },
+      "expect": [["alpha", 1], ["beta", 1]]
+    },
+    {
+      "name": "the final tie compares char codes, so an upper-case segment sorts first",
+      "from": "Endpoints.kt thenBy { it.segment }",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/accounts", "mono": 500},
+          {"id": "t1", "callId": "c1", "path": "/v1/wallet/Balance", "mono": 500}
+        ]
+      },
+      "expect": [["Balance", 1], ["accounts", 1]]
+    },
+    {
+      "name": "the limit caps the list",
+      "from": "EndpointsTest.the limit caps the list",
+      "input": {
+        "limit": 3,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/a", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/b", "mono": 200},
+          {"id": "t2", "callId": "c2", "path": "/c", "mono": 300},
+          {"id": "t3", "callId": "c3", "path": "/d", "mono": 400}
+        ]
+      },
+      "expect": [["d", 1], ["c", 1], ["b", 1]]
+    },
+    {
+      "name": "a zero limit is no chips",
+      "from": "EndpointsTest.the limit caps the list",
+      "input": {"limit": 0, "transactions": [{"id": "t0", "callId": "c0", "path": "/a", "mono": 100}]},
+      "expect": []
+    },
+    {
+      "name": "a negative limit is no chips",
+      "from": "EndpointsTest.the limit caps the list",
+      "input": {"limit": -1, "transactions": [{"id": "t0", "callId": "c0", "path": "/a", "mono": 100}]},
+      "expect": []
+    },
+    {
+      "name": "a segment the grammar cannot tokenize is skipped",
+      "from": "EndpointsTest.a segment the grammar cannot tokenize is skipped",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/two words", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/v1/a|b", "mono": 200},
+          {"id": "t2", "callId": "c2", "path": "/v1/say\"what", "mono": 300},
+          {"id": "t3", "callId": "c3", "path": "/v1/fine", "mono": 400}
+        ]
+      },
+      "expect": [["fine", 1]]
+    },
+    {
+      "name": "a path with no segments has no chip",
+      "from": "EndpointsTest.a path with no segments has no chip",
+      "input": {
+        "limit": 10,
+        "transactions": [{"id": "t0", "callId": "c0", "path": "/", "mono": 100}, {"id": "t1", "callId": "c1", "path": "", "mono": 200}]
+      },
+      "expect": []
+    },
+    {
+      "name": "a trailing slash is ignored",
+      "from": "Endpoints.kt lastPathSegment",
+      "input": {
+        "limit": 10,
+        "transactions": [
+          {"id": "t0", "callId": "c0", "path": "/v1/holdings/", "mono": 100},
+          {"id": "t1", "callId": "c1", "path": "/v1/holdings", "mono": 200}
+        ]
+      },
+      "expect": [["holdings", 2]]
+    }
+  ]
+}

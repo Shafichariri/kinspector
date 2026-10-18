@@ -1,0 +1,46 @@
+{
+  "rule": "hopByHop",
+  "cases": [
+    {
+      "name": "the hop-by-hop set",
+      "from": "Replay.kt HOP_BY_HOP_HEADERS",
+      "input": {},
+      "expect": {
+        "names": [
+          "accept-encoding",
+          "connection",
+          "content-length",
+          "host",
+          "keep-alive",
+          "proxy-authenticate",
+          "proxy-authorization",
+          "te",
+          "trailer",
+          "transfer-encoding",
+          "upgrade"
+        ]
+      }
+    },
+    {
+      "name": "hop-by-hop headers are dropped whatever their case",
+      "from": "Replay.kt replayableHeaders",
+      "input": {
+        "headers": {
+          "Host": ["api.example.invalid"],
+          "Content-Length": ["12"],
+          "TE": ["trailers"],
+          "Accept-Encoding": ["gzip"],
+          "Authorization": ["Bearer t"]
+        }
+      },
+      "expect": {"lines": ["Authorization: Bearer t"]}
+    },
+    {
+      "name": "repeated values join with a comma",
+      "from": "Replay.kt replayableHeaders",
+      "input": {"headers": {"Accept": ["application/json", "text/plain"], "X-Trace": ["1"]}},
+      "expect": {"lines": ["Accept: application/json, text/plain", "X-Trace: 1"]}
+    },
+    {"name": "no headers is no lines", "from": "Replay.kt replayableHeaders", "input": {"headers": {}}, "expect": {"lines": []}}
+  ]
+}

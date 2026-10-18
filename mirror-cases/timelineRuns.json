@@ -1,0 +1,146 @@
+{
+  "rule": "timelineRuns",
+  "cases": [
+    {
+      "name": "adjacent identical observations collapse into one run",
+      "from": "TimelineTest.adjacent identical observations collapse into one run",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"S": {"id": "r3", "tag": "state", "name": "form", "mono": 130}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"}]
+    },
+    {
+      "name": "a call in the middle splits a run in two",
+      "from": "TimelineTest.a call in the middle splits a run in two",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"T": {"id": "a", "callId": "a", "path": "/v1/a", "mono": 125}},
+          {"S": {"id": "r3", "tag": "state", "name": "form", "mono": 130}},
+          {"S": {"id": "r4", "tag": "state", "name": "form", "mono": 140}}
+        ]
+      },
+      "expect": [
+        {"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"},
+        {"key": null, "entries": ["T:a"]},
+        {"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r3"}
+      ]
+    },
+    {
+      "name": "a marker also splits a run",
+      "from": "TimelineTest.a marker also splits a run",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"M": {"label": "tapped", "mono": 115}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}}
+        ]
+      },
+      "expect": [
+        {"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r1"},
+        {"key": null, "entries": ["M:tapped"]},
+        {"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r2"}
+      ]
+    },
+    {
+      "name": "a different name does not join the run",
+      "from": "TimelineTest.a different name does not join the run",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"S": {"id": "o", "tag": "state", "name": "other", "mono": 115}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}}
+        ]
+      },
+      "expect": [
+        {"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r1"},
+        {"key": "state\u0000other", "entries": ["S:state/other"], "id": "state\u0000other\u0000o"},
+        {"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r2"}
+      ]
+    },
+    {
+      "name": "a different tag with the same name does not join the run",
+      "from": "Timeline.kt runKeyOf",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"S": {"id": "c", "tag": "cache", "name": "form", "mono": 115}}
+        ]
+      },
+      "expect": [
+        {"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r1"},
+        {"key": "cache\u0000form", "entries": ["S:cache/form"], "id": "cache\u0000form\u0000c"}
+      ]
+    },
+    {
+      "name": "transactions never group even when identical",
+      "from": "TimelineTest.transactions never group even when identical",
+      "input": {"entries": [{"T": {"id": "a", "path": "/same", "mono": 100}}, {"T": {"id": "b", "path": "/same", "mono": 110}}]},
+      "expect": [{"key": null, "entries": ["T:a"]}, {"key": null, "entries": ["T:b"]}]
+    },
+    {
+      "name": "markers never group even when identical",
+      "from": "Timeline.kt runKeyOf",
+      "input": {"entries": [{"M": {"label": "same", "mono": 100}}, {"M": {"label": "same", "mono": 110}}]},
+      "expect": [{"key": null, "entries": ["M:same"]}, {"key": null, "entries": ["M:same"]}]
+    },
+    {
+      "name": "an ascending run is keyed on its earliest member",
+      "from": "TimelineTest.a run keeps its id while it grows in either order",
+      "input": {
+        "entries": [
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"}]
+    },
+    {
+      "name": "a newest-first run is keyed on its earliest member, not its head",
+      "from": "TimelineTest.a run keeps its id while it grows in either order",
+      "input": {
+        "entries": [
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000r1"}]
+    },
+    {
+      "name": "a newest-first run keeps its id as it grows at the head",
+      "from": "TimelineTest.a run keeps its id when the reading order flips",
+      "input": {
+        "entries": [
+          {"S": {"id": "r4", "tag": "state", "name": "form", "mono": 140}},
+          {"S": {"id": "r3", "tag": "state", "name": "form", "mono": 130}},
+          {"S": {"id": "r2", "tag": "state", "name": "form", "mono": 120}},
+          {"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}
+        ]
+      },
+      "expect": [
+        {
+          "key": "state\u0000form",
+          "entries": ["S:state/form", "S:state/form", "S:state/form", "S:state/form"],
+          "id": "state\u0000form\u0000r1"
+        }
+      ]
+    },
+    {
+      "name": "a single observation is a run of one",
+      "from": "Timeline.kt timelineRuns",
+      "input": {"entries": [{"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}]},
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form"], "id": "state\u0000form\u0000r1"}]
+    },
+    {
+      "name": "an empty list has no runs",
+      "from": "TimelineTest.an empty list has no runs",
+      "input": {"entries": []},
+      "expect": []
+    }
+  ]
+}

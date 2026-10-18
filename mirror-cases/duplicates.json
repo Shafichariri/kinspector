@@ -1,0 +1,328 @@
+{
+  "rule": "duplicates",
+  "cases": [
+    {
+      "name": "two separate calls inside the window are a repeat",
+      "from": "DuplicatesTest.two separate calls for the same thing inside the window are a duplicate",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 2900, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 1900, "callCount": 2}]
+    },
+    {
+      "name": "the same pair outside the window is not",
+      "from": "DuplicatesTest.the same pair outside the window is not",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 4500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a gap of exactly the window still joins",
+      "from": "Duplicates.kt <= windowMs",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 4000, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 3000, "callCount": 2}]
+    },
+    {
+      "name": "the window is configurable",
+      "from": "DuplicatesTest.the window is configurable",
+      "input": {
+        "windowMs": 5000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 4500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 3500, "callCount": 2}]
+    },
+    {
+      "name": "retry attempts of one call are not repeats",
+      "from": "DuplicatesTest.retry attempts of one call are not duplicates",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "call-1", "path": "/v1/profile/status", "status": 500, "resBytes": 20},
+          {"id": "b", "mono": 1100, "callId": "call-1", "path": "/v1/profile/status", "status": 500, "resBytes": 20, "attempt": 2},
+          {"id": "c", "mono": 1200, "callId": "call-1", "path": "/v1/profile/status", "status": 500, "resBytes": 20, "attempt": 3}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a retried call that is also repeated counts calls, not rows",
+      "from": "DuplicatesTest.a retried call that is also duplicated still reports the duplication",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "call-1", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {
+            "id": "b",
+            "mono": 1100,
+            "callId": "call-1",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "attempt": 2
+          },
+          {"id": "c", "mono": 1200, "callId": "call-2", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b", "c"], "spanMs": 200, "callCount": 2}]
+    },
+    {
+      "name": "the count is calls and not rows when a retry is in the group",
+      "from": "DuplicatesTest.the count is calls and not rows when a retry is in the group",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "call-1", "path": "/v1/profile/status", "status": 500, "resBytes": 20},
+          {"id": "b", "mono": 2000, "callId": "call-2", "path": "/v1/profile/status", "status": 500, "resBytes": 20},
+          {"id": "c", "mono": 2100, "callId": "call-2", "path": "/v1/profile/status", "status": 500, "resBytes": 20, "attempt": 2}
+        ]
+      },
+      "expect": [{"ids": ["a", "b", "c"], "spanMs": 1100, "callCount": 2}]
+    },
+    {
+      "name": "different paths are unrelated",
+      "from": "DuplicatesTest.different paths are unrelated",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/one", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/two", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a different response size is a different answer",
+      "from": "DuplicatesTest.a different response size is treated as a different answer",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 512}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a different request size is a different question",
+      "from": "Duplicates.kt duplicateKey",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "reqBytes": 10},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "reqBytes": 11}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a different status is a different answer",
+      "from": "Duplicates.kt duplicateKey",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 500, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a different method is unrelated",
+      "from": "DuplicatesTest.a different method is unrelated",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "method": "GET"},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "method": "POST"}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a different query is unrelated",
+      "from": "Duplicates.kt duplicateKey uses the full URL",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {
+            "id": "a",
+            "mono": 1000,
+            "callId": "a",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "query": "page=1"
+          },
+          {
+            "id": "b",
+            "mono": 1500,
+            "callId": "b",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "query": "page=2"
+          }
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "an empty query is not the same URL as no query",
+      "from": "NetworkTransaction.url keeps the ? for an empty query",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "query": ""},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "two empty queries are the same URL",
+      "from": "NetworkTransaction.url",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "query": ""},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "query": ""}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 500, "callCount": 2}]
+    },
+    {
+      "name": "a run of close calls is one group measured between neighbours",
+      "from": "DuplicatesTest.a run of close calls is one group measured between neighbours",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "p0", "mono": 1000, "callId": "p0", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "p1", "mono": 3000, "callId": "p1", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "p2", "mono": 5000, "callId": "p2", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "p3", "mono": 7000, "callId": "p3", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "p4", "mono": 9000, "callId": "p4", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["p0", "p1", "p2", "p3", "p4"], "spanMs": 8000, "callCount": 5}]
+    },
+    {
+      "name": "a gap splits one run into two groups",
+      "from": "DuplicatesTest.a gap splits one run into two groups",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 0, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1000, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "c", "mono": 60000, "callId": "c", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "d", "mono": 61000, "callId": "d", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 1000, "callCount": 2}, {"ids": ["c", "d"], "spanMs": 1000, "callCount": 2}]
+    },
+    {
+      "name": "groups are ordered by their first member",
+      "from": "Duplicates.kt sortedBy first member's mono",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "x1", "mono": 5000, "callId": "x1", "path": "/late", "status": 200, "resBytes": 972},
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "x2", "mono": 5100, "callId": "x2", "path": "/late", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1200, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 200, "callCount": 2}, {"ids": ["x1", "x2"], "spanMs": 100, "callCount": 2}]
+    },
+    {
+      "name": "headers are not part of the identity",
+      "from": "DuplicatesTest.headers are not part of the identity so signed requests still match",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {
+            "id": "a",
+            "mono": 1000,
+            "callId": "a",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "reqHeaders": {"X-Device-Nonce": ["aaa"]}
+          },
+          {
+            "id": "b",
+            "mono": 2000,
+            "callId": "b",
+            "path": "/v1/profile/status",
+            "status": 200,
+            "resBytes": 972,
+            "reqHeaders": {"X-Device-Nonce": ["bbb"]}
+          }
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 1000, "callCount": 2}]
+    },
+    {
+      "name": "a non-positive window disables detection",
+      "from": "DuplicatesTest.a non-positive window disables detection",
+      "input": {
+        "windowMs": 0,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972},
+          {"id": "b", "mono": 1100, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "the port is part of the identity",
+      "from": "DuplicatesTest.the port is part of the identity",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "port": 8080},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "port": 9090}
+        ]
+      },
+      "expect": []
+    },
+    {
+      "name": "a default port is the same URL as no port",
+      "from": "NetworkTransaction.url omits the default port",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [
+          {"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972, "port": 443},
+          {"id": "b", "mono": 1500, "callId": "b", "path": "/v1/profile/status", "status": 200, "resBytes": 972}
+        ]
+      },
+      "expect": [{"ids": ["a", "b"], "spanMs": 500, "callCount": 2}]
+    },
+    {
+      "name": "a single row is no group",
+      "from": "DuplicatesTest.no duplicates is an empty map",
+      "input": {
+        "windowMs": 3000,
+        "transactions": [{"id": "a", "mono": 1000, "callId": "a", "path": "/v1/profile/status", "status": 200, "resBytes": 972}]
+      },
+      "expect": []
+    }
+  ]
+}

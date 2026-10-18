@@ -215,6 +215,7 @@
     return Boolean(meta) && !meta.endedAt;
   };
 
+  // @mirror-begin jsonParser
   /*
    * JSON is parsed here rather than with `JSON.parse`, and that is not taste. `JSON.parse` turns
    * every number into a double, so a 64-bit id such as 1234567890123456789 comes back as
@@ -335,6 +336,7 @@
     walk(root, '');
     return out.join('');
   }
+  // @mirror-end jsonParser
 
   // --- JSON tree ------------------------------------------------------------
   //
@@ -702,13 +704,17 @@
     }
   };
 
+  // @mirror-begin urlOf
   // Mirrors NetworkTransaction.url on the Kotlin side. Built here rather than taken from the row
-  // because `url` is a computed property and does not travel on the wire.
+  // because `url` is a computed property and does not travel on the wire. An empty query keeps its
+  // `?`, as Kotlin's `query?.let` does: `/a?` and `/a` are different URLs, and the duplicate key is
+  // built from this.
   const urlOf = (txn) => {
     const dflt = { http: 80, ws: 80, https: 443, wss: 443 }[String(txn.scheme).toLowerCase()];
     const port = txn.port != null && txn.port !== dflt ? `:${txn.port}` : '';
-    return `${txn.scheme}://${txn.host}${port}${txn.path}${txn.query ? '?' + txn.query : ''}`;
+    return `${txn.scheme}://${txn.host}${port}${txn.path}${txn.query != null ? '?' + txn.query : ''}`;
   };
+  // @mirror-end urlOf
 
   const curlFor = (txn, reqBody) => {
     let out = `curl -X ${txn.method} '${urlOf(txn)}'`;
@@ -923,7 +929,9 @@
   const TAB_ORDER = ['cache', 'screen', 'state'];
   const TAG_LABELS = { screen: 'screens' };
 
+  // @mirror-begin tagOf
   const tagOf = (signal) => String(signal.tag).toLowerCase();
+  // @mirror-end tagOf
   const signalsForTag = (tag) => state.signals.filter((signal) => tagOf(signal) === tag);
 
   function tagsInSession() {
@@ -1217,6 +1225,7 @@
 
   // --- the scope bar ------------------------------------------------------
 
+  // @mirror-begin pathScope
   /**
    * A mirror of `pathScope` in `:inspector-model`. Keep them in step.
    *
@@ -1274,6 +1283,7 @@
       strip: (path) => (path.startsWith(prefix) ? path.slice(prefix.length) : path),
     };
   }
+  // @mirror-end pathScope
 
   /**
    * Drawn above the list and not scrolled with it.
@@ -1353,25 +1363,16 @@
     // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the
     // only arrangement that makes causal sense, then reverse the whole thing. Reversing after
     // interleaving keeps each divider attached to the same rows: read downward in newest-first
-    // and a divider below a row still means that row happened after the marker.
-    const markers = [...state.markers].filter((m) => inRange(m.mono)).sort((a, b) => a.mono - b.mono);
-    const sequence = [];
-    let markerIndex = 0;
-    for (const txn of visibleTransactions().sort((a, b) => a.mono - b.mono)) {
-      while (markerIndex < markers.length && markers[markerIndex].mono <= txn.mono) {
-        sequence.push({ marker: markers[markerIndex] });
-        markerIndex++;
-      }
-      sequence.push({ txn });
-    }
-    for (; markerIndex < markers.length; markerIndex++) {
-      sequence.push({ marker: markers[markerIndex] });
-    }
+    // and a divider below a row still means that row happened after the marker. The interleave
+    // is `timelineEntries`, the mirror of the model's `timeline()` that the mirror cases check,
+    // rather than a second copy of it here.
+    const markers = state.markers.filter((m) => inRange(m.mono));
+    const sequence = timelineEntries(visibleTransactions(), markers, []);
     if (state.newestFirst) sequence.reverse();
 
     for (const entry of sequence) {
       list.appendChild(
-        entry.marker
+        entry.kind === 'marker'
           ? el('div', 'marker-divider', entry.marker.label)
           : rowFor(entry.txn),
       );
@@ -1756,6 +1757,7 @@
 
   // --- visits: the rule the path, the waterfall and the axis band share -----
 
+  // @mirror-begin visits
   /**
    * Mirror of `visits` in `:inspector-model`'s `Visits.kt`; `VisitsTest` is the authority and this
    * follows it. Keep them in step.
@@ -1863,6 +1865,7 @@
     }
     return entries;
   }
+  // @mirror-end visits
 
   /**
    * One colour per screen name, in order of first appearance in the session's skeleton.
@@ -2808,6 +2811,7 @@
     if (state.view !== 'all' && state.view !== 'network') renderBrowser();
   }
 
+  // @mirror-begin duplicates
   /**
    * Mirror of `duplicateGroups` in :inspector-model — same rules, so a row that highlights here
    * highlights in the app too. Keep the two in step; the Kotlin one carries the reasoning.
@@ -2825,6 +2829,45 @@
     ].join(' ');
   }
 
+  function computeDuplicates(txns, windowMs) {
+    const marks = new Map();
+    if (!windowMs || windowMs <= 0 || txns.length < 2) return marks;
+
+    const byKey = new Map();
+    for (const txn of txns) {
+      const key = duplicateKey(txn);
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(txn);
+    }
+
+    let ordinal = 0;
+    for (const group of byKey.values()) {
+      // `mono` is the monotonic clock. `ts` is a wall clock that can step, and the device and host
+      // clocks are unrelated — so timing uses mono and only the display uses ts.
+      const ordered = [...group].sort((a, b) => a.mono - b.mono);
+      let run = [];
+      const flush = () => {
+        const calls = new Set(run.map((t) => t.callId)).size;
+        if (run.length > 1 && calls > 1) {
+          ordinal += 1;
+          const span = run[run.length - 1].mono - run[0].mono;
+          // Calls, not rows — the model's `callCount`. A group that swept up a retry has more rows
+          // than calls, and the reader is asking how many times the app asked.
+          for (const t of run) marks.set(t.id, { ordinal, count: calls, spanMs: span });
+        }
+        run = [];
+      };
+      for (const txn of ordered) {
+        if (run.length && txn.mono - run[run.length - 1].mono > windowMs) flush();
+        run.push(txn);
+      }
+      flush();
+    }
+    return marks;
+  }
+  // @mirror-end duplicates
+
+  // @mirror-begin endpointShortcuts
   /**
    * The last non-empty path segment: `/v3/accounts/profile/status` -> `status`.
    *
@@ -2851,8 +2894,12 @@
    *
    * Ordered by count rather than recency deliberately: recency would reshuffle the whole chip row
    * on every request during live tail, and the endpoints worth a one-click filter are the ones
-   * that dominate the list. Ties break on the most recent call and then alphabetically, so the
+   * that dominate the list. Ties break on the most recent call and then on the segment, so the
    * order is fully determined and the jsdom harness can assert it.
+   *
+   * The last tie compares UTF-16 code units, as the model's `thenBy { it.segment }` does, and not
+   * `localeCompare`: the two disagree on case — `Balance` sorts before `accounts` here — and the
+   * overlay already draws the model's order for the same session.
    */
   function endpointShortcuts(txns, limit) {
     if (!limit || limit <= 0) return [];
@@ -2868,9 +2915,10 @@
       bySegment.set(segment, entry);
     }
     return [...bySegment.values()]
-      .sort((a, b) => b.count - a.count || b.latest - a.latest || a.segment.localeCompare(b.segment))
+      .sort((a, b) => b.count - a.count || b.latest - a.latest || (a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0))
       .slice(0, limit);
   }
+  // @mirror-end endpointShortcuts
 
   function renderEndpointChips() {
     const box = $('endpoint-chips');
@@ -2895,40 +2943,6 @@
       });
       box.appendChild(chip);
     }
-  }
-
-  function computeDuplicates(txns, windowMs) {
-    const marks = new Map();
-    if (!windowMs || windowMs <= 0 || txns.length < 2) return marks;
-
-    const byKey = new Map();
-    for (const txn of txns) {
-      const key = duplicateKey(txn);
-      if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key).push(txn);
-    }
-
-    let ordinal = 0;
-    for (const group of byKey.values()) {
-      // `mono` is the monotonic clock. `ts` is a wall clock that can step, and the device and host
-      // clocks are unrelated — so timing uses mono and only the display uses ts.
-      const ordered = [...group].sort((a, b) => a.mono - b.mono);
-      let run = [];
-      const flush = () => {
-        if (run.length > 1 && new Set(run.map((t) => t.callId)).size > 1) {
-          ordinal += 1;
-          const span = run[run.length - 1].mono - run[0].mono;
-          for (const t of run) marks.set(t.id, { ordinal, count: run.length, spanMs: span });
-        }
-        run = [];
-      };
-      for (const txn of ordered) {
-        if (run.length && txn.mono - run[run.length - 1].mono > windowMs) flush();
-        run.push(txn);
-      }
-      flush();
-    }
-    return marks;
   }
 
   /**
@@ -4054,6 +4068,7 @@
     return ends;
   }
 
+  // @mirror-begin timelineRuns
   /**
    * How many adjacent identical observations it takes before they are worth collapsing.
    *
@@ -4088,8 +4103,21 @@
     return runs;
   }
 
-  /** Stable across re-renders: signal ids are, and the first of a run does not move. */
-  const runIdOf = (run) => `${run.key}\u0000${run.entries[0].signal.id}`;
+  /**
+   * Mirror of `TimelineRun.id`: keyed on the run's **earliest** member, never its head.
+   *
+   * A run grows at its newest end, so in newest-first order the head is the newest observation and
+   * changes on every one — an id taken from it re-keyed the run and collapsed an expanded run under
+   * the reader during live tail, which is exactly when somebody is watching it. The earliest member
+   * also survives flipping the order. The first minimum in draw order wins a tie, as `minBy` does.
+   */
+  const runIdOf = (run) => {
+    let earliest = run.entries[0];
+    for (const entry of run.entries) if (entry.mono < earliest.mono) earliest = entry;
+    const token = earliest.kind === 'signal' ? earliest.signal.id : String(earliest.mono);
+    return `${run.key ?? ''}\u0000${token}`;
+  };
+  // @mirror-end timelineRuns
 
   function renderTimeline() {
     if (state.view !== 'all') return;
@@ -4097,11 +4125,14 @@
     root.innerHTML = '';
 
     const ends = spanEndsFor(state.signals);
-    const entries = [
-      ...state.transactions.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
-      ...state.signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
-      ...state.markers.map((marker) => ({ kind: 'marker', mono: marker.mono, marker })),
-    ].filter((entry) => inRange(entry.mono)).sort((a, b) => a.mono - b.mono);
+    // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
+    // call's `mono` is drawn before it. One stable sort over all three streams with markers added
+    // last put a tied marker after the call it introduced — the opposite of the list beside it.
+    const entries = timelineEntries(
+      state.transactions.filter((txn) => inRange(txn.mono)),
+      state.markers.filter((marker) => inRange(marker.mono)),
+      state.signals.filter((signal) => inRange(signal.mono)),
+    );
 
     if (state.newestFirst) entries.reverse();
 
@@ -4580,6 +4611,7 @@
    * and supplying the body by hand is the only way to run it at all.
    */
 
+  // @mirror-begin hopByHop
   /** Hop-by-hop headers, mirroring `HOP_BY_HOP_HEADERS` in `Replay.kt`. Keep them in step. */
   const HOP_BY_HOP = new Set([
     'host', 'content-length', 'connection', 'keep-alive', 'transfer-encoding',
@@ -4600,6 +4632,7 @@
       .map(([name, values]) => `${name}: ${values.join(', ')}`)
       .join('\n');
   }
+  // @mirror-end hopByHop
 
   /**
    * Parses the header box back into a map.

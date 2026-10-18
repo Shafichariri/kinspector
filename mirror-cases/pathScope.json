@@ -1,0 +1,235 @@
+{
+  "rule": "pathScope",
+  "cases": [
+    {
+      "name": "lifts the segments every path shares",
+      "from": "PathScopeTest.lifts_the_segments_every_path_shares",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/market/quotes", "mono": 4}
+        ]
+      },
+      "expect": {
+        "host": "api.example.invalid",
+        "prefix": "/v3/some-service/",
+        "covered": 4,
+        "label": "api.example.invalid/v3/some-service/"
+      }
+    },
+    {
+      "name": "never takes the last segment of a path",
+      "from": "PathScopeTest.never_takes_the_last_segment_of_a_path",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/orders/submit", "mono": 1},
+          {"id": "r1", "path": "/v3/orders/cancel", "mono": 2},
+          {"id": "r2", "path": "/v3/orders/amend", "mono": 3},
+          {"id": "r3", "path": "/v3/orders/status", "mono": 4}
+        ]
+      },
+      "expect": {"host": "api.example.invalid", "prefix": "/v3/orders/", "covered": 4, "label": "api.example.invalid/v3/orders/"}
+    },
+    {
+      "name": "a polled endpoint keeps its last segment on the row",
+      "from": "PathScopeTest.a_session_that_polled_one_endpoint_still_leaves_that_endpoint_on_the_row",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/orders/status", "mono": 1},
+          {"id": "r1", "path": "/v3/orders/status", "mono": 2},
+          {"id": "r2", "path": "/v3/orders/status", "mono": 3},
+          {"id": "r3", "path": "/v3/orders/status", "mono": 4}
+        ]
+      },
+      "expect": {"host": "api.example.invalid", "prefix": "/v3/orders/", "covered": 4, "label": "api.example.invalid/v3/orders/"}
+    },
+    {
+      "name": "a path that is the front of the others stops the prefix short",
+      "from": "PathScopeTest.a_path_that_is_the_front_of_the_others_stops_the_prefix_short",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/orders", "mono": 1},
+          {"id": "r1", "path": "/v3/orders/submit", "mono": 2},
+          {"id": "r2", "path": "/v3/orders/cancel", "mono": 3},
+          {"id": "r3", "path": "/v3/orders/amend", "mono": 4}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "stops at the first segment that differs",
+      "from": "PathScopeTest.stops_at_the_first_segment_that_differs",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/a/one", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/a/two", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/b/three", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/b/four", "mono": 4}
+        ]
+      },
+      "expect": {
+        "host": "api.example.invalid",
+        "prefix": "/v3/some-service/",
+        "covered": 4,
+        "label": "api.example.invalid/v3/some-service/"
+      }
+    },
+    {
+      "name": "no shared front means no scope",
+      "from": "PathScopeTest.no_shared_front_means_no_scope",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/alpha/one", "mono": 1},
+          {"id": "r1", "path": "/beta/two", "mono": 2},
+          {"id": "r2", "path": "/gamma/three", "mono": 3},
+          {"id": "r3", "path": "/delta/four", "mono": 4}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "three rows are below the row threshold",
+      "from": "PathScopeTest.a_short_session_is_left_alone",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "four rows meet the row threshold exactly",
+      "from": "SCOPE_MIN_ROWS",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/market/quotes", "mono": 4}
+        ]
+      },
+      "expect": {
+        "host": "api.example.invalid",
+        "prefix": "/v3/some-service/",
+        "covered": 4,
+        "label": "api.example.invalid/v3/some-service/"
+      }
+    },
+    {
+      "name": "a four-character prefix is below the length threshold",
+      "from": "PathScopeTest.a_prefix_too_short_to_be_worth_a_bar_is_declined",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/alpha/one", "mono": 1},
+          {"id": "r1", "path": "/v3/beta/two", "mono": 2},
+          {"id": "r2", "path": "/v3/gamma/three", "mono": 3},
+          {"id": "r3", "path": "/v3/delta/four", "mono": 4}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "a six-character prefix meets the length threshold exactly",
+      "from": "SCOPE_MIN_LENGTH",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/abcd/one", "mono": 1},
+          {"id": "r1", "path": "/abcd/two", "mono": 2},
+          {"id": "r2", "path": "/abcd/three", "mono": 3},
+          {"id": "r3", "path": "/abcd/four", "mono": 4}
+        ]
+      },
+      "expect": {"host": "api.example.invalid", "prefix": "/abcd/", "covered": 4, "label": "api.example.invalid/abcd/"}
+    },
+    {
+      "name": "a five-character prefix is declined",
+      "from": "SCOPE_MIN_LENGTH",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/abc/one", "mono": 1},
+          {"id": "r1", "path": "/abc/two", "mono": 2},
+          {"id": "r2", "path": "/abc/three", "mono": 3},
+          {"id": "r3", "path": "/abc/four", "mono": 4}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "the busier host wins and covers only its own rows",
+      "from": "PathScopeTest.the_busier_host_wins_and_the_other_is_not_covered",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/market/quotes", "mono": 4},
+          {"id": "o", "path": "/v1/oauth/token", "host": "auth.example.invalid", "mono": 9}
+        ]
+      },
+      "expect": {
+        "host": "api.example.invalid",
+        "prefix": "/v3/some-service/",
+        "covered": 4,
+        "label": "api.example.invalid/v3/some-service/"
+      }
+    },
+    {
+      "name": "a path outside the prefix on the same host breaks the run",
+      "from": "PathScopeTest.a_path_outside_the_prefix_on_the_same_host_is_not_covered",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/market/quotes", "mono": 4},
+          {"id": "r4", "path": "/assets/config.json", "mono": 5}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "the dominant host is scoped when another host has no prefix",
+      "from": "PathScopeTest.the_dominant_host_is_scoped_even_when_another_host_has_no_prefix",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r3", "path": "/v3/some-service/market/quotes", "mono": 4},
+          {"id": "r0", "path": "/one", "mono": 1, "host": "cdn.example.invalid"},
+          {"id": "r1", "path": "/two", "mono": 2, "host": "cdn.example.invalid"}
+        ]
+      },
+      "expect": {
+        "host": "api.example.invalid",
+        "prefix": "/v3/some-service/",
+        "covered": 4,
+        "label": "api.example.invalid/v3/some-service/"
+      }
+    },
+    {
+      "name": "a dominant host with fewer than four rows has no scope",
+      "from": "SCOPE_MIN_ROWS",
+      "input": {
+        "transactions": [
+          {"id": "r0", "path": "/v3/some-service/client-dashboard", "mono": 1},
+          {"id": "r1", "path": "/v3/some-service/client-settings", "mono": 2},
+          {"id": "r2", "path": "/v3/some-service/orders/submit", "mono": 3},
+          {"id": "r0", "path": "/x/one", "mono": 1, "host": "cdn.example.invalid"},
+          {"id": "r1", "path": "/y/two", "mono": 2, "host": "cdn.example.invalid"}
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "an empty session has no scope",
+      "from": "PathScopeTest.an_empty_session_has_no_scope",
+      "input": {"transactions": []},
+      "expect": null
+    }
+  ]
+}

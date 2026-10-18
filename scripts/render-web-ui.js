@@ -12,17 +12,24 @@
  *
  * INSPECTOR_UI_SESSION=<id or substring> targets a session other than the newest.
  * INSPECTOR_UI_ORIGIN=http://127.0.0.1:PORT reads a daemon somewhere other than 8099.
+ * INSPECTOR_UI_EXPECT_CHECKS=<n> fails the run unless exactly n checks passed; CI sets it.
  *
- * The report goes to stderr; a self-contained static snapshot goes to stdout.
- * A healthy run reports non-zero rows and 'errors: none'.
+ * The report goes to stderr; a self-contained static snapshot goes to stdout. It ends with
+ * `checks: P passed, F failed, S n/a, U unclassified, N notes`, and exits 1 on any failed check, any
+ * page error or a list that did not mirror — and, when INSPECTOR_UI_EXPECT_CHECKS is set, on a pass
+ * count other than the expected one or any unclassified line.
  *
- * Against an archive with no sessions it runs a shorter report — the empty state, the top bar, the
- * parser and the stylesheet audits — and names every session-dependent probe as n/a. That is how
+ * Tested against jsdom 29.1.1, the version CI installs (`.github/workflows/ci.yml`, job `web`).
+ * The JSON parser and `visits` mirror checks that used to live here moved to `check-web-static.js`
+ * with the other mirror cases, since they need no daemon. The stylesheet audits are still printed
+ * here, from the one copy in `scripts/lib/web-audits.js` that both scripts share.
+ *
+ * Against an archive with no sessions it runs a shorter report — the empty state, the top bar and
+ * the stylesheet audits — and names every session-dependent probe as n/a. That is how
  * the "waiting for an app" empty state gets checked at all:
  *   inspector serve --port 8238 --data "$(mktemp -d)" &
  *   INSPECTOR_UI_ORIGIN=http://127.0.0.1:8238 node scripts/render-web-ui.js > /dev/null
  */
-const fs = require('fs');
 
 let JSDOM, VirtualConsole;
 try {
@@ -32,7 +39,8 @@ try {
   process.exit(2);
 }
 
-const WEB = require('path').join(__dirname, '..', 'inspector-daemon', 'src', 'main', 'resources', 'web');
+const { loadScripts, loadStyles, loadIndexHtml } = require('./lib/web-sources');
+const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -40,9 +48,9 @@ const WEB = require('path').join(__dirname, '..', 'inspector-daemon', 'src', 'ma
  */
 const ORIGIN = process.env.INSPECTOR_UI_ORIGIN || 'http://127.0.0.1:8099';
 
-const css = fs.readFileSync(`${WEB}/style.css`, 'utf8');
-const js = fs.readFileSync(`${WEB}/app.js`, 'utf8');
-let html = fs.readFileSync(`${WEB}/index.html`, 'utf8');
+const css = loadStyles().map((s) => s.text).join('\n');
+const js = loadScripts().map((s) => s.text).join('\n');
+let html = loadIndexHtml();
 
 /*
  * The same two literal tags `HtmlExport.kt` replaces to build an exported session; change one side
@@ -75,6 +83,100 @@ const dom = new JSDOM(html, {
 });
 
 const { window } = dom;
+
+/*
+ * The verdict, derived from the report's own lines.
+ *
+ * For most of its life this script exited 0 whatever it printed, so a run in which every line said
+ * NO was a green run to anything that only read the exit code — which is everything in CI. Rather
+ * than thread a result through a hundred probes, the report lines are classified as they are
+ * printed: a value starting `yes` or `true` passed, `NO` or `false` failed, `n/a` was skipped.
+ * A line that is information on purpose — a count, a list of labels — is printed through `note()`
+ * and says so in a comment where it is printed; anything else is *unclassified*.
+ *
+ * Unclassified is a failure whenever INSPECTOR_UI_EXPECT_CHECKS is set. A check worded as prose, or
+ * the second half of a compound line, is a check whose NO nobody counts: QA set the detail pane's
+ * default tab to the wrong one and the run stayed green because `detail default tab` printed a tab
+ * name rather than a verdict. So every check gets its own line, and every other line is declared.
+ * Without an expected count — a developer pointing this at whatever session is on the machine —
+ * probes legitimately fall into prose branches for data the session lacks, so there it is reported
+ * and not fatal.
+ *
+ * INSPECTOR_UI_EXPECT_CHECKS pins how many passed. A probe that quietly stopped running — a renamed
+ * selector, a session lacking what it looks at — does not fail anything, it just reports less, and
+ * the smaller number is the only sign of it.
+ */
+const verdict = { reporting: false, noting: false, passed: 0, failed: [], skipped: 0, notes: 0, unclassified: [], notMirror: false };
+const realConsoleError = console.error.bind(console);
+console.error = (...args) => {
+  realConsoleError(...args);
+  if (!verdict.reporting) return;
+  const line = args.map((a) => (typeof a === 'string' ? a : String(a))).join(' ');
+  if (line.startsWith('---')) return;
+  const match = line.match(/^([^:]+?)\s*:\s?([\s\S]*)$/);
+  if (!match) return;
+  const [, label, value] = match;
+  if (label === 'errors') return; // counted from `errors` itself
+  if (verdict.noting) { verdict.notes++; return; }
+  if (line.includes('(NOT a mirror)')) verdict.notMirror = true;
+  if (/^(yes|true)\b/.test(value)) verdict.passed++;
+  else if (/^(NO|false)\b/.test(value)) verdict.failed.push(label.trim());
+  else if (/^n\/a\b/.test(value)) verdict.skipped++;
+  else verdict.unclassified.push(label.trim());
+};
+
+/**
+ * Every transaction in a session, as `{ items }`, read a page at a time.
+ *
+ * The daemon clamps one page to 1000 rows (`SessionRepository.queryTransactions`), so asking for
+ * `limit=2000` quietly got the newest 1000 of a bigger session — and a probe comparing the page
+ * against those rows would report a false NO on any large local session. `sessionId` is already
+ * URL-encoded.
+ */
+async function sessionTransactions(sessionId) {
+  const items = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/transactions?offset=${offset}&limit=1000`)
+      .then((r) => r.json());
+    items.push(...(page.items || []));
+    if (!page.items || page.items.length < 1000 || items.length >= page.matched) return { items };
+  }
+}
+
+/** Every signal in a session, newest first, paged the same way; the route caps a page at 1000 too. */
+async function sessionSignals(sessionId) {
+  const all = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await fetch(`${ORIGIN}/api/sessions/${sessionId}/signals?offset=${offset}&limit=1000`)
+      .then((r) => r.json());
+    if (!Array.isArray(page)) return all;
+    all.push(...page);
+    if (page.length < 1000) return all;
+  }
+}
+
+/** A report line that is information, not a check. Say why at the call site. */
+function note(...args) {
+  verdict.noting = true;
+  try { console.error(...args); } finally { verdict.noting = false; }
+}
+
+/** Prints the verdict line and sets the exit code; called once, after the last report line. */
+function finishReport() {
+  verdict.reporting = false;
+  const { passed, failed, skipped, notes, unclassified } = verdict;
+  realConsoleError(
+    `checks: ${passed} passed, ${failed.length} failed, ${skipped} n/a, ${unclassified.length} unclassified, ${notes} notes`,
+  );
+  if (failed.length) realConsoleError(`failed: ${failed.join(', ')}`);
+  if (unclassified.length) realConsoleError(`unclassified: ${unclassified.join(', ')}`);
+  const expected = process.env.INSPECTOR_UI_EXPECT_CHECKS || undefined;
+  const countWrong = expected !== undefined && Number(expected) !== passed;
+  if (countWrong) realConsoleError(`expected ${expected} passing checks, got ${passed}`);
+  const strayProse = expected !== undefined && unclassified.length > 0;
+  if (strayProse) realConsoleError('unclassified lines fail a run with an expected count: give each a verdict or print it with note()');
+  if (failed.length || errors.length || verdict.notMirror || countWrong || strayProse) process.exitCode = 1;
+}
 
 // Proxy the page's fetch to the live daemon.
 window.fetch = (path, init) =>
@@ -405,11 +507,11 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   if (!doc.querySelector('#session-picker option')) {
     const listProbe = await probeList();
     const topBarProbe = await probeTopBar();
+    verdict.reporting = true;
     console.error('--- empty archive ---');
-    console.error('sessions           : 0');
+    note('sessions           : 0');
     console.error('emptySession       :', listProbe.emptySession ?? 'NO - the empty-state check did not run');
     for (const [name, value] of Object.entries(topBarProbe)) console.error(`${name.padEnd(19)}:`, value);
-    console.error('parser             :', probeJsonParser().ok);
     console.error('min text size      :', auditMinTextSize(css));
     console.error('long tokens wrap   :', auditLongTokenWrap(css));
     console.error('hidden panes hide  :', auditHiddenPanes(css));
@@ -421,6 +523,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       console.error(`${skipped.padEnd(19)}: n/a (no sessions)`);
     }
     console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
+    finishReport();
     writeSnapshot('Static snapshot of the live UI against an empty archive. ');
     window.close();
     return;
@@ -680,6 +783,45 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
   const signalProbe = await probeSignals();
 
+  /**
+   * A marker at exactly a call's `mono` is drawn before that call on the timeline tab too.
+   *
+   * The model's `timeline()` places it with `<=`, because a marker is dropped just before the
+   * thing it marks, and a tie is what that looks like on a millisecond clock. The list always did
+   * this; the timeline tab sorted all three streams by `mono` in one stable sort with markers
+   * added last, so a tied marker landed after the call it introduced. The ties are found from the
+   * daemon's own rows, not from the page.
+   */
+  async function probeTimelineTie() {
+    const allTab = doc.querySelector('#tabs .tab[data-view="all"]');
+    if (!allTab) return 'n/a (no timeline tab)';
+    await click(allTab);
+    await new Promise((r) => setTimeout(r, 400));
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const [page, markers] = await Promise.all([
+      sessionTransactions(sessionId),
+      fetch(`${ORIGIN}/api/sessions/${sessionId}/markers`).then((r) => r.json()).catch(() => []),
+    ]);
+    const txns = page.items || [];
+    const ties = markers.filter((m) => txns.some((t) => t.mono === m.mono));
+    if (!ties.length) return "n/a (no marker shares a call's millisecond in this session)";
+    const kids = [...doc.getElementById('timeline').children];
+    const newestFirst = doc.getElementById('order-newest').classList.contains('on');
+    const wrong = [];
+    for (const m of ties) {
+      const at = kids.findIndex((n) => n.dataset.kind === 'marker' && n.textContent === m.label);
+      for (const t of txns.filter((x) => x.mono === m.mono)) {
+        const row = kids.findIndex((n) => n.dataset.kind === 'txn' && n.dataset.id === t.id);
+        if (at < 0 || row < 0) { wrong.push(`"${m.label}" or ${t.method} ${t.path} not drawn`); continue; }
+        if (newestFirst ? at < row : at > row) wrong.push(`"${m.label}" drawn after ${t.method} ${t.path}`);
+      }
+    }
+    return wrong.length
+      ? `NO - ${wrong.join('; ')}`
+      : `yes (${ties.length} tied ${ties.length === 1 ? 'marker' : 'markers'} drawn before the call)`;
+  }
+  const timelineTie = await probeTimelineTie();
+
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
   await click(doc.querySelector('#tabs .tab[data-view="network"]'));
@@ -757,47 +899,6 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
         : markersText === 'markers' ? 'yes ("markers", none in this session)' : `NO - "${markersText}"`,
       shortcuts: doc.getElementById('keys-button').textContent === 'shortcuts' ? 'yes' : 'NO',
     };
-  }
-
-  /**
-   * Nothing under 11px except the method badge, the key caps and the fold glyphs.
-   *
-   * Read from the stylesheet source: jsdom computes no font sizes worth trusting. Each exception is
-   * named rather than matched by pattern, so a new 10px rule fails here until someone decides it
-   * belongs on the list.
-   */
-  function auditMinTextSize(cssText) {
-    // The method badge, key caps, and the three fold glyphs (▸ ▾), which are shapes, not text.
-    const allowed = ['.row .method', 'kbd', '.jt-tw', '.now-caret', '.tl-twisty'];
-    const offenders = [];
-    const source = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
-    for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      const size = body.match(/font-size:\s*(\d+(?:\.\d+)?)px/);
-      if (!size || Number(size[1]) >= 11) continue;
-      const name = selector.trim();
-      if (!allowed.includes(name)) offenders.push(`${name} ${size[1]}px`);
-    }
-    return offenders.length ? `NO - ${offenders.join(', ')}` : `yes (only ${allowed.join(', ')} below 11px)`;
-  }
-
-  /**
-   * A long unbroken token must not be able to widen the detail pane.
-   *
-   * Checked against the stylesheet text, not `getComputedStyle`: jsdom has no layout engine, so
-   * it reports neither the 7139px line box this guards against nor whether the rule prevented it.
-   * A computed-style version of this check passes just as happily with the rule deleted — the
-   * same reason `auditHiddenPanes` reads the CSS source. The real measurement belongs in a
-   * browser, and is recorded in the commit that added the rule.
-   */
-  function auditLongTokenWrap(cssText) {
-    const block = cssText.match(/\.headers\s*\{([^}]*)\}/);
-    if (!block) return 'NO - no .headers rule at all';
-    const wrap = block[1].match(/overflow-wrap\s*:\s*([a-z-]+)/);
-    const breaks = block[1].match(/word-break\s*:\s*([a-z-]+)/);
-    const value = wrap?.[1] || breaks?.[1];
-    return value && ['anywhere', 'break-all', 'break-word'].includes(value)
-      ? `yes (${value})`
-      : 'NO - a bearer token will paint outside the pane and scroll the page';
   }
 
   /**
@@ -953,7 +1054,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     }
 
     const pull = doc.getElementById('browser-pull');
-    result.pullButton = pull.hidden ? 'hidden (no provider seen)' : 'present and enabled';
+    result.pullButton = pull.hidden ? 'yes (hidden: no provider seen)' : 'yes (present and enabled)';
     return result;
   }
 
@@ -1036,7 +1137,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     if (network) {
       await click(network);
       await new Promise((r) => setTimeout(r, 400));
-      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'shown';
+      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'yes (shown)';
     }
 
     const browser = firstTagBrowserTab();
@@ -1044,7 +1145,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await click(browser);
       await new Promise((r) => setTimeout(r, 700));
       result.onBrowser = doc.getElementById('toolbar').hidden
-        ? `hidden (on '${browser.dataset.view}')`
+        ? `yes (hidden on '${browser.dataset.view}')`
         : `NO - still shown on '${browser.dataset.view}'`;
       result.ownFilterInstead = doc.getElementById('browser-filter') ? 'yes' : 'NO';
     }
@@ -1107,23 +1208,29 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     await click(row);
     await new Promise((r) => setTimeout(r, 400));
     result.opensOnSelect = isOpen() ? 'yes' : 'NO - selecting a row left it shut';
-    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'shown';
+    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'yes (shown)';
 
     await click(doc.getElementById('drawer-close'));
     await new Promise((r) => setTimeout(r, 200));
-    result.closeButton = isOpen() ? 'NO' : 'closes';
+    result.closeButton = isOpen() ? 'NO' : 'yes (closes)';
 
     await click(row);
     await new Promise((r) => setTimeout(r, 300));
-    await click(doc.getElementById('drawer-scrim'));
+    // jsdom dispatches a click to a hidden element as readily as to a shown one, so a scrim that
+    // never appeared would still "close" the drawer here. Nobody can click what is not drawn.
+    const scrim = doc.getElementById('drawer-scrim');
+    const scrimShown = !scrim.hidden;
+    await click(scrim);
     await new Promise((r) => setTimeout(r, 200));
-    result.scrimCloses = isOpen() ? 'NO' : 'closes';
+    result.scrimCloses = !scrimShown
+      ? 'NO - the scrim was hidden, so there was nothing to click'
+      : isOpen() ? 'NO' : 'yes (closes)';
 
     await click(row);
     await new Promise((r) => setTimeout(r, 300));
     doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await new Promise((r) => setTimeout(r, 200));
-    result.escape = isOpen() ? 'NO' : 'closes';
+    result.escape = isOpen() ? 'NO' : 'yes (closes)';
 
     // A drawer covers the list it came from; carrying it across a tab switch would leave it
     // sitting over a list that never produced it.
@@ -1133,30 +1240,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     if (other) {
       await click(other);
       await new Promise((r) => setTimeout(r, 700));
-      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'closes';
+      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'yes (closes)';
     }
     return result;
-  }
-
-  /** Is the detail pane a drawer at all below the breakpoint? Read from the stylesheet. */
-  function auditDrawerCss(cssText) {
-    // The block that lays out `#panes`, not merely the first narrow block: another view's narrow
-    // rule placed earlier in the file used to make this read the wrong block and fail.
-    const block = [...cssText.matchAll(/@media \(max-width: \d+px\) \{([\s\S]*?)\n\}/g)]
-      .find((m) => /#panes/.test(m[1]));
-    if (!block) return 'NO - no narrow-width media block lays out #panes';
-    const body = block[1];
-    // Anchored at the end of the declaration: `1fr` alone also prefix-matches `1fr 1fr`, which
-    // is the exact two-column layout this is supposed to catch.
-    const oneColumn = /#panes[^{]*\{[^}]*grid-template-columns:\s*1fr\s*[;}]/.test(body);
-    const floats = /#detail-pane\s*\{[^}]*position:\s*absolute/.test(body);
-    const slides = /drawer-open[^{]*#detail-pane\s*\{[^}]*translateX\(0\)/.test(body);
-    const missing = [
-      !oneColumn && 'the list does not take the full width',
-      !floats && 'the detail pane is still in flow',
-      !slides && 'nothing brings the drawer on screen',
-    ].filter(Boolean);
-    return missing.length ? `NO - ${missing.join('; ')}` : 'yes';
   }
 
   /**
@@ -1188,7 +1274,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       const tabsAt = kids.findIndex((k) => k.classList.contains('dtabs'));
       const chainAt = kids.findIndex((k) => k.classList.contains('chain-row'));
       result.chainPinned = chainAt !== -1 && chainAt < tabsAt
-        ? 'above the tabs'
+        ? 'yes (above the tabs)'
         : 'NO - an attempt chain is tabbed away';
       // Every chain exercises this: a first attempt is the default, so the archive never writes
       // its `attempt` field. Read raw it printed "undefined." and sorted out of place, which is
@@ -1268,7 +1354,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     const pane = doc.getElementById('detail-empty');
     const rows = [...pane.querySelectorAll('.glance-row')];
     result.session = rows.length
-      ? `${rows.length} rows`
+      ? `yes (${rows.length} rows)`
       : `NO - still reads "${pane.textContent.trim()}"`;
     result.clickable = pane.querySelectorAll('.glance-click').length;
 
@@ -1283,12 +1369,24 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await new Promise((r) => setTimeout(r, 600));
       result.slowestSelects = doc.getElementById('detail').hidden
         ? 'NO - clicking a slow call did nothing'
-        : 'selects it';
+        : 'yes (selects it)';
+      // The glance rows stay in the DOM from the first render whether the pane shows or not, so
+      // counting them proved nothing: QA turned Escape into a bare `break` and this still said yes.
+      // What Escape must do is visible: the selection cleared, the detail gone, the glance pane
+      // shown, and the glance drawn afresh — a node stamped in now must not survive it.
+      const stale = doc.createElement('i');
+      stale.dataset.probeStale = '1';
+      pane.appendChild(stale);
       doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((r) => setTimeout(r, 300));
-      result.escRestores = doc.querySelectorAll('#detail-empty .glance-row').length
-        ? 'yes'
-        : 'NO';
+      const wrong = [
+        pane.hidden && 'the glance pane is still hidden',
+        !doc.getElementById('detail').hidden && 'the detail pane is still showing',
+        doc.querySelector('#list .row.selected') && 'a row is still selected',
+        pane.contains(stale) && 'the glance was not re-rendered',
+        !pane.querySelectorAll('.glance-row').length && 'the glance has no rows',
+      ].filter(Boolean);
+      result.escRestores = wrong.length ? `NO - ${wrong.join('; ')}` : 'yes (shown, selection cleared, redrawn)';
     }
 
     const browser = firstTagBrowserTab();
@@ -1298,7 +1396,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       const detail = doc.getElementById('browser-detail');
       const tagRows = detail.querySelectorAll('.glance-row').length;
       result.tag = tagRows
-        ? `${tagRows} rows on '${browser.dataset.view}'`
+        ? `yes (${tagRows} rows on '${browser.dataset.view}')`
         : `NO - still reads "${detail.textContent.trim()}"`;
     }
     return result;
@@ -1313,12 +1411,14 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
    */
   const sessionCallCount = async () => {
     const id = doc.getElementById('session-picker').value;
-    const q = new URLSearchParams({ filter: '', limit: '2000' });
+    // `matched`, not the page's length: a page is clamped to 1000 rows, so counting items said 1000
+    // for any bigger session and could not see it grow.
+    const q = new URLSearchParams({ filter: '', limit: '1' });
     try {
       const page = await window.fetch(
         `/api/sessions/${encodeURIComponent(id)}/transactions?${q}`
       ).then((r) => r.json());
-      return page.items.length;
+      return typeof page.matched === 'number' ? page.matched : null;
     } catch {
       return null; // unknown, which the caller reports rather than guesses about
     }
@@ -1361,7 +1461,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await settle();
     }
     const axis = doc.getElementById('axis');
-    result.shown = axis.hidden ? 'NO - hidden on traffic' : 'shown';
+    result.shown = axis.hidden ? 'NO - hidden on traffic' : 'yes (shown)';
     if (axis.hidden) return result;
 
     result.bars = axis.querySelectorAll('.axis-bar-all').length;
@@ -1384,10 +1484,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     const grew = callsBefore !== null && callsAfter !== null ? callsAfter - callsBefore : null;
     result.sessionMoved = grew === null
-      ? 'unknown - the daemon did not answer; counts below are not compared'
+      ? 'NO - the daemon did not answer; counts below are not compared'
       : grew > 0
-        ? `grew by ${grew} under the probe (${callsBefore} -> ${callsAfter} calls) - still recording`
-        : `held still (${callsBefore} calls)`;
+        ? `n/a (grew by ${grew} under the probe, ${callsBefore} -> ${callsAfter} calls - still recording)`
+        : `yes (held still, ${callsBefore} calls)`;
 
     // A filter that removed nothing tells the two layers apart from neither, so say so rather
     // than passing on it: a session of nothing but errors would otherwise read as proof.
@@ -1450,8 +1550,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     // exercised it, rather than letting a trivial pass read as a proof.
     const id = encodeURIComponent(doc.getElementById('session-picker').value);
     const [txns, signals] = await Promise.all([
-      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
-      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+      sessionTransactions(id),
+      sessionSignals(id),
     ]);
     const screens = (Array.isArray(signals) ? signals : []).filter((s) => s.tag === 'screen');
     if (!screens.length) {
@@ -1460,8 +1560,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       const lastScreen = Math.max(...screens.map((s) => s.mono));
       const trailing = (txns.items || []).filter((x) => x.mono >= lastScreen).length;
       result.trailingCalls = trailing
-        ? `${trailing} after the last screen — the branch that catches them ran`
-        : 'none in this session, so that branch was not exercised here';
+        ? `yes (${trailing} after the last screen — the branch that catches them ran)`
+        : 'n/a (none in this session, so that branch was not exercised here)';
     }
 
     // Oldest first inside each visit. The daemon sends rows newest first, and a grouping that kept
@@ -1485,7 +1585,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await new Promise((r) => setTimeout(r, 600));
       result.rowSelects = doc.getElementById('detail').hidden
         ? 'NO - clicking a bar did nothing'
-        : 'selects the call';
+        : 'yes (selects the call)';
     }
     return result;
   }
@@ -1532,7 +1632,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
         ].filter(Boolean);
         result.txnButton = missing.length
           ? `NO - missing ${missing.join(', ')}`
-          : `${text.length} chars, names the session and the call`;
+          : `yes (${text.length} chars, names the session and the call)`;
 
         // Header lines only. A minified JSON body is legitimately one very long line and has its
         // own, larger cap — measuring "the longest line in the paste" conflates the two and fails
@@ -1564,63 +1664,12 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await new Promise((r) => setTimeout(r, 700));
       const text = lastCopied || '';
       result.sessionButton = text.includes('session_summary(') && text.includes(session)
-        ? `${text.length} chars, names the session and the MCP entry point`
+        ? `yes (${text.length} chars, names the session and the MCP entry point)`
         : `NO - ${text ? 'missing the session or its MCP call' : 'nothing was copied'}`;
     }
     return result;
   }
 
-
-  /**
-   * The `app.js` mirror of `visits()`, lifted out of the real file and run against the cases
-   * `VisitsTest` pins in `:inspector-model`. A mirror nobody runs drifts silently; this is the
-   * check that it says the same thing as the Kotlin it copies.
-   */
-  function probeVisitsMirror() {
-    const from = js.indexOf('  // --- visits: the rule');
-    const to = js.indexOf('  /**\n   * One colour per screen name');
-    if (from < 0 || to < from) return { ok: 'NO - the visits markers moved; this check has to follow them' };
-    const { visits, visitIndexAt } = new Function(
-      `const tagOf = (s) => String(s.tag).toLowerCase();\n${js.slice(from, to)}\nreturn { visits, visitIndexAt };`,
-    )();
-    let seq = 0;
-    const scr = (name, mono, tag = 'screen') => ({ id: `s${++seq}`, tag, name, mono });
-    const call = (id, mono, ms = 10) => ({ id, mono, ms });
-    const mark = (label, mono) => ({ label, mono });
-    const shape = (list) => list.map((v) => `${v.screen ? v.screen.name : '-'}[${v.entries.map((e) =>
-      e.kind === 'txn' ? e.txn.id : e.kind === 'marker' ? `M:${e.marker.label}` : `S:${e.signal.tag}/${e.signal.name}`,
-    ).join(' ')}]`).join(' ');
-    const failures = [];
-    const expect = (name, got, want) => { if (got !== want) failures.push(`${name}: got ${got}`); };
-
-    expect('start', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('a', 150), call('b', 350)], [], [])), 'Home[a] Cart[b]');
-    expect('tie', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('a', 300)], [], [])), 'Home[] Cart[a]');
-    expect('no grace', shape(visits([scr('Home', 100), scr('Cart', 300)], [call('pay', 299)], [], [])), 'Home[pay] Cart[]');
-    expect('revisit', shape(visits([scr('A', 100), scr('B', 200), scr('A', 300)], [], [], [])), 'A[] B[] A[]');
-    expect('repeats', shape(visits([scr('Checkout', 100), scr('Checkout', 200), scr('Done', 400)], [call('a', 150), call('b', 250)], [], [])),
-      'Checkout[a S:screen/Checkout b] Done[]');
-    expect('leading', shape(visits([scr('Home', 100)], [call('config', 20), call('a', 120)], [], [])), '-[config] Home[a]');
-    expect('no screens', shape(visits([], [call('a', 10), call('b', 20)], [], [])), '-[a b]');
-    expect('empty', shape(visits([], [], [], [])), '');
-    expect('kept empty', shape(visits([scr('Product', 100), scr('Cart', 200), scr('Checkout', 300)], [call('a', 120), call('b', 320)], [], [])),
-      'Product[a] Cart[] Checkout[b]');
-    expect('seq tie', shape(visits(
-      [{ ...scr('Home', 100), seq: 1 }, { ...scr('Cart', 300), seq: 3 }],
-      [{ ...call('init', 300), seq: 4 }], [], [{ ...scr('add_to_cart', 300, 'tap'), seq: 2 }],
-    )), 'Home[S:tap/add_to_cart] Cart[init]');
-    expect('no seq tie', shape(visits(
-      [{ ...scr('Home', 100), seq: 1 }, { ...scr('Cart', 300), seq: 3 }], [], [], [scr('add_to_cart', 300, 'tap')],
-    )), 'Home[] Cart[S:tap/add_to_cart]');
-    expect('leading kept', shape(visits([scr('Home', 100)], [], [], [], 20)), '-[] Home[]');
-    expect('no leading at start', shape(visits([scr('Home', 100)], [], [], [], 100)), 'Home[]');
-    expect('skeleton only', shape(visits([scr('Home', 100)], [], [], [scr('Ghost', 200)])), 'Home[]');
-    expect('in place', shape(visits([scr('Cart', 100)], [call('pay', 200)], [mark('about to pay', 200)], [scr('orders', 250, 'cache')])),
-      'Cart[M:about to pay pay S:cache/orders]');
-    expect('case', shape(visits([scr('Home', 100, 'Screen')], [call('a', 150)], [], [])), 'Home[a]');
-    const spanning = visits([scr('Cart', 100), scr('Confirm', 300)], [call('orders', 250, 120)], [], []);
-    expect('finish', `${visitIndexAt(spanning, 250)} ${visitIndexAt(spanning, 370)} ${visitIndexAt(spanning, 50)}`, '0 1 -1');
-    return { ok: failures.length ? `NO - ${failures.join('; ')}` : 'yes (17 cases from VisitsTest)' };
-  }
 
   /**
    * The path tab: a map of stations on top, and a log with one line per visit beneath it.
@@ -1647,8 +1696,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     const id = encodeURIComponent(doc.getElementById('session-picker').value);
     const [txns, signals, markers] = await Promise.all([
-      fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=2000`).then((r) => r.json()),
-      fetch(`${ORIGIN}/api/sessions/${id}/signals?limit=2000`).then((r) => r.json()),
+      sessionTransactions(id),
+      sessionSignals(id),
       fetch(`${ORIGIN}/api/sessions/${id}/markers`).then((r) => r.json()).catch(() => []),
     ]);
     const all = Array.isArray(signals) ? signals : [];
@@ -1703,7 +1752,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     if (call) {
       await click(call);
       await new Promise((r) => setTimeout(r, 400));
-      result.callSelects = doc.getElementById('detail').hidden ? 'NO - nothing opened' : 'opens the call';
+      result.callSelects = doc.getElementById('detail').hidden ? 'NO - nothing opened' : 'yes (opens the call)';
     }
     const card = doc.querySelector('#path .pv-name.pv-sig');
     if (card) {
@@ -1711,7 +1760,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       await new Promise((r) => setTimeout(r, 400));
       const title = doc.querySelector('#detail .detail-title')?.textContent;
       result.cardSelects = title === card.textContent
-        ? 'opens the screen signal'
+        ? 'yes (opens the screen signal)'
         : `NO - detail shows ${title || 'nothing'}`;
     }
 
@@ -1740,7 +1789,6 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const axisProbe = await probeAxis();
   const waterfallProbe = await probeWaterfall();
   const pathProbe = await probePath();
-  const visitsMirrorProbe = probeVisitsMirror();
   const glanceProbe = await probeGlance();
   /**
    * The replay editor, which is `REPLAY.md` step 3.
@@ -2058,38 +2106,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     return result;
   }
 
-  /**
-   * The parser under the tree, which exists because `JSON.parse` rewrites what the app received:
-   * doubles for every number, integer-like keys hoisted, duplicate keys dropped. Lifted out of the
-   * real app.js by its markers, so this checks the shipped code rather than a copy of it.
-   */
-  function probeJsonParser() {
-    const from = js.indexOf('  const JSON_NUMBER');
-    const to = js.indexOf('  // --- JSON tree');
-    if (from < 0 || to < from) return { ok: 'NO - the parser markers moved; this check has to follow them' };
-    const { parseJsonTree, printJsonTree } =
-      new Function(`${js.slice(from, to)}\nreturn { parseJsonTree, printJsonTree };`)();
-    const pretty = (t) => printJsonTree(parseJsonTree(t));
-    const failures = [];
-    const expect = (name, got, want) => { if (got !== want) failures.push(name); };
-    expect('big id', pretty('{"id":1234567890123456789}'), '{\n  "id": 1234567890123456789\n}');
-    expect('key order', pretty('{"b":1,"2":2}'), '{\n  "b": 1,\n  "2": 2\n}');
-    expect('duplicate keys', pretty('{"a":1,"a":2}'), '{\n  "a": 1,\n  "a": 2\n}');
-    expect('escapes', pretty('["\\u00e9"]'), '[\n  "\\u00e9"\n]');
-    for (const t of ['{}', '[]', '{"a":{"b":[1,{"c":"d"}],"e":[]},"f":{}}', ' [ 1 , "x" ] ']) {
-      expect(`layout ${t}`, pretty(t), JSON.stringify(JSON.parse(t), null, 2));
-    }
-    for (const bad of ['{"a":1', '{"a":1,}', '[01]', '{a:1}', '[1] x', '', '"\\q"']) {
-      let threw = false;
-      try { parseJsonTree(bad); } catch { threw = true; }
-      if (!threw) failures.push(`accepted ${JSON.stringify(bad)}`);
-    }
-    return { ok: failures.length ? `NO - ${failures.join(', ')}` : 'yes (ids, key order, duplicates, escapes, layout, rejection)' };
-  }
-
   const detailTabProbe = await probeDetailTabs();
   const jsonTreeProbe = await probeJsonTree();
-  const jsonParserProbe = probeJsonParser();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
   const drawerProbe = await probeDrawer();
@@ -2100,42 +2118,6 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
   const ageProbe = await probeAges();
-
-  /**
-   * A hidden pane must actually be invisible.
-   *
-   * `hidden` only works because of a user agent rule, `[hidden] { display: none }`, and any author
-   * rule setting `display` on the same element outranks it — the pane then paints over whichever
-   * view is selected while its `hidden` property still reads true. This is checked against the
-   * stylesheet text rather than through `getComputedStyle`, because jsdom resolves a hidden
-   * element to `display: none` whatever the CSS says: the computed-style version of this check
-   * passes just as happily with the guard rule deleted, which makes it worse than no check at all.
-   */
-  function auditHiddenPanes(cssText) {
-    // Panes the app shows and hides by toggling `hidden`.
-    // `.toolbar` and `.now-strip` join the list because they are the newest members of exactly
-    // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
-    const panes = [
-      '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
-      '.drawer-scrim', '.axis', '.waterfall', '.path-view', '.path-new',
-      // Hidden on the path tab, where order has no meaning; it rendered anyway until this was here.
-      '.seg2',
-    ];
-    const setsDisplay = new Set();
-    const guarded = new Set();
-    for (const [, selector, body] of cssText.matchAll(/([.#][A-Za-z0-9_-]+)\s*\{([^}]*)\}/g)) {
-      if (/(^|;)\s*display\s*:/.test(body)) setsDisplay.add(selector);
-    }
-    for (const [, selector] of cssText.matchAll(
-      /([.#][A-Za-z0-9_-]+)\[hidden\]\s*\{[^}]*display\s*:\s*none/g,
-    )) {
-      guarded.add(selector);
-    }
-    const offenders = panes.filter((s) => setsDisplay.has(s) && !guarded.has(s));
-    return offenders.length
-      ? `NO - ${offenders.join(', ')} sets display without a [hidden] override`
-      : 'yes';
-  }
 
   const hiddenPaneAudit = auditHiddenPanes(css);
 
@@ -2285,40 +2267,79 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   const sessionProbe = await probeSessions();
   const topBarProbe = await probeTopBar();
 
+  verdict.reporting = true;
   console.error('--- render report ---');
-  console.error('rows rendered      :', doc.querySelectorAll('#list .row').length);
+  const rendered = doc.querySelectorAll('#list .row').length;
+  console.error('rows rendered      :', rendered > 0 ? `yes (${rendered})` : 'NO - the list is empty');
   console.error('sort flip reverses :', reversed, `(button then read "${flippedLabel}")`);
   console.error('sort flip restores :', restored);
   console.error(
-    'list sequence      :', `${beforeSequence} -> ${afterSequence}`,
-    afterSequence === [...beforeSequence].reverse().join('') ? '(exact mirror)' : '(NOT a mirror)',
+    'list sequence      :',
+    afterSequence === [...beforeSequence].reverse().join('')
+      ? `yes (${beforeSequence} -> ${afterSequence}, exact mirror)`
+      : `NO - ${beforeSequence} -> ${afterSequence} (NOT a mirror)`,
   );
-  console.error('method classes     :', methodClasses.join(', ') || 'none');
+  // Notes below: what this session happens to hold. Each is a count or a list whose right value
+  // depends on the session, and the rules behind them are asserted on their own lines.
+  note('method classes     :', methodClasses.join(', ') || 'none');
   console.error('--- list ---');
   for (const [name, value] of Object.entries(listProbe)) {
     console.error(`${name.padEnd(19)}:`, value);
   }
-  console.error('marker dividers    :', doc.querySelectorAll('.marker-divider').length);
-  console.error('session options    :', doc.querySelectorAll('#session-picker option').length);
-  console.error('counts             :', doc.getElementById('counts').textContent);
-  console.error('session option     :', doc.querySelector('#session-picker option')?.textContent ?? 'none');
-  console.error('markers listed     :', doc.querySelectorAll('#markers li').length);
+  note('marker dividers    :', doc.querySelectorAll('.marker-divider').length, '(list and timeline together)');
+  note('session options    :', doc.querySelectorAll('#session-picker option').length);
+  note('counts             :', doc.getElementById('counts').textContent);
+  note('session option     :', doc.querySelector('#session-picker option')?.textContent ?? 'none');
+  note('markers listed     :', doc.querySelectorAll('#markers li').length);
   console.error('detail visible     :', !doc.getElementById('detail').hidden);
-  console.error(
+  // Which sections and blocks show depends on the row the probe opened; the tab rules are checked
+  // under "detail tabs" below.
+  note(
     'detail sections    :', doc.querySelectorAll('#detail .section-title').length,
     '(pinned ones plus the open tab, not all five faces)',
   );
-  console.error('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
-  console.error('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
+  note('body blocks        :', doc.querySelectorAll('#detail pre.body').length);
+  note('chain rows         :', doc.querySelectorAll('#detail .chain-row').length);
   const dupRows = [...doc.querySelectorAll('#list .row.duplicate')];
   // Scoped to the list. The timeline draws transactions too, so an unscoped count double-counts
   // every duplicate and turns "badges must equal rows" into a permanent, meaningless failure.
   const dupBadges = [...doc.querySelectorAll('#list .dup-badge')].length;
   const clocks = [...doc.querySelectorAll('#list .row .clock')].filter((n) => n.textContent.trim()).length;
 
-  console.error('duplicate rows     :', dupRows.length);
-  console.error('duplicate badges   :', dupBadges, '(must equal the rows — colour alone is not enough)');
-  console.error('start times shown  :', clocks, 'of', doc.querySelectorAll('#list .row').length);
+  /*
+   * The repeat label counts calls, not rows. A group that swept up a retry has more rows than
+   * calls, and "sent 3x" for a call the app made twice is the confidently wrong reading the model's
+   * `callCount` exists to prevent. Checked against the rows' own `callId`s, which the page never
+   * groups by, so this does not agree with a bug in `computeDuplicates` by construction.
+   */
+  let repeatLabel = 'n/a (no repeats in this session)';
+  if (dupRows.length) {
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const page = await sessionTransactions(sessionId);
+    const callOf = new Map((page.items || []).map((t) => [t.id, t.callId]));
+    const byTitle = new Map();
+    for (const row of dupRows) byTitle.set(row.title, [...(byTitle.get(row.title) || []), row.dataset.id]);
+    const wrong = [];
+    let rowsMoreThanCalls = false;
+    for (const [title, ids] of byTitle) {
+      const said = Number((title.match(/sent (\d+)x/) || [])[1]);
+      const calls = new Set(ids.map((id) => callOf.get(id))).size;
+      if (ids.length > calls) rowsMoreThanCalls = true;
+      if (said !== calls) wrong.push(`"sent ${said}x" on ${ids.length} rows from ${calls} calls`);
+    }
+    repeatLabel = wrong.length
+      ? `NO - ${wrong.join('; ')}`
+      : `yes (${byTitle.size} ${byTitle.size === 1 ? 'group' : 'groups'}${rowsMoreThanCalls ? ', one with more rows than calls' : ''})`;
+  }
+
+  note('duplicate rows     :', dupRows.length, '(their labels and badges are checked on the next lines)');
+  console.error('repeat counts calls:', repeatLabel, '(a retry inside a repeat is a row, not a call)');
+  console.error(
+    'duplicate badges   :', dupBadges === dupRows.length ? `yes (${dupBadges})` : `NO - ${dupBadges} for ${dupRows.length} rows`,
+    '(must equal the rows — colour alone is not enough)',
+  );
+  const rowCount = doc.querySelectorAll('#list .row').length;
+  console.error('start times shown  :', clocks === rowCount ? `yes (${clocks} of ${rowCount})` : `NO - ${clocks} of ${rowCount}`);
   // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
   // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
   // also matched `profile/status` would quietly be lying.
@@ -2328,40 +2349,85 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   );
   const unanchored = endpointChips.filter((c) => !c.dataset.filter.startsWith('path:*/')).length;
 
-  console.error('endpoint chips     :', endpointChips.length);
-  console.error('endpoint labels    :', chipLabels.join(' ') || 'none');
-  console.error('unanchored chips   :', unanchored, '(must be 0)');
+  note('endpoint chips     :', endpointChips.length);
+  /*
+   * Chip order is the model's: most calls first, then the most recent call, then the segment by
+   * char code — `thenBy { it.segment }` compares UTF-16 units, so `Balance` sorts before
+   * `accounts`, where a locale-aware compare puts them the other way round. Recency comes from the
+   * daemon's rows rather than the page, and the fixture holds a tie on count and recency.
+   */
+  let chipOrder = 'n/a (fewer than two chips)';
+  if (endpointChips.length > 1) {
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const page = await sessionTransactions(sessionId);
+    const latest = new Map();
+    for (const t of page.items || []) {
+      const segment = String(t.path || '').split('/').filter(Boolean).pop();
+      if (segment !== undefined) latest.set(segment, Math.max(latest.get(segment) ?? -Infinity, t.mono));
+    }
+    const chips = endpointChips.map((c) => ({
+      segment: c.firstChild.textContent,
+      count: Number(c.querySelector('.chip-count')?.textContent),
+    }));
+    const outOfOrder = [];
+    for (let i = 0; i + 1 < chips.length; i++) {
+      const [a, b] = [chips[i], chips[i + 1]];
+      const [la, lb] = [latest.get(a.segment), latest.get(b.segment)];
+      const inOrder = a.count > b.count || (a.count === b.count && (la > lb || (la === lb && a.segment < b.segment)));
+      if (!inOrder) outOfOrder.push(`${a.segment} before ${b.segment}`);
+    }
+    const tied = chips.some((a, i) => chips.slice(i + 1).some((b) =>
+      a.count === b.count && latest.get(a.segment) === latest.get(b.segment)));
+    chipOrder = outOfOrder.length
+      ? `NO - ${outOfOrder.join(', ')}`
+      : `yes (count, then recency, then char code${tied ? '; a full tie is in this session' : ''})`;
+  }
+
+  note('endpoint labels    :', chipLabels.join(' ') || 'none', '(their order is the next line)');
+  console.error('chip order         :', chipOrder);
+  console.error('unanchored chips   :', unanchored === 0 ? 'yes (0)' : `NO - ${unanchored}`, '(must be 0)');
   console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
   console.error('chips survive click:', chipProbe.survived, `(${endpointChips.length} -> ${chipProbe.chipsAfter})`);
   console.error('chip marks active  :', chipProbe.active, '(the clicked chip, and only it)');
-  console.error('limit 3 caps to    :', limitProbe.capped, '(must be 3)');
+  console.error('limit 3 caps to    :', limitProbe.capped === 3 ? 'yes (3)' : `NO - ${limitProbe.capped}`, '(must be 3)');
   console.error('limit 0 hides      :', limitProbe.off);
-  console.error('limit restored to  :', limitProbe.restored);
-  console.error('limit summary      :', limitProbe.summary);
+  console.error('limit restored to  :', limitProbe.restored === endpointChips.length
+    ? `yes (${limitProbe.restored})` : `NO - ${limitProbe.restored}, was ${endpointChips.length}`);
+  note('limit summary      :', limitProbe.summary);
   console.error('--- signals ---');
   console.error('all tab present    :', signalProbe.switchShown);
-  console.error('opened on view     :', signalProbe.defaultView, "('network' — traffic leads)");
-  console.error('timeline entries   :', signalProbe.entries);
-  console.error('lanes present      :', signalProbe.lanes.join(', ') || 'none');
+  console.error('opened on view     :', signalProbe.defaultView === 'network'
+    ? 'yes (network)' : `NO - ${signalProbe.defaultView}`, '(traffic leads)');
+  // Counts of what the session recorded, per kind and lane.
+  note('timeline entries   :', signalProbe.entries);
+  note('lanes present      :', signalProbe.lanes.join(', ') || 'none');
   console.error('unknown tag renders:', signalProbe.unknownTagRendered);
-  console.error('span glyphs        :', signalProbe.spans, '(cache/session: interval claims)');
-  console.error('point glyphs       :', signalProbe.points, '(screen/state: instants)');
-  console.error('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
+  note('span glyphs        :', signalProbe.spans, '(cache/session: interval claims)');
+  note('point glyphs       :', signalProbe.points, '(screen/state: instants)');
+  note('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
   console.error('traffic + signals  :', signalProbe.merged);
-  console.error('now panel rows     :', signalProbe.currentRows);
+  console.error('marker at a tie    :', timelineTie, "(before the call at its millisecond, as timeline() places it)");
+  note('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
   console.error('pushed row warned  :', signalProbe.pushedWarned, '(a snapshot is not live state)');
-  console.error('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun})`);
+  note('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun}; checked by the next two lines)`);
   console.error('run expands whole  :', signalProbe.runExpandsLossless, '(collapsing must lose nothing)');
   console.error('run collapses back :', signalProbe.runCollapsesBack);
   console.error('--- peers ---');
-  console.error('peers listed       :', peerRows.length);
-  console.error('peer roles         :', peerRoles.join(', ') || 'none');
-  console.error('self has kill btn  :', selfKillButtons, '(must be 0)');
+  // Whatever inspector processes this machine is running; not a property of the page.
+  note('peers listed       :', peerRows.length);
+  note('peer roles         :', peerRoles.join(', ') || 'none');
+  console.error('self has kill btn  :', selfKillButtons === 0 ? 'yes (0)' : `NO - ${selfKillButtons}`, '(must be 0)');
   console.error('--- sessions ---');
-  console.error('session rows       :', sessionProbe.rows);
-  console.error('deletes disabled   :', sessionProbe.disabledDeletes, '(sessions still recording)');
+  note('session rows       :', sessionProbe.rows);
+  // The daemon refuses to delete a session with no `endedAt`, so that is what must be disabled —
+  // read from the daemon's own list, not from the page.
+  const unended = (await fetch(`${ORIGIN}/api/sessions`).then((r) => r.json()).catch(() => []))
+    .filter((meta) => !meta.endedAt).length;
+  console.error('deletes disabled   :', sessionProbe.disabledDeletes === unended
+    ? `yes (${sessionProbe.disabledDeletes}, one per session with no endedAt)`
+    : `NO - ${sessionProbe.disabledDeletes} disabled, ${unended} sessions with no endedAt`);
   console.error('clear all arms     :', sessionProbe.clearArms);
   console.error('header delete      :', sessionProbe.headerDelete);
   console.error('--- top bar ---');
@@ -2370,9 +2436,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   }
 
   console.error('--- tabs ---');
-  console.error('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
+  note('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
-  console.error('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session');
+  note('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session', '(that they render is "unknown tag renders")');
   console.error('traffic tab first  :', tabProbe.trafficFirst);
   console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
@@ -2380,8 +2446,10 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
   console.error('now strip present  :', nowProbe.present);
   console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
-  console.error('now says collapsed :', nowProbe.collapsedSummary);
-  console.error('now expands to     :', nowProbe.expandsTo, 'rows; collapses back:', nowProbe.collapsesBack);
+  console.error('now says collapsed :', String(nowProbe.collapsedSummary).startsWith('NO') || nowProbe.collapsedSummary === 'n/a'
+    ? nowProbe.collapsedSummary : `yes ("${nowProbe.collapsedSummary}")`);
+  console.error('now expands        :', nowProbe.expandsTo > 0 ? `yes (${nowProbe.expandsTo} rows)` : 'NO - nothing listed');
+  console.error('now collapses back :', nowProbe.collapsesBack);
   console.error('--- handing to an agent ---');
   console.error('call bundle        :', bundleProbe.txnButton);
   console.error('header values cap  :', bundleProbe.headersCapped ?? 'n/a', '(a bearer token must not fill the paste)');
@@ -2391,7 +2459,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('session under probe:', axisProbe.sessionMoved);
   console.error('shape is whole sess:', axisProbe.shapeIsWholeSession);
   console.error('waterfall tab      :', waterfallProbe.tabShown, `- ${waterfallProbe.groups} screens, ${waterfallProbe.rows} calls`);
-  console.error('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none');
+  note('screens grouped    :', (waterfallProbe.names || []).join(', ') || 'none', '(the route is checked under path)');
   console.error('every call once    :', waterfallProbe.everyCallOnce ?? 'n/a');
   console.error('no call lost       :', waterfallProbe.noneLost ?? 'n/a');
   console.error('trailing calls     :', waterfallProbe.trailingCalls ?? 'n/a');
@@ -2399,8 +2467,8 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('oldest first       :', waterfallProbe.oldestFirst ?? 'n/a');
   console.error('bar selects call   :', waterfallProbe.rowSelects ?? 'n/a');
   console.error('--- path ---');
-  console.error('visits mirror      :', visitsMirrorProbe.ok);
-  console.error('path tab           :', pathProbe.tabShown, `- second: ${pathProbe.second ?? 'n/a'}, ${pathProbe.columns ?? 0} visits`);
+  console.error('path tab           :', pathProbe.tabShown, `- ${pathProbe.columns ?? 0} visits`);
+  console.error('path tab second    :', pathProbe.second ?? 'n/a');
   console.error('route matches      :', pathProbe.route ?? 'n/a');
   console.error('map matches log    :', pathProbe.mapMatchesLog ?? 'n/a');
   console.error('station opens line :', pathProbe.stationOpensLine ?? 'n/a');
@@ -2412,20 +2480,30 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('call opens         :', pathProbe.callSelects ?? 'n/a');
   console.error('screen card opens  :', pathProbe.cardSelects ?? 'n/a');
   console.error('empty pane (calls) :', glanceProbe.session, '-', glanceProbe.clickable, 'rows go somewhere');
-  console.error('slowest row        :', glanceProbe.slowestSelects, '- esc restores:', glanceProbe.escRestores ?? 'n/a');
+  console.error('slowest row        :', glanceProbe.slowestSelects ?? 'n/a');
+  console.error('esc restores glance:', glanceProbe.escRestores ?? 'n/a');
   console.error('empty pane (tag)   :', glanceProbe.tag);
-  console.error('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
-  console.error('detail default tab :', detailTabProbe.defaultTab, '- opens on:', detailTabProbe.firstSection);
+  note('detail tabs        :', detailTabProbe.tabs.join(', ') || 'none');
+  console.error('detail default tab :', detailTabProbe.defaultTab === 'res'
+    ? `yes (res, opens on: ${detailTabProbe.firstSection})`
+    : `NO - ${detailTabProbe.defaultTab}, opens on: ${detailTabProbe.firstSection}`, '(the response is why you opened the row)');
   console.error('body before headers:', detailTabProbe.bodyBeforeHeaders ?? 'n/a', '(the reason you opened the row)');
   console.error('one panel at a time:', detailTabProbe.onePanel);
-  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a', '- remembered:', detailTabProbe.remembersAcrossRows ?? 'n/a');
+  console.error('detail tab switches:', detailTabProbe.switches ?? 'n/a');
+  console.error('tab remembered     :', detailTabProbe.remembersAcrossRows ?? 'n/a', '(across rows)');
   console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
   console.error('chain numbered     :', detailTabProbe.chainOrder, '(a first attempt has no `attempt` field)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
-  console.error('drawer opens       :', drawerProbe.opensOnSelect, '- scrim:', drawerProbe.scrim);
-  console.error('drawer closes by   :', `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`);
+  console.error('drawer opens       :', drawerProbe.opensOnSelect);
+  console.error('drawer scrim       :', drawerProbe.scrim ?? 'n/a');
+  const drawerCloses = [drawerProbe.closeButton, drawerProbe.scrimCloses, drawerProbe.escape];
+  console.error(
+    'drawer closes by   :',
+    drawerCloses.every((v) => String(v).startsWith('yes')) ? 'yes (button, scrim, esc)' : 'NO -',
+    `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`,
+  );
   console.error('drawer on tab swap :', drawerProbe.tabSwitch);
-  console.error('tab labels         :', tabProbe.labels);
+  note('tab labels         :', tabProbe.labels);
   console.error('tab bar shown      :', tabProbe.alwaysShown);
   console.error('signal separator   :', tabProbe.signalSeparator);
   console.error('--- toolbar labels ---');
@@ -2436,7 +2514,9 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('--- scope bar ---');
   console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);
   console.error('sticky in css      :', scopeProbe.stickyInCss, '(a bar that scrolls away makes the rows below it wrong)');
-  console.error('rows stripped      :', scopeProbe.shown ? `${scopeProbe.strippedRows} of ${scopeProbe.totalRows}` : 'n/a');
+  // How many rows the scope strips is a property of the session; that covered rows are stripped
+  // correctly is "host not repeated" and "outside rows say it".
+  note('rows stripped      :', scopeProbe.shown ? `${scopeProbe.strippedRows} of ${scopeProbe.totalRows}` : 'n/a');
   console.error('host not repeated  :', scopeProbe.noRepeatedHost ?? 'n/a', '(a covered row must not repeat the bar)');
   console.error('outside rows say it:', scopeProbe.uncoveredNameTheirHost ?? 'n/a', '(a row the bar does not cover names its host)');
   console.error('--- adding a marker ---');
@@ -2445,14 +2525,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('matches recording  :', markerFormProbe.matchesRecording ?? 'n/a', `- disabled: ${markerFormProbe.disabled}, recording: ${recordingNow.length}`);
   console.error('--- replay ---');
   console.error('button pressed    :', replayButtonProbe.pressed, replayButtonProbe.pressed ? '' : `- ${replayButtonProbe.reason}`);
-  console.error('section titles    :', `${replayButtonProbe.sectionTitlesDirect ?? '?'} direct, ${replayButtonProbe.sectionTitlesAnywhere ?? '?'} anywhere (the anchor must be a direct child)`);
+  // Context for the next line: the direct-child anchor is asserted by "result panel drawn".
+  note('section titles    :', `${replayButtonProbe.sectionTitlesDirect ?? '?'} direct, ${replayButtonProbe.sectionTitlesAnywhere ?? '?'} anywhere (the anchor must be a direct child)`);
   console.error('result panel drawn:', replayButtonProbe.panelRendered ?? 'n/a', '(it threw before building the request until 2026-09-19)');
   console.error('request built     :', replayButtonProbe.requestBuilt ?? 'n/a');
   console.error('status shown      :', replayButtonProbe.statusShown ?? 'n/a');
   console.error('--- replay editor (REPLAY.md step 3) ---');
   console.error('form opens        :', replayEditorProbe.opened, replayEditorProbe.opened ? '' : `- ${replayEditorProbe.reason}`);
   console.error('seeded from capture:', replayEditorProbe.seeded ?? 'n/a');
-  console.error('header lines      :', replayEditorProbe.headerLines ?? 'n/a');
+  note('header lines      :', replayEditorProbe.headerLines ?? 'n/a', '(what was seeded; stripping is the next line)');
   console.error('hop-by-hop stripped:', replayEditorProbe.hopByHopStripped ?? 'n/a', '(a sent map skips the daemon\'s own filtering)');
   console.error('body box present  :', replayEditorProbe.hasBodyBox ?? 'n/a');
   console.error('re-sign defaults on:', replayEditorProbe.resignDefaultsOn ?? 'n/a');
@@ -2460,7 +2541,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('and nothing sent  :', replayEditorProbe.nothingSent ?? 'n/a', '(a refused line must not reach the wire)');
   console.error('closes again      :', replayEditorProbe.closesAgain ?? 'n/a');
   console.error('--- per-field copy ---');
-  console.error('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows`);
+  note('copy buttons       :', copyProbe.buttons, `- ${copyProbe.headerRows} header rows (one each is the next line)`);
   console.error('every header has 1 :', copyProbe.everyHeaderHasOne);
   console.error('body has one       :', copyProbe.bodyButton);
   console.error('all labelled       :', copyProbe.labelled, '(a screen reader must be able to say which value)');
@@ -2471,14 +2552,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     console.error(`--- ${probe.tag} browser ---`);
     console.error('tab present        :', probe.tabShown);
     if (!probe.tabShown) continue;
-    console.error('keys               :', probe.keys);
-    console.error('observations       :', probe.observations);
-    console.error('facets             :', probe.facets.join(', ') || 'none (fewer than two values)');
-    console.error('freshness dots     :', probe.dotStates.join(', ') || 'none');
+    // What this tag holds in this session; the browser's behaviour is the lines after.
+    note('keys               :', probe.keys);
+    note('observations       :', probe.observations);
+    note('facets             :', probe.facets.join(', ') || 'none (fewer than two values)');
+    note('freshness dots     :', probe.dotStates.join(', ') || 'none');
     console.error('detail rendered    :', probe.detailRendered);
     console.error('value              :', probe.valueShown);
     console.error('some key has value :', probe.anyValueRendered);
-    console.error('history rows       :', probe.historyRows);
+    note('history rows       :', probe.historyRows, '(switching between them is the next line)');
     console.error('history switches   :', probe.historySwitches);
     console.error('key filter         :', probe.keyFilterWorks);
     console.error('facet filter       :', probe.facetFilterWorks);
@@ -2490,7 +2572,6 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
     console.error(`${name.padEnd(19)}:`, value);
   }
   console.error('--- json tree ---');
-  console.error('parser             :', jsonParserProbe.ok);
   for (const [name, value] of Object.entries(jsonTreeProbe)) {
     console.error(`${name.padEnd(19)}:`, value);
   }
@@ -2500,6 +2581,7 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
   console.error('ages tick          :', ageProbe.ticks);
   console.error('hidden panes hide  :', hiddenPaneAudit);
   console.error('errors             :', errors.length ? errors.join(' | ') : 'none');
+  finishReport();
 
   /*
    * Re-open the replay editor for the snapshot only.

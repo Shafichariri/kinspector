@@ -1,0 +1,121 @@
+{
+  "rule": "timeline",
+  "cases": [
+    {
+      "name": "a marker lands before the traffic that followed it",
+      "from": "TimelineTest.a marker lands before the traffic that followed it",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 300}],
+        "markers": [{"label": "checkout", "mono": 200}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:checkout", "T:b"]
+    },
+    {
+      "name": "a marker at exactly a call's mono introduces that call",
+      "from": "TimelineTest.a marker at exactly a call's mono introduces that call",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 200}],
+        "markers": [{"label": "tap", "mono": 200}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:tap", "T:b"]
+    },
+    {
+      "name": "a marker after the last call is still drawn",
+      "from": "TimelineTest.a marker after the last call is still drawn",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}],
+        "markers": [{"label": "idle", "mono": 900}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:idle"]
+    },
+    {
+      "name": "a marker before any traffic comes first",
+      "from": "TimelineTest.a marker before any traffic comes first",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 500}],
+        "markers": [{"label": "launch", "mono": 10}],
+        "signals": []
+      },
+      "expect": ["M:launch", "T:a"]
+    },
+    {
+      "name": "several markers between two calls keep their own order",
+      "from": "TimelineTest.several markers between two calls keep their own order",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 900}],
+        "markers": [{"label": "third", "mono": 500}, {"label": "first", "mono": 200}, {"label": "second", "mono": 300}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:first", "M:second", "M:third", "T:b"]
+    },
+    {
+      "name": "no markers is the list unchanged",
+      "from": "TimelineTest.no markers is the list unchanged",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 200}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": ["T:a", "T:b"]
+    },
+    {
+      "name": "no traffic is the markers alone",
+      "from": "TimelineTest.no traffic is the markers alone",
+      "input": {"transactions": [], "markers": [{"label": "launch", "mono": 10}, {"label": "idle", "mono": 20}], "signals": []},
+      "expect": ["M:launch", "M:idle"]
+    },
+    {
+      "name": "out of order transactions are placed by mono",
+      "from": "TimelineTest.out of order transactions are placed by mono",
+      "input": {
+        "transactions": [{"id": "b", "callId": "b", "path": "/v1/b", "mono": 300}, {"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}],
+        "markers": [{"label": "checkout", "mono": 200}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:checkout", "T:b"]
+    },
+    {
+      "name": "signals land between the calls they happened between",
+      "from": "TimelineTest.signals land between the calls they happened between",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 300}],
+        "markers": [],
+        "signals": [{"id": "s1", "tag": "screen", "name": "home", "mono": 200}]
+      },
+      "expect": ["T:a", "S:screen/home", "T:b"]
+    },
+    {
+      "name": "traffic signals and markers merge on one clock",
+      "from": "TimelineTest.traffic signals and markers merge on one clock",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 100}, {"id": "b", "callId": "b", "path": "/v1/b", "mono": 500}],
+        "markers": [{"label": "checkout", "mono": 300}],
+        "signals": [{"id": "s2", "tag": "screen", "name": "cart", "mono": 200}, {"id": "s3", "tag": "state", "name": "form", "mono": 400}]
+      },
+      "expect": ["T:a", "S:screen/cart", "M:checkout", "S:state/form", "T:b"]
+    },
+    {
+      "name": "a call and a signal at the same millisecond put the call first",
+      "from": "Timeline.kt stable sort, calls added first",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200}],
+        "markers": [],
+        "signals": [{"id": "s4", "tag": "state", "name": "form", "mono": 200}]
+      },
+      "expect": ["T:a", "S:state/form"]
+    },
+    {
+      "name": "a marker tied with a call and a signal goes before both",
+      "from": "Timeline.kt <=",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200}],
+        "markers": [{"label": "tap", "mono": 200}],
+        "signals": [{"id": "s5", "tag": "state", "name": "form", "mono": 200}]
+      },
+      "expect": ["M:tap", "T:a", "S:state/form"]
+    }
+  ]
+}

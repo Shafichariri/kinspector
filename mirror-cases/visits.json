@@ -1,0 +1,213 @@
+{
+  "rule": "visits",
+  "cases": [
+    {
+      "name": "attribution is strictly by start",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v1", "tag": "screen", "name": "Home", "mono": 100}, {"id": "v2", "tag": "screen", "name": "Cart", "mono": 300}],
+        "transactions": [{"id": "a", "callId": "a", "mono": 150}, {"id": "b", "callId": "b", "mono": 350}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": ["T:a"]}, {"screen": "Cart", "entries": ["T:b"]}]}
+    },
+    {
+      "name": "a call at the arrival millisecond belongs to the arriving screen",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v3", "tag": "screen", "name": "Home", "mono": 100}, {"id": "v4", "tag": "screen", "name": "Cart", "mono": 300}],
+        "transactions": [{"id": "a", "callId": "a", "mono": 300}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": []}, {"screen": "Cart", "entries": ["T:a"]}]}
+    },
+    {
+      "name": "there is no grace window",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v5", "tag": "screen", "name": "Home", "mono": 100}, {"id": "v6", "tag": "screen", "name": "Cart", "mono": 300}],
+        "transactions": [{"id": "pay", "callId": "pay", "mono": 299}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": ["T:pay"]}, {"screen": "Cart", "entries": []}]}
+    },
+    {
+      "name": "a revisit is a new visit",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v7", "tag": "screen", "name": "A", "mono": 100},
+          {"id": "v8", "tag": "screen", "name": "B", "mono": 200},
+          {"id": "v9", "tag": "screen", "name": "A", "mono": 300}
+        ],
+        "transactions": [],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "A", "entries": []}, {"screen": "B", "entries": []}, {"screen": "A", "entries": []}]}
+    },
+    {
+      "name": "consecutive same-name screens are one visit with repeats in place",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v10", "tag": "screen", "name": "Checkout", "mono": 100},
+          {"id": "v11", "tag": "screen", "name": "Checkout", "mono": 200},
+          {"id": "v12", "tag": "screen", "name": "Done", "mono": 400}
+        ],
+        "transactions": [{"id": "a", "callId": "a", "mono": 150}, {"id": "b", "callId": "b", "mono": 250}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "Checkout", "entries": ["T:a", "S:screen/Checkout", "T:b"]}, {"screen": "Done", "entries": []}]}
+    },
+    {
+      "name": "anything before the first screen is a leading visit",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v13", "tag": "screen", "name": "Home", "mono": 100}],
+        "transactions": [{"id": "config", "callId": "config", "mono": 20}, {"id": "a", "callId": "a", "mono": 120}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": null, "entries": ["T:config"]}, {"screen": "Home", "entries": ["T:a"]}]}
+    },
+    {
+      "name": "no screens is one leading visit",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [],
+        "transactions": [{"id": "a", "callId": "a", "mono": 10}, {"id": "b", "callId": "b", "mono": 20}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": null, "entries": ["T:a", "T:b"]}]}
+    },
+    {
+      "name": "an empty session has no visits",
+      "from": "VisitsTest",
+      "input": {"screens": [], "transactions": [], "markers": [], "signals": []},
+      "expect": {"visits": []}
+    },
+    {
+      "name": "a visit nothing happened on is kept, empty",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v14", "tag": "screen", "name": "Product", "mono": 100},
+          {"id": "v15", "tag": "screen", "name": "Cart", "mono": 200},
+          {"id": "v16", "tag": "screen", "name": "Checkout", "mono": 300}
+        ],
+        "transactions": [{"id": "a", "callId": "a", "mono": 120}, {"id": "b", "callId": "b", "mono": 320}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {
+        "visits": [{"screen": "Product", "entries": ["T:a"]}, {"screen": "Cart", "entries": []}, {"screen": "Checkout", "entries": ["T:b"]}]
+      }
+    },
+    {
+      "name": "a same-millisecond tie goes by seq",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v17", "tag": "screen", "name": "Home", "mono": 100, "seq": 1},
+          {"id": "v18", "tag": "screen", "name": "Cart", "mono": 300, "seq": 3}
+        ],
+        "transactions": [{"id": "init", "callId": "init", "mono": 300, "seq": 4}],
+        "markers": [],
+        "signals": [{"id": "v19", "tag": "tap", "name": "add_to_cart", "mono": 300, "seq": 2}]
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": ["S:tap/add_to_cart"]}, {"screen": "Cart", "entries": ["T:init"]}]}
+    },
+    {
+      "name": "a tie without seq goes to the arriving screen",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v20", "tag": "screen", "name": "Home", "mono": 100, "seq": 1},
+          {"id": "v21", "tag": "screen", "name": "Cart", "mono": 300, "seq": 3}
+        ],
+        "transactions": [],
+        "markers": [],
+        "signals": [{"id": "v22", "tag": "tap", "name": "add_to_cart", "mono": 300}]
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": []}, {"screen": "Cart", "entries": ["S:tap/add_to_cart"]}]}
+    },
+    {
+      "name": "sessionStart keeps the leading visit when the filter emptied it",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v23", "tag": "screen", "name": "Home", "mono": 100}],
+        "transactions": [],
+        "markers": [],
+        "signals": [],
+        "sessionStart": 20
+      },
+      "expect": {"visits": [{"screen": null, "entries": []}, {"screen": "Home", "entries": []}]}
+    },
+    {
+      "name": "no leading visit when the session starts at the first screen",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v24", "tag": "screen", "name": "Home", "mono": 100}],
+        "transactions": [],
+        "markers": [],
+        "signals": [],
+        "sessionStart": 100
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": []}]}
+    },
+    {
+      "name": "screens in signals are ignored; the skeleton is the only source",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v25", "tag": "screen", "name": "Home", "mono": 100}],
+        "transactions": [],
+        "markers": [],
+        "signals": [{"id": "v26", "tag": "screen", "name": "Ghost", "mono": 200}]
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": []}]}
+    },
+    {
+      "name": "a visit's entries are in timeline order",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v27", "tag": "screen", "name": "Cart", "mono": 100}],
+        "transactions": [{"id": "pay", "callId": "pay", "mono": 200}],
+        "markers": [{"label": "about to pay", "mono": 200}],
+        "signals": [{"id": "v28", "tag": "cache", "name": "orders", "mono": 250}]
+      },
+      "expect": {"visits": [{"screen": "Cart", "entries": ["M:about to pay", "T:pay", "S:cache/orders"]}]}
+    },
+    {
+      "name": "the screen tag is matched case-insensitively",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [{"id": "v29", "tag": "Screen", "name": "Home", "mono": 100}],
+        "transactions": [{"id": "a", "callId": "a", "mono": 150}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": ["T:a"]}]}
+    },
+    {
+      "name": "visitIndexAt says where a call finished",
+      "from": "VisitsTest",
+      "input": {
+        "screens": [
+          {"id": "v30", "tag": "screen", "name": "Cart", "mono": 100},
+          {"id": "v31", "tag": "screen", "name": "Confirm", "mono": 300}
+        ],
+        "transactions": [{"id": "orders", "callId": "orders", "mono": 250, "ms": 120}],
+        "markers": [],
+        "signals": [],
+        "indexAt": [250, 370, 50]
+      },
+      "expect": {"visits": [{"screen": "Cart", "entries": ["T:orders"]}, {"screen": "Confirm", "entries": []}], "indexAt": [0, 1, -1]}
+    }
+  ]
+}
