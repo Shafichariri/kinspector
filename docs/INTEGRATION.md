@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v57 — 2026-10-12.**
+**Document version: v58 — 2026-10-18.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1042,8 +1042,8 @@ itself has been stable, but the parameter-to-body mapping is the part worth re-r
 
 iOS `URLSession`, WebViews, and any SDK that hides its transport entirely. The universal answer
 is proxy-based capture — the daemon running a local proxy with a generated CA that the simulator
-trusts. That is a substantially larger piece of work and has not been started; see `AGENTS.md`
-→ "Capturing what Ktor cannot see".
+trusts. That is a substantially larger piece of work and has not been started; see
+`docs/decisions/capture.md` → "Capturing what Ktor cannot see".
 
 ---
 
@@ -1300,7 +1300,15 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v57 — 2026-10-12 (this document)
+### v58 — 2026-10-18 (this document)
+
+**Nothing to do. One cross-reference, moved.**
+
+§10 "Still not covered" pointed at `AGENTS.md` → "Capturing what Ktor cannot see". That section
+now lives in `docs/decisions/capture.md`, along with the rest of the repository's recorded
+decisions, and the pointer follows it. No code, and no other change.
+
+### v57 — 2026-10-12
 
 **Bump to 1.3.0 and download the 1.3.0 daemon. Your code does not have to change.**
 

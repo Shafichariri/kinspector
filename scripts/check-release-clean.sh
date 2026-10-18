@@ -136,9 +136,9 @@ scan_target() {
         # miss here means the detector could not see, not that the artifact is clean, and this
         # script's own rule is that those are not the same answer.
         #
-        # Same shape as the iOS case in AGENTS.md: the canary is ASCII in a klib and invisible in
-        # a linked binary. The consumer-side technique for both is in INTEGRATION.md section 3 —
-        # grep the package path, not the canary.
+        # Same shape as the iOS case in docs/decisions/release.md: the canary is ASCII in a klib
+        # and invisible in a linked binary. The consumer-side technique for both is in
+        # INTEGRATION.md section 3 — grep the package path, not the canary.
         unproven+=("$target")
         echo "  UNPROVEN (Android dex): $target"
       else

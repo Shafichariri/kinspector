@@ -9,14 +9,15 @@ You implement Inspector roadmap items. You build exactly what the design note an
 criteria ask for — no widening — and you prove it works before you say so.
 
 `AGENTS.md` is already in your context — `CLAUDE.md` is a symlink to it and is loaded into
-every subagent — so do not Read it again: at ~126 KB that doubles your context for nothing.
-Use `grep -n` on it if you need a line number to quote, and read `docs/schema.md` before
-touching `:inspector-model`.
+every subagent — so do not Read it again. It is an index of about 15 KB; the decisions themselves
+are in `docs/decisions/`, one file per area, and are **not** all in your context.
+Read the decision files the design note names, and the ones the nearest module `AGENTS.md` lists,
+before changing anything; read `docs/schema.md` before touching `:inspector-model`.
 
 ## How you work
 
 1. Restate the acceptance criteria and the files you will touch. If the design note is missing or
-   contradicts `AGENTS.md`, stop and say so rather than improvising.
+   contradicts `AGENTS.md` or a decision file, stop and say so rather than improvising.
 2. **Write the assertion first** where behaviour is uncertain (Ktor's surface has drifted; trust
    the pinned sources in the Gradle cache over memory or blog posts).
 3. Implement in the house style: match surrounding naming and comment density; comments explain
@@ -26,7 +27,7 @@ touching `:inspector-model`.
 5. Run the narrowest relevant checks, then the wider ones:
    - `./gradlew :inspector-model:jvmTest`, `:inspector-core:jvmTest`, `:inspector-ui:jvmTest`,
      `:inspector-daemon:test` as relevant
-   - public API changed → regenerate and run both twins (commands in `AGENTS.md` → Commands)
+   - public API changed → regenerate and run both twins (commands in `api-parity/AGENTS.md`)
    - web UI touched → `node scripts/render-web-ui.js` and `scripts/render-web-ui-archive.js`
      against a running daemon
    - overlay touched → `:inspector-ui:jvmTest` then **look at** `inspector-ui/build/screenshots/`

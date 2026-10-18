@@ -4,18 +4,19 @@ Eight Claude Code subagents, defined in `.claude/agents/`, that work the backlog
 `docs/ROADMAP.md`. The playbook that runs them in order is the `roadmap-cycle` skill
 (`.claude/skills/roadmap-cycle/SKILL.md`).
 
-Every role reads `AGENTS.md` first. The team adds **no new tracking documents**: the backlog stays
-in `ROADMAP.md` and the state of the project stays in `AGENTS.md` → "Where we are", so there is
-still exactly one copy of each.
+Every role starts from `AGENTS.md`, the index, and reads the `docs/decisions/` files for the
+modules it touches. The team adds **no new tracking documents**: the backlog stays in `ROADMAP.md`
+and the state of the project stays in `docs/STATUS.md` (it moved there from `AGENTS.md` → "Where
+we are" in phase G), so there is still exactly one copy of each.
 
 | Role | Owns | Writes | Asks for |
 |---|---|---|---|
 | `product-owner` | What and why: items, priority, acceptance criteria, what is *not* being done | `docs/ROADMAP.md` | Decisions only the human can make |
-| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; "Non-obvious decisions" in `AGENTS.md` | Confirmation before any public-API, schema or boundary change |
+| `architect` | Structure: modules, twins, golden files, model ↔ `app.js` mirrors, hot path, security boundary | design notes; the decision files in `docs/decisions/` | Confirmation before any public-API, schema or boundary change |
 | `engineer` | Building one designed item, with tests | code and tests | A design note before starting |
 | `qa-verifier` | Evidence: each criterion Verified / Not verified / Failed, guards proven both ways | nothing (read-only) | — |
 | `ux-reviewer` | Usability of the overlay, the web UI and `INTEGRATION.md`, judged by looking | nothing (read-only) | — |
-| `delivery-tracker` | What is actually done | roadmap item state; "Where we are" in `AGENTS.md` | QA evidence before marking anything done |
+| `delivery-tracker` | What is actually done | roadmap item state; `docs/STATUS.md` and the phase table in `AGENTS.md` | QA evidence before marking anything done |
 | `release-steward` | What consumers and the public see; release readiness; public-repo hygiene | `INTEGRATION.md`, `DAEMON.md`, `ACCESS.md`, `README.md` | The private term list for the hygiene scan |
 | `business-strategist` | Whether and how the tool makes money: market, competitors, free vs paid, pricing, cheapest demand test | **nothing in this repo** — commercial work stays private | The goal (side income, company, leads), time available; the `architect` for anything needing auth |
 
@@ -24,8 +25,11 @@ still exactly one copy of each.
 Each file's frontmatter carries more than a prompt, and each choice has a reason:
 
 - **`AGENTS.md` is never re-read.** `CLAUDE.md` is a symlink to it and Claude Code loads it into
-  every subagent, so "read AGENTS.md first" made each role pay for ~126 KB twice. The prompts now
-  point at sections already in context.
+  every subagent, so "read AGENTS.md first" made each role pay for it twice — ~126 KB, before
+  phase G made it an index under 15 KB. The prompts point at sections already in context, and name
+  the `docs/decisions/` files to Read, because those are not. Each module's `AGENTS.md` imports its
+  decision files with `@`, but whether a subagent loads a nested guide at all is unverified, so no
+  prompt relies on it.
 - **`effort: high` on `architect` and `qa-verifier`** — the two roles whose misses ship.
   **`model: sonnet` on `delivery-tracker`**, which reconciles text against evidence it is handed.
   Everything else inherits the session's model.

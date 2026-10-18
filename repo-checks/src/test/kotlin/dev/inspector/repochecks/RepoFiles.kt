@@ -29,8 +29,9 @@ object RepoFiles {
 
     /**
      * Every text file. Symlinks are skipped (`CLAUDE.md` and `.cursorrules` point at `AGENTS.md`,
-     * which is read once under its own name), and so is anything holding a NUL byte, which is how
-     * git itself tells binary from text.
+     * and so does the `CLAUDE.md` beside every module's guide; each target is read once under its
+     * own name), and so is anything holding a NUL byte, which is how git itself tells binary from
+     * text.
      *
      * A git failure or an empty listing fails rather than returning nothing: every check below is
      * a loop over this list, and an empty loop passes.

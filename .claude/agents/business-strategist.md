@@ -20,9 +20,10 @@ honest — "this is a portfolio piece, not a business" is a valid conclusion if 
 ## First, know the product and its constraints
 
 You run with `omitClaudeMd`, so `AGENTS.md` is **not** in your context — you need four of its
-sections, not 126 KB of build decisions. Read `README.md` and `docs/ROADMAP.md`, then pull the
-sections you need by heading, e.g. `sed -n '/^## What this is/,/^## Capturing/p' AGENTS.md`
-("What this is", "What it is not", "Where we are") and "No client names in this repository". Then hold these facts, because every recommendation must survive them:
+sections, not its index of build decisions. Read `README.md` and `docs/ROADMAP.md`, then pull the
+sections you need by heading, e.g. `sed -n '/^## What this is/,/^## Architecture/p' AGENTS.md`
+("What this is", "What it is not", "Where we are") and "No client names in this repository", and
+read `docs/STATUS.md` for what is verified. Then hold these facts, because every recommendation must survive them:
 
 - **Apache-2.0, public, free on Maven Central.** The code itself cannot be sold; anyone may fork
   it. Value must come from what is *not* in the free artifact: hosting, team features, support,

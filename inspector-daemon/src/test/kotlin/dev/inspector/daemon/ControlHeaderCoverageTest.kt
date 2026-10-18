@@ -43,7 +43,7 @@ import kotlin.test.fail
 class ControlHeaderCoverageTest {
 
     /**
-     * Not GET, so a guard is owed, and deliberately left open. From `AGENTS.md`:
+     * Not GET, so a guard is owed, and deliberately left open. From `docs/decisions/daemon-and-mcp.md`:
      *
      * "Read-only endpoints are deliberately left open — `HttpMarkerPoster` and the MCP tools post
      * markers without it, and a marker is not a weapon."
