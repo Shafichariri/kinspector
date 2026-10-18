@@ -55,7 +55,11 @@ object RepoFiles {
         files
     }
 
-    fun regenerating(): Boolean = System.getProperty("inspector.structure.regenerate") == "true"
+    /** `-Dinspector.modules.regenerate=true`: rewrite `structure/modules.txt` from the build. */
+    fun regeneratingModules(): Boolean = System.getProperty("inspector.modules.regenerate") == "true"
+
+    /** `-Dinspector.budgets.tighten=true`: lower or remove budgets in `structure/budgets.txt`. */
+    fun tighteningBudgets(): Boolean = System.getProperty("inspector.budgets.tighten") == "true"
 
     /** The structure golden files' lines, comments and blanks dropped. */
     fun golden(name: String): List<String> {

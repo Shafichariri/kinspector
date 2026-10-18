@@ -48,22 +48,31 @@ private val structureLines: Provider<List<String>> = provider {
 class StructureArguments(
     @get:Internal val repoRoot: File,
     @get:Input val structure: Provider<List<String>>,
-    @get:Input val regenerate: Provider<String>,
+    @get:Input val regenerateModules: Provider<String>,
+    @get:Input val tightenBudgets: Provider<String>,
 ) : CommandLineArgumentProvider {
     override fun asArguments(): Iterable<String> = listOf(
         "-Dinspector.repoRoot=${repoRoot.absolutePath}",
         // `|` cannot occur in a Gradle path or configuration name, so it separates safely.
         "-Dinspector.structure=${structure.get().joinToString("|")}",
-        "-Dinspector.structure.regenerate=${regenerate.get()}",
+        "-Dinspector.modules.regenerate=${regenerateModules.get()}",
+        "-Dinspector.budgets.tighten=${tightenBudgets.get()}",
     )
 }
 
-// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly.
-private val regenerateStructure = providers.systemProperty("inspector.structure.regenerate").orElse("false")
+/*
+ * Two flags, never one. A single "regenerate structure/" switch meant that tightening a budget
+ * after a file shrank also rewrote modules.txt, accepting whatever edge had changed in the same
+ * run without anyone looking at it. Each golden is now rewritten only when asked for by name.
+ *
+ * Gradle's own -D lands on the daemon, not the forked test JVM, so both are forwarded explicitly.
+ */
+private val regenerateModules = providers.systemProperty("inspector.modules.regenerate").orElse("false")
+private val tightenBudgets = providers.systemProperty("inspector.budgets.tighten").orElse("false")
 
 tasks.test {
     useJUnitPlatform()
-    jvmArgumentProviders += StructureArguments(rootProject.projectDir, structureLines, regenerateStructure)
+    jvmArgumentProviders += StructureArguments(rootProject.projectDir, structureLines, regenerateModules, tightenBudgets)
     /*
      * Always runs, never from cache. These tests read every tracked file and every lockfile, and
      * declaring that as an input means declaring the repository; without this, adding a marker or

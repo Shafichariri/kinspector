@@ -4,7 +4,7 @@
 # file may neither grow past its number nor shrink below it: a smaller file fails until the budget
 # is tightened, so lost lines cannot come back unnoticed. Tighten and remove with
 #
-#   ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true
+#   ./gradlew :repo-checks:test -Dinspector.budgets.tighten=true
 #
 # which never raises or adds. Raising a budget or adding a file is a hand edit, with the reason on
 # the line. The entries below are the sizes measured when the ratchet was introduced (ROADMAP §5).

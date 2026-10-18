@@ -1726,7 +1726,8 @@ open inspector-ui/build/screenshots/list-dark.png # ... what that render produce
 ./gradlew :inspector-daemon:distZip -Pinspector.version=0.2.0   # the release zip, as CI builds it
 ./gradlew publishToMavenLocal -Pinspector.version=0.2.0-local   # publish the library locally
 ./gradlew :repo-checks:test                       # module graph, twins, locks, markers, file budgets
-./gradlew :repo-checks:test -Dinspector.structure.regenerate=true   # ... rewrite structure/ (budgets only ever tighten)
+./gradlew :repo-checks:test -Dinspector.modules.regenerate=true     # ... rewrite structure/modules.txt after a deliberate edge change
+./gradlew :repo-checks:test -Dinspector.budgets.tighten=true        # ... lower or remove budgets after a file shrank; touches nothing else
 # regenerate every gradle.lockfile, on macOS, after a deliberate dependency change:
 ./gradlew resolveLockedConfigurations :inspector-daemon:dependencies --configuration runtimeClasspath --write-locks
 ./scripts/check-commit-identity.sh origin/main HEAD                 # your commits, before pushing
@@ -1826,7 +1827,8 @@ The stream pair has its own golden file, and the same friction:
   `FileBudgetTest` holds it. `structure/budgets.txt` is a
   ratchet, not a cap: a budgeted file fails when it grows, and it also fails when it *shrinks*,
   until the budget is lowered to match. A budget left at the old size would let the lost lines
-  back in unnoticed. Regenerating only lowers or removes. Raising a budget or adding a file is a
+  back in unnoticed. `-Dinspector.budgets.tighten=true` only lowers or removes, and never touches
+  `modules.txt`. Raising a budget or adding a file is a
   hand edit with the reason on the line.
 
 ---

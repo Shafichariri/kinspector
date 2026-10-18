@@ -13,7 +13,8 @@ import kotlin.test.fail
  * unnoticed, so a smaller file fails until the budget is tightened to match. That is the
  * difference between a ratchet and a cap.
  *
- * Regenerating only ever lowers or removes a budget. Raising one, or adding a new file to the
+ * Tightening (`-Dinspector.budgets.tighten=true`) only ever lowers or removes a budget, and touches
+ * nothing else in `structure/`. Raising one, or adding a new file to the
  * list, is a hand edit with a `#` reason on the line, because it is a decision to let something
  * get bigger and the diff should say who decided and why.
  */
@@ -50,7 +51,7 @@ class FileBudgetTest {
         val unbudgeted = sizes.filter { (path, n) -> n > LIMIT && path !in budgeted }
             .map { (path, n) -> "$path: $n lines" }
 
-        if (RepoFiles.regenerating() && (shrank.isNotEmpty() || gone.isNotEmpty())) {
+        if (RepoFiles.tighteningBudgets() && (shrank.isNotEmpty() || gone.isNotEmpty())) {
             val drop = gone.map { it.raw } + shrank.filter { sizes.getValue(it.path) <= LIMIT }.map { it.raw }
             val lower = shrank.filter { sizes.getValue(it.path) > LIMIT }.associate { it.raw to sizes.getValue(it.path) }
             val rewritten = budgetFile.readLines().mapNotNull { line ->
@@ -67,15 +68,15 @@ class FileBudgetTest {
         val problems = buildList {
             if (grew.isNotEmpty()) add("Grew past its budget -- split it, or raise the budget by hand with a `#` reason:\n  " + grew.joinToString("\n  "))
             if (unbudgeted.isNotEmpty()) add("Over $LIMIT lines with no budget -- split it, or add an entry by hand with a `#` reason:\n  " + unbudgeted.joinToString("\n  "))
-            if (!RepoFiles.regenerating()) {
+            if (!RepoFiles.tighteningBudgets()) {
                 if (shrank.isNotEmpty()) add(
                     "Smaller than its budget -- tighten the budget so the lines cannot come back:\n  " +
                         shrank.joinToString("\n  ") { "${it.path}: ${sizes[it.path]} lines, budget ${it.lines}" } +
-                        "\n  ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true"
+                        "\n  ./gradlew :repo-checks:test -Dinspector.budgets.tighten=true"
                 )
                 if (gone.isNotEmpty()) add(
                     "Budgeted, but no such file -- remove the entry:\n  " + gone.joinToString("\n  ") { it.path } +
-                        "\n  ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true"
+                        "\n  ./gradlew :repo-checks:test -Dinspector.budgets.tighten=true"
                 )
             }
         }

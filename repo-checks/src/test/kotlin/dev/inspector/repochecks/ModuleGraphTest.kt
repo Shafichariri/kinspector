@@ -18,7 +18,7 @@ class ModuleGraphTest {
     fun the_module_graph_matches_the_golden_file() {
         val actual = structure()
         val file = File(RepoFiles.root, "structure/modules.txt")
-        if (RepoFiles.regenerating()) {
+        if (RepoFiles.regeneratingModules()) {
             file.writeText(HEADER + actual.joinToString("\n") + "\n")
             println("Regenerated ${file.path} with ${actual.size} lines")
             return
@@ -33,7 +33,7 @@ class ModuleGraphTest {
                 if (extra.isNotEmpty()) appendLine("\nIn the build, not in the file:\n  " + extra.joinToString("\n  "))
                 if (missing.isNotEmpty()) appendLine("\nIn the file, not in the build:\n  " + missing.joinToString("\n  "))
                 appendLine("\nIf the change is intended, regenerate and commit the file:")
-                append("  ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true")
+                append("  ./gradlew :repo-checks:test -Dinspector.modules.regenerate=true")
             }
         )
     }
@@ -55,7 +55,7 @@ class ModuleGraphTest {
             |# change to what a consumer receives. Samples are left out: their edges flip under
             |# -Pinspector=off, which the release-swap CI job covers.
             |#
-            |#   ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true
+            |#   ./gradlew :repo-checks:test -Dinspector.modules.regenerate=true
             |
         """.trimMargin() + "\n"
     }

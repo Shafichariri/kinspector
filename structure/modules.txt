@@ -3,7 +3,7 @@
 # change to what a consumer receives. Samples are left out: their edges flip under
 # -Pinspector=off, which the release-swap CI job covers.
 #
-#   ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true
+#   ./gradlew :repo-checks:test -Dinspector.modules.regenerate=true
 
 edge :inspector-core -> :inspector-model commonMainApi
 edge :inspector-daemon -> :inspector-model implementation
