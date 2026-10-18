@@ -1,0 +1,24 @@
+# The module graph: which modules publish, and every project-to-project edge with the
+# configuration it was declared in. Generated, then reviewed like code -- a diff here is a
+# change to what a consumer receives. Samples are left out: their edges flip under
+# -Pinspector=off, which the release-swap CI job covers.
+#
+#   ./gradlew :repo-checks:test -Dinspector.structure.regenerate=true
+
+edge :inspector-core -> :inspector-model commonMainApi
+edge :inspector-daemon -> :inspector-model implementation
+edge :inspector-daemon -> :inspector-stream testImplementation
+edge :inspector-noop -> :inspector-model commonMainApi
+edge :inspector-noop-stream -> :inspector-noop commonMainApi
+edge :inspector-noop-ui -> :inspector-noop commonMainApi
+edge :inspector-stream -> :inspector-core commonMainApi
+edge :inspector-ui -> :inspector-core commonMainApi
+module :inspector-core published
+module :inspector-daemon unpublished
+module :inspector-model published
+module :inspector-noop published
+module :inspector-noop-stream published
+module :inspector-noop-ui published
+module :inspector-stream published
+module :inspector-ui published
+module :repo-checks unpublished
