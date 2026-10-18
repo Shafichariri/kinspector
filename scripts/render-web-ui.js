@@ -1216,9 +1216,15 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
 
     await click(row);
     await new Promise((r) => setTimeout(r, 300));
-    await click(doc.getElementById('drawer-scrim'));
+    // jsdom dispatches a click to a hidden element as readily as to a shown one, so a scrim that
+    // never appeared would still "close" the drawer here. Nobody can click what is not drawn.
+    const scrim = doc.getElementById('drawer-scrim');
+    const scrimShown = !scrim.hidden;
+    await click(scrim);
     await new Promise((r) => setTimeout(r, 200));
-    result.scrimCloses = isOpen() ? 'NO' : 'yes (closes)';
+    result.scrimCloses = !scrimShown
+      ? 'NO - the scrim was hidden, so there was nothing to click'
+      : isOpen() ? 'NO' : 'yes (closes)';
 
     await click(row);
     await new Promise((r) => setTimeout(r, 300));
@@ -1364,11 +1370,23 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
       result.slowestSelects = doc.getElementById('detail').hidden
         ? 'NO - clicking a slow call did nothing'
         : 'yes (selects it)';
+      // The glance rows stay in the DOM from the first render whether the pane shows or not, so
+      // counting them proved nothing: QA turned Escape into a bare `break` and this still said yes.
+      // What Escape must do is visible: the selection cleared, the detail gone, the glance pane
+      // shown, and the glance drawn afresh — a node stamped in now must not survive it.
+      const stale = doc.createElement('i');
+      stale.dataset.probeStale = '1';
+      pane.appendChild(stale);
       doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await new Promise((r) => setTimeout(r, 300));
-      result.escRestores = doc.querySelectorAll('#detail-empty .glance-row').length
-        ? 'yes'
-        : 'NO';
+      const wrong = [
+        pane.hidden && 'the glance pane is still hidden',
+        !doc.getElementById('detail').hidden && 'the detail pane is still showing',
+        doc.querySelector('#list .row.selected') && 'a row is still selected',
+        pane.contains(stale) && 'the glance was not re-rendered',
+        !pane.querySelectorAll('.glance-row').length && 'the glance has no rows',
+      ].filter(Boolean);
+      result.escRestores = wrong.length ? `NO - ${wrong.join('; ')}` : 'yes (shown, selection cleared, redrawn)';
     }
 
     const browser = firstTagBrowserTab();
@@ -1393,12 +1411,14 @@ window.navigator.clipboard = { writeText: async (text) => { lastCopied = text; }
    */
   const sessionCallCount = async () => {
     const id = doc.getElementById('session-picker').value;
-    const q = new URLSearchParams({ filter: '', limit: '2000' });
+    // `matched`, not the page's length: a page is clamped to 1000 rows, so counting items said 1000
+    // for any bigger session and could not see it grow.
+    const q = new URLSearchParams({ filter: '', limit: '1' });
     try {
       const page = await window.fetch(
         `/api/sessions/${encodeURIComponent(id)}/transactions?${q}`
       ).then((r) => r.json());
-      return page.items.length;
+      return typeof page.matched === 'number' ? page.matched : null;
     } catch {
       return null; // unknown, which the caller reports rather than guesses about
     }
