@@ -113,6 +113,12 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   tie archive, ordered entries as the model does. The 2,000 clamp is kept. `DAEMON.md` §8 "1.3.0 and
   earlier" was checked against the `v1.3.0` tag.
 
+- **Nested agent guides load in a subagent on Read (phase G, 2026-10-18, QA probe).** In a
+  subagent, Reading a file under a module injected that module's guide and the guides of its parent
+  directories, with their relative `@` imports expanded, and no approval prompt appeared. Bash
+  commands did not load them. Still unverified: whether a fresh subagent that never Reads a file
+  gets them, which is why the role prompts name the decision files to Read.
+
 ### Not verified
 
 - **The Gradle cache carrying over between checkout paths** for the mirror-case test inputs is

@@ -29,8 +29,9 @@ Each file's frontmatter carries more than a prompt, and each choice has a reason
   every subagent, so "read AGENTS.md first" made each role pay for it twice — ~126 KB, before
   phase G made it an index under 15 KB. The prompts point at sections already in context, and name
   the `docs/decisions/` files to Read, because those are not. Each module's `AGENTS.md` imports its
-  decision files with `@`, but whether a subagent loads a nested guide at all is unverified, so no
-  prompt relies on it.
+  decision files with `@`. QA's probe showed a subagent gets a module's guide, its parents' guides
+  and their imports when it Reads a file there, and not through Bash; whether one that never Reads
+  gets them is unverified (`docs/STATUS.md`), so no prompt relies on it.
 - **`effort: high` on `architect` and `qa-verifier`** — the two roles whose misses ship.
   **`model: sonnet` on `delivery-tracker`**, which reconciles text against evidence it is handed.
   Everything else inherits the session's model.

@@ -945,8 +945,8 @@ staying what the docs say. Also the maintainer, who today enforces every rule be
 **Out of scope.** detekt and ktlint (decision 4). A build-wide formatter. Scanning history, which is
 already public. As recorded, the check belongs before the commit.
 
-**Status, 2026-10-18: built, pending CI. Not done.** It is on `shafic/structure-phase-b`, which is
-not pushed, so CI has not run. What landed:
+**Status, 2026-10-18: built, and CI on PR #84 is green on all four jobs. Done once merged.** It is
+on `shafic/structure-phase-b`. What landed:
 
 - `:repo-checks`, a build-only JVM module with no `maven-publish`. Its 8 JUnit 5 tests run in
   `./gradlew build`: the module graph against `structure/modules.txt`; the twins against
@@ -990,9 +990,9 @@ them again.
 **After the first green run, add `repo` as a required check on `main`,** beside `build` and
 `release-swap`. Until it is required, a red identity or name check does not block a merge.
 
-**The Android locks have not been proven in CI yet.** They were written on a Mac with no Android
-SDK, because resolving `androidRuntimeClasspath` does not need one. The first CI `build` run, which
-has the SDK, is the first proof that they hold there too.
+**The Android locks resolved on CI.** They were written on a Mac with no Android SDK, because
+resolving `androidRuntimeClasspath` does not need one, and PR #84's CI, which has the SDK, resolved
+them green.
 
 **Still to do once the secret exists:** create `CLIENT_NAME_TERMS`, then add `--require-terms` to
 the push-to-`main` run. Until then the scan prints NOT RUN with a warning on every run, which is
