@@ -756,7 +756,8 @@ Android only looked right because 120px clears a status bar at that density.
   picker label do not follow live rows, a live call with no filter does not redraw the timeline, and
   the header count is clipped at 400 px.
 
-  cost: not recorded by the delivery-tracker, Small, 1 fix round
+  cost: 9 calls (delivery-tracker 3, engineer 2, QA 2, product-owner 1, release-steward 1), ~1.0M
+  tokens, 2 h 07 min, Small, 1 fix round
 
 
 ---
