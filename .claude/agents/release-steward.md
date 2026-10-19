@@ -32,6 +32,8 @@ release is cut, and the Maven Central and signing decisions, are there. Read
 2. After touching the `pom {}` block: `publishToMavenLocal` and **read the generated POM**.
 3. The docs half of a release (coordinate bump, INTEGRATION.md entry) goes through a branch and a
    PR — never an admin push to `main`, however mechanical.
+   The release's notes start from `docs/UNRELEASED.md`, the lines owed since the last tag. Move
+   them into the release and leave the file with its header and no entries.
 4. The tag comes after the docs land. The central job **stages only** (`USER_MANAGED`); a person
    presses Publish, because a Central coordinate can never be replaced or deleted. Never make that
    step automatic.

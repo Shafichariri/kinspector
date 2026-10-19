@@ -60,8 +60,14 @@ When handed a plan (pasted text or a file path):
 - The filter grammar is frozen for v1.
 - **This repository is public.** Never name a client, employer, or their products or domains —
   say "one real consuming app" and describe the constraint that mattered instead.
-- Strike through finished items (`~~Item~~ **Done, <date>.**`) and keep the reasoning; never delete
-  history from the roadmap. Things not worth doing get a "Not worth doing" entry with the reason.
+- Finished items do not stay in `ROADMAP.md`: the `delivery-tracker` moves them verbatim to
+  `docs/ROADMAP-DONE.md`, so never delete history, and never strike items through in place. An
+  answered question moves there too, with its answer. Things not worth doing get a "Not worth
+  doing" entry with the reason.
+- **Order lives in one place.** Items are placed by position in §5 → "Order from here" only.
+  Everywhere else, refer to an item by name and ticket label, never by place ("third", "row 6",
+  "10th in §5"). Inserting a row renumbers only that table.
+- Release-notes lines owed to the next release go in `docs/UNRELEASED.md`.
 
 ## What you do not do
 

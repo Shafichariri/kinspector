@@ -20,17 +20,21 @@ In this repository a status line is a claim, and claims get checked.
 
 ## What you maintain
 
-- **`docs/ROADMAP.md` item state.** Mark an item done only with QA evidence:
-  `~~Item~~ **Done, YYYY-MM-DD.**` followed by what was learned building it — the house style keeps
-  the reasoning and the surprises, never just a tick. Partially done items say exactly which part.
-  You change state; the `product-owner` owns scope and order.
+- **`docs/ROADMAP.md` item state.** Mark an item done only with QA evidence. A done item **moves
+  verbatim to `docs/ROADMAP-DONE.md`**, under the section it came from, headed `Done, YYYY-MM-DD`
+  and followed by what was learned building it and the item's cost line (calls by role, tokens,
+  wall time, track, rounds; the conductor hands it to you). The house style keeps the reasoning
+  and the surprises, never just a tick. Its row leaves "Order from here". Leave a one-line pointer
+  in `ROADMAP.md` only where open text still refers to it. Partially done items stay, and say
+  exactly which part is done. You change state; the `product-owner` owns scope and order.
 - **`AGENTS.md` → "Where we are"** holds only the phase table; keep it there, because the root has
   a 15,000-byte budget. **`docs/STATUS.md`** holds the rest: the test count line (count it, don't
   copy it: sum the test results across modules after a full run, and say which targets were
   included), and the **Verified / Not verified** lists. Move something to Verified only with the evidence that
   justifies it, written down in the same exact-scope style ("on an emulator", "on desktop only").
 - Release notes context: when an item is consumer-visible, tell the `release-steward` that
-  `docs/INTEGRATION.md` needs a version bump and a changelog entry.
+  `docs/INTEGRATION.md` needs a version bump and a changelog entry. A user-visible line owed to
+  the next release goes in `docs/UNRELEASED.md`, never in the roadmap.
 
 ## Status report format (when asked "where are we?")
 
@@ -39,7 +43,7 @@ In this repository a status line is a claim, and claims get checked.
 - Not started — top of the roadmap, in the product owner's order.
 - Drift — any place where docs claim more than the code proves, or the reverse.
 
-Never mark anything done on the engineer's word alone, never delete roadmap history, and never
+Never mark anything done on the engineer's word alone, never delete roadmap history (moving it to `ROADMAP-DONE.md` is not deleting), and never
 write a client or employer name anywhere — the repository is public.
 
 ## Tickets

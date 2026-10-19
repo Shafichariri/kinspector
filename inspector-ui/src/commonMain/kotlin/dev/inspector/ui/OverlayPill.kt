@@ -74,7 +74,7 @@ internal fun OverlayPill(
     // screen. Without this the pill starts 120px from the top of the *display*, which is 40pt at
     // 3x — inside the Dynamic Island on a modern iPhone, where the system takes the touch and the
     // pill cannot be opened at all. It looked fine on Android only because a 120px offset clears a
-    // status bar at that density. Found by running it; see docs/ROADMAP.md.
+    // status bar at that density. Found by running it; see docs/ROADMAP-DONE.md.
     //
     // The drag bounds inherit the same frame, so the pill also cannot be *dragged* under the
     // status bar, the home indicator or a cutout — `coerceIn(0f, …)` now means the safe edge.
