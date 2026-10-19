@@ -2533,8 +2533,8 @@ function runScripts() {
   console.error('waterfall calls    :', waterfallText.callsMatch, '(tag:screen matched signals; no calls match)');
   console.error('path 0 of N match  :', filterPanes.pathCounts, '("nothing recorded" only where nothing was)');
   console.error('path filter note   :', filterPanes.pathNote);
-  console.error('long chips count oldest:', longSession.longChips);
-  console.error('long repeat marked :', longSession.longRepeat);
+  // The long session's lines, labelled in lib/long-session-probes.js; each value is a verdict.
+  for (const [label, value] of longSession) console.error(`${label.padEnd(19)}:`, value);
   console.error('timeline emptied   :', filterPanes.timelineEmptied, '(markers ignore the filter and must not hide this)');
   console.error('timeline thinned   :', filterPanes.timelineThinned);
   console.error('filter panes tabs  :', filterPanes.tabsSteady, '(the tab bar never moves under a filter)');

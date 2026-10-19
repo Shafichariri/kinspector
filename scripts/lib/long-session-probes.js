@@ -6,12 +6,14 @@
  * the newest 1000, so one page of the route draws it and holds nothing it repeats. The endpoint
  * chips and the repeat marks read the page's whole-session copy, and only a copy read past the clamp
  * makes the `twice` chip count 2 and marks #203; read from the first page alone, it counts 1 and
- * marks nothing.
+ * marks nothing. With no filter the list itself draws the page's own 1000, and the header says
+ * `newest 1000 of 1203 shown` in both, never the `1000 of 1203 calls` a filter produces; an export
+ * asked for more than 1000 would draw more, and say so.
  *
  * `render-web-ui.js` switches its page to the session and back through `probeLongSession`;
  * `render-web-ui-archive.js` opens the session's export and asks `readLongSession` the same
- * questions, so the two lines mean the same thing in both. Each returns `{ key: verdict }`, and the
- * caller prints one line per key.
+ * questions, so the lines mean the same thing in both. Each returns `[label, verdict]` pairs, one
+ * per line the caller prints, so a new line here needs no wiring there.
  */
 
 /** The long session's id, as `ProbeFixture.kt` names it. */
@@ -37,26 +39,32 @@ function twicePair(calls) {
   return calls.filter((t) => String(t.path).endsWith('/twice')).sort((a, b) => a.mono - b.mono);
 }
 
-/** The two verdicts, read from a page that is showing the long session. */
+/** The report's labels, in the order the lines print. */
+const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter'];
+const every = (why) => LONG_LABELS.map((label) => [label, why]);
+
+/** The verdicts, read from a page that is showing the long session with no filter. */
 function readLongSession(doc, calls) {
   const pair = twicePair(calls);
-  if (pair.length !== 2) {
-    const why = `n/a (the session has ${pair.length} calls to /twice, not 2)`;
-    return { longChips: why, longRepeat: why };
-  }
+  if (pair.length !== 2) return every(`n/a (the session has ${pair.length} calls to /twice, not 2)`);
   const chip = [...doc.querySelectorAll('#endpoint-chips .chip')].find((c) => c.firstChild?.textContent === 'twice');
   const count = chip?.querySelector('.chip-count')?.textContent;
   const newer = doc.querySelector(`#list .row[data-id="${pair[1].id}"]`);
-  return {
-    longChips: count === '2'
+  const counts = doc.getElementById('counts').textContent;
+  const due = `newest 1000 of ${calls.length} shown`;
+  return [
+    [LONG_LABELS[0], count === '2'
       ? 'yes (the twice chip counts 2, the oldest call included)'
-      : `NO - the twice chip counts ${count ?? 'nothing'} (1 is the newest 1000 alone)`,
-    longRepeat: !newer
+      : `NO - the twice chip counts ${count ?? 'nothing'} (1 is the newest 1000 alone)`],
+    [LONG_LABELS[1], !newer
       ? `NO - no row drawn for ${pair[1].id}, the oldest of the newest 1000`
       : newer.classList.contains('duplicate')
         ? `yes (${pair[1].id} is marked as a repeat of ${pair[0].id}, past the clamp)`
-        : `NO - ${pair[1].id} is drawn unmarked (its repeat is older than the newest 1000)`,
-  };
+        : `NO - ${pair[1].id} is drawn unmarked (its repeat is older than the newest 1000)`],
+    [LONG_LABELS[2], counts === due
+      ? `yes ("${counts}", which no filter reads like)`
+      : `NO - "${counts}", where "${due}" was due`],
+  ];
 }
 
 /** Picks a session through the picker's real `change` event. */
@@ -77,10 +85,7 @@ async function probeLongSession(ctx) {
   const { doc } = ctx;
   const picker = doc.getElementById('session-picker');
   const before = picker.value;
-  if (![...picker.options].some((o) => o.value === LONG_SESSION_ID)) {
-    const why = `n/a (no session ${LONG_SESSION_ID})`;
-    return { longChips: why, longRepeat: why };
-  }
+  if (![...picker.options].some((o) => o.value === LONG_SESSION_ID)) return every(`n/a (no session ${LONG_SESSION_ID})`);
   const calls = (await ctx.sessionTransactions(encodeURIComponent(LONG_SESSION_ID))).items || [];
   const pair = twicePair(calls);
   choose(ctx, LONG_SESSION_ID);
@@ -98,4 +103,4 @@ async function probeLongSession(ctx) {
   return verdicts;
 }
 
-module.exports = { LONG_SESSION_ID, probeLongSession, readLongSession, waitFor };
+module.exports = { LONG_LABELS, LONG_SESSION_ID, probeLongSession, readLongSession, waitFor };

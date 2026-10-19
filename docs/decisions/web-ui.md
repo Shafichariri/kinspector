@@ -190,7 +190,11 @@ across the seam — and was proven red with a `page.length < 1000` stop and with
 removed. The whole-session calls are paged under a filter, and without one when the list's page is
 short of the session total, because the path counts what each visit recorded from that copy: stopped
 at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
-list itself still stops at the clamp; that is `item:web-transactions-paged`.
+list draws the newest 1000 calls by the page's own limit (`LIST_CEILING`), not by the route's clamp
+happening to match what it asked, so an export, which answers whatever limit it is asked, draws the
+same list. With no filter and no brushed stretch the header then says `newest 1000 of 4210 shown`,
+because `1000 of 4210 calls` is the shape a filter produces and sent readers looking for one;
+`no-filter count` in `check-web-static.js` and `long count no filter` in both probes hold it.
 
 The two cached copies have gone stale in the ways below, and all but the last are closed; this is
 what has been found, not every way there is. Resuming the list and the socket opening again after
@@ -230,8 +234,8 @@ for a `...` whose innermost bracket is a call's `(`; and `axis window 200k` to `
 functions out of the real files over 200,000 rows. Each was proven red with each file's spreads put
 back. What jsdom cannot show — rows and the axis drawn and the dot at "connected" on a real
 160,016-call session in headless Chrome, red at `a86dde2` and green after — is recorded in KIN-37's
-notes. Holding that many rows at all is a cost this does not settle; `item:web-transactions-paged`
-owns whether the whole-session read is capped.
+notes. Holding that many rows at all is a cost this does not settle; KIN-42 owns whether the
+whole-session read is capped.
 
 **A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
 list always did; the waterfall, the path and the timeline did not. Under a filter that matched

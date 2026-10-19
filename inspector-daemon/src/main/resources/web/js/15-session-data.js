@@ -53,15 +53,28 @@ function sessionLabel(meta) {
  * The daemon reports how many rows the *text filter* matched, which was the whole story until
  * the axis could narrow things further. Counting only that would leave the header reading
  * `17/17` above a list of five — a number that is true of a query nobody can see.
+ *
+ * With no filter and no stretch, a list short of the session is the list's ceiling, and says so in
+ * words: `1000 of 4210 calls` is the shape a filter produces, and it sent readers looking for a
+ * filter that was not there. Under a filter or a stretch the plain count stays, because the filter
+ * note already says when the matches outrun the list.
  */
 function renderCounts() {
+  const node = $('counts');
   const total = state.sessionTotal;
+  node.title = '';
   if (total === null || total === undefined) {
-    $('counts').textContent = '';
+    node.textContent = '';
+    return;
+  }
+  const shown = visibleTransactions().length;
+  if (!state.filter && !state.timeRange && shown < total) {
+    node.textContent = `newest ${shown} of ${total} shown`;
+    node.title = `the list draws the newest ${shown} calls; the session holds ${total}`;
     return;
   }
   // With its noun: a bare `12/12` beside a session picker could be a count of anything.
-  $('counts').textContent = `${visibleTransactions().length} of ${total} ${total === 1 ? 'call' : 'calls'}`;
+  node.textContent = `${shown} of ${total} ${total === 1 ? 'call' : 'calls'}`;
 }
 
 /**
@@ -72,6 +85,13 @@ function showSessionLabel() {
   const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
   document.title = meta ? `${meta.appId} · inspector` : 'inspector';
 }
+
+/**
+ * How many calls the list asks for, newest first. The page's own number rather than the daemon's
+ * clamp happening to match it, so an export, which answers whatever limit it is asked, draws the
+ * same list a live page does. The whole-session copy is read past it in pages (`routePages`).
+ */
+const LIST_CEILING = 1000;
 
 /**
  * The list, its markers and the whole-session copy, then the signals, for the filter as it stands.
@@ -92,7 +112,7 @@ async function loadTransactions() {
   const isLatest = () => load === state.callLoad;
   const filter = state.filter;
   const id = encodeURIComponent(state.sessionId);
-  const q = new URLSearchParams({ filter, limit: '2000' });
+  const q = new URLSearchParams({ filter, limit: String(LIST_CEILING) });
   let page = null;
   let error = null;
   try {

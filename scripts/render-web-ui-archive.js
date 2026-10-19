@@ -21,7 +21,7 @@
  */
 const fs = require('fs');
 const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
-const { readLongSession, waitFor } = require('./lib/long-session-probes');
+const { LONG_LABELS, readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 
 let JSDOM, VirtualConsole;
@@ -385,15 +385,13 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     console.error(`--- exported session ${long.dom.window.INSPECTOR_ARCHIVE?.meta?.sessionId ?? '(no metadata)'} ---`);
     // The shared verdicts read `yes (…)` or `NO - …`; the verdict word is check's to print.
     const detail = (verdict) => verdict.replace(/^(yes|NO)\s*(- )?/, '');
-    const { longChips, longRepeat } = readLongSession(longDoc, calls);
-    check('long chips count oldest', longChips.startsWith('yes'), detail(longChips));
-    check('long repeat marked', longRepeat.startsWith('yes'), detail(longRepeat));
+    for (const [label, value] of readLongSession(longDoc, calls)) check(label, value.startsWith('yes'), detail(value));
     check('long no network attempts', long.attempts.length === 0, long.attempts.slice(0, 3).join(' | ') || 'none');
     check('long no page errors', long.errors.length === 0, long.errors.slice(0, 3).join(' | ') || 'none');
     long.dom.window.close();
   } else {
     // Information: CI sets INSPECTOR_UI_ARCHIVE_LONG, and its expected count notices these missing.
-    for (const label of ['long chips count oldest', 'long repeat marked', 'long no network attempts', 'long no page errors']) {
+    for (const label of [...LONG_LABELS, 'long no network attempts', 'long no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_LONG is not set)');
     }
   }

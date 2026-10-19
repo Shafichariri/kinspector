@@ -308,11 +308,13 @@ function clampPage(sources) {
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, showFilterError() {},
     renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {}, $: () => element,
   });
-  // The files declare their own renderers over the stubs; drawing is not what is checked here.
+  // The files declare their own renderers over the stubs; drawing is not what is checked here. The
+  // real header count is kept aside for the check that reads it.
+  const real = { renderCounts: page.renderCounts };
   for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState']) {
     page[name] = () => {};
   }
-  return { state, page };
+  return { state, page, real, element };
 }
 
 /** What the path says of each visit, as `renderPath` would draw an emptied one, joined by ` / `. */
@@ -396,6 +398,21 @@ async function checkUnfilteredThenFilter(sources) {
     : `NO - "${got}", where "0 of 2500 match / 0 of 516 match" was due; the unfiltered load left ${unfiltered} in the whole copy`;
 }
 
+/**
+ * The same session with no filter: the list holds the newest 1000 of 3016, and the header says so
+ * in words a filter does not produce. `1000 of 3016 calls` is what a filter matching 1000 reads.
+ * Through the real `renderCounts`, put back over the stub before the load calls it.
+ */
+async function checkNoFilterCount(sources) {
+  const { state, page, real, element } = clampPage(sources);
+  page.renderCounts = real.renderCounts;
+  await page.loadTransactions();
+  const text = element.textContent;
+  return text === 'newest 1000 of 3016 shown'
+    ? `yes ("${text}", ${state.transactions.length} rows held of ${state.sessionTotal}, no filter)`
+    : `NO - "${text}", where "newest 1000 of 3016 shown" was due`;
+}
+
 async function checkSessionState(sources) {
   return [
     ['last capture whole', checkLastCapture(sources)],
@@ -407,6 +424,7 @@ async function checkSessionState(sources) {
     ['session change forgets', await checkAfterSessionChange(sources)],
     ...(await checkPastTheClamp(sources)),
     ['unfiltered then filter', await checkUnfilteredThenFilter(sources)],
+    ['no-filter count', await checkNoFilterCount(sources)],
   ];
 }
 
