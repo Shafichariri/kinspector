@@ -277,14 +277,12 @@ async function checkAfterSessionChange(sources) {
 }
 
 /**
- * A session past the route's 1000-row clamp: 3016 calls, 1200 of them to `/v3/shop/bulk`, over two
- * screens — `Old` from the start, `New` from call 2500. The route stub clamps a page as the daemon
- * does and answers `total` and `matched` as it does. Run through the real load, then asked what
- * the filter notes and the path say. The rows a load holds stop at the clamp, so a count taken
- * from them is a count of the clamp: the session total less the filter's matches is the answer,
- * and where only held rows can answer — a brushed stretch — the note says "at least".
+ * The page over a session past the route's 1000-row clamp: 3016 calls, 1200 of them to
+ * `/v3/shop/bulk`, over two screens — `Old` from the start, `New` from call 2500. The route stub
+ * clamps a page as the daemon does and answers `total` and `matched` as it does. The files run are
+ * the real load and the real notes and path; drawing is stubbed.
  */
-async function checkPastTheClamp(sources) {
+function clampPage(sources) {
   const calls = Array.from({ length: 3016 }, (_, i) => ({
     id: `t${String(i).padStart(4, '0')}`, mono: i, host: 'shop.invalid',
     path: i % 2 === 0 && i < 2400 ? '/v3/shop/bulk' : '/v3/shop/stock',
@@ -302,14 +300,6 @@ async function checkPastTheClamp(sources) {
     return [];
   };
   const element = { hidden: false, textContent: '' };
-  const node = () => {
-    const parts = [];
-    return {
-      parts, replaceChildren() { parts.length = 0; }, append(...xs) { parts.push(...xs.map(String)); },
-      appendChild(child) { parts.push(child.textContent || ''); return child; },
-      get textContent() { return parts.join(''); },
-    };
-  };
   const el = (tag, cls, text) => ({ textContent: text || '', addEventListener() {} });
   const state = { ...sessionState(''), timeRange: null, recording: [] };
   const page = runFile(sources, ['js/15-session-data.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js'], {
@@ -322,6 +312,35 @@ async function checkPastTheClamp(sources) {
   for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState']) {
     page[name] = () => {};
   }
+  return { state, page };
+}
+
+/** What the path says of each visit, as `renderPath` would draw an emptied one, joined by ` / `. */
+function pathCounts(page, state) {
+  if (typeof page.countRecorded !== 'function') return 'no countRecorded in js/50-path.js';
+  const list = page.visits(state.screens, state.transactions, [], state.signals, page.sessionStartMono());
+  page.countRecorded(list);
+  // A top-level `const`, so it lives in the scripts' shared scope rather than on the context.
+  const emptyVisitText = vm.runInContext('emptyVisitText', page);
+  return list.map((visit) => emptyVisitText(visit, 'nothing recorded')).join(' / ');
+}
+
+/**
+ * A session past the route's 1000-row clamp, filter first. The rows a load holds stop at the
+ * clamp, so a count taken from them is a count of the clamp: the session total less the filter's
+ * matches is the answer, and where only held rows can answer — a brushed stretch — the note says
+ * "at least".
+ */
+async function checkPastTheClamp(sources) {
+  const { state, page } = clampPage(sources);
+  const node = () => {
+    const parts = [];
+    return {
+      parts, replaceChildren() { parts.length = 0; }, append(...xs) { parts.push(...xs.map(String)); },
+      appendChild(child) { parts.push(child.textContent || ''); return child; },
+      get textContent() { return parts.join(''); },
+    };
+  };
   const lines = [];
   const note = (hidden) => page.filterNote(node(), hidden, false).textContent;
 
@@ -349,20 +368,32 @@ async function checkPastTheClamp(sources) {
     ? `yes ("${text.slice(0, 40)}…")`
     : `NO - "${text.slice(0, 40)}", where 3016 calls hidden was due`]);
 
-  let got;
-  if (typeof page.countRecorded !== 'function') {
-    got = 'no countRecorded in js/50-path.js';
-  } else {
-    const list = page.visits(state.screens, state.transactions, [], state.signals, page.sessionStartMono());
-    page.countRecorded(list);
-    // A top-level `const`, so it lives in the scripts' shared scope rather than on the context.
-    const emptyVisitText = vm.runInContext('emptyVisitText', page);
-    got = list.map((visit) => emptyVisitText(visit, 'nothing recorded')).join(' / ');
-  }
+  const got = pathCounts(page, state);
   lines.push(['path N past the clamp', got === '0 of 2500 match / 0 of 516 match'
     ? `yes ("${got}", N over every call)`
     : `NO - "${got}", where "0 of 2500 match / 0 of 516 match" was due`]);
   return lines;
+}
+
+/**
+ * The same session loaded with no filter first, then filtered — the order a reader usually takes.
+ * The unfiltered page is the newest 1000 calls, short of the 3016 the route counts, so it is not the
+ * whole session: the whole-session copy is read in pages there too. Copied from the page and marked
+ * as the session, as `if (!filter)` alone did, it was trusted once the filter was typed, and the
+ * path counted every visit older than the newest 1000 calls from the clamp, calling them emptier
+ * than they were — on the real session, "nothing recorded" over visits with calls. The filter-first
+ * check above cannot see it, because a filtered load always reads the copy whole.
+ */
+async function checkUnfilteredThenFilter(sources) {
+  const { state, page } = clampPage(sources);
+  await page.loadTransactions();
+  const unfiltered = `${state.allTransactions.length} of ${state.sessionTotal}`;
+  state.filter = 'path:/nothing';
+  await page.loadTransactions();
+  const got = pathCounts(page, state);
+  return got === '0 of 2500 match / 0 of 516 match'
+    ? `yes ("${got}" after an unfiltered load held ${unfiltered} in the whole copy)`
+    : `NO - "${got}", where "0 of 2500 match / 0 of 516 match" was due; the unfiltered load left ${unfiltered} in the whole copy`;
 }
 
 async function checkSessionState(sources) {
@@ -375,6 +406,7 @@ async function checkSessionState(sources) {
     ...(await checkForgetInFlight(sources)),
     ['session change forgets', await checkAfterSessionChange(sources)],
     ...(await checkPastTheClamp(sources)),
+    ['unfiltered then filter', await checkUnfilteredThenFilter(sources)],
   ];
 }
 

@@ -158,9 +158,13 @@ wrong source for anything describing the session as a whole. `state.allTransacti
 session; endpoint chips and duplicate detection both read it. Endpoint chips built from the
 filtered view would collapse to the one chip you just clicked, making every other endpoint a dead
 end, and duplicate highlighting would vanish under exactly the filter you applied to investigate
-it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
-filter is set, because then the rows already are the whole session. The stopped banner's "newest
-row in this session" reads it too, with `allSignals`. It used to read the filtered calls, and under
+it. Under a filter it costs one paged read per *session*, not per keystroke. With no filter it costs
+nothing only while the list's own page holds the whole session; past the route's clamp that page is
+the newest 1000 calls, so the copy is the same paged read. Copying the page there instead was trusted
+once a filter was typed, and the path counted every older visit from the clamp (`unfiltered then
+filter` in `check-web-static.js`, red with the copy taken whenever no filter is set; the filter-first
+checks cannot see it, because a filtered load always reads the copy whole). The stopped banner's
+"newest row in this session" reads it too, with `allSignals`. It used to read the filtered calls, and under
 a filter that kept only older calls it dated the session by the newest one the filter happened to
 keep. `check-web-static.js`'s `last capture whole` holds it.
 
@@ -188,9 +192,9 @@ short of the session total, because the path counts what each visit recorded fro
 at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
 list itself still stops at the clamp; that is `item:web-transactions-paged`.
 
-The two cached copies go stale in three ways, and each is closed. Resuming the list and the socket
-opening again after the daemon was away clear both (`forgetWholeSession`): the live socket is the
-only thing that keeps either copy current, so rows that arrived while nothing listened are in
+The two cached copies have gone stale in the ways below, and all but the last are closed; this is
+what has been found, not every way there is. Resuming the list and the socket opening again after
+the daemon was away clear both (`forgetWholeSession`): the live socket is the only thing that keeps either copy current, so rows that arrived while nothing listened are in
 neither, and the tabs, the route and the endpoint chips went on without them until the filter was
 cleared. "The daemon was away" covers a drop nobody asked for as well as a stop or a restart:
 `ws.onclose` moves `serverState` from `running` to `away`, and it used to leave it at `running`, so
@@ -208,7 +212,11 @@ reading the mark, said a session with calls had recorded none (`whole read failu
 `whole calls read failure` in `check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
 one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
 answer two loads out of order, and a slow unfiltered read that landed last put every row back under
-the filter just typed (`older call load dropped`, `older signal load dropped`).
+the filter just typed (`older call load dropped`, `older signal load dropped`). Open: a live row that
+arrives while the whole-session read is between pages is in neither the read nor the copy, because a
+live row joins a copy only once the copy is marked as the session's, and the mark is set when the read
+lands. Paging widened that window from one request to every page. `item:web-transactions-paged` owns
+it.
 
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
