@@ -20,7 +20,7 @@
  * a base whose routes differ is measured against today's routes, which the output says.
  *
  * Options: --head <dir> (default: this repository), --base <dir>, --install <dir>,
- * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,first,
+ * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,first,
  * --first-rows-ms <n> (default 3000), --keep (keep the temp directory).
  * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run.
  */
@@ -32,6 +32,7 @@ const path = require('path');
 const { launchChrome, sleep } = require('./lib/measure-cdp');
 const { writeSessions } = require('./lib/measure-fixtures');
 const cases = require('./lib/measure-cases');
+const { topBar } = require('./lib/topbar-cases');
 
 const REPO = path.resolve(__dirname, '..');
 const WEB = 'inspector-daemon/src/main/resources';
@@ -39,7 +40,7 @@ const WEB = 'inspector-daemon/src/main/resources';
 function parseArgs(argv) {
   const opts = {
     head: REPO, base: null, install: path.join(REPO, 'inspector-daemon/build/install/inspector'),
-    probe: null, only: ['layout', 'run', 'live', 'first'], firstRowsMs: 3000, keep: false,
+    probe: null, only: ['layout', 'run', 'live', 'topbar', 'first'], firstRowsMs: 3000, keep: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -122,6 +123,7 @@ async function measureSide(chrome, side, opts) {
   }
   if (opts.only.includes('run')) groups.push((p) => cases.runToggle(p, side.urls.big, 'big'));
   if (opts.only.includes('live')) groups.push((p) => cases.liveArrival(p, side.urls.big, 'big'));
+  if (opts.only.includes('topbar')) groups.push((p) => topBar(p, side.urls.big, 'long'));
   return groups;
 }
 

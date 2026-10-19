@@ -91,11 +91,11 @@ flowchart LR
     class s1,s2,s3,m1,m2,m3,l2,l4 sub
 ```
 
-Every fix round, on any track, is one fresh `qa-verifier`. A Small plan that turns out to touch a
-recorded decision stops for you before it moves up to Standard.
+Every fix round, on any track, is re-checked by one `qa-verifier`, never the engineer. A Small
+plan that turns out to touch a recorded decision stops for you before it moves up to Standard.
 
 On every track:
-- A fix round is re-checked by one fresh QA.
+- A fix round is re-checked by one QA: the round's own, resumed, or a fresh one.
 - QA renders any UI change, live and in an export, at the widths the criteria name.
 - The architect reviews a diff only when code is restructured or a decision file is rewritten.
 - An item does not grow after its design gate: a new defect becomes its own roadmap item unless it
@@ -307,9 +307,12 @@ The rules that keep it from becoming a second backlog:
   under its heading. A defect found outside any item goes to the `product-owner` first.
 - **Pace rules from the signals item (2026-10-19).** The conductor's list is in the skill under
   "Pace": decide a round's scope before spawning its engineer and give a large ticket its own round;
-  a fresh engineer per item; size the review to the item by its track (see [Tracks](#tracks--the-process-scales-to-the-item); one fresh QA for every fix round); one owner
+  a fresh engineer per item; size the review to the item by its track (see [Tracks](#tracks--the-process-scales-to-the-item); one QA for every fix round); one owner
   per finding; a close verdict that blocks only on this item's criteria and regressions; heuristics
-  documented as heuristics. The engineer runs fast checks per ticket and the full set, Chrome
+  documented as heuristics; `scripts/env-check.sh` before the first engineer, with no agent
+  downloading a toolchain; a reviewer's harness that proves an unguarded criterion promoted to
+  `scripts/lib/` in the same item; and a cost line (calls by role, tokens, wall time, track,
+  rounds) recorded when the item closes. The engineer runs fast checks per ticket and the full set, Chrome
   included, once per round (`.claude/agents/engineer.md`); QA's bar for documentation is a false
   claim, not one more missed case (`.claude/agents/qa-verifier.md`).
 - **A bug ticket stays inside its item.** Before a fix round is built, the conductor reads each

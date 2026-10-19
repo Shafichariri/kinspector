@@ -37,8 +37,10 @@ Rules every track keeps:
   reviewer.
 - **The `ux-reviewer` is for new screens and layout redesigns** (1a, 1b, the kind of item that
   gets the Large track). It is not for the wording of one count or a single CSS rule.
-- **A fix round is re-checked by one fresh `qa-verifier`, always.** A round expands only when QA
-  reports something it cannot judge, and the report names the role that can.
+- **A fix round is re-checked by one `qa-verifier`, always.** That is either the round's own QA,
+  resumed so it keeps its harnesses, or a fresh one once its context runs long. It is never the
+  engineer's conversation. A round expands only when QA reports something it cannot judge, and the
+  report names the role that can.
 - **An item does not grow once its design gate has passed.** A defect found during the build or a
   panel gets its own roadmap item through the `product-owner`, unless it fails one of this item's
   criteria or is a regression this item introduced. Before the gate, folding in new criteria is the
@@ -90,7 +92,7 @@ Pick the track first (see "Tracks" above), and name it to the human with the rea
 
    QA reports per ticket ID. Any **Failed** or blocking finding goes to the `delivery-tracker`,
    which files it as a `bug` ticket under the same item. Then back to step 5. **Every fix round is
-   re-checked by one fresh `qa-verifier`, on every track.** Loop until clean, with two checks on
+   re-checked by one `qa-verifier`, on every track.** Loop until clean, with two checks on
    every round:
    - **Scope review before the build.** Read the new bug tickets' criteria for scope yourself; the
      `architect` does it only on the Large track. A criterion that needs another item's work, or a
@@ -102,6 +104,8 @@ Pick the track first (see "Tracks" above), and name it to the human with the rea
    step 6 replaces it.
 8. `delivery-tracker` → close each ticket with the QA evidence, then the roadmap item once every
    ticket under it is Done, then `docs/STATUS.md` and the phase table in `AGENTS.md` "Where we are".
+   Pass it the item's cost line (see "Pace" → "Record what each item cost") to write under the
+   done entry.
 9. `release-steward` → if consumer-visible: INTEGRATION.md bump + changelog; always: hygiene scan,
    which covers `backlog/` — ticket files are committed and public.
 10. Commit (as the maintainer, no attribution trailers — see `AGENTS.md`) and push only if the human
@@ -170,15 +174,30 @@ be messaged. When you report to the human, call each role by its name (docs/TEAM
 
 **verify-panel** (replaces Mode B steps 5–6)
 1. Each member writes its verdict **before** reading anyone else's — QA's table, the architect's
-   ranked diff findings, UX's rendered review. Independence first, then cross-examination: each one
-   tries to break the others' "Verified" claims.
-2. `qa-verifier`'s table is the only source of Verified; a disagreement it cannot settle with
+   ranked diff findings, UX's rendered review.
+2. **Cross-examination is a challenge, not a confirmation.** On `item:web-transactions-paged`,
+   messages mostly said "confirms X's finding", and several reports ended "no reply yet", because
+   a teammate finishes its turn before the others' questions reach it. So:
+   - **Send a challenge as soon as you have it**, not after your report is written. A challenge
+     names one claim of another member's, Verified or blocking, and the evidence against it: a
+     command and its output, or a screenshot.
+   - **Never send agreement or a restated finding.** A finding two members share goes in the
+     report once, with both names.
+   - **Do not wait for replies.** An unanswered challenge goes in your report as open, and the
+     lead settles it.
+   - **Send to the lead only your final report and exact text for a file change.** Do not send
+     running commentary, and do not relay another member's findings. The lead does not relay them
+     either.
+   - **Every report ends with one line, "Changed by cross-examination:"**, followed by what changed
+     and who changed it, or "nothing". This is how the team learns whether panels are worth their
+     cost. If several Large items in a row read "nothing", raise it with the human.
+3. `qa-verifier`'s table is the only source of Verified. A disagreement it cannot settle with
    evidence is reported as Not verified, never averaged away.
-3. Any Failed → `engineer` (subagent) fixes, then message the **same** panel to re-verify
-   (`SendMessage` resumes a member whose turn ended); spawn fresh members only for a new item, so
-   the panel keeps its harnesses and does not re-read every ticket. Re-verifying means re-running
-   the commands, not re-reading the earlier output. Mode B step 6's scope review and stop rule
-   apply to every round. Shut down when clean.
+4. Any Failed → `engineer` (subagent) fixes it. Then only the panel's **`qa-verifier`** is resumed
+   with `SendMessage` to re-verify, because it keeps its harnesses and does not re-read every
+   ticket. The other members are resumed only when QA reports something it cannot judge.
+   Re-verifying means re-running the commands, not re-reading the earlier output. Mode B step 6's
+   scope review and stop rule apply to every round. Shut down when clean.
 
 **root-cause**
 1. Write 2–3 competing hypotheses yourself; spawn one teammate per hypothesis.
@@ -224,5 +243,23 @@ Teams cost a full context window per member — each loads the project context o
 - **Heuristics are documented as heuristics from the first draft.** A check that is not a parser
   is described as "a heuristic; among what it misses: …", never with a complete list. Two rounds
   (KIN-21, KIN-22) went to doc text that claimed a complete list of misses.
+- **Check the machine before the first engineer.** Run `./scripts/env-check.sh` once per session,
+  and put its JAVA_HOME line in every brief that builds or runs probes. If it reports MISS, tell
+  the human what to install, and do not let an agent download a toolchain. On 2026-10-19 one did,
+  into a scratch directory, and every later prompt had to carry the path.
+- **Promote a harness the first time it earns it.** When a reviewer writes a scratch harness that
+  proves a criterion no committed check holds, or two reviewers write the same one, it moves into
+  `scripts/lib/` in the same item, wired into `measure-web-ui.js` or a probe. On
+  `item:web-transactions-paged`, three reviewers each wrote a top-bar harness (`bar.js`), and
+  KIN-49's fix sat unguarded until it became `lib/topbar-cases.js`. Briefs name the existing
+  `scripts/lib/` harnesses, so a reviewer reuses them instead of writing its own.
+- **Record what each item cost.** Every Agent result ends with its `subagent_tokens` and
+  `duration_ms`; keep a running sum per item, with a call count per role. At close, hand it to the
+  `delivery-tracker`, which writes one line under the item's done entry: calls by role, tokens,
+  wall time from the first design call to close, track, and rounds. For example: `cost: 14 calls
+  (architect 3, engineer 3, QA 6, UX 2), ~2.4M tokens, 4 h, Standard, 3 rounds`. It is how the
+  tracks get checked against what they save. The figures are approximate: a resumed agent's
+  `subagent_tokens` includes the context it carried, so sums overcount, and lines compare with
+  each other, never with a bill.
 - **Leave nothing waiting on the human unattended.** Before leaving a phase to run alone, run its
   snapshot command once yourself (see Team phases) and check no member is blocked on an approval.
