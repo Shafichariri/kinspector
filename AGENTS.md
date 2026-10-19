@@ -49,7 +49,7 @@ Nobody should be told to "open the desktop app".
 | **4a** | OkHttp capture, for SDKs that own their transport | ✅ done |
 | **4b** | Report what we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
-| **S-D** | Structure pass (not a capture letter), phase D — daemon packages, layering check | 🟡 built, done once PR merged and CI green |
+| **S-D** | Structure pass (not a capture letter), phase D — daemon packages, layering check | ✅ done (PR #87; `repo` red on the merge push for author identity only, see `docs/STATUS.md`) |
 | **S-F** | Structure pass, phase F — web UI script and CSS split behind the manifest | ✅ done (PR #88; `repo` red on the merge push for author identity only, see `docs/STATUS.md`) |
 
 The lettered rows are **capture mechanisms** and are lettered independently of Phase 4, which is

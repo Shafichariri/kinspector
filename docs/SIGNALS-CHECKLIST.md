@@ -83,7 +83,7 @@ a build. If you find yourself explaining something here, it belongs in the spec.
 ### 7 — The overlay (added after 0.3.0)
 
 The build order above stops at the host. These are the overlay's, numbered on from it rather than
-restarting: `ROADMAP.md` counts the overlay work 1–4 and the collision has already been confusing
+restarting: `ROADMAP-DONE.md` counts the overlay work 1–4 and the collision has already been confusing
 once.
 
 - [x] Signals merge into the traffic list on one clock, one tap away *(0.8.0)*

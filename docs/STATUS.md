@@ -8,17 +8,31 @@ was run. A branch-wide total of 897 was computed by arithmetic, never measured, 
 
 **Phase A of the structure pass (web checks and mirror cases in CI) is done**: its first CI run, on
 PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swap` (macOS: full
-`./gradlew build`, Android host tests, `-Pinspector=off`). `docs/ROADMAP.md` §5 has the detail.
+`./gradlew build`, Android host tests, `-Pinspector=off`). `docs/ROADMAP-DONE.md` §5 has the detail.
 
 **Phase E (MCP `timeline` and `explain` order through the model's `timeline()`) is done**: CI on
-PR #82 went green on `build`, `release-swap` and `web`. `docs/ROADMAP.md` §5 has the detail.
+PR #82 went green on `build`, `release-swap` and `web`. `docs/ROADMAP-DONE.md` §5 has the detail.
 
-**Phase D (daemon packages; `Server.kt` and `McpTools.kt` split; layering check) is built, and done
-once its PR is merged and CI is green**: it is on `shafic/structure-phase-d`, not pushed, so CI has not
-run. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf`). The engineer reports
-247 daemon tests and 35 repo-checks tests passing at `c1f2a4a`; the verifier did not re-run that commit,
-and no full-repository count has been taken. Not verified: the no-client-names check, whose term list is
-kept out of the repository. `docs/ROADMAP.md` §5 has the detail.
+**Phase C (every control route refuses without the header, by test) is done**: PR #83 merged as `fbc2516`;
+CI on its head and on the merge push passed `build`, `web` and `release-swap`. `ControlHeaderCoverageTest`
+runs inside `:inspector-daemon:test`. No `repo` job existed yet.
+
+**Phase B (module graph, dependency locks, budgets, identity and name checks) is done**: PR #84 merged as
+`01c6f5f`; CI on its head `b51b2c9` passed all four jobs, including `repo`. On the merge push `repo` was
+red on the commit-identity check only (the merge commit's author address). The `CLIENT_NAME_TERMS` secret
+exists and `ci.yml` passes `--require-terms` on push. Not verified: that `repo` is a required check on
+`main` (branch protection requires `build` and `release-swap` only, read 2026-10-19; a maintainer action).
+
+**Phase G (`AGENTS.md` as an index, `docs/decisions/`, per-module guides) is done**: PR #85 merged as
+`b51b2c9`; CI on its head `fdf8d4c` passed all four jobs, `repo` red on the merge push for author identity
+only. The root is 14,605 bytes against the 15,000 budget held by `:repo-checks`.
+
+**Phase D (daemon packages; `Server.kt` and `McpTools.kt` split; layering check) is done**: PR #87 merged as
+`f574bda`; CI on its head `b919341` passed all four jobs, `repo` red on the merge push for author identity
+only. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf`). The 247 daemon tests
+and 35 repo-checks tests are the engineer's count at `c1f2a4a`, which the verifier did not re-run, and no
+full-repository count has been taken. Not verified: the no-client-names check on the tickets, whose term
+list is kept out of the repository. `docs/ROADMAP-DONE.md` §5 has the detail.
 
 **Phase F (`app.js` and CSS split behind the manifest) is done**: PR #88 merged to `main` as `1913cf7`,
 and CI run 39146369617 on that push passed `build`, `release-swap` and `web`. `repo` was red on that push,
@@ -32,7 +46,7 @@ full-repository total: `:inspector-daemon:test` 259, `:inspector-ui:jvmTest` 134
 Chrome 131: 16 configurations, served and exported under `file:`, computed-style, text and PNG hashes
 identical to base, 0 page errors. Not verified: Safari and Firefox, Android host tests (no SDK), the
 no-client-names check, and how the page looks to a human. Six layout defects that predate the phase are
-listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP.md` §5 has the detail.
+listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP-DONE.md` §5 has the detail.
 
 **`item:signals-query-one-rule` is done, with one deferred bug** (2026-10-19, on branch
 `shafic/roadmap-batch-2026-10-18`, not pushed, so CI has not run). Tickets KIN-24 to KIN-41 and KIN-26
