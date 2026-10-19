@@ -334,6 +334,32 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     .reduce((sum, t) => sum + Number(t.querySelector('.tab-count')?.textContent ?? NaN), 0);
   check('signal tabs count all', tabTotal === total, `${tabTotal} of ${total}`);
 
+  // --- the transaction route, as the export answers it ---
+  // The same four questions of the page route: it is read a page at a time too, and an export that
+  // answered every row whatever it was asked would draw a different list from the daemon's.
+  const txnRoute = `/api/sessions/${encodeURIComponent(archive.meta?.sessionId ?? 'x')}/transactions`;
+  const askTxns = async (query) => {
+    const res = await source.fetch(`${txnRoute}?${new URLSearchParams(query)}`);
+    return { status: res.status, body: await res.json() };
+  };
+  const txnsNewestFirst = txns.slice().sort((a, b) => b.mono - a.mono).map((t) => t.id);
+  const txnTotal = txnsNewestFirst.length;
+  const txnPage = (reply, want) => reply.status === 200 && Array.isArray(reply.body?.items) &&
+    reply.body.total === txnTotal && reply.body.matched === txnTotal &&
+    reply.body.items.map((t) => t.id).join(',') === want.join(',');
+  const txnCount = (reply) => (Array.isArray(reply.body?.items) ? reply.body.items.length : reply.status);
+  const fewTxns = Math.max(1, Math.min(3, txnTotal - 1));
+  const txnSliced = await askTxns({ offset: '0', limit: String(fewTxns) });
+  check('transactions sliced by limit', txnPage(txnSliced, txnsNewestFirst.slice(0, fewTxns)),
+    `limit=${fewTxns}: ${txnCount(txnSliced)} of ${txnTotal}, newest first`);
+  const txnWhole = await askTxns({ offset: '0', limit: String(txnTotal + 5) });
+  check('transactions limit past total', txnPage(txnWhole, txnsNewestFirst),
+    `limit=${txnTotal + 5}: ${txnCount(txnWhole)} of ${txnTotal}`);
+  const txnBeyond = await askTxns({ offset: String(txnTotal + 5), limit: '1000' });
+  check('transactions offset past end', txnPage(txnBeyond, []), `${txnCount(txnBeyond)} items`);
+  const txnFiltered = await askTxns({ filter: 'status:500', offset: '0', limit: '1000' });
+  check('transactions filter refused', txnFiltered.status === 400, `status ${txnFiltered.status}`);
+
   // --- the proof ---
   check('no network attempts', attempts.length === 0, attempts.slice(0, 3).join(' | ') || 'none');
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none');

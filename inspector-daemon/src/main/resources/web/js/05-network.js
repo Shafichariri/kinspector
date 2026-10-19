@@ -62,7 +62,12 @@ function archiveSource(archive) {
         if (url.searchParams.get('filter')) {
           return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
         }
-        return reply(200, { total: rows.length, matched: rows.length, items: rows });
+        // Sliced as the signals below are, for the same reason: the page reads the whole session a
+        // page at a time, and an export answering every row whatever `offset` it was asked for
+        // would be a different question from the daemon's. `total` and `matched` stay the session's.
+        const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+        const limit = url.searchParams.has('limit') ? Math.max(0, Number(url.searchParams.get('limit')) || 0) : rows.length;
+        return reply(200, { total: rows.length, matched: rows.length, items: rows.slice(offset, offset + limit) });
       }
       if ((m = p.match(/^\/api\/sessions\/[^/]+\/transactions\/([^/]+)\/body\/(req|res)$/))) {
         const entry = exported.get(decodeURIComponent(m[1]));
