@@ -48,6 +48,15 @@ identical to base, 0 page errors. Not verified: Safari and Firefox, Android host
 no-client-names check, and how the page looks to a human. Six layout defects that predate the phase are
 listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP-DONE.md` §5 has the detail.
 
+**`item:web-current-session-guard` is done** (2026-10-19, commit `eaaadce` on branch
+`shafic/current-session-guard-445b65`, not pushed, so CI has not run). KIN-51 is Done on one fresh
+qa-verifier pass. Counts at `eaaadce`, per target and not a full-repository total: web static checks
+79/0, live probe 187 passed 0 failed, archive probe 37/0, `:inspector-daemon:test` 268/0,
+`:repo-checks:test` 35/0. Guard proven red both ways (guard deleted: 186/1; `catch` fallback put
+back: `now failed read empty` fails). Verified in headless Chrome only. Not run: `:inspector-model`
+and the iOS, Android and overlay targets (nothing there changed). Accepted trade-off: a failed
+`/current` read always empties the strip, also on an unchanged session.
+
 **`item:signals-query-one-rule` is done, with one deferred bug** (2026-10-19, on branch
 `shafic/roadmap-batch-2026-10-18`, not pushed, so CI has not run). Tickets KIN-24 to KIN-41 and KIN-26
 are Done on verifier evidence over four panels (`5f6b610`, `e1711a3`, `a86dde2`, `8082e02`) and a fresh
