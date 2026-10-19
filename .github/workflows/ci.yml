@@ -172,15 +172,21 @@ jobs:
 
       # The terms are a repository secret and never in the repository. An unset secret arrives as
       # an empty string, and so does every secret on a fork's pull request; the script then says
-      # NOT RUN with a warning rather than printing a pass. `--require-terms` (fail instead) goes
-      # on the push to main once the secret exists -- passing it before would turn main red.
+      # NOT RUN with a warning rather than printing a pass. On a push to main the secret exists, so
+      # `--require-terms` makes a missing or emptied secret fail instead of warning: a scan that
+      # silently stopped running would otherwise leave main green forever. Pull requests keep the
+      # warning, because a fork's pull request never receives secrets.
+      # It runs even when the identity step above failed: a bad merge author once skipped it, so
+      # main went a push without its name scan, and the two checks answer different questions.
       - name: Client names — tree, commit messages, branch name
+        if: success() || failure()
         env:
           CLIENT_NAME_TERMS: ${{ secrets.CLIENT_NAME_TERMS }}
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
-        run: ./scripts/check-client-names.sh --range "$BASE..$HEAD" --branch "$BRANCH"
+          REQUIRE: ${{ github.event_name == 'push' && '--require-terms' || '' }}
+        run: ./scripts/check-client-names.sh --range "$BASE..$HEAD" --branch "$BRANCH" $REQUIRE
 
   release-swap:
     # Proves -Pinspector=off is wired end to end, independently of the artifact scan above.

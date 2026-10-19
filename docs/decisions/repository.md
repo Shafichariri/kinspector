@@ -64,8 +64,11 @@ clear in a public log.
 **A scan with no terms says NOT RUN, and NOT RUN is never a pass.** A fork's pull request gets no
 secrets, and an unset secret arrives empty. In both cases the script prints `NOT RUN` and a
 `::warning::`, then exits 0. It never prints "clean" or "0 matches". `--require-terms` makes that
-case exit 1. CI does not pass it yet, because the secret has not been created and `main` would go
-red. Add it to the push-to-`main` run once the secret exists.
+case exit 1. The secret was created on 2026-10-19, and CI passes `--require-terms` on a push to
+`main`, so a missing or emptied secret fails `main` instead of warning. Pull requests keep the
+warning, because a fork's pull request never receives secrets. The step runs even when the
+identity step before it failed: the first `main` push after the secret existed had a merge commit
+with the wrong author, and the name scan was skipped without a word.
 
 **A term matches as a whole word, not as a substring.** It counts only where the characters on
 both sides are not letters or digits, so it is caught in a domain, a path, beside `_` or `-`, or in
