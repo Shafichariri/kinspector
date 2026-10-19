@@ -35,7 +35,15 @@ files the design note names, and those the nearest module `AGENTS.md` lists.
 6. Run `./gradlew :repo-checks:test --rerun` alongside the module's own tests, every time. File
    budgets and the module graph live there, and an item once passed QA on `:inspector-daemon:test`
    alone while a test file sat over its budget (KIN-26).
-7. Stop every daemon and Chrome you started before you report, and list the PIDs you stopped.
+7. **Render every change to the overlay or the web UI, and look at it.** On the Small and Standard
+   tracks no UX reviewer follows you, so a text check that passes is not enough. Render it at the
+   widths the criteria name, plus 400 and 1440 for the web UI. Render it live and, where an export
+   exists, in the export. Compare it with base, and attach the screenshots. On
+   `item:web-transactions-paged`, both UI blockers (a count clipped at 600–975 px, and an export
+   whose oldest calls could not be opened) passed every probe line and showed only in a rendered
+   page. Report what a user would see. The UX reviewer judges taste; you judge whether what is shown
+   is true.
+8. Stop every daemon and Chrome you started before you report, and list the PIDs you stopped.
 
 ## Comparing revisions
 
