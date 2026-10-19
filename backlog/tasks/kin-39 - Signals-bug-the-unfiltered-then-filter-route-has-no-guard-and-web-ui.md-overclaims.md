@@ -3,11 +3,11 @@ id: KIN-39
 title: >-
   Signals bug: the unfiltered-then-filter route has no guard, and web-ui.md
   overclaims
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 22:45'
-updated_date: '2026-10-18 22:45'
+updated_date: '2026-10-19 00:30'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -35,3 +35,13 @@ Found by the third verify panel (head a86dde2), blocking; fails KIN-24 AC6. Reve
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built by Bob (engineer), commit 182fadc (after KIN-40's d321929, so AC3's statement is dropped rather than added: KIN-40 fixed the '0 of N match' limit, and web-ui.md now describes the fix, not the limit). No web file changed.
+NEW CHECK: 'unfiltered then filter' in check-web-static.js's session state section (scripts/lib/session-state-checks.js checkUnfilteredThenFilter): the real 15/25/45/50 files over the 3016-call clamp stub; loadTransactions with no filter, then 'path:/nothing', then the path's counts. Green: '"0 of 2500 match / 0 of 516 match" after an unfiltered load held 3016 of 3016 in the whole copy'. The stub and the path-count reader are now shared with checkPastTheClamp (clampPage, pathCounts); its four lines print as before. Static 64 -> 65 checks, 0 failed.
+RED PROOF: 15-session-data.js line 291 set to 'if (!filter) {' -> 'unfiltered then filter: NO - "0 of 484 match / 0 of 516 match", where "0 of 2500 match / 0 of 516 match" was due; the unfiltered load left 1000 of 3016 in the whole copy', 65 checks, 1 failed, and no other line moved (the gap the panel found). Restored -> 65/0.
+DOCS (docs/decisions/web-ui.md): the 'costs nothing at all when no filter is set' sentence (was :161-162) now says it costs nothing only while the list's page holds the whole session, and that past the clamp the copy is the same paged read, naming the check. The 'go stale in three ways, and each is closed' sentence (was :191) now reads 'have gone stale in the ways below, and all but the last are closed; this is what has been found, not every way there is', and the paragraph ends with the open one: a live row arriving between pages of the whole-session read is in neither the read nor the copy (owned by item:web-transactions-paged, per ROADMAP dbabdbe). Re-verified against this tree with the panel's scratch harness c3/midread.js: 'marked=true all=2500 daemon=2501 list has LIVE=true whole copy has LIVE=false'.
+RUNS: static 65/0, live probe 182/0, archive 26/0, :inspector-daemon:test --rerun 267/0, :repo-checks:test --rerun 35/0. Chrome measurements not rerun for this commit: no web file changed, and the served jar's web is byte-identical to the tree (checked 50-path.js out of the jar).
+<!-- SECTION:NOTES:END -->
