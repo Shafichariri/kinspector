@@ -62,7 +62,12 @@ function archiveSource(archive) {
         if (url.searchParams.get('filter')) {
           return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
         }
-        return reply(200, { total: rows.length, matched: rows.length, items: rows });
+        // Sliced as the signals below are, for the same reason: the page reads the whole session a
+        // page at a time, and an export answering every row whatever `offset` it was asked for
+        // would be a different question from the daemon's. `total` and `matched` stay the session's.
+        const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+        const limit = url.searchParams.has('limit') ? Math.max(0, Number(url.searchParams.get('limit')) || 0) : rows.length;
+        return reply(200, { total: rows.length, matched: rows.length, items: rows.slice(offset, offset + limit) });
       }
       if ((m = p.match(/^\/api\/sessions\/[^/]+\/transactions\/([^/]+)\/body\/(req|res)$/))) {
         const entry = exported.get(decodeURIComponent(m[1]));
@@ -167,7 +172,7 @@ function connectLive() {
 
     if (message.type === 'txn') {
       state.transactions.push(message.txn);
-      if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
+      admitLive('transactions', message.txn);
       // The list takes the row as one more match, so both counts move and what the filter hides
       // stays what it was.
       if (state.sessionTotal !== null) state.sessionTotal++;
@@ -185,7 +190,7 @@ function connectLive() {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
       state.signals.push(message.signal);
-      if (state.allSignalsSessionId === state.sessionId) state.allSignals.push(message.signal);
+      admitLive('signals', message.signal);
       if (tagOf(message.signal) === 'screen') {
         state.screens.push(message.signal);
         if (state.view === 'path') loadScreenPayloads().then(renderPath);

@@ -66,6 +66,9 @@ const state = {
   // its answer once a newer one has started, because the daemon may answer them out of order.
   callLoad: 0,
   signalLoad: 0,
+  // Live rows that arrived while a whole-session read of that kind was in flight, as
+  // `{ sessionId, rows }`, or null when none is. Merged by id when the read lands (`admitLive`).
+  arriving: { transactions: null, signals: null },
   // How many endpoint chips to show. 0 hides them.
   endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
   // App-state observations for this session as the daemon matched them against the filter, and

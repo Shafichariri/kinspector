@@ -668,9 +668,27 @@ QA while verifying `item:export-md-query-once`, the other three by the architect
 `item:signals-query-one-rule`. Placed by the product owner the same day. Three are items and one is
 not worth doing. Where each sits in the order is in §5 → "Order from here".*
 
-- **The web traffic list stops at 1000 calls and does not say so.** *Ticket label:*
-  `item:web-transactions-paged`. **Ordered 2026-10-18: third in the order from here**, straight
-  after the signals item whose pager fixes it.
+- ~~**The web traffic list stops at 1000 calls and does not say so.**~~ **Done, 2026-10-19.**
+  *Ticket label:* `item:web-transactions-paged`. **Ordered 2026-10-18: third in the order from here**,
+  straight after the signals item whose pager fixes it.
+
+  **Done, 2026-10-19 (KIN-43 to KIN-50, QA at `68315b4`, base `c21aaf0`; architect and UX said yes).**
+  The panel ran three rounds. Round 1 found three blockers (KIN-47, KIN-48, KIN-49); round 2 found one
+  false doc sentence (KIN-50); round 3 closed. Evidence at `68315b4`: web static checks 79/0,
+  `:inspector-daemon:test` 268/0, `:repo-checks:test` 35/0 (`DecisionsTest` 5/0), live probe 185
+  passed 0 failed, archive probe with the long export 37/0, and every red proof for KIN-43 to KIN-49
+  re-run. What was learned: the list now asks for its own 1000 (`LIST_CEILING`) and says `newest 1000
+  of N shown` with no filter, instead of the filter-shaped `1000 of N calls`. The export's
+  transactions route slices by `offset` and `limit` like its signals route (KIN-43), and the
+  maintainer decided on 2026-10-19 that **an export draws every embedded call**: at 1000 its oldest
+  calls could not be opened while a brushed stretch over them said they did not exist (KIN-48). That
+  retired the archive half of KIN-44's red proof (offline the copy is the list, so the pager is never
+  called) and amended KIN-45's "same text live and offline": offline reads `1203 of 1203 calls`, live
+  `newest 1000 of 1203 shown`. A live row arriving during the whole-session read is buffered and merged
+  by id (KIN-46), including when the copy is marked but empty (KIN-47). The count had to stop wrapping
+  in the 44px bar (KIN-49), which in turn let the closed session picker shrink. **KIN-42 stays
+  deferred and owns whether the whole-session read is capped.** Not verified: CI (not pushed),
+  `-Pinspector=off` (no consumer signature changed), and layout in anything but Chrome 131 headless.
 
   `loadTransactions` and `syncAllTransactions` (`web/js/15-session-data.js`) ask for `limit=2000`.
   `SessionRepository.queryTransactions` clamps every page to 1000. So on any session over 1000 calls:
@@ -734,6 +752,12 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
     on what the list draws is acceptable at all is the maintainer's call. It is under §5 → "Open
     questions only the human can answer".
 
+    *Answered and moved, 2026-10-19.* The maintainer said **yes** to a labelled 1000-call ceiling
+    on what the list draws (§5 → "Open questions only the human can answer"). Whether the
+    *whole-session read* is capped no longer belongs to this item: it belongs to **KIN-42**, which
+    the maintainer kept on the side, deferred, and did **not** fold in here. This item's design does
+    not decide it, and its verify panels do not hold it to an answer.
+
   **Two criteria folded in, 2026-10-19,** from defects the signals verify panels found outside any
   item. They go here because this item now owns the whole-session read, and the signals item is
   closing and takes no more:
@@ -756,6 +780,15 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
 
   **Size.** It was ordered as S before these were added. The architect re-sizes it. Its place stays
   third, because it still shows a user something false today: a filter that is not there.
+
+  **Re-sized to M, 2026-10-19, with tickets KIN-43 to KIN-46, approved by the maintainer the same
+  day.** KIN-43 is the export's `offset` and `limit`, KIN-44 the 1203-call live probe for the chips
+  and repeat marks, KIN-45 the no-filter count, KIN-46 the live row during the whole-session read.
+  The place is unchanged. KIN-42 is not among them (see "Where it stands" above).
+
+  **Defects its first verify panel found that are not its own** (2026-10-19). Eight, each older than
+  its diff (base `c21aaf0`) or outside its criteria, so none joins its fix round. They are placed
+  below `item:web-current-session-guard`, with a table of where each went.
 
 - **Live rows ignore the filter until the next reload.** *Ticket label:*
   `item:web-live-rows-filtered`. **Ordered 2026-10-18: fourth in the order from here**, conditional
@@ -793,9 +826,35 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
     burst of 100 live rows can cause.
   - Pausing is unchanged: it still drops rows and re-reads on resume (`docs/decisions/web-ui.md`).
 
+  - **The header and the tab count follow live rows.** *(Added 2026-10-19, from the first verify
+    panel on `item:web-transactions-paged`.)* Today `renderCounts` runs on a load and from
+    `setTimeRange`, never when a live row arrives, so `16 of 16 calls` stays while 20 rows are drawn,
+    and the tab reads `traffic 1000` while the list grows. After this item, once a live row has been
+    admitted or refused, the header and the tab count say what the list and the session now hold,
+    under a filter and without one. A live-row probe asserts the header after two live rows and
+    fails with the counts left to the next load. *Why here:* this item decides what a live row does
+    to the lists, and a count that ignores the decision is the same defect one line lower.
+  - **A whitespace-only filter is no filter on the page, as it is on the daemon.** *(Added
+    2026-10-19, from the same panel.)* The daemon treats a blank filter as none
+    (`SessionRepository`, `filterText.isBlank()`), so `filter=%20` returns the whole session. The
+    page reportedly treats it as a filter and draws the filtered `N of M calls` shape. This was read
+    from the code and a curl, not driven in the page, so the architect confirms it first. The
+    criterion holds either way: with only spaces typed, the header, the notes and the live path
+    behave as with nothing typed, and a live row costs no request. The page decides "is there a
+    filter" in one place, and a check fails with a space typed if it disagrees with the daemon.
+    *Why here:* the "no filter, no request" criterion above needs exactly that test, and getting it
+    wrong costs a re-read on every live row for a user who typed a space.
+
   **Out of scope.** The filter grammar. The overlay, which filters in process on every change.
   Surfaces: web UI, and the daemon's live route if the architect puts the match there. No public
   API. Release-notes line when it ships.
+
+  **The two criteria added 2026-10-19 may push this item above S**, which under the condition below
+  moves it to after phase I. The product owner judges both belong here anyway: the stale count is
+  the same live-row decision, and the blank-filter test is one the item must write. The architect
+  sizes it with them in. **Decided 2026-10-19 by the maintainer: both criteria stay.** If that
+  sizes the item above S, it moves after phase I, and the maintainer accepted that. Size: S, to be
+  confirmed.
 
   **The condition on its place.** It is fourth because it shows a user something false today, the
   same reason the maintainer put the two defects first. If the architect sizes it above S, it moves
@@ -905,6 +964,87 @@ involved:*
   **Why its own item.** `item:web-live-rows-filtered` changes which live rows join the lists, not what
   a session switch leaves behind. The signals item is closing. Folding it into 1a would leave a
   false fact on screen for three more items, to save one small ticket.
+
+*The eight defects below were found on 2026-10-19 by the first verify panel on
+`item:web-transactions-paged`. Each is older than that item's diff (base `c21aaf0`) or outside its
+criteria, so none joins its fix round. Placed by the product owner the same day. One is a new item,
+which takes two of them. Five became acceptance criteria on items that already rebuild the code
+involved. One is not worth doing. The maintainer placed the new item on 2026-10-19, straight after
+`item:web-current-session-guard` (§5 → "Order from here").*
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| 1. Under a filter, the list never says it holds only some of the matches | **new item**, `item:web-list-says-what-it-holds` | the list is the one pane without the note; no open item draws it |
+| 2. The header and the tab count go stale under live tail | `item:web-live-rows-filtered` | that item rewrites what a live row does to the lists; the count is the same decision |
+| 3. A brushed stretch below the newest 1000 says "no calls in the selected stretch" | **new item**, with 1 | same cause: the list holds part of what it counts and says nothing |
+| 4. A whitespace-only filter is a filter on the page and not on the daemon | `item:web-live-rows-filtered` | that item adds a page-side "is there a filter" test, which must agree with the daemon |
+| 5. The repeat mark is cut to `twic…` at 400px | 1b, `item:web-foundation-list-room`, under (b) | (b) already owns what a row keeps at 400px |
+| 6. The count is off-screen below about 600px | 1a, `item:web-foundation-shell`, under (e) | (e) covered the controls, not the count; now it covers the count too |
+| 7. Four numbers for one session on one screen | 1b, under (f3) | (f3) already owns counts that read as disagreeing; the boundary-row idea goes to the new item |
+| 8. The export answers `limit=0` with 0 rows | not worth doing, below | nothing asks it |
+
+- **The traffic list does not say when it holds only part of what it counts.** *Ticket label:*
+  `item:web-list-says-what-it-holds`. **Ordered 2026-10-19 by the maintainer: straight after
+  `item:web-current-session-guard`**, with the other web defects (§5 → "Order from here", row 6).
+  The product owner had proposed straight after `item:web-transactions-paged`.
+
+  Two defects, one cause. The list draws the newest 1000 matching calls (`LIST_CEILING`), which the
+  maintainer accepted on 2026-10-19 on the condition that the page says so. With no filter it now
+  does (KIN-45). In two other cases it still does not:
+
+  - **Under a filter.** `path:/v3/shop/bulk` on a 3016-call session matches 1200. The header reads
+    `1000 of 3016 calls` and the list pane has no note. The path, the waterfall and the timeline
+    all draw `newest N of M matches loaded` (`filterNote`), and the list, which is the default
+    view, does not. So a reader is told 1000 calls match when 1200 do. The panel called it the most
+    misleading thing left on these screens.
+  - **Under a brushed stretch older than the newest 1000.** The list says `no calls in the selected
+    stretch` while the THIS STRETCH figure counts calls in it. Live, and at base. A filter that
+    narrows the matches under 1000 is the only way out, and nothing tells the reader that.
+
+  **The user and the problem.** A web UI user on a Mac with a long session who narrows it, by a
+  filter or by brushing the axis, which is how anyone looks for one call in a long session. The
+  list states a count, or an absence, that is false, and the panes beside it state the truth.
+
+  **Why now.** The ceiling was accepted on the condition that it is labelled. These are the two
+  places it is not, so until they are fixed the condition is not met. It is also cheap: the note,
+  the route's `matched` number and the stretch rule already exist for the other three panes.
+
+  **Acceptance criteria.**
+
+  - Under a filter that matches more calls than the list draws, the header numbers the matches and
+    says how many are drawn, in words that cannot be read as the match count: for example
+    `newest 1000 of 1200 matches shown`. `1000 of 3016 calls` does not appear. The match count
+    comes from the route's `matched`, never from the rows held.
+  - The list pane draws the same `newest N of M matches loaded` note the path, waterfall and
+    timeline draw, through `filterNote` or whatever the architect makes it, not a fourth wording.
+  - A brushed stretch the list holds no calls for, while the stretch holds calls, never reads `no
+    calls in the selected stretch`. It says the calls there are older than what the list loaded and
+    how to reach them. The rule `docs/decisions/web-ui.md` records for a stretch ("at least" when
+    the stretch reaches below the oldest mono at which both lists are whole) holds here too.
+  - The panel suggested a boundary row at the oldest end of a capped list: `203 older calls not
+    drawn — filter to reach them`. That is one way to meet the last two criteria. The architect
+    chooses.
+  - Checks over a 3016-call stub clamped as the daemon clamps, in `check-web-static.js` and in both
+    probes where a probe can see it: one for the filtered header, one for the list note, one for
+    the stretch. Each is proven red with the old wording put back. An exported session behaves the
+    same offline (`render-web-ui-archive.js`).
+  - The list still draws at most 1000 calls, and the daemon's clamp is unchanged.
+
+  **Out of scope.** Whether the whole-session read is capped (KIN-42). The four-numbers polish,
+  which is 1b's (f3). Virtualising the list. The filter grammar; no filter is evaluated in
+  `web/js`. Surfaces: web UI only. No public API, no `:inspector-model` change. Size S, to be
+  confirmed by the architect. Release-notes line, because a user could have been misled by it.
+
+  **Not a decision overturned.** It extends `docs/decisions/web-ui.md`'s rule that a pane a filter
+  thinned says so to the one pane that does not.
+
+- **The export answers `limit=0` with no rows, where the daemon coerces it to 1.** **Not worth doing,
+  2026-10-19.** Both the transactions and the signals branch of `archiveSource` do it. The export
+  is read by one caller, the page, and the page never sends `limit=0`: its pager asks for whole
+  pages. So no reader of any export can see the difference. Making the export agree would add a
+  copy of the daemon's coercion rule for a request nobody makes, which is a mirror with nothing to
+  mirror. Reopen it if anything other than the page ever reads an export's routes, or the page
+  starts sending a computed limit that can reach 0.
 
 ### Open questions
 
@@ -1093,17 +1233,18 @@ here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They ar
 |---|---|---|---|---|
 | 1 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
 | 2 | ~~The signals sort and clamp exist twice~~ **Done, 2026-10-19, with one deferred bug, KIN-42** (KIN-24 to KIN-41, KIN-26; four verify rounds; KIN-42 open, deferred: false empty state for ~25 s on a ~160k-call session) | §3 → Guards | `item:signals-query-one-rule` | S |
-| 3 | The web traffic list stops at 1000 calls *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | S |
-| 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed |
+| 3 | ~~The web traffic list stops at 1000 calls~~ **Done, 2026-10-19** (KIN-43 to KIN-50, QA at `68315b4`; KIN-42 stays deferred and owns whether the whole-session read is capped) *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | ~~S~~ M *(re-sized 2026-10-19; KIN-43 to KIN-46, approved; KIN-47 to KIN-50 from the verify panel)* |
+| 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S; both 2026-10-19 criteria kept, maintainer 2026-10-19)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed *(if above S, moves after phase I; maintainer accepted 2026-10-19)* |
 | 5 | One session's "now" values can land under another *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
-| 6 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 7 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
-| 8 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 9 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 10 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
-| 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
-| 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
-| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| 6 | The traffic list does not say when it holds only part of what it counts *(added 2026-10-19; placed by the maintainer)* | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
+| 7 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 8 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 9 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 10 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 11 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 12 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 13 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 14 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
 wait for the next one.
@@ -1128,6 +1269,19 @@ for the same reason they go first: it shows a user something false, and it is sm
 defects should go ahead of the `McpTest.kt` split and phases H and I at all is still open for the
 maintainer (§5 → "Open questions only the human can answer"). If the answer is no, this row moves
 with them. The maintainer's rows keep their order relative to each other.
+
+**One row added 2026-10-19 for the first `item:web-transactions-paged` verify panel's eight
+defects.** Five were folded into `item:web-live-rows-filtered`, 1a and 1b as acceptance criteria,
+one is not worth doing, and two make a new item, `item:web-list-says-what-it-holds`. The product
+owner proposed it straight after row 3. **The maintainer placed it on 2026-10-19 with the web
+defects instead, straight after `item:web-current-session-guard`**, as row 6; the rows after it
+moved down one, and the maintainer's rows keep their relative order. The table of where each
+defect went is in §3, below `item:web-current-session-guard`.
+
+**Decided 2026-10-19 by the maintainer: `item:web-live-rows-filtered` keeps both criteria added
+that day** (the header and tab count under live tail, and the whitespace-only filter). If the
+architect sizes it above S with them in, its own condition applies and row 4 moves to after
+phase I, still ahead of 1a. The maintainer accepted that consequence.
 
 **Why this order.** By value per hour. The two defects come first: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -1396,6 +1550,15 @@ the timeline and path views (rows arriving live follow the filter once item:web-
 lands), and a session with more than 1000 signals shows all of them."* "Loaded" is load-bearing: a
 signal pushed over the live socket is drawn whatever the filter until that item lands, so a line
 saying the filter applies to every signal would be false on a live session.
+`item:web-transactions-paged` (done 2026-10-19) owes a fifth: *"Web UI, on a session of more than
+1000 calls: with no filter, the live list says `newest 1000 of N shown` instead of a count shaped
+like a filter; the endpoint chips and repeat marks count the whole session, not the newest 1000; an
+exported session draws every call; and a live call arriving while the page loads is no longer lost."*
+"Live" is load-bearing in the first clause: offline the export draws every call, so it reads
+`N of N calls`, and a line promising the same words in both would be false. No `INTEGRATION.md`
+entry of its own: it joins the same daemon-only entry as the lines above, because a consumer's
+code, coordinates and release build are untouched and the change reaches them only through the
+daemon they download.
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
@@ -1843,13 +2006,33 @@ decision or a known trap:
   rows, on the maintainer's own rule that a false fact comes before a move. The maintainer has not
   confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
   web defects straight after phase I. Either way they stay ahead of 1a.
-- **Is a labelled 1000-call ceiling acceptable?** *(Raised 2026-10-18, recorded 2026-10-19.)*
+  `item:web-list-says-what-it-holds`, placed with them on 2026-10-19, moves with them.
+- ~~**Is a labelled 1000-call ceiling acceptable?** *(Raised 2026-10-18, recorded 2026-10-19.)*
   `item:web-transactions-paged` lets the architect cap what the list draws, provided the count says
   so in words that cannot be read as a filter, such as `newest 1000 of 4210 shown`. A session of
   about 160,000 calls has since shown that drawing and holding everything has a real cost. If the
   answer is no, the list draws every call and the item likely needs virtualising, which it now
   leaves out of scope, and its size goes up. If yes, the remaining question, whether the
-  *whole-session read* behind the chips and repeat marks is capped too, is the architect's.
+  *whole-session read* behind the chips and repeat marks is capped too, is the architect's.~~
+  **Decided 2026-10-19 by the maintainer: yes.** The list draws at most 1000 calls and says so.
+  Whether the whole-session read is capped is **not** the architect's under this item after all: it
+  belongs to KIN-42, which the maintainer kept deferred and outside `item:web-transactions-paged`.
+- ~~**Where does `item:web-list-says-what-it-holds` go?** *(Raised 2026-10-19.)* The first verify
+  panel on `item:web-transactions-paged` found that the list still states a false count under a
+  filter (`1000 of 3016 calls` where 1200 match) and a false absence under an old brushed stretch.
+  The panel called the first the most misleading thing left on these screens, and the ceiling was
+  accepted on the condition that it is labelled. The product owner proposes it **straight after
+  `item:web-transactions-paged`**, ahead of `item:web-live-rows-filtered`: it is small, in the same
+  files, and it completes the condition the maintainer set. The alternative is after
+  `item:web-current-session-guard`, with the other web defects. It has no place until the maintainer
+  says.~~ **Decided 2026-10-19 by the maintainer: with the web defects, straight after
+  `item:web-current-session-guard`**, as row 6 of "Order from here". The rows after it moved down
+  one; the maintainer's rows keep their relative order.
+- ~~**Does `item:web-live-rows-filtered` keep the two criteria added 2026-10-19**, the live-tail
+  count refresh and the whitespace-only filter, given that they may size it above S and so move it
+  after phase I?~~ **Decided 2026-10-19 by the maintainer: it keeps both.** If the architect sizes
+  it above S, its own rule applies and it moves after phase I, still ahead of 1a. The maintainer
+  accepted that.
 
 ---
 
@@ -1871,10 +2054,10 @@ screen, and building those into the current single page would mean building them
 
 | Order | Item | Size | Ships in | Scheduled 2026-10-18 |
 |---|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ ~~9th~~ 10th in §5 → "Order from here" |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ ~~10th~~ 11th |
-| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ ~~11th~~ 12th |
-| — | The private security advisory's fix | not sized | not set | ~~9th~~ ~~12th~~ 13th, after 2 |
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ ~~9th~~ ~~10th~~ 11th in §5 → "Order from here" |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ ~~10th~~ ~~11th~~ 12th |
+| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ ~~11th~~ ~~12th~~ 13th |
+| — | The private security advisory's fix | not sized | not set | ~~9th~~ ~~12th~~ ~~13th~~ 14th, after 2 |
 | 3 | Session diff | L | 1.5 | not scheduled |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 | not scheduled |
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 | not scheduled |
@@ -1882,7 +2065,8 @@ screen, and building those into the current single page would mean building them
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
 
 *Last column added 2026-10-18, and shifted one place on 2026-10-19 when
-`item:web-current-session-guard` was added ahead of it.* The maintainer's decision that day ordered work across §3, §5 and
+`item:web-current-session-guard` was added ahead of it, and one more the same day when the
+maintainer placed `item:web-list-says-what-it-holds` after it.* The maintainer's decision that day ordered work across §3, §5 and
 §6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
 a §6 item; it sits here because it now comes after 2.
 
@@ -1967,6 +2151,17 @@ In **1a, the shell**:
   and delete could not be reached. After 1a, the top bar's scrollWidth is at most the window width
   at 400px, and every control it still holds can be reached by pointer and by keyboard. Restart and
   stop leave it for Processes anyway.
+- **(e) The call count is on screen at 400px.** *(Added 2026-10-19, from the first verify panel on
+  `item:web-transactions-paged`.)* Below about 600px the count sat past the right edge of the
+  overflowing top bar, so it was off-screen entirely. That is the overflow above, but the criterion
+  above covers controls and the count is not one, so it is stated here: at 400px the whole count
+  text is inside the window. If 1b moves the count into its one-row toolbar (f2), the same check
+  moves with it into 1b.
+- **(e) Keep the session's start time visible when the picker truncates.** *(Added 2026-10-19, from
+  the UX reviewer on `item:web-transactions-paged`.)* Since KIN-49 the closed picker can shrink to
+  "com.example." at 600-700 px, so two sessions of one app look alike until it is opened. After 1a,
+  the part of the label that tells sessions apart, the start time, is still on screen with the
+  picker closed.
 - **(e) Every tab is reachable at a 400px window.** At base the tab bar measured 704 against 400,
   and screens, state, analytics and tap were hidden. The bar need not *show* every tab at that
   width, but each must be reachable without resizing: visible, or behind one control that is. The
@@ -2002,6 +2197,10 @@ In **1b, room for the list**:
   400px, every row in the base session shows its path's last segment in full and its byte count.
   The host and the clock give way before the path does. UX suggested dropping or shortening the clock column below about
   520px.
+  *(Added 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* **The repeat
+  mark survives too.** At 400px it was cut to `twic…`, leaving only the tint, and a tint alone does
+  not say how many times. After 1b, at 400px, every repeat mark in a repeat-bearing session reads in
+  full, in its usual words or a shorter form such as `2×`, which the overlay already uses.
 - **(c) The drawer's `✕` covers nothing.** At base, at 1000px, it sat over the header's last action
   (`replay ▾` served, `copy for agent` in an export), so a click on that corner closed the drawer.
   After 1b, the `✕` and every header action have disjoint boxes at 1000px, served and in an export.
@@ -2011,6 +2210,13 @@ In **1b, room for the list**:
 - **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
   top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
   `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
+  *(Widened 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* On a
+  1203-call session one screen showed four numbers for one session: the tab `traffic 1000`, the
+  header `newest 1000 of 1203 shown`, the scope bar `1203 of 1203` and the axis `1203 calls`. The
+  scope bar's sits directly over the rows and reads as "rows below", but it counts the session.
+  After 1b, every count on the traffic page says in its own words what it counts: drawn rows, the
+  session, or a prefix. Two that count the same thing show the same number. A probe on a capped
+  session reads all of them and fails if any two disagree without different labels.
 - **The sticky layout KIN-33 fixed is held by a committed check, and the check lands before 1b
   moves anything.** *(Added 2026-10-19, from the signals verify panels.)* KIN-33 made every sticky
   band in the list pane stop under the scope bar, through `--sticky-top`

@@ -123,6 +123,7 @@ function socketPage(sources, view, newestFirst) {
     expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,
     screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null, timelineFresh: true,
     callLoad: 0, signalLoad: 0, allSessionId: 'S', allSignalsSessionId: 'S', serverState: 'running',
+    arriving: { transactions: null, signals: null },
   };
   state.allSignals.push(state.screens[0]);
   const sockets = [];

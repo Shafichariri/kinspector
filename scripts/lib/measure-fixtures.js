@@ -3,7 +3,8 @@
  * The three sessions scripts/measure-web-ui.js measures, built from the probe fixture
  * (`./gradlew :inspector-daemon:writeProbeFixture`) rather than committed, since one is 33 MB:
  *
- *   probe — the fixture as written: 16 calls, 19 signals, two markers.
+ *   probe — the fixture as written: 16 calls, 19 signals, two markers, and the 1203-call session
+ *           beside it, which every copy carries unchanged.
  *   big   — plus 3000 calls after the probe's, 1200 to /v3/shop/bulk and 1800 to /v3/shop/other.
  *           Over the route's 1000-row clamp, and tall enough that every pane scrolls.
  *   huge  — plus 160,000 calls to /v3/shop/bulk. Past the ~110k-element limit where spreading a
@@ -15,11 +16,17 @@
 const fs = require('fs');
 const path = require('path');
 
+// The probe session's id, as ProbeFixture.kt names it. Picked by id: the fixture also writes a
+// 1203-call session beside it, older so the page still opens on this one, and the extra rows of
+// big and huge go into this one only.
+const PROBE_SESSION_ID = '2026-01-01T09-00-00_probe_ci_debug';
+
 function sessionDir(dataDir) {
-  const sessions = path.join(dataDir, 'sessions');
-  const names = fs.readdirSync(sessions).filter((n) => fs.statSync(path.join(sessions, n)).isDirectory());
-  if (names.length !== 1) throw new Error(`${sessions} holds ${names.length} sessions; the probe fixture writes one`);
-  return path.join(sessions, names[0]);
+  const dir = path.join(dataDir, 'sessions', PROBE_SESSION_ID);
+  if (!fs.existsSync(path.join(dir, 'index.jsonl'))) {
+    throw new Error(`${dataDir} holds no session ${PROBE_SESSION_ID}; write it with writeProbeFixture`);
+  }
+  return dir;
 }
 
 function readRows(file) {

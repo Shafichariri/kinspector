@@ -190,9 +190,16 @@ across the seam — and was proven red with a `page.length < 1000` stop and with
 removed. The whole-session calls are paged under a filter, and without one when the list's page is
 short of the session total, because the path counts what each visit recorded from that copy: stopped
 at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
-list itself still stops at the clamp; that is `item:web-transactions-paged`.
+list draws the newest 1000 calls by the page's own limit (`LIST_CEILING`), not by the route's clamp
+happening to match what it asked, and with no filter and no brushed stretch the header then says
+`newest 1000 of 4210 shown`, because `1000 of 4210 calls` is the shape a filter produces and sent
+readers looking for one (`no-filter count` in `check-web-static.js`, `long count no filter` in the
+live probe). An export asks for every embedded call instead, and says `4210 of 4210 calls`: it has
+no filter to reach past a ceiling, and at 1000 its oldest calls could not be opened at all, while a
+brushed stretch over them said they did not exist (`long count no filter`, `long stretch oldest` and
+`long offset 1000 sliced` in the archive probe).
 
-The two cached copies have gone stale in the ways below, and all but the last are closed; this is
+The two cached copies have gone stale in the ways below, and all are closed; this is
 what has been found, not every way there is. Resuming the list and the socket opening again after
 the daemon was away clear both (`forgetWholeSession`): the live socket is the only thing that keeps either copy current, so rows that arrived while nothing listened are in
 neither, and the tabs, the route and the endpoint chips went on without them until the filter was
@@ -212,11 +219,18 @@ reading the mark, said a session with calls had recorded none (`whole read failu
 `whole calls read failure` in `check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
 one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
 answer two loads out of order, and a slow unfiltered read that landed last put every row back under
-the filter just typed (`older call load dropped`, `older signal load dropped`). Open: a live row that
-arrives while the whole-session read is between pages is in neither the read nor the copy, because a
-live row joins a copy only once the copy is marked as the session's, and the mark is set when the read
-lands. Paging widened that window from one request to every page. `item:web-transactions-paged` owns
-it.
+the filter just typed (`older call load dropped`, `older signal load dropped`). And a live row that
+arrived while the whole-session read was between pages was in neither the read nor the copy, because
+a live row joined a copy only once the copy was marked as the session's, and the mark is set when the
+read lands; paging widened that window from one request to every page. Now, from the first page
+request until the read lands, a live row for that session is buffered (`admitLive`, `state.arriving`),
+and the landed copy is the read plus every buffered row whose id it lacks, for both copies. A copy
+already marked is read again when it is empty, and the read replaces it, so a live row goes into an
+open buffer whether or not its copy is marked (`mid-read calls empty`, `mid-read signals empty`). Opening
+the buffer before the first request is enough because the daemon stores a row before it broadcasts it,
+so a row broadcast earlier is already in the read; and the merge is by id because a row can be in a
+page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mid-read calls once`,
+`mid-read signals once`).
 
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
@@ -230,8 +244,8 @@ for a `...` whose innermost bracket is a call's `(`; and `axis window 200k` to `
 functions out of the real files over 200,000 rows. Each was proven red with each file's spreads put
 back. What jsdom cannot show — rows and the axis drawn and the dot at "connected" on a real
 160,016-call session in headless Chrome, red at `a86dde2` and green after — is recorded in KIN-37's
-notes. Holding that many rows at all is a cost this does not settle; `item:web-transactions-paged`
-owns whether the whole-session read is capped.
+notes. Holding that many rows at all is a cost this does not settle; KIN-42 owns whether the
+whole-session read is capped.
 
 **A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
 list always did; the waterfall, the path and the timeline did not. Under a filter that matched

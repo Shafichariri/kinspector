@@ -43,6 +43,18 @@ passed, archive probe 26 passed. KIN-42 is open and deferred by the maintainer. 
 `:inspector-model` and the iOS, Android and overlay test targets (nothing there changed).
 Not verified: the no-client-names check (term list not available to the tracker).
 
+**`item:web-transactions-paged` is done** (2026-10-19, on branch `shafic/next-priorities-8bf5c2`, base
+`c21aaf0`, not pushed, so CI has not run). Tickets KIN-43 to KIN-50 are Done on verifier evidence over
+three rounds, last pass at `68315b4`. Counts at `68315b4`, per target and not a full-repository total:
+web static checks 79/0, `:inspector-daemon:test` 268/0, `:repo-checks:test` 35/0 (`DecisionsTest`
+5/0), live probe 185 passed 0 failed, archive probe with the long export 37/0. Not run: `:inspector-model`
+and the iOS, Android and overlay targets (nothing there changed), and `-Pinspector=off` (no consumer
+signature changed). Not verified: CI, the no-client-names check (term list not available to the
+tracker), and the top-bar layout readings in anything but headless Chrome 131. Three criteria are
+unticked on purpose: KIN-43 AC#4 ("passes ... in CI"), KIN-44 AC#4 (its archive half was retired) and
+KIN-45 AC#4 ("same text live and offline", amended); the last two follow the maintainer's decision that
+an export draws every embedded call. KIN-42 stays deferred.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -67,6 +79,16 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **The web list draws the newest 1000 calls and says so, and an export draws every embedded call,
+  in headless Chrome 131 and the static checks.** At `68315b4`: static 79/0, live probe 185/0
+  (`long count no filter` reads `newest 1000 of 1203 shown`; `long chips count oldest` and `long repeat
+  marked` read past the clamp), archive probe 37/0 (`1203 of 1203 calls`, `long stretch oldest`, `long
+  offset 1000 sliced`), `:inspector-daemon:test` 268/0, `:repo-checks:test` 35/0. Live rows arriving
+  during the whole-session read are kept once (`mid-read ... kept/once/empty`, static). Each red proof
+  re-run in round 2.
+- **The top-bar count stays on one line from 600 to 1100 px, in headless Chrome 131 only.** 21 widths
+  against base `c21aaf0`: no control that base had inside the viewport is outside it at head.
+  Numbers are in KIN-49's notes. Stop is still clipped at 800 px (off-screen at base).
 - **The web UI follows live rows without moving a scrolled-back pane, in headless Chrome 131 only.**
   `scripts/measure-web-ui.js` against a snapshot of `8082e02`: 184 readings, 22 failed at base and 2 at
   `8f64058`. The 20 readings that moved are all "scrolled back: moves -> stays" (timeline and waterfall,
@@ -168,6 +190,15 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **`item:web-transactions-paged` on CI**: the branch is not pushed. KIN-43 AC#4 ("passes with it in
+  CI") is the one criterion left unticked for that reason. `-Pinspector=off` was not run (no consumer
+  signature changed).
+- **The archive half of KIN-44's red proof** is retired, not met: offline the copy is the list, so the
+  pager is never called. Offline paging is guarded instead by `long offset 1000 sliced`.
+- **Whether the whole-session read should be capped** is KIN-42's, deferred; the read is still awaited
+  and uncapped.
+- **Closed session picker at 600-700 px** can read `com.example.`, so two sessions of one app look
+  alike (ROADMAP 1a (e)).
 - **A ~160,000-call session shows a false empty state for about 25 s before the first rows**, in
   headless Chrome (rows at 26 to 27 s, connected at 26 to 29 s, over the 3000 ms bar). KIN-42, introduced
   by KIN-34, deferred by the maintainer on 2026-10-19.

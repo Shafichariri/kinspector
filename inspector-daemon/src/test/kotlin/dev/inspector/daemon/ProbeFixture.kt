@@ -32,6 +32,21 @@ import java.time.Instant
 
 const val PROBE_SESSION_ID = "2026-01-01T09-00-00_probe_ci_debug"
 private const val PROBE_STARTED_AT = "2026-01-01T09:00:00.000Z"
+
+/**
+ * A second session, past the route's 1000-row clamp, beside the probe session.
+ *
+ * Older than the probe session, so the picker still opens on the probe session and `latest` still
+ * points at it; named by the same `SessionLayout.sessionId` scheme (stamp, app, device, build).
+ */
+const val LONG_SESSION_ID = "2025-12-31T09-00-00_probe-long_ci_debug"
+private const val LONG_STARTED_AT = "2025-12-31T09:00:00.000Z"
+
+/** How many calls the long session holds: past the clamp by 203, so the oldest 203 are off the first page. */
+const val LONG_SESSION_CALLS = 1203
+
+/** The call that repeats call #0: the oldest of the newest 1000, so it is on the first page and #0 is not. */
+const val LONG_REPEAT_INDEX = LONG_SESSION_CALLS - 1000
 private const val API = "api.example.invalid"
 private const val AUTH = "auth.example.invalid"
 
@@ -42,20 +57,24 @@ fun main(args: Array<String>) {
 }
 
 /**
- * Writes the probe session under [dataDir] and points `latest` at it.
+ * Writes the probe session and the long session under [dataDir] and points `latest` at the probe
+ * session.
  *
- * Replaces the probe session if one is already there. `SessionWriter` appends, so a second run into
+ * Replaces either session if one is already there. `SessionWriter` appends, so a second run into
  * the same directory used to double every row — and the probes, which count rows against the
- * daemon's own answers, would then pass or fail on how many times the task had run. Only the probe
- * session's own folder is removed; anything else under [dataDir] is left alone.
+ * daemon's own answers, would then pass or fail on how many times the task had run. Only the two
+ * sessions' own folders are removed; anything else under [dataDir] is left alone.
  */
 fun writeProbeFixture(dataDir: Path): Path {
     val config = DaemonConfig(dataDir = dataDir)
     Files.createDirectories(config.sessionsDir)
-    val previous = config.sessionsDir.resolve(PROBE_SESSION_ID)
-    if (Files.exists(previous)) {
-        Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+    for (id in listOf(PROBE_SESSION_ID, LONG_SESSION_ID)) {
+        val previous = config.sessionsDir.resolve(id)
+        if (Files.exists(previous)) {
+            Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
+        }
     }
+    writeSession(config, LONG_SESSION_ID, LONG_STARTED_AT, transactions = longSessionCalls())
     val fixture = probeFixture()
     val dir = writeSession(
         config, PROBE_SESSION_ID, PROBE_STARTED_AT,
@@ -218,4 +237,32 @@ fun probeFixture(): ProbeFixtureContents {
     observe(SignalTags.STATE, "CartViewModel", 2_550, """{"loading":false,"lines":0}""")
 
     return ProbeFixtureContents(rows, markers, signals, bodies)
+}
+
+/**
+ * The long session's calls, oldest first: [LONG_SESSION_CALLS] of them, 10 ms apart.
+ *
+ * Built so that only a whole-session read can see two facts. Call #0 and call #[LONG_REPEAT_INDEX]
+ * are the same request by the duplicate key (method, URL, status, both byte counts) from different
+ * calls, 2030 ms apart, inside the default 3000 ms window. #[LONG_REPEAT_INDEX] is the oldest of the
+ * newest 1000, so one page of the route holds it and not #0: read from that page alone, the `twice`
+ * chip counts 1 and the row carries no repeat mark. Every other call has its own query, so it forms
+ * no repeat group, and the session has two endpoints, so every chip is shown under the default
+ * limit of 10.
+ */
+fun longSessionCalls(): List<NetworkTransaction> {
+    val start = Instant.parse(LONG_STARTED_AT)
+    return (0 until LONG_SESSION_CALLS).map { i ->
+        val mono = 1_000L + i * 10L
+        val twice = i == 0 || i == LONG_REPEAT_INDEX
+        NetworkTransaction(
+            id = "b" + i.toString(16).padStart(7, '0'), ts = start.plusMillis(mono).toString(), mono = mono,
+            method = "GET", scheme = "https", host = API,
+            path = if (twice) "/v3/long/twice" else "/v3/long/bulk", query = if (twice) null else "n=$i",
+            status = 200, ms = 40, callId = "c-long-$i", resBytes = 32,
+            reqHeaders = mapOf("Accept" to listOf("application/json")),
+            resHeaders = mapOf("Content-Type" to listOf("application/json")),
+            resContentType = "application/json",
+        )
+    }
 }

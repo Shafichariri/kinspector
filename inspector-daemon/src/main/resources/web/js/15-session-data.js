@@ -53,15 +53,28 @@ function sessionLabel(meta) {
  * The daemon reports how many rows the *text filter* matched, which was the whole story until
  * the axis could narrow things further. Counting only that would leave the header reading
  * `17/17` above a list of five — a number that is true of a query nobody can see.
+ *
+ * With no filter and no stretch, a list short of the session is the list's ceiling, and says so in
+ * words: `1000 of 4210 calls` is the shape a filter produces, and it sent readers looking for a
+ * filter that was not there. Under a filter or a stretch the plain count stays, because the filter
+ * note already says when the matches outrun the list.
  */
 function renderCounts() {
+  const node = $('counts');
   const total = state.sessionTotal;
+  node.title = '';
   if (total === null || total === undefined) {
-    $('counts').textContent = '';
+    node.textContent = '';
+    return;
+  }
+  const shown = visibleTransactions().length;
+  if (!state.filter && !state.timeRange && shown < total) {
+    node.textContent = `newest ${shown} of ${total} shown`;
+    node.title = `the list draws the newest ${shown} calls; the session holds ${total}`;
     return;
   }
   // With its noun: a bare `12/12` beside a session picker could be a count of anything.
-  $('counts').textContent = `${visibleTransactions().length} of ${total} ${total === 1 ? 'call' : 'calls'}`;
+  node.textContent = `${shown} of ${total} ${total === 1 ? 'call' : 'calls'}`;
 }
 
 /**
@@ -72,6 +85,15 @@ function showSessionLabel() {
   const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
   document.title = meta ? `${meta.appId} · inspector` : 'inspector';
 }
+
+/**
+ * How many calls the live list asks for, newest first: the page's own number rather than the
+ * daemon's clamp happening to match it. The whole-session copy is read past it in pages
+ * (`routePages`). An export asks for every call it embeds instead, because it has no filter to
+ * reach past a ceiling: at 1000 its oldest calls could not be opened at all, and a stretch brushed
+ * over them said they did not exist.
+ */
+const LIST_CEILING = 1000;
 
 /**
  * The list, its markers and the whole-session copy, then the signals, for the filter as it stands.
@@ -92,7 +114,7 @@ async function loadTransactions() {
   const isLatest = () => load === state.callLoad;
   const filter = state.filter;
   const id = encodeURIComponent(state.sessionId);
-  const q = new URLSearchParams({ filter, limit: '2000' });
+  const q = new URLSearchParams({ filter, limit: String(ARCHIVE ? ARCHIVE.transactions.length : LIST_CEILING) });
   let page = null;
   let error = null;
   try {
@@ -194,16 +216,71 @@ async function syncAllSignals(filter, isLatest = () => true) {
   }
   if (state.allSignalsSessionId === state.sessionId && state.allSignals.length) return;
   const sessionId = state.sessionId;
+  // Opened before the first page is asked for, so a live signal arriving mid-read is kept; see `admitLive`.
+  const buffer = openArrivals('signals', sessionId);
   try {
     const all = await signalPages(api, sessionId, '');
+    closeArrivals('signals', buffer);
     if (!isLatest()) return;
-    state.allSignals = all;
+    state.allSignals = withArrivals(all, buffer);
     state.allSignalsSessionId = sessionId;
   } catch {
+    closeArrivals('signals', buffer);
     if (!isLatest()) return;
     state.allSignals = state.signals.slice();
     state.allSignalsSessionId = null;
   }
+}
+
+/**
+ * A live call or signal joining the whole-session copy of its `kind`, `transactions` or `signals`.
+ *
+ * A row joins a copy only once the copy is marked as the session's, and the mark is set when the
+ * whole-session read lands, so a row that arrived between the read's first page and its last was in
+ * neither the read nor the copy. While a read of that kind is in flight for this session, the row
+ * also goes into the read's buffer, and the read takes it in by id when it lands. Opening the
+ * buffer before the first page is asked for is enough: the daemon stores a row before it broadcasts
+ * it (`SessionManager.append`), so a row broadcast earlier is already in what the read returns.
+ *
+ * The buffer takes the row whether or not the copy is marked. A marked copy that is empty is read
+ * again under a filter, and the landed read replaces it, so a row pushed onto the marked copy alone
+ * went with the array it was pushed into. With neither a marked copy nor a read in flight the row
+ * is dropped, because the next load reads the copy whole.
+ */
+function admitLive(kind, row) {
+  const marked = kind === 'transactions' ? state.allSessionId : state.allSignalsSessionId;
+  if (marked === state.sessionId) (kind === 'transactions' ? state.allTransactions : state.allSignals).push(row);
+  const buffer = state.arriving[kind];
+  if (buffer && buffer.sessionId === state.sessionId) buffer.rows.push(row);
+}
+
+/** Starts buffering live rows of `kind` for a whole-session read of `sessionId`; the buffer. */
+function openArrivals(kind, sessionId) {
+  const buffer = { sessionId, rows: [] };
+  state.arriving[kind] = buffer;
+  return buffer;
+}
+
+/**
+ * Stops buffering for the read that opened `buffer` — only if the buffer is still its own: a newer
+ * load's read may have opened another since, and clearing that would drop its arrivals.
+ */
+function closeArrivals(kind, buffer) {
+  if (state.arriving[kind] === buffer) state.arriving[kind] = null;
+}
+
+/**
+ * The read's rows, then each buffered row whose id the read does not already hold. By id, not
+ * appended whole: a row that arrived before the page holding it was asked for is in both.
+ */
+function withArrivals(read, buffer) {
+  const held = new Set(read.map((row) => row.id));
+  for (const row of buffer.rows) {
+    if (held.has(row.id)) continue;
+    held.add(row.id);
+    read.push(row);
+  }
+  return read;
 }
 
 /**
@@ -221,6 +298,8 @@ async function syncAllSignals(filter, isLatest = () => true) {
 function forgetWholeSession() {
   state.allSessionId = null;
   state.allSignalsSessionId = null;
+  state.arriving.transactions = null;
+  state.arriving.signals = null;
   state.callLoad++;
   state.signalLoad++;
 }
@@ -299,10 +378,13 @@ async function syncAllTransactions(filter, isLatest = () => true) {
   }
   if (state.allSessionId === state.sessionId && state.allTransactions.length) return;
   const sessionId = state.sessionId;
+  // Opened before the first page is asked for, so a live call arriving mid-read is kept; see `admitLive`.
+  const buffer = openArrivals('transactions', sessionId);
   let all;
   try {
     all = await transactionPages(api, sessionId, '');
   } catch {
+    closeArrivals('transactions', buffer);
     // Chips are a convenience. If this fails, fall back to what we have rather than taking the
     // list down with it — but not marked as the session, as `syncAllSignals` does not mark its
     // stand-in: the list's empty state reads the mark, and a filtered stand-in taken for the whole
@@ -312,7 +394,8 @@ async function syncAllTransactions(filter, isLatest = () => true) {
     state.allSessionId = null;
     return;
   }
+  closeArrivals('transactions', buffer);
   if (!isLatest()) return;
-  state.allTransactions = all;
+  state.allTransactions = withArrivals(all, buffer);
   state.allSessionId = sessionId;
 }

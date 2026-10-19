@@ -43,6 +43,7 @@ const vm = require('vm');
 const { loadScripts, loadStyles, loadIndexHtml, STYLES_SLOT, SCRIPTS_SLOT } = require('./lib/web-sources');
 const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
 const { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText } = require('./lib/filter-probes');
+const { probeLongSession } = require('./lib/long-session-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -928,6 +929,7 @@ function runScripts() {
   const wholeSession = await probeWholeSessionRefresh(filterCtx);
   const filterPanes = await probeFilterPanes(filterCtx);
   const waterfallText = await probeWaterfallText(filterCtx);
+  const longSession = await probeLongSession(filterCtx); // switches to the 1203-call session and back
 
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
@@ -2531,6 +2533,8 @@ function runScripts() {
   console.error('waterfall calls    :', waterfallText.callsMatch, '(tag:screen matched signals; no calls match)');
   console.error('path 0 of N match  :', filterPanes.pathCounts, '("nothing recorded" only where nothing was)');
   console.error('path filter note   :', filterPanes.pathNote);
+  // The long session's lines, labelled in lib/long-session-probes.js; each value is a verdict.
+  for (const [label, value] of longSession) console.error(`${label.padEnd(19)}:`, value);
   console.error('timeline emptied   :', filterPanes.timelineEmptied, '(markers ignore the filter and must not hide this)');
   console.error('timeline thinned   :', filterPanes.timelineThinned);
   console.error('filter panes tabs  :', filterPanes.tabsSteady, '(the tab bar never moves under a filter)');

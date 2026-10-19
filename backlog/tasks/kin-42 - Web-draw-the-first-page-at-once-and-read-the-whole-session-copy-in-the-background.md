@@ -7,7 +7,7 @@ status: To Do
 assignee:
   - '@engineer'
 created_date: '2026-10-19 05:04'
-updated_date: '2026-10-19 06:33'
+updated_date: '2026-10-19 11:32'
 labels:
   - 'item:signals-query-one-rule'
   - deferred
@@ -28,7 +28,7 @@ Found by the fourth verify panel (head 8082e02), blocking. Regression from KIN-3
 - [ ] #1 The list, tab bar, timeline, axis and counts draw from the first page as soon as it lands: rows within 2 s on the 160k session in headless Chrome; the live socket connects then, and the dot shows the socket's state, not the load's
 - [ ] #2 'waiting for an app' and every 'nothing recorded' or 'no calls' text never appear while the whole-session copy is still being read; in that time empty states and filter notes say the session is still being read (with a count where known)
 - [ ] #3 When the copy lands, everything that depends on it redraws (endpoint chips, repeat marks, path counts and 'calls not loaded' markers, axis and notes) without moving the scroll position
-- [ ] #4 A live call or signal arriving while the whole-session read is in progress is buffered and merged by id when the read lands; this closes the mid-read window recorded as open in web-ui.md (scratchpad c3/midread.js), which is removed from the open list
+- [ ] #4 ~~A live call or signal arriving while the whole-session read is in progress is buffered and merged by id when the read lands; this closes the mid-read window recorded as open in web-ui.md (scratchpad c3/midread.js), which is removed from the open list~~ MET by KIN-46 and KIN-47 (2026-10-19), struck here; the numbering is kept so the other criteria stay citable
 - [ ] #5 A newer load, a session switch or a forget during the background read cancels it (load counters)
 - [ ] #6 Checks: a jsdom or static check for the in-progress empty-state text, the post-read redraw and the mid-read merge, each red at 8082e02; the Chrome timing on 160k recorded as a documented check
 - [ ] #7 web-ui.md describes the progressive read with no completeness claims
@@ -49,4 +49,6 @@ Found by the fourth verify panel (head 8082e02), blocking. Regression from KIN-3
 
 <!-- SECTION:NOTES:BEGIN -->
 Deferred by the maintainer on 2026-10-19, after KIN-41. A ~160k-call session shows a false empty state for about 25 s before the first rows; KIN-34 introduced it. Fix later: draw the first page at once and read the whole-session copy in the background, per the ACs.
+
+2026-10-19, tracker: AC#4 (the mid-read live-row merge) is struck. KIN-46 (admitLive and the buffer-and-merge, 0fbced1) and KIN-47 (a marked but empty copy, f0b8e74) built it for the blocking read and closed the web-ui.md open sentence; QA close at 68315b4. AC#6 still asks for a mid-read merge check 'red at 8082e02' on the progressive read; the existing checks 'mid-read calls/signals kept/once/empty' now cover the merge, so only the in-progress empty-state text and the post-read redraw remain to check here. Status unchanged: deferred, To Do. KIN-42 owns whether the whole-session read is capped.
 <!-- SECTION:NOTES:END -->
