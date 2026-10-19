@@ -591,6 +591,62 @@ Android only looked right because 120px clears a status bar at that density.
   its diff (base `c21aaf0`) or outside its criteria, so none joins its fix round. They are placed
   below `item:web-current-session-guard`, with a table of where each went.
 
+- ~~**One session's "now" values can land under another.**~~ **Done, 2026-10-19.** *Ticket label:*
+  `item:web-current-session-guard`. **Ordered 2026-10-19: straight after
+  `item:web-live-rows-filtered`** (§5 → "Order from here").
+
+  `refreshCurrent` (`web/js/70-timeline.js:347-352`) awaits `GET /api/sessions/{id}/current` and
+  writes `state.current` with no check that the session it asked about is still the one on screen.
+  It is the one async writer of session state without a load or session guard. KIN-29 gave the
+  others one. It runs on every session load and on every live signal, so with live traffic a read
+  is often in flight. Switch sessions while one is, and the old session's values are drawn in the
+  new session's now strip. There is a second way in: on a failed read it keeps `state.current` as
+  it was, and right after a switch that is the other session's.
+
+  **The user and the problem.** A web UI user on a Mac who switches sessions, most often to compare
+  a run with the previous one. The now strip claims to show what this app holds now. Showing
+  another session's values there is the confidently wrong reading that the strip's age and
+  provenance exist to prevent.
+
+  **Acceptance criteria.**
+
+  - A `/current` reply for a session that is no longer selected is dropped. The strip shows the
+    selected session's values or none, never another session's.
+  - A failed `/current` read after a switch leaves the strip empty for the new session. It does not
+    keep the previous session's values.
+  - A `render-web-ui.js` probe holds a `/current` reply, switches session, then releases it, and
+    asserts what the strip shows. It fails with the guard removed, and with the `catch` fallback
+    put back.
+  - No other state writer changes.
+
+  **Out of scope.** What the daemon derives for `/current`. The overlay, which holds one session.
+  Surfaces: web UI only. No public API. Size S. It gets a release-notes line with its neighbours,
+  because a user could have seen it.
+
+  **Why its own item.** `item:web-live-rows-filtered` changes which live rows join the lists, not what
+  a session switch leaves behind. The signals item is closing. Folding it into 1a would leave a
+  false fact on screen until 1a lands, to save one small ticket.
+
+  **Done, 2026-10-19** (KIN-51, commit `eaaadce`, one fresh QA pass, one round). The fix is one hunk in
+  `refreshCurrent`: it takes `state.sessionId` before the await, as `syncAllSignals` and
+  `syncAllTransactions` do (KIN-29), returns without writing or rendering when the selection has
+  changed, and a failed read now gives `[]`. Learned: `state.current` does not record which session
+  it belongs to, so `refreshCurrent` cannot tell "the previous values are this session's" from
+  "they are the one just left". Tagging it would have meant changing `loadSignals` and
+  `afterSessionChange`, which criterion 4 rules out, so **a failed read empties the strip always,
+  also on a session that did not change, until the next signal or load.** Accepted trade-off; the
+  product owner may revisit. The guard is session-only, not a load counter: A to B to A with a reply
+  for A held lands A's own values, which criterion 1 allows. Proof in both directions: guard
+  deleted, 186 passed 1 failed (`now late reply dropped`); `.catch(() => state.current)` put back,
+  `now failed read empty` fails; restored, 187 passed. Chrome render over a two-session archive: at
+  base the old session's values show after the late reply, at head the new session's; a failed
+  read hides the strip with items `[]`. Counts: web static checks 79/0, live probe 187/0, archive
+  probe 37/0, `:inspector-daemon:test` 268/0, `:repo-checks:test` 35/0; commit identity and
+  client-name scans pass.
+
+  cost: 5 calls (delivery-tracker 2, engineer 1, QA 1, release-steward 1), ~0.4M tokens, ~45 min, Small, 1 round
+
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -647,6 +703,7 @@ tag cut before any of this existed.
 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
 | ~~The signals sort and clamp exist twice~~ **Done, 2026-10-19, with one deferred bug, KIN-42** (KIN-24 to KIN-41, KIN-26; four verify rounds; KIN-42 open, deferred: false empty state for ~25 s on a ~160k-call session) | §3 → Guards | `item:signals-query-one-rule` | S |
 | ~~The web traffic list stops at 1000 calls~~ **Done, 2026-10-19** (KIN-43 to KIN-50, QA at `68315b4`; KIN-42 stays deferred and owns whether the whole-session read is capped) *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | ~~S~~ M *(re-sized 2026-10-19; KIN-43 to KIN-46, approved; KIN-47 to KIN-50 from the verify panel)* |
+| ~~One session's "now" values can land under another~~ **Done, 2026-10-19** (KIN-51, `eaaadce`; a failed `/current` read now always empties the strip) *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 

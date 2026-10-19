@@ -398,41 +398,7 @@ involved:*
 | The export's transactions route ignores `offset`/`limit` | `item:web-transactions-paged` | that item's export criterion cannot be checked without it |
 | The "Lost the daemon" banner shows only on the first close after an unplanned drop | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
 
-- **One session's "now" values can land under another.** *Ticket label:*
-  `item:web-current-session-guard`. **Ordered 2026-10-19: straight after
-  `item:web-live-rows-filtered`** (§5 → "Order from here").
-
-  `refreshCurrent` (`web/js/70-timeline.js:347-352`) awaits `GET /api/sessions/{id}/current` and
-  writes `state.current` with no check that the session it asked about is still the one on screen.
-  It is the one async writer of session state without a load or session guard. KIN-29 gave the
-  others one. It runs on every session load and on every live signal, so with live traffic a read
-  is often in flight. Switch sessions while one is, and the old session's values are drawn in the
-  new session's now strip. There is a second way in: on a failed read it keeps `state.current` as
-  it was, and right after a switch that is the other session's.
-
-  **The user and the problem.** A web UI user on a Mac who switches sessions, most often to compare
-  a run with the previous one. The now strip claims to show what this app holds now. Showing
-  another session's values there is the confidently wrong reading that the strip's age and
-  provenance exist to prevent.
-
-  **Acceptance criteria.**
-
-  - A `/current` reply for a session that is no longer selected is dropped. The strip shows the
-    selected session's values or none, never another session's.
-  - A failed `/current` read after a switch leaves the strip empty for the new session. It does not
-    keep the previous session's values.
-  - A `render-web-ui.js` probe holds a `/current` reply, switches session, then releases it, and
-    asserts what the strip shows. It fails with the guard removed, and with the `catch` fallback
-    put back.
-  - No other state writer changes.
-
-  **Out of scope.** What the daemon derives for `/current`. The overlay, which holds one session.
-  Surfaces: web UI only. No public API. Size S. It gets a release-notes line with its neighbours,
-  because a user could have seen it.
-
-  **Why its own item.** `item:web-live-rows-filtered` changes which live rows join the lists, not what
-  a session switch leaves behind. The signals item is closing. Folding it into 1a would leave a
-  false fact on screen until 1a lands, to save one small ticket.
+- ~~**One session's "now" values can land under another.**~~ Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-current-session-guard`.
 
 *The eight defects below were found on 2026-10-19 by the first verify panel on
 `item:web-transactions-paged`. Each is older than that item's diff (base `c21aaf0`) or outside its
@@ -659,7 +625,6 @@ here. Phases A to G are merged (see `ROADMAP-DONE.md` → §5). They are not in 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
 | 1 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S; both 2026-10-19 criteria kept, maintainer 2026-10-19)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed *(if above S, moves after phase I; maintainer accepted 2026-10-19)* |
-| 2 | One session's "now" values can land under another *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
 | 3 | The traffic list does not say when it holds only part of what it counts *(added 2026-10-19; placed by the maintainer)* | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
 | 4 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
 | 5 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |

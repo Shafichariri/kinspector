@@ -33,3 +33,7 @@ code, coordinates and release build are untouched and the change reaches them on
 daemon they download.
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
+`item:web-current-session-guard` (done 2026-10-19) owes a sixth, joining the same daemon-only entry:
+*"Web UI: switching sessions could show the previous session's \"now\" values in the now strip; it now
+shows the selected session's own values, or none."* A failed read of the now values also empties the
+strip, on an unchanged session too, until the next signal or load.
