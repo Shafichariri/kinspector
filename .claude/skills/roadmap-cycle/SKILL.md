@@ -40,7 +40,13 @@ the commands and who may change what; `.claude/hooks/backlog-guard.js` enforces 
    each in a **fresh** call, never a continued engineer conversation, which would review its own
    reasoning instead of the diff. QA reports per ticket ID. Any **Failed** or blocking finding:
    `delivery-tracker` files it as a `bug` ticket under the same item, then back to step 5; loop
-   until clean.
+   until clean, with two checks on every round:
+   - **Scope review before the build.** `architect` (subagent) reads the new bug tickets'
+     criteria for scope (its definition says how). A criterion that needs another item's work, or
+     a defect that predates the diff, goes to the `product-owner`, not into the round.
+   - **Stop rule.** If the panel finds a blocking regression that the previous fix round
+     introduced, gate with the human before another round: narrow the ticket that caused it,
+     revert it, or continue. Do not start a third round on your own.
 7. `ux-reviewer` → render and look, for UI items.
 8. `delivery-tracker` → close each ticket with the QA evidence, then the roadmap item once every
    ticket under it is Done, then `docs/STATUS.md` and the phase table in `AGENTS.md` "Where we are".
@@ -79,8 +85,12 @@ conductor; every gate above still stops for the human.
   Agent without `name`.
 - Spawn every member of a phase **in one message, each with `run_in_background: false`**. A
   backgrounded teammate gets no shared task list and receives messages only after its turn ends;
-  the guard refuses it. Tell each member the others' names, and that if a first message is refused
-  as unreachable, the other member has not started yet: wait briefly (`sleep 10` in Bash) and retry.
+  the guard refuses it. Tell each member the others' names, that a message reaches a member at its
+  next tool round, and not to poll with `sleep`: the harness blocks chained sleeps (seven refusals
+  in one session). Long commands go in `run_in_background`.
+- Tell every member to copy revisions with `scripts/qa-snapshot.sh` (`docs/TEAM.md`,
+  "Snapshots"), and run that command once yourself before spawning a phase you will leave
+  unattended, so any approval prompt surfaces while the human is there.
 - Rosters: **design-council** — `architect`, `ux-reviewer`, `qa-verifier`; **verify-panel** —
   `qa-verifier`, `architect`, `ux-reviewer` (UI items only); **root-cause** — `architect`,
   `qa-verifier` (one `qa-verifier` per hypothesis is fine).
@@ -112,8 +122,11 @@ be messaged. When you report to the human, call each role by its name (docs/TEAM
    tries to break the others' "Verified" claims.
 2. `qa-verifier`'s table is the only source of Verified; a disagreement it cannot settle with
    evidence is reported as Not verified, never averaged away.
-3. Any Failed → `engineer` (subagent) fixes, then message the panel to re-verify. Re-verifying means
-   re-running the commands, not re-reading the earlier output. Shut down when clean.
+3. Any Failed → `engineer` (subagent) fixes, then message the **same** panel to re-verify
+   (`SendMessage` resumes a member whose turn ended); spawn fresh members only for a new item, so
+   the panel keeps its harnesses and does not re-read every ticket. Re-verifying means re-running
+   the commands, not re-reading the earlier output. Mode B step 6's scope review and stop rule
+   apply to every round. Shut down when clean.
 
 **root-cause**
 1. Write 2–3 competing hypotheses yourself; spawn one teammate per hypothesis.

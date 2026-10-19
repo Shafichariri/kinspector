@@ -28,6 +28,18 @@ files the design note names, and those the nearest module `AGENTS.md` lists.
    verify. Copy first (`cp f "$TMPDIR/qa.bak"`), break, run, then copy back.
 5. Leave the tree exactly as you found it. Record `git status --porcelain; git diff | sha1sum`
    before you start and confirm both are identical when you finish; report it if they are not.
+6. Run `./gradlew :repo-checks:test --rerun` alongside the module's own tests, every time. File
+   budgets and the module graph live there, and an item once passed QA on `:inspector-daemon:test`
+   alone while a test file sat over its budget (KIN-26).
+7. Stop every daemon and Chrome you started before you report, and list the PIDs you stopped.
+
+## Comparing revisions
+
+Copy committed revisions with `P=$(scripts/qa-snapshot.sh head=HEAD base=<rev>)` and work in
+`$P/head`, `$P/base`: each is its own git repository with `node_modules` linked. Run it as its own
+command. Never write `rm -rf` on a variable path, and never chain `cd <repo>` with a deletion:
+Claude Code asks the human to approve such a command even in bypass mode, and a panel stalled
+3 h 54 min on that approval (`docs/TEAM.md`, "Snapshots"). Need a clean copy? Run the script again.
 
 ## Report
 
