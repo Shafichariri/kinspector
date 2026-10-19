@@ -132,21 +132,23 @@ function stubNode(id = null, className = '') {
 /**
  * The traffic views' files run in one scope over [state], with the DOM stubbed: `$` hands out one
  * node per id, each a child of one `list-pane`, and `el` a fresh node with the class it was given.
+ * `before` names files to run ahead of them, and `globals` adds to or replaces the stubs.
  */
-function stubPage(sources, state) {
+function stubPage(sources, state, { before = [], globals = {} } = {}) {
   const nodes = new Map();
   const pane = stubNode('list-pane');
   const $ = (id) => {
     if (!nodes.has(id)) { const n = stubNode(id); n.parentElement = pane; nodes.set(id, n); }
     return nodes.get(id);
   };
-  const page = runFile(sources, ['js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
+  const page = runFile(sources, [...before, 'js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
     state, $, document: { getElementById: $ },
     el: (tag, cls, text) => Object.assign(stubNode(null, cls || ''), { textContent: text === undefined ? '' : String(text) }),
     getComputedStyle: () => ({ top: '0' }), sessionIsLive: () => false,
     fmtMs: (ms) => `${ms}ms`, fmtBytes: (n) => `${n} B`, ageNode: () => stubNode(),
     selectSignal() {}, source: { fetch: async () => ({ ok: false }) }, ARCHIVE: null,
     closeDrawer() {}, closePops() {}, renderSessionGlance() {},
+    ...globals,
   });
   // A call's row is the list's, which reads `00-core.js`'s formatters; its shape is not checked here.
   page.rowFor = () => stubNode(null, 'row');

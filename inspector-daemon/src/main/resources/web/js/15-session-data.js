@@ -126,6 +126,8 @@ async function loadTransactions() {
   renderMarkers();
   markerFormState();
   renderList();
+  // A new filter, session or re-read is a new list, which the timeline follows from its newest end.
+  state.timelineFresh = true;
   renderTimeline();
 }
 

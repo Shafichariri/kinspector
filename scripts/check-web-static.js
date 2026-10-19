@@ -28,7 +28,8 @@
  *     and the axis, the waterfall, the stretch note, the timeline and the path run over 200,000 rows;
  *     and the path, past the clamp, says which visits' calls are not loaded rather than "0 of N";
  *   - the timeline under live tail: a run opened or closed leaves the pane where it is, a new row is
- *     followed only from the end it follows, and opening the view follows once.
+ *     followed only from the end it follows, and opening the view follows once; and the live socket's
+ *     calls and markers leave the timeline, the path and the waterfall where the reader put them.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -50,7 +51,7 @@ const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
 const { checkSessionState } = require('./lib/session-state-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
-const { checkTimelineFollow } = require('./lib/follow-checks');
+const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 
 const results = [];
 const report = (label, value) => {
@@ -120,6 +121,7 @@ async function main() {
 
   console.error('--- live follow ---');
   for (const [label, value] of await checkTimelineFollow(scripts)) report(label, value);
+  for (const [label, value] of await checkSocketFollow(scripts)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

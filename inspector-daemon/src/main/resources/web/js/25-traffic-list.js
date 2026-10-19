@@ -345,8 +345,11 @@ function renderList() {
     );
   }
 
-  // Follow the newest row, wherever it now lives.
-  if (state.liveTail) {
+  // Follow the newest row, wherever it now lives — only while the list is the view shown. The
+  // timeline, the path and the waterfall flow in the same pane, and following here whatever view was
+  // shown moved a reader scrolled back in one of them on every live call or marker. Each of those
+  // views follows by its own rule (`renderTimeline`, `renderPath`); the waterfall has none.
+  if (state.liveTail && state.view === 'network') {
     const pane = list.parentElement;
     pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
   }
@@ -359,6 +362,8 @@ function setSortOrder(newestFirst) {
   $('order-newest').classList.toggle('on', newestFirst);
   $('order-oldest').setAttribute('aria-pressed', String(!newestFirst));
   $('order-newest').setAttribute('aria-pressed', String(newestFirst));
+  // The timeline follows a change of order to its newest end, as the list does.
+  state.timelineFresh = true;
   renderList();
   renderTimeline();
   // Order is a reading preference, not a view: it applies to the key list and to every

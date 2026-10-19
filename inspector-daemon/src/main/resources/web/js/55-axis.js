@@ -191,6 +191,8 @@ function setTimeRange(range) {
   renderAxis();
   renderCounts();
   axisPaintSuspended = true;
+  // A brushed stretch is a new list, which the timeline follows from its newest end.
+  state.timelineFresh = true;
   try {
     renderList();
     renderTimeline();

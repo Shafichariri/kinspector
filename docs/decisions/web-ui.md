@@ -288,9 +288,17 @@ made its follow move the whole pane on every redraw, so expanding a run in the m
 session threw the reader to the end — 24 to 29934 oldest-first, 29800 to 0 newest-first. It now
 follows as the path's log does: on opening the view, and on a redraw only when the pane was already
 at the end it follows; a run opened or closed never moves it (`renderTimeline({ follow: false })`).
-`check-web-static.js`'s live follow section drives the real file over a stub pane in both orders,
-red at `a86dde2` on the run and on a row arriving while scrolled back; KIN-38's notes record the
-headless Chrome numbers. A
+The list's own follow moved the same pane, and it ran whatever view was shown: on the 3016-call
+session one live call or marker moved a timeline scrolled to the middle from 14927 to its end
+oldest-first and to 0 newest-first, and a path or a waterfall the same way. It follows only while
+the list is shown now. The order toggle, a load and a brushed stretch had followed on the timeline
+only because that follow moved the pane first, so each sets `state.timelineFresh`. The waterfall has
+no follow of its own, so it no longer moves under live tail at all. `check-web-static.js`'s live follow
+section drives the real file over a stub pane in both orders, red at `a86dde2` on the run and on a
+row arriving while scrolled back; its `socket …` and `timeline asked follows` lines send calls,
+markers and signals through the real `05-network.js` handler with the timeline, the path and the
+waterfall shown, red at `8082e02` on all three views scrolled back. KIN-38's and KIN-41's notes record
+the headless Chrome numbers. A
 clicked station scrolls its visit to just under the sticky box by measuring the box at click time;
 the fixed `scroll-margin-top: 96px` it replaced did not count the filter note, and landed the row 19
 to 33px under the box. Layout again, so not a probe: KIN-33's notes record the headless Chrome
