@@ -154,6 +154,10 @@ every release build clean:
 
 ## Commands
 
+Before reading any skill or playbook (`.claude/skills/`), sync the checkout to current `main` or a
+branch from it; if you read one first, re-read it from disk after syncing. A stale copy has no way
+to say it is stale.
+
 ```bash
 ./gradlew build                                   # everything, all targets
 node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
