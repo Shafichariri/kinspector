@@ -21,6 +21,7 @@
  */
 const fs = require('fs');
 const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
+const { readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 
 let JSDOM, VirtualConsole;
@@ -36,42 +37,50 @@ if (!FILE) {
   console.error('Set INSPECTOR_UI_ARCHIVE to an exported session .html file.');
   process.exit(2);
 }
-const html = fs.readFileSync(FILE, 'utf8');
-
-const errors = [];
-const attempts = [];
-const virtualConsole = new VirtualConsole();
-virtualConsole.on('jsdomError', (e) => errors.push(`jsdomError: ${e.message}`));
-virtualConsole.on('error', (...a) => errors.push(`console.error: ${a.join(' ')}`));
+// Optional: the long session's export, opened second and asked what the page read past the clamp.
+const LONG_FILE = process.env.INSPECTOR_UI_ARCHIVE_LONG;
 
 // A forbidden call throws inside the page. The page's async init does not catch it, so it surfaces
 // here as an unhandled rejection — recorded, so the report names the call instead of node dying
-// with a stack trace and no report at all.
-process.on('unhandledRejection', (e) => errors.push(`unhandled: ${e && e.message ? e.message : e}`));
-process.on('uncaughtException', (e) => errors.push(`uncaught: ${e && e.message ? e.message : e}`));
+// with a stack trace and no report at all. Recorded against the page opened last; the two are
+// opened and probed one after the other, never at once.
+let current = null;
+process.on('unhandledRejection', (e) => current.errors.push(`unhandled: ${e && e.message ? e.message : e}`));
+process.on('uncaughtException', (e) => current.errors.push(`uncaught: ${e && e.message ? e.message : e}`));
 
-let copied = null;
-const dom = new JSDOM(html, {
-  // The page's own inline scripts, run by the page's own load — not code injected by this script,
-  // which would prove only that this script can assemble a page.
-  runScripts: 'dangerously',
-  pretendToBeVisual: true,
-  url: 'file:///exported/session.html',
-  virtualConsole,
-  beforeParse(window) {
-    const forbid = (kind) => (target) => {
-      attempts.push(`${kind} ${target}`);
-      throw new Error(`network forbidden in an exported session: ${kind} ${target}`);
-    };
-    window.fetch = forbid('fetch');
-    window.WebSocket = class { constructor(url) { forbid('WebSocket')(url); } };
-    window.XMLHttpRequest = class { open(method, url) { forbid('XMLHttpRequest')(url); } };
-    window.navigator.clipboard = { writeText: async (text) => { copied = text; } };
-    if (!window.TextEncoder) window.TextEncoder = TextEncoder;
-    if (!window.TextDecoder) window.TextDecoder = TextDecoder;
-  },
-});
-const { window } = dom;
+/** Opens an exported file as a double-click does, with every way to reach the network throwing. */
+function openExport(file) {
+  const page = { errors: [], attempts: [], copied: null };
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (e) => page.errors.push(`jsdomError: ${e.message}`));
+  virtualConsole.on('error', (...a) => page.errors.push(`console.error: ${a.join(' ')}`));
+  current = page;
+  page.dom = new JSDOM(fs.readFileSync(file, 'utf8'), {
+    // The page's own inline scripts, run by the page's own load — not code injected by this script,
+    // which would prove only that this script can assemble a page.
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    url: 'file:///exported/session.html',
+    virtualConsole,
+    beforeParse(window) {
+      const forbid = (kind) => (target) => {
+        page.attempts.push(`${kind} ${target}`);
+        throw new Error(`network forbidden in an exported session: ${kind} ${target}`);
+      };
+      window.fetch = forbid('fetch');
+      window.WebSocket = class { constructor(url) { forbid('WebSocket')(url); } };
+      window.XMLHttpRequest = class { open(method, url) { forbid('XMLHttpRequest')(url); } };
+      window.navigator.clipboard = { writeText: async (text) => { page.copied = text; } };
+      if (!window.TextEncoder) window.TextEncoder = TextEncoder;
+      if (!window.TextDecoder) window.TextDecoder = TextDecoder;
+    },
+  });
+  return page;
+}
+
+const main = openExport(FILE);
+const { errors, attempts } = main;
+const { window } = main.dom;
 const doc = window.document;
 
 const results = [];
@@ -245,7 +254,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     if (cURL) {
       click(cURL);
       await sleep(100);
-      check('copy cURL works', typeof copied === 'string' && copied.startsWith('curl'), (copied || '').slice(0, 50));
+      check('copy cURL works', typeof main.copied === 'string' && main.copied.startsWith('curl'), (main.copied || '').slice(0, 50));
     }
   } else {
     note('JSON body as a tree', 'n/a (no untruncated JSON response body in this session)');
@@ -363,8 +372,31 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   // --- the proof ---
   check('no network attempts', attempts.length === 0, attempts.slice(0, 3).join(' | ') || 'none');
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none');
-
   window.close();
+
+  // --- the long session's export: what the page read past the clamp, offline ---
+  // See lib/long-session-probes.js. Its own window, opened as the first was, network forbidden.
+  if (LONG_FILE) {
+    const long = openExport(LONG_FILE);
+    const longDoc = long.dom.window.document;
+    const drawn = await waitFor(() => long.dom.window.INSPECTOR_ARCHIVE && longDoc.querySelector('#list .row'));
+    const calls = drawn ? long.dom.window.INSPECTOR_ARCHIVE.transactions.map((t) => t.txn) : [];
+    await settle(() => `${longDoc.querySelectorAll('#list .row').length}|${longDoc.getElementById('counts').textContent}`);
+    console.error(`--- exported session ${long.dom.window.INSPECTOR_ARCHIVE?.meta?.sessionId ?? '(no metadata)'} ---`);
+    // The shared verdicts read `yes (…)` or `NO - …`; the verdict word is check's to print.
+    const detail = (verdict) => verdict.replace(/^(yes|NO)\s*(- )?/, '');
+    const { longChips, longRepeat } = readLongSession(longDoc, calls);
+    check('long chips count oldest', longChips.startsWith('yes'), detail(longChips));
+    check('long repeat marked', longRepeat.startsWith('yes'), detail(longRepeat));
+    check('long no network attempts', long.attempts.length === 0, long.attempts.slice(0, 3).join(' | ') || 'none');
+    check('long no page errors', long.errors.length === 0, long.errors.slice(0, 3).join(' | ') || 'none');
+    long.dom.window.close();
+  } else {
+    // Information: CI sets INSPECTOR_UI_ARCHIVE_LONG, and its expected count notices these missing.
+    for (const label of ['long chips count oldest', 'long repeat marked', 'long no network attempts', 'long no page errors']) {
+      note(label, 'n/a (INSPECTOR_UI_ARCHIVE_LONG is not set)');
+    }
+  }
   process.exit(verdict());
 })().catch((e) => {
   // A probe step that throws — a row it expected missing because nothing rendered — is a failure

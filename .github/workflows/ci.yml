@@ -71,8 +71,8 @@ jobs:
       # How many checks each probe must pass against the fixture session. A probe that stops
       # running reports less rather than failing; these numbers are what notice. Update them in
       # the same change that adds or removes a check.
-      UI_EXPECT_CHECKS: '182'
-      ARCHIVE_EXPECT_CHECKS: '30'
+      UI_EXPECT_CHECKS: '184'
+      ARCHIVE_EXPECT_CHECKS: '34'
       # Never 8099: that is the port every consuming app dials by default.
       PROBE_PORT: '8231'
 
@@ -127,9 +127,12 @@ jobs:
       - name: Exported session probe
         env:
           INSPECTOR_UI_ARCHIVE: ${{ runner.temp }}/s.html
+          # The fixture's 1203-call session, past the route's clamp; see scripts/lib/long-session-probes.js.
+          INSPECTOR_UI_ARCHIVE_LONG: ${{ runner.temp }}/long.html
           INSPECTOR_UI_EXPECT_CHECKS: ${{ env.ARCHIVE_EXPECT_CHECKS }}
         run: |
           curl -sf "http://127.0.0.1:$PROBE_PORT/api/sessions/latest/export.html" -o "$INSPECTOR_UI_ARCHIVE"
+          curl -sf "http://127.0.0.1:$PROBE_PORT/api/sessions/2025-12-31T09-00-00_probe-long_ci_debug/export.html" -o "$INSPECTOR_UI_ARCHIVE_LONG"
           node scripts/render-web-ui-archive.js
 
       # The snapshots are what a person reads when a probe goes red here; keep them either way.
@@ -141,6 +144,7 @@ jobs:
           path: |
             ${{ runner.temp }}/ui.html
             ${{ runner.temp }}/s.html
+            ${{ runner.temp }}/long.html
             ${{ runner.temp }}/daemon.log
           retention-days: 14
           if-no-files-found: ignore
