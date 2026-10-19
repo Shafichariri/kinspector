@@ -172,7 +172,7 @@ function connectLive() {
 
     if (message.type === 'txn') {
       state.transactions.push(message.txn);
-      if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
+      admitLive('transactions', message.txn);
       // The list takes the row as one more match, so both counts move and what the filter hides
       // stays what it was.
       if (state.sessionTotal !== null) state.sessionTotal++;
@@ -190,7 +190,7 @@ function connectLive() {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
       state.signals.push(message.signal);
-      if (state.allSignalsSessionId === state.sessionId) state.allSignals.push(message.signal);
+      admitLive('signals', message.signal);
       if (tagOf(message.signal) === 'screen') {
         state.screens.push(message.signal);
         if (state.view === 'path') loadScreenPayloads().then(renderPath);

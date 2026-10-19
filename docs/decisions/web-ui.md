@@ -196,7 +196,7 @@ same list. With no filter and no brushed stretch the header then says `newest 10
 because `1000 of 4210 calls` is the shape a filter produces and sent readers looking for one;
 `no-filter count` in `check-web-static.js` and `long count no filter` in both probes hold it.
 
-The two cached copies have gone stale in the ways below, and all but the last are closed; this is
+The two cached copies have gone stale in the ways below, and all are closed; this is
 what has been found, not every way there is. Resuming the list and the socket opening again after
 the daemon was away clear both (`forgetWholeSession`): the live socket is the only thing that keeps either copy current, so rows that arrived while nothing listened are in
 neither, and the tabs, the route and the endpoint chips went on without them until the filter was
@@ -216,11 +216,16 @@ reading the mark, said a session with calls had recorded none (`whole read failu
 `whole calls read failure` in `check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
 one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
 answer two loads out of order, and a slow unfiltered read that landed last put every row back under
-the filter just typed (`older call load dropped`, `older signal load dropped`). Open: a live row that
-arrives while the whole-session read is between pages is in neither the read nor the copy, because a
-live row joins a copy only once the copy is marked as the session's, and the mark is set when the read
-lands. Paging widened that window from one request to every page. `item:web-transactions-paged` owns
-it.
+the filter just typed (`older call load dropped`, `older signal load dropped`). And a live row that
+arrived while the whole-session read was between pages was in neither the read nor the copy, because
+a live row joined a copy only once the copy was marked as the session's, and the mark is set when the
+read lands; paging widened that window from one request to every page. Now, from the first page
+request until the read lands, a live row for that session is buffered (`admitLive`, `state.arriving`),
+and the landed copy is the read plus every buffered row whose id it lacks, for both copies. Opening
+the buffer before the first request is enough because the daemon stores a row before it broadcasts it,
+so a row broadcast earlier is already in the read; and the merge is by id because a row can be in a
+page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mid-read calls once`,
+`mid-read signals once`).
 
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long

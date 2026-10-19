@@ -46,15 +46,20 @@ function checkLastCapture(sources) {
 /**
  * A stub of the signal route over `rows`: a bare array, newest first, sliced by `offset` and
  * `limit`, honouring only `tag:<name>` filters, and failing or waiting where `behave` says.
+ *
+ * `readAt` says when the rows are read. `arrival`, the default, is what the daemon held when the
+ * request reached it, however long the answer then takes, which is what a read from before a gap
+ * needs. `answer` reads them as the answer leaves, so a row added while `behave` holds the request
+ * is in that page, as a row stored before a page is read is in the daemon's.
  */
-function signalRoute(rows, behave = () => null) {
+function signalRoute(rows, behave = () => null, { readAt = 'arrival' } = {}) {
   return async (path) => {
     const url = new URL(path, 'http://stub.invalid');
     if (!url.pathname.endsWith('/signals')) return [];
     const filter = url.searchParams.get('filter') || '';
-    // What the daemon holds when the request reaches it, however long the answer then takes.
-    const held = rows.slice();
-    await behave(filter);
+    let held = rows.slice();
+    await behave(filter, url);
+    if (readAt === 'answer') held = rows.slice();
     const want = filter.startsWith('tag:') ? held.filter((r) => r.tag === filter.slice(4)) : filter ? [] : held;
     const offset = Number(url.searchParams.get('offset')) || 0;
     const limit = Number(url.searchParams.get('limit')) || 100;
@@ -77,6 +82,7 @@ function sessionData(sources, api, state) {
 const sessionState = (filter) => ({
   sessionId: 'S', filter, signals: [], allSignals: [], allSignalsSessionId: null, screens: [], view: 'network',
   transactions: [], allTransactions: [], allSessionId: null, markers: [], callLoad: 0, signalLoad: 0,
+  arriving: { transactions: null, signals: null },
 });
 
 /**
@@ -173,15 +179,16 @@ async function checkCallRace(sources) {
  * A stub of the transaction route over `rows`: a page, newest first, sliced by `offset` and
  * `limit` and clamped to `clamp` as the daemon clamps, honouring only `path:<path>` filters, with
  * `total` the session's count and `matched` the filter's — the daemon's own shape — and failing or
- * waiting where `behave` says.
+ * waiting where `behave` says. `readAt` as for `signalRoute`.
  */
-function callRoute(rows, { clamp = 1000, behave = () => null } = {}) {
+function callRoute(rows, { clamp = 1000, behave = () => null, readAt = 'arrival' } = {}) {
   return async (path) => {
     const url = new URL(path, 'http://stub.invalid');
     if (!url.pathname.endsWith('/transactions')) return [];
     const filter = url.searchParams.get('filter') || '';
-    const held = rows.slice();
-    await behave(filter);
+    let held = rows.slice();
+    await behave(filter, url);
+    if (readAt === 'answer') held = rows.slice();
     const want = filter ? held.filter((t) => `path:${t.path}` === filter) : held;
     const offset = Number(url.searchParams.get('offset')) || 0;
     const limit = Math.min(clamp, Number(url.searchParams.get('limit')) || 50);
@@ -413,6 +420,57 @@ async function checkNoFilterCount(sources) {
     : `NO - "${text}", where "newest 1000 of 3016 shown" was due`;
 }
 
+/**
+ * A live row arriving while the whole-session read is in flight is in the copy when the read lands,
+ * and in it once — for the calls and for the signals. The session is 1500 rows, so the read takes
+ * two pages, and the routes read their rows as they answer, as the daemon's do.
+ *
+ * - kept: the second page (`offset=1000`) is held while the row arrives, so the read never returns
+ *   it — every page it could be on was answered already. Only the buffer has it. It was in neither
+ *   while a live row joined a copy only once the copy was marked, which happens when the read lands.
+ * - once: the first page is held instead, so the read returns the row and the buffer holds it too.
+ *   Merged by id it is there once; appended whole it is there twice.
+ */
+async function checkMidRead(sources) {
+  const lines = [];
+  for (const held of ['kept', 'once']) {
+    for (const kind of ['calls', 'signals']) {
+      const calls = kind === 'calls';
+      const rows = Array.from({ length: 1500 }, (_, i) => (calls
+        ? { id: `t${i}`, path: '/a', mono: i }
+        : { id: `s${i}`, tag: 'screen', mono: i }));
+      const holdAt = held === 'kept' ? '1000' : '0';
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      let reached;
+      const asked = new Promise((resolve) => { reached = resolve; });
+      const behave = (filter, url) => {
+        if (filter || url.searchParams.get('offset') !== holdAt) return null;
+        reached();
+        return gate;
+      };
+      const api = calls ? callRoute(rows, { behave, readAt: 'answer' }) : signalRoute(rows, behave, { readAt: 'answer' });
+      const state = sessionState(calls ? 'path:/b' : 'tag:cache');
+      const page = sessionData(sources, api, state);
+      const read = calls ? page.syncAllTransactions(state.filter) : page.syncAllSignals(state.filter);
+      await asked;
+      const live = calls ? { id: 'live', path: '/a', mono: 1500 } : { id: 'live', tag: 'screen', mono: 1500 };
+      page.admitLive(calls ? 'transactions' : 'signals', live);
+      rows.push(live);
+      release();
+      await read;
+      const copy = calls ? state.allTransactions : state.allSignals;
+      const marked = (calls ? state.allSessionId : state.allSignalsSessionId) === state.sessionId;
+      const times = copy.filter((r) => r.id === 'live').length;
+      const where = `page offset=${holdAt} held`;
+      lines.push([`mid-read ${kind} ${held}`, marked && times === 1 && copy.length === 1501
+        ? `yes (a live row arriving with the ${where} is in the landed copy once, ${copy.length} rows)`
+        : `NO - with the ${where}, the landed copy holds the live row ${times} time(s) in ${copy.length} rows${marked ? '' : ', unmarked'}; once in 1501 was due`]);
+    }
+  }
+  return lines;
+}
+
 async function checkSessionState(sources) {
   return [
     ['last capture whole', checkLastCapture(sources)],
@@ -425,6 +483,7 @@ async function checkSessionState(sources) {
     ...(await checkPastTheClamp(sources)),
     ['unfiltered then filter', await checkUnfilteredThenFilter(sources)],
     ['no-filter count', await checkNoFilterCount(sources)],
+    ...(await checkMidRead(sources)),
   ];
 }
 
