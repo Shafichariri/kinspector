@@ -386,9 +386,9 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     // The shared verdicts read `yes (…)` or `NO - …`; the verdict word is check's to print.
     const detail = (verdict) => verdict.replace(/^(yes|NO)\s*(- )?/, '');
     for (const [label, value] of readLongSession(longDoc, calls, { exported: true })) check(label, value.startsWith('yes'), detail(value));
-    // The pager's second question, the only one with a middle offset: the first page and the
-    // whole-route lines above pass against a route that slices to `limit` rather than to
-    // `offset + limit`, or that ignores `offset`, and this one does not.
+    // The pager's second question, the only one with a middle offset: the lines above all pass
+    // against a route that slices to `limit` rather than to `offset + limit`, and this one does not.
+    // A route that ignores `offset` already fails `transactions offset past end`.
     const oldest = calls.slice().sort((a, b) => b.mono - a.mono).slice(1000).map((t) => t.id);
     const longRoute = `/api/sessions/${encodeURIComponent(LONG_SESSION_ID)}/transactions`;
     const second = await (await long.dom.window.eval('source').fetch(`${longRoute}?offset=1000&limit=1000`)).json();
