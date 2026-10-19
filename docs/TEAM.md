@@ -2,7 +2,8 @@
 
 Eight Claude Code subagents, defined in `.claude/agents/`, that work the backlog in
 `docs/ROADMAP.md`. The playbook that runs them in order is the `roadmap-cycle` skill
-(`.claude/skills/roadmap-cycle/SKILL.md`).
+(`.claude/skills/roadmap-cycle/SKILL.md`). The conductor syncs the checkout to current `main`
+before reading it, and re-reads it if it loaded it first; the rule is at the top of the skill.
 
 Every role starts from `AGENTS.md`, the index, and reads the `docs/decisions/` files for the
 modules it touches. **What** is next and in what order lives only in `ROADMAP.md`;
@@ -311,7 +312,8 @@ The rules that keep it from becoming a second backlog:
   per finding; a close verdict that blocks only on this item's criteria and regressions; heuristics
   documented as heuristics; `scripts/env-check.sh` before the first engineer, with no agent
   downloading a toolchain; a reviewer's harness that proves an unguarded criterion promoted to
-  `scripts/lib/` in the same item; and a cost line (calls by role, tokens, wall time, track,
+  `scripts/lib/` in the same item; a new probe on the shared probe page re-proving one neighbouring
+  guard red; and a cost line (calls by role, tokens, wall time, track,
   rounds) recorded when the item closes. The engineer runs fast checks per ticket and the full set, Chrome
   included, once per round (`.claude/agents/engineer.md`); QA's bar for documentation is a false
   claim, not one more missed case (`.claude/agents/qa-verifier.md`).

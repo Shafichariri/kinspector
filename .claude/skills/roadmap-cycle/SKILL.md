@@ -11,6 +11,13 @@ verbatim, and stop at the gates below. Subagents *can* spawn subagents now, but 
 chain to the next one itself: subagents cannot ask the human anything, so every gate below would be
 skipped, and QA run by the engineer it is checking is no longer independent.
 
+**Before anything else, sync.** The checkout must be on current `main` (`git fetch origin`, then
+fast-forward) or on a branch cut from it. If you read this skill before syncing, read it again from
+disk now: the copy you loaded may be stale. On 2026-10-19 the conductor loaded it from a merged
+branch, then fast-forwarded `main`, and so ran a whole item without the Tracks section, the
+`env-check.sh` rule and the cost-line rule. A rule in here cannot fix a stale copy of itself, so
+`AGENTS.md` → Commands carries the same line.
+
 ## Tracks — pick one before Mode B starts, and say which
 
 The process scales to the item. Every role costs a full context window (150–220k tokens and 10–20
@@ -253,6 +260,12 @@ Teams cost a full context window per member — each loads the project context o
   `item:web-transactions-paged`, three reviewers each wrote a top-bar harness (`bar.js`), and
   KIN-49's fix sat unguarded until it became `lib/topbar-cases.js`. Briefs name the existing
   `scripts/lib/` harnesses, so a reviewer reuses them instead of writing its own.
+- **A new probe on the shared probe page re-proves one neighbouring guard red.** Probes share one
+  page, so a probe that leaves state behind can make the guards after it pass with nothing to
+  check. The engineer's brief says so: after adding a probe, break one existing guard that runs on
+  the same page and show it fail. On `item:web-live-rows-filtered` the new live probe left a path
+  visit open, and `failures unfolded` and `expanded unfolded` passed vacuously until QA did exactly
+  this (KIN-55).
 - **Record what each item cost.** Every Agent result ends with its `subagent_tokens` and
   `duration_ms`; keep a running sum per item, with a call count per role. At close, hand it to the
   `delivery-tracker`, which writes one line under the item's done entry: calls by role, tokens,
