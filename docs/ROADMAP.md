@@ -481,6 +481,100 @@ involved. One is not worth doing. The maintainer placed the new item on 2026-10-
   mirror. Reopen it if anything other than the page ever reads an export's routes, or the page
   starts sending a computed limit that can reach 0.
 
+*The three defects below were found on 2026-10-19 by QA on `item:web-current-session-guard`
+(KIN-51, fix at `eaaadce`). Each is older than that item's diff or outside its criteria, so none
+joins its fix round. Placed by the product owner the same day, with a ruling on the trade-off that
+item accepted. All three, and the ruling, make one new item: they are the same state, the same two
+functions and the same probe file, and splitting them would mean three tickets each rebuilding the
+probe's fixture.*
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| 1. After a session switch, the now strip, the timeline's signal rows and the glance show the previous session's values until `loadSignals` lands | **new item**, `item:web-now-strip-follows-session` | a false fact on screen, true at base; 1a rebuilds the switch path but is far off, and gets a criterion that keeps the new probe green |
+| 2. Two `refreshCurrent` reads for the same session can land out of order | **new item**, with 1 | the same writer; KIN-51 guarded the session, not the order |
+| 3. The probe `now late reply dropped` cannot tell "dropped" from "blanked" | **new item**, with 1 | a guard that cannot detect; the new item's probes need the same second fixture session |
+| KIN-51's trade-off: a failed `/current` read empties the strip on an unchanged session too | **new item**, ruled below: keep the session's own values | the fix is one field beside the counter in 2 |
+
+- **The now strip and the signal panes can show what is no longer true.** *Ticket label:*
+  `item:web-now-strip-follows-session`. **Placed 2026-10-19 by the product owner: straight after
+  `item:web-list-says-what-it-holds`** (§5 → "Order from here"), with the other web defects.
+
+  Three ways the signal side of the page shows something false, all left after KIN-51:
+
+  - **The switch window.** The picker's `change` handler (`web/js/99-init.js`) and
+    `afterSessionChange` (`web/js/90-sessions.js`, after a delete or clear) both reach
+    `loadTransactions`, which reads a page of calls, the markers, the whole-session copy of the
+    calls (`syncAllTransactions`) and only then `loadSignals`. Until that lands, `state.current`, `state.signals`, `state.allSignals` and
+    `state.screens` are still the previous session's, so the now strip, the timeline's signal rows
+    and the glance describe the session just left, under the new one's name. True at base, before
+    KIN-51. On a large session the window is as long as the whole-session read, which is the
+    25-second wait recorded under KIN-42 in §3 → Guards, so the reader has time to believe it.
+    `afterSessionChange` clears all of these only when no session is left, and the picker never.
+  - **Out-of-order replies.** `refreshCurrent` runs on every live signal. KIN-51 drops a reply for a
+    session no longer selected, but two reads for the same session have no load counter, so an
+    older reply landing last overwrites a newer one. `loadSignals` has `signalLoad` for exactly
+    this; `refreshCurrent` does not share it.
+  - **A probe that cannot fail on one mutation.** In KIN-51's `now late reply dropped`
+    (`scripts/lib/current-guard-probes.js`), the fixture's second session has no current values,
+    so "the strip lists the new session's own values" and "the strip is empty" are the same
+    assertion. A mutation that writes `[]` on a mismatched session, instead of returning, passes
+    CI. That is a guard only ever seen passing, against "prove guards in both directions".
+
+  **Ruling on KIN-51's trade-off: on an unchanged session, keep the values; blank only across a
+  switch.** Since KIN-51 a failed `/current` read always empties the strip, until the next signal
+  or load. Blank is right after a switch, because the values held belong to another session and
+  nothing says so. On the same session it is the worse of the two. Every row the strip keeps is
+  this session's and carries its own age, so it is a dated fact: `docs/decisions/signals.md`
+  ("The collapsed line says how stale the oldest of it is") is what makes a kept row honest. An
+  empty strip is undated and reads as "this app holds nothing now", which is the confidently wrong
+  reading the age exists to prevent. The cost of keeping is one value that may be one signal old,
+  and the failed read is rare: the usual cause is the daemon going away, which already raises the
+  banner and re-reads everything on reconnect. The fix is to record whose values `state.current`
+  holds, so a failure keeps them only when they are the selected session's. **This touches no
+  recorded decision**: KIN-51's rule ("a failed read after a switch leaves the strip empty")
+  still holds, and the accepted trade-off lives only in `docs/STATUS.md` and the `UNRELEASED.md`
+  line, which the delivery tracker amends when this ships.
+
+  **The user and the problem.** A web UI user on a Mac who switches sessions to compare two runs,
+  or watches the strip under live traffic. The strip and the timeline claim to describe this
+  session now, and for a window, or after one slow reply, they describe another session or an
+  older moment, without a mark that says so.
+
+  **Why now.** KIN-51 just made the strip's session promise. These are the holes left in the same
+  two functions, while the code and the probe are fresh. It is small, and it shows a user
+  something false today, which is the maintainer's rule for going ahead of the structure moves.
+
+  **Acceptance criteria.**
+
+  - From the moment another session is selected until its own signals land, the now strip, the
+    timeline's signal rows and the glance show none of the previous session's values: either
+    nothing, or a loading state that names no values. A probe holds the new session's signal read,
+    asserts all three, and fails with the clear removed.
+  - Of two `/current` reads for one session, the later-started one decides the strip, whatever
+    order they land in. A probe releases them newest first and fails with the counter removed.
+    A `/current` read started by `loadSignals` and one started by a live signal obey the same
+    rule; the architect chooses whether they share `signalLoad` or a counter of their own.
+  - A failed `/current` read on an unchanged session leaves the strip as it was. A failed read
+    after a switch still leaves it empty: KIN-51's `now failed read empty` stays green. A probe
+    for the unchanged case fails with KIN-51's `catch(() => [])` behaviour kept for it.
+  - The live probe's fixture has a second session with current values of its own, different from
+    the first's, so `now late reply dropped` asserts the new session's values and not an empty
+    strip. It is proven red with a mismatched reply written as `[]`, and the `n/a` branches that
+    the old fixture took no longer fire.
+  - No filter is evaluated in `web/js`, and no new route is added.
+
+  **Out of scope.** The call list and the counts, which the first page of the switch already
+  replaces. Making the whole-session read shorter, which is KIN-42. Marking a kept value as "not
+  refreshed", which can be a later polish if the kept-value case is ever seen in use. The overlay,
+  which holds one session. Surfaces: web UI only. No public API, no `:inspector-model` change.
+  Size S, to be confirmed by the architect. Release-notes line, because a user could have seen the
+  switch window.
+
+  **Why not only a criterion on 1a.** 1a rebuilds the session switch, but it is the fifth item
+  after this one and sized L, and folding this in would leave a false fact on screen until then,
+  the same argument that made KIN-51 its own item. 1a carries one criterion instead: the probes
+  this item adds stay green through its rebuild.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -626,14 +720,15 @@ here. Phases A to G are merged (see `ROADMAP-DONE.md` → §5). They are not in 
 |---|---|---|---|---|
 | 1 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S; both 2026-10-19 criteria kept, maintainer 2026-10-19)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed *(if above S, moves after phase I; maintainer accepted 2026-10-19)* |
 | 3 | The traffic list does not say when it holds only part of what it counts *(added 2026-10-19; placed by the maintainer)* | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
-| 4 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 5 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
-| 6 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 7 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 8 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
-| 9 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
-| 10 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
-| 11 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| 4 | The now strip and the signal panes can show what is no longer true *(added 2026-10-19)* | §3 → Bugs found | `item:web-now-strip-follows-session` | S, to be confirmed |
+| 5 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 6 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 7 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 8 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 10 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 11 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 12 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
 wait for the next one.
@@ -669,6 +764,15 @@ defect went is in §3, below `item:web-current-session-guard`.
 that day** (the header and tab count under live tail, and the whitespace-only filter). If the
 architect sizes it above S with them in, its own condition applies and `item:web-live-rows-filtered` moves to after
 phase I, still ahead of 1a. The maintainer accepted that consequence.
+
+**One row added 2026-10-19 by the product owner**, `item:web-now-strip-follows-session`, from QA on
+`item:web-current-session-guard`: three defects that item left in the same two functions and the
+same probe, and a ruling on the trade-off it accepted. It goes straight after
+`item:web-list-says-what-it-holds`, with the other web defects, for their reason: it is small and
+shows a user something false today. The maintainer's rows keep their relative order and the rows
+after it move down one. If the maintainer takes the web defects after phase I instead (§5 → "Open
+questions only the human can answer"), this row moves with them. Where each defect went is in §3,
+above the item.
 
 **Why this order.** By value per hour. The two defects come ahead of the structure moves: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -835,7 +939,8 @@ decision or a known trap:
   rows, on the maintainer's own rule that a false fact comes before a move. The maintainer has not
   confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
   web defects straight after phase I. Either way they stay ahead of 1a.
-  `item:web-list-says-what-it-holds`, placed with them on 2026-10-19, moves with them.
+  `item:web-list-says-what-it-holds`, placed with them on 2026-10-19, moves with them. So does
+  `item:web-now-strip-follows-session`, placed with them later the same day.
 
 ---
 
@@ -981,6 +1086,13 @@ In **1a, the shell**:
   into Processes and rebuilds the top bar the banner sits under, so the states this keys on
   (`stopped`, `restarting`, `away`) are rewritten there anyway. The recorded rule that a stopped
   daemon's banner offers no restart (`docs/decisions/web-ui.md`) still holds.
+- **The session switch keeps its probes green.** *(Added 2026-10-19, from QA on
+  `item:web-current-session-guard`.)* 1a rebuilds how a session is chosen, as Sessions leaves the
+  dialog and hash routes give a session an address. The probes KIN-51 and
+  `item:web-now-strip-follows-session` add (a late or failed `/current` read across a switch, the
+  out-of-order pair, the switch window) still pass after 1a, driven through whichever control
+  selects a session then, and are not deleted or reported `n/a` because the picker moved. *Why 1a:*
+  it is the item that moves the switch; the defects themselves are fixed earlier, in their own item.
 
 In **1b, room for the list**:
 
