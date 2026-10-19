@@ -26,6 +26,10 @@ files the design note names, and those the nearest module `AGENTS.md` lists.
    it. **Never restore with `git checkout -- <file>`**: you run before the engineer's work is
    committed, so that reverts the file to `HEAD` and silently deletes the change you were sent to
    verify. Copy first (`cp f "$TMPDIR/qa.bak"`), break, run, then copy back.
+   **Documentation criteria:** the bar is a **false claim**, meaning a sentence the code does not
+   bear out, or a list presented as complete that is not. One more case that a documented
+   heuristic misses is not a failure when the text already says its list is not complete; report
+   it as a note. Two rounds were spent hunting shapes against heuristic checks (KIN-21, KIN-22).
 5. Leave the tree exactly as you found it. Record `git status --porcelain; git diff | sha1sum`
    before you start and confirm both are identical when you finish; report it if they are not.
 6. Run `./gradlew :repo-checks:test --rerun` alongside the module's own tests, every time. File

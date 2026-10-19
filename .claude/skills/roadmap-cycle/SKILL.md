@@ -145,3 +145,30 @@ Teams cost a full context window per member — each loads the project context o
 - Wait for teammates to finish before acting on a phase; don't do their part yourself.
 - The repository is public: no client, employer or product names anywhere, including prompts that
   end up in commit messages.
+
+### Pace — what the signals item (2026-10-18/19) cost, and the rules it left
+
+- **Decide a round's scope before you spawn its engineer.** A message reaches a running agent only
+  at its next tool round, so a scope change mid-build means undone work. Put a large ticket (one
+  that changes loading, paging or layout across views) in its own round; never bundle it with
+  small fixes, so the small ones can close while the large one is still open.
+- **A fresh engineer per item, and per round once its report runs long.** The engineer's context
+  per call grew from about 118k to 227k tokens across one item, and every step slowed with it.
+  Brief a new one with the ticket paths and the previous round's notes rather than resuming.
+- **Size the panel to the change.** A full verify panel (QA, architect, UX) for an item's first
+  round and for any round that moves layout, scrolling or loading. A round of narrow code or text
+  fixes is re-checked by one fresh `qa-verifier`, plus the `architect` only when the fix restructures
+  code. Single-QA re-checks (KIN-21, KIN-22, KIN-26, KIN-41) took about 25 minutes each against 30
+  for a panel, and found what mattered.
+- **One owner per finding in a panel.** Give each member its lens in the spawn prompt (QA: the
+  criteria and red proofs; architect: the diff and the rules; UX: what a user sees) and tell them to
+  cross-check each other's claims by message, not to reproduce each other's findings. In panel 4
+  four agents independently established the same two defects.
+- **A panel ends with a close verdict.** Each member says plainly whether the item can close, and a
+  finding blocks only if it fails a criterion of this item or is a regression this item introduced.
+  Everything older goes to the `product-owner` as a list, never into the round.
+- **Heuristics are documented as heuristics from the first draft.** A check that is not a parser
+  is described as "a heuristic; among what it misses: …", never with a complete list. Two rounds
+  (KIN-21, KIN-22) went to doc text that claimed a complete list of misses.
+- **Leave nothing waiting on the human unattended.** Before leaving a phase to run alone, run its
+  snapshot command once yourself (see Team phases) and check no member is blocked on an approval.

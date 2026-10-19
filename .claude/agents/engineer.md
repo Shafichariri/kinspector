@@ -39,6 +39,13 @@ before changing anything; read `docs/schema.md` before touching `:inspector-mode
      `P=$(scripts/qa-snapshot.sh base=<round's base>)`. jsdom cannot see layout, scrolling or a
      160k-call session, and every regression the signals panels found was one of those. Report
      every line under "moved against base" and say which ones your tickets meant to move.
+   - **Per ticket, the fast checks only:** `node scripts/check-web-static.js` and the tests of the
+     module you changed. **Once per round, before reporting:** both probes, `:repo-checks:test`, the
+     other modules' tests and the Chrome suite. Re-running everything before every commit cost
+     about an hour per round in the signals item and caught nothing the round-end run did not.
+   - Pick the Chrome suite's sections by what the ticket touches: `--only layout,run,live` for
+     layout and scrolling; add `first` (the 160k-call session, about 27 s per load) only when the
+     ticket changes how a session loads.
    - overlay touched → `:inspector-ui:jvmTest` then **look at** `inspector-ui/build/screenshots/`
    - `./gradlew build -Pinspector=off` whenever a consumer-facing signature moved
 6. Report: what changed, which commands ran with their real result (failures included), and what

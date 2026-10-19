@@ -245,6 +245,13 @@ The rules that keep it from becoming a second backlog:
 
 - **Every ticket hangs under a roadmap item**, labelled `item:<slug>` with the slug the item names
   under its heading. A defect found outside any item goes to the `product-owner` first.
+- **Pace rules from the signals item (2026-10-19).** The conductor's list is in the skill under
+  "Pace": decide a round's scope before spawning its engineer and give a large ticket its own round;
+  a fresh engineer per item; size the panel to the change (one fresh QA for narrow fixes); one owner
+  per finding; a close verdict that blocks only on this item's criteria and regressions; heuristics
+  documented as heuristics. The engineer runs fast checks per ticket and the full set, Chrome
+  included, once per round (`.claude/agents/engineer.md`); QA's bar for documentation is a false
+  claim, not one more missed case (`.claude/agents/qa-verifier.md`).
 - **A bug ticket stays inside its item.** Before a fix round is built, the `architect` reads each
   new bug ticket's criteria for scope. A criterion that needs another roadmap item's work, or a
   defect whose own text says it predates the diff, goes to the `product-owner` instead of into the
