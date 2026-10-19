@@ -1,11 +1,11 @@
 ---
 id: KIN-41
 title: 'Web bug: a live call or marker moves the pane while the timeline is shown'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-19 05:04'
-updated_date: '2026-10-19 06:07'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -22,21 +22,21 @@ Found by the fourth verify panel (head 8082e02), blocking. Regression from KIN-3
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With the timeline (or path or waterfall) shown and scrolled back, a live call or marker leaves scrollTop unchanged in both orders
-- [ ] #2 With the pane at the end it follows, a new row is still followed
-- [ ] #3 The order toggle, a filter load and a time-range brush still follow on the timeline, as at 8082e02 (state.timelineFresh set in setSortOrder, loadTransactions and setTimeRange)
-- [ ] #4 A new check drives the real socket txn and marker path while the timeline is scrolled back; red at 8082e02, green after
-- [ ] #5 web-ui.md's follow paragraph is true and names the check
-- [ ] #6 Chrome measurement at 1440 and 400 recorded
+- [x] #1 With the timeline (or path or waterfall) shown and scrolled back, a live call or marker leaves scrollTop unchanged in both orders
+- [x] #2 With the pane at the end it follows, a new row is still followed
+- [x] #3 The order toggle, a filter load and a time-range brush still follow on the timeline, as at 8082e02 (state.timelineFresh set in setSortOrder, loadTransactions and setTimeRange)
+- [x] #4 A new check drives the real socket txn and marker path while the timeline is scrolled back; red at 8082e02, green after
+- [x] #5 web-ui.md's follow paragraph is true and names the check
+- [x] #6 Chrome measurement at 1440 and 400 recorded
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
-- [ ] #4 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #5 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #4 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #5 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #6 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -65,3 +65,9 @@ Found, not fixed (outside the ticket): a live call does not redraw the timeline 
 
 Also run after commit 8f64058: node scripts/measure-web-ui.js --base <qa-snapshot of 8082e02> (the suite added in d932227). base 184 readings, 22 failed; head 184 readings, 2 failed. Moved against base: 20 lines, every one 'scrolled back: moves -> stays' (big 1440 and 400, both orders, timeline/waterfall txn+marker, and path at 400) - all meant by KIN-41. The 2 head failures are KIN-42's: first rows huge 27062 ms, connected huge 27163 ms (over the 3000 ms bar); big 207/207 ms within.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All six ACs Verified by a fresh QA at 8f64058, no regression against 8082e02. Static 64 to 71 checks, 0 failed (red at 8082e02: 3 socket-scrolled checks failed; green at 8f64058); live probe 182, archive 26, daemon 267/0, repo-checks 35/0. Chrome suite scripts/measure-web-ui.js: base 22 failed, head 2 failed; the 20 readings that moved are all 'scrolled back: moves to stays'; the 2 left are KIN-42's (first rows and connected over the 3000 ms bar on the 160k session). DoD 3 and 6 (no client names, duplicate lines) left unticked: scan terms unavailable to the tracker. Found, not fixed: a live call never redraws the timeline (see ROADMAP).
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -536,8 +536,33 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
   published, so there is no noop twin or golden file to carry.
 
-- **The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**
-  *Ticket label:* `item:signals-query-one-rule`. **Known violation, not yet fixed.**
+- ~~**The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**~~
+  **Done, 2026-10-19, with one deferred bug, KIN-42.** *Ticket label:* `item:signals-query-one-rule`.
+  Tickets KIN-24 to KIN-41 and KIN-26 are Done on QA evidence; KIN-42 stays open and deferred (below).
+  Four verify rounds found and closed the defects (heads `5f6b610`, `e1711a3`, `a86dde2`, `8082e02`),
+  and a fresh QA at `8f64058` found no regression: static checks 71/0, live probe 182, archive probe 26,
+  `:inspector-daemon:test` 267/0, `:repo-checks:test` 35/0. Each round's findings were filed back under
+  the item (KIN-27 to KIN-41), which is why 18 tickets cover what was sized S. KIN-26 was the follow-up
+  to KIN-23: its test pushed `McpTest.kt` past its budget, and `:repo-checks` caught what a daemon-only
+  run had not. What was learned: the route and `list_signals` now share `SessionRepository.querySignals`
+  (pinned by `SignalQueryTest`); the web UI keeps a whole-session copy of signals beside the filtered one,
+  as it already did for calls, and every round found another way that copy went stale (pause and resume,
+  an unplanned reconnect, a slow older load, a clamp on counts), so the rule is written down in
+  `docs/decisions/web-ui.md` and each way has a check. The Chrome suite `scripts/measure-web-ui.js` showed
+  22 failures at the base of KIN-41 and 2 at head; the 20 that moved are all "scrolled back: moves ->
+  stays", and the 2 left are KIN-42's. The release-notes line owed (below, the fourth) still stands
+  and is unchanged.
+  **Open, deferred by the maintainer on 2026-10-19: KIN-42.** On a session of about 160,000 calls, the
+  web UI shows a false empty state ("waiting for an app" / "nothing recorded") for about 25 seconds
+  before the first rows appear, and the live socket connects only after. KIN-34 introduced it, when the
+  filter-note counts began reading the whole session. The fix is to draw the first page at once and
+  read the whole-session copy in the background (ACs in the ticket); it is not scheduled. The item is
+  Done without it by that decision, not because the defect is closed.
+  **For the product-owner, unplaced:** a live call never redraws the timeline. The `txn` branch of the
+  socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
+  appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
+  sense that nothing moves. It predates this item and is not in KIN-42; it needs placing in the order.
+  *Original statement of the defect, kept as the record:*
   **Ordered 2026-10-18: second in the order from here** (§5 → "Order from here"), right after the
   Markdown export bug. It is a live web UI defect: a filter a user types does not reach the
   signals, and a long session loses its oldest screens without saying so.
@@ -1067,7 +1092,7 @@ here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They ar
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
 | 1 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
-| 2 | The signals sort and clamp exist twice | §3 → Guards | `item:signals-query-one-rule` | S |
+| 2 | ~~The signals sort and clamp exist twice~~ **Done, 2026-10-19, with one deferred bug, KIN-42** (KIN-24 to KIN-41, KIN-26; four verify rounds; KIN-42 open, deferred: false empty state for ~25 s on a ~160k-call session) | §3 → Guards | `item:signals-query-one-rule` | S |
 | 3 | The web traffic list stops at 1000 calls *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | S |
 | 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed |
 | 5 | One session's "now" values can land under another *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |

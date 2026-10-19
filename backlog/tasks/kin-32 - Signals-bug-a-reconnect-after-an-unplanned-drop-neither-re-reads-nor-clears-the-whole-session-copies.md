@@ -3,11 +3,11 @@ id: KIN-32
 title: >-
   Signals bug: a reconnect after an unplanned drop neither re-reads nor clears
   the whole-session copies
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 21:27'
-updated_date: '2026-10-18 22:45'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -31,8 +31,8 @@ Found by the second verify panel (Doug) on KIN-24 AC6, head e1711a3. ws.onclose 
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -43,3 +43,9 @@ Built by Bob (engineer). ws.onclose (05-network.js) moves serverState from 'runn
 
 QA (third verify panel, head a86dde2): AC1-3 Verified. Not closed: the item closes together.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All ACs Verified by QA at a86dde2 (third panel); per-AC commands and decisive lines are in that panel's report and the ticket's QA note, with the engineer's red/green proofs in the implementation notes. Item-wide regression run at 8f64058 by a fresh QA (KIN-41 verification): static checks 71 passed 0 failed, live probe 182, archive probe 26, :inspector-daemon:test 267/0, :repo-checks:test 35/0. DoD 3 (no client names) left unticked: the scan terms were not available to the tracker, same as every ticket in this item.
+<!-- SECTION:FINAL_SUMMARY:END -->

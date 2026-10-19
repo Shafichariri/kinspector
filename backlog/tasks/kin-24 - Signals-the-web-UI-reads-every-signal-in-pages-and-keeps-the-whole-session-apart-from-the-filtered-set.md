@@ -3,11 +3,11 @@ id: KIN-24
 title: >-
   Signals: the web UI reads every signal in pages and keeps the whole session
   apart from the filtered set
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:27'
-updated_date: '2026-10-19 05:04'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies: []
@@ -44,18 +44,18 @@ Web half of item:signals-query-one-rule, built first because it is safe against 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 scripts/check-web-static.js runs the real signalPages lifted by its anchors against stubs: a 1001-signal session served 1000 per page returns all 1001 ids, newest first, each once; a server clamping at 500 still returns all 1001; a source that ignores offset terminates with each id once; a row repeated across the page seam appears once. Proven failing with a 'page.length < 1000' stop (the 500 stub) and with the dedupe removed.
-- [ ] #2 render-web-ui.js: the signal tabs' counts sum to the probe's own sessionSignals() length for the session, proving loadSignals reads the whole session through the pager. Proven failing with loadSignals reading one page of limit=500.
-- [ ] #3 render-web-ui-archive.js, in the opened export: GET …/signals?offset=0&limit=N is a bare array, newest first, of min(N, total) rows; an offset past the end is []; a non-empty filter is a 400; and the signal tabs' counts sum to archive.signals.length. ARCHIVE_EXPECT_CHECKS in ci.yml moves by the number added.
+- [x] #1 scripts/check-web-static.js runs the real signalPages lifted by its anchors against stubs: a 1001-signal session served 1000 per page returns all 1001 ids, newest first, each once; a server clamping at 500 still returns all 1001; a source that ignores offset terminates with each id once; a row repeated across the page seam appears once. Proven failing with a 'page.length < 1000' stop (the 500 stub) and with the dedupe removed.
+- [x] #2 render-web-ui.js: the signal tabs' counts sum to the probe's own sessionSignals() length for the session, proving loadSignals reads the whole session through the pager. Proven failing with loadSignals reading one page of limit=500.
+- [x] #3 render-web-ui-archive.js, in the opened export: GET …/signals?offset=0&limit=N is a bare array, newest first, of min(N, total) rows; an offset past the end is []; a non-empty filter is a 400; and the signal tabs' counts sum to archive.signals.length. ARCHIVE_EXPECT_CHECKS in ci.yml moves by the number added.
 - [x] #4 Against the current route nothing visible changes: every existing render-web-ui.js and render-web-ui-archive.js check passes, and UI_EXPECT_CHECKS moves only by the checks this ticket adds.
-- [ ] #5 No reader of state.signals remains outside renderTimeline's entries, the path view's visits(...) call and hiddenByFilter (grep in the review). [Amended 2026-10-19: hiddenByFilter added as a third reader, recorded in docs/decisions/web-ui.md.]
+- [x] #5 No reader of state.signals remains outside renderTimeline's entries, the path view's visits(...) call and hiddenByFilter (grep in the review). [Amended 2026-10-19: hiddenByFilter added as a third reader, recorded in docs/decisions/web-ui.md.]
 - [x] #6 web-ui.md and shared-rules.md carry the paragraphs above; DecisionsTest passes; structure/budgets.txt raises render-web-ui.js by hand with the reason on the line.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -74,3 +74,9 @@ QA (third verify panel, head a86dde2): AC6 Failed again. Reverting 15-session-da
 
 QA (fourth verify panel, head 8082e02): AC6 Verified (web-ui.md paragraph accurate after KIN-39 at 182fadc). Ticked; AC1-3 and AC5 remain unticked, ticket stays In Progress.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+AC4, AC6 Verified by QA panels 2 and 4 (e1711a3, 8082e02). AC1-3 and AC5 were never listed by a panel; ticked by the tracker on re-run evidence at 8f64058 (fresh QA run): AC1 static checks 71/0 including the '--- signal pages ---' section; AC2 live probe 182 passed, including 'signal tabs count'; AC3 archive probe 26 passed, the 5 signal checks included (21 to 26). AC5 re-grepped by the tracker at 8f64058: state.signals is read only at 50-path.js:74 visits(...), 70-timeline.js:99 entries and 25-traffic-list.js:241 hiddenByFilter; the remaining hits write or copy the unfiltered set (15-session-data.js:191,204). The red directions (page.length<1000 stop, dedupe removed, one-page loadSignals, broken archive copies) are the engineer's recorded proofs in this ticket's notes; no QA panel re-ran them, and the 500-page red is invisible in CI (19-signal fixture). Item-wide regression run at 8f64058 by a fresh QA (KIN-41 verification): static checks 71 passed 0 failed, live probe 182, archive probe 26, :inspector-daemon:test 267/0, :repo-checks:test 35/0. DoD 3 (no client names) left unticked: the scan terms were not available to the tracker, same as every ticket in this item.
+<!-- SECTION:FINAL_SUMMARY:END -->

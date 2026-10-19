@@ -7,9 +7,10 @@ status: To Do
 assignee:
   - '@engineer'
 created_date: '2026-10-19 05:04'
-updated_date: '2026-10-19 06:07'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
+  - deferred
 dependencies:
   - KIN-40
 type: bug
@@ -43,3 +44,9 @@ Found by the fourth verify panel (head 8082e02), blocking. Regression from KIN-3
 - [ ] #5 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #6 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Deferred by the maintainer on 2026-10-19, after KIN-41. A ~160k-call session shows a false empty state for about 25 s before the first rows; KIN-34 introduced it. Fix later: draw the first page at once and read the whole-session copy in the background, per the ACs.
+<!-- SECTION:NOTES:END -->

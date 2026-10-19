@@ -3,11 +3,11 @@ id: KIN-40
 title: >-
   Web bug: path stations say '0 of N match' for visits whose calls match, past
   1000 matches
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 22:45'
-updated_date: '2026-10-19 05:04'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -31,8 +31,8 @@ Found by the third verify panel (head a86dde2), blocking. On the 3016-call sessi
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -48,3 +48,9 @@ OPEN, NOT FIXED (outside the ticket): the waterfall's stub visits read 'no match
 
 QA (fourth verify panel doug-4, charles-4, simon-4, head 8082e02): every AC of this ticket Verified; ACs ticked, ticket left In Progress because the item closes together. Panel reports filed as received; the per-AC command and decisive line are in the panel reports, not copied here.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All ACs Verified by QA at 8082e02 (fourth panel); per-AC commands and decisive lines are in that panel's report and the ticket's QA note, with the engineer's red/green proofs in the implementation notes. Item-wide regression run at 8f64058 by a fresh QA (KIN-41 verification): static checks 71 passed 0 failed, live probe 182, archive probe 26, :inspector-daemon:test 267/0, :repo-checks:test 35/0. DoD 3 (no client names) left unticked: the scan terms were not available to the tracker, same as every ticket in this item.
+<!-- SECTION:FINAL_SUMMARY:END -->

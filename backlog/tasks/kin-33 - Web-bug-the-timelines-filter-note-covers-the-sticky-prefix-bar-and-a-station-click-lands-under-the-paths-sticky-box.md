@@ -3,11 +3,11 @@ id: KIN-33
 title: >-
   Web bug: the timeline's filter note covers the sticky prefix bar, and a
   station click lands under the path's sticky box
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 21:27'
-updated_date: '2026-10-18 22:45'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -32,8 +32,8 @@ Regressions outside the ACs, found by the second verify panel (Simon, Doug), hea
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -46,3 +46,9 @@ RED at e1711a3: fixture 88 checks, 30 failed; 3016-call session 88 checks, 32 fa
 
 QA (third verify panel, head a86dde2): AC1-4 Verified. Not closed: the item closes together. Panel found a regression introduced by this ticket, filed as the 'expanding a timeline run under live tail' bug (B) under the item.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+All ACs Verified by QA at a86dde2 (third panel); per-AC commands and decisive lines are in that panel's report and the ticket's QA note, with the engineer's red/green proofs in the implementation notes. Item-wide regression run at 8f64058 by a fresh QA (KIN-41 verification): static checks 71 passed 0 failed, live probe 182, archive probe 26, :inspector-daemon:test 267/0, :repo-checks:test 35/0. DoD 3 (no client names) left unticked: the scan terms were not available to the tracker, same as every ticket in this item.
+<!-- SECTION:FINAL_SUMMARY:END -->

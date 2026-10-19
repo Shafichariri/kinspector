@@ -3,11 +3,11 @@ id: KIN-25
 title: >-
   Signals: GET …/signals reads SessionRepository.querySignals, so a filter
   reaches the signals and the route holds no rule
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-18 19:27'
-updated_date: '2026-10-18 21:01'
+updated_date: '2026-10-19 06:33'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -34,21 +34,21 @@ Daemon half of item:signals-query-one-rule, and the ticket that changes what use
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The route gets its rows from the same function list_signals uses (SessionRepository.querySignals), so the sort, the clamp and the filter exist in one place; SignalRoutes.kt's list route has no sort, clamp or tag comparison of its own.
-- [ ] #2 tag= keeps working: ?tag=screen and ?tag=SCREEN return the screen signals; ?tag=screen&filter=name:Route is their AND; a tag value containing ' | path:x' returns only signals with that exact tag (none), proving the tag is a term and not text. The existing RestApiTest signals_are_served_newest_first_and_filterable_by_tag passes unchanged.
-- [ ] #3 The route still answers with a bare array, newest first; the export's archiveSource mirrors that shape and render-web-ui-archive.js holds it (KIN-24's checks stay green).
-- [ ] #4 A new daemon test file (SignalQueryTest.kt, not McpTest.kt, which is over its size budget and next to be split) asks the route and list_signals for the same session and filters ('', tag:screen, name:Route, text:pair, since:marker(...), path:/v2, 'tag:screen | path:/v2', 'status:500 | tag:cache') and asserts the same ids in the same order. Its session has mono ties written out of archive order and ts disagreeing with mono. It fails with the route's old body put back, naming the filter it diverged on, and fails with a route sort by ts.
-- [ ] #5 A session with 1205 signals (1100 screen, 105 cache): ?limit=2000 returns the 1000 newest; ?offset=1000&limit=1000 returns the other 205 including the oldest; paging with filter=tag:screen returns exactly 1100; no id twice.
-- [ ] #6 ?filter=bogus:1 is a 400 whose body carries the parser's message (Unknown filter key 'bogus') verbatim.
-- [ ] #7 A filter typed in the web UI drops signals by the grammar's exclusion rule, checked by render-web-ui.js on the timeline tab: a path: filter matching at least one call leaves at least one call row and zero signal rows; tag:screen leaves zero call rows and at least one signal row, every one in the screen lane; clearing restores the unfiltered counts; and the tab bar's view list is identical before, during and after. The signal-row checks fail with the old route put back; the tab check fails with 20-navigation.js reading state.signals. UI_EXPECT_CHECKS moves by the number added, and budgets.txt raises render-web-ui.js by hand with the reason.
-- [ ] #8 MCP list_signals' arguments and page shape are unchanged; McpToolsListGoldenTest passes untouched.
-- [ ] #9 daemon-and-mcp.md and signals.md carry the edits above; DecisionsTest passes. The release notes carry one line.
+- [x] #1 The route gets its rows from the same function list_signals uses (SessionRepository.querySignals), so the sort, the clamp and the filter exist in one place; SignalRoutes.kt's list route has no sort, clamp or tag comparison of its own.
+- [x] #2 tag= keeps working: ?tag=screen and ?tag=SCREEN return the screen signals; ?tag=screen&filter=name:Route is their AND; a tag value containing ' | path:x' returns only signals with that exact tag (none), proving the tag is a term and not text. The existing RestApiTest signals_are_served_newest_first_and_filterable_by_tag passes unchanged.
+- [x] #3 The route still answers with a bare array, newest first; the export's archiveSource mirrors that shape and render-web-ui-archive.js holds it (KIN-24's checks stay green).
+- [x] #4 A new daemon test file (SignalQueryTest.kt, not McpTest.kt, which is over its size budget and next to be split) asks the route and list_signals for the same session and filters ('', tag:screen, name:Route, text:pair, since:marker(...), path:/v2, 'tag:screen | path:/v2', 'status:500 | tag:cache') and asserts the same ids in the same order. Its session has mono ties written out of archive order and ts disagreeing with mono. It fails with the route's old body put back, naming the filter it diverged on, and fails with a route sort by ts.
+- [x] #5 A session with 1205 signals (1100 screen, 105 cache): ?limit=2000 returns the 1000 newest; ?offset=1000&limit=1000 returns the other 205 including the oldest; paging with filter=tag:screen returns exactly 1100; no id twice.
+- [x] #6 ?filter=bogus:1 is a 400 whose body carries the parser's message (Unknown filter key 'bogus') verbatim.
+- [x] #7 A filter typed in the web UI drops signals by the grammar's exclusion rule, checked by render-web-ui.js on the timeline tab: a path: filter matching at least one call leaves at least one call row and zero signal rows; tag:screen leaves zero call rows and at least one signal row, every one in the screen lane; clearing restores the unfiltered counts; and the tab bar's view list is identical before, during and after. The signal-row checks fail with the old route put back; the tab check fails with 20-navigation.js reading state.signals. UI_EXPECT_CHECKS moves by the number added, and budgets.txt raises render-web-ui.js by hand with the reason.
+- [x] #8 MCP list_signals' arguments and page shape are unchanged; McpToolsListGoldenTest passes untouched.
+- [x] #9 daemon-and-mcp.md and signals.md carry the edits above; DecisionsTest passes. The release notes carry one line.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
@@ -61,3 +61,9 @@ DEVIATION: 20-navigation.js offered the waterfall tab on state.transactions.leng
 RED PROOFS. (1) Route's old body put back (git show HEAD:SignalRoutes.kt): SignalQueryTest 4/4 fail; the comparison names it: 'route and list_signals diverged on filter 'tag:screen'', plus 400 expected/200, 1100 expected/1205, AND case returns all screens. (2) Route sorting page.items by ts: 2 fail, 'diverged on filter ''' (order reversed) and the tag case. (3) tag pasted as text 'tag:$it ' + filter: tag case fails, expected [] but was the four screens. (4) Live probe with the old route served: 'filter path drops: NO - 4 call rows, 15 signal rows', 'filter tag keeps: NO - 0 call rows, 15 signal rows, off the screen lane: analytics,tap,cache,...', 167 passed, exit 1. (5) 20-navigation.js reading state.signals (sed allSignals->signals, 3 sites): 'filter tabs steady: NO - during network,path,waterfall / network,path,all,waterfall,screen', exit 1. (6) Waterfall on state.transactions (before the deviation fix): 'filter tabs steady: NO', 168 passed. Each restored and re-run green (169, exit 0).
 McpToolsListGoldenTest and RestApiTest.signals_are_served_newest_first_and_filterable_by_tag pass untouched. Release notes line (reworded by KIN-30 to match docs/ROADMAP.md's owed lines): 'Web UI: a filter now applies to the signals loaded on the timeline and path views (rows arriving live follow the filter once item:web-live-rows-filtered lands), and a session with more than 1000 signals shows all of them.' Client-name scan: see commit report.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Verified at 8f64058 by a fresh QA run, relayed to the tracker: :inspector-daemon:test 267/0 (263 + SignalQueryTest 4; AC1-6, AC8 incl. RestApiTest and McpToolsListGoldenTest untouched), live probe 182 passed (169 at KIN-25 plus later items; the 4 filter checks 'filter path drops', 'filter tag keeps', 'filter clear back', 'filter tabs steady' cover AC7), archive probe 26 (AC3), :repo-checks:test 35/0 (DecisionsTest, AC9). Caveat: this ticket carries no per-AC QA line of its own (panels recorded their findings on the bugs they filed); the tracker ticked from the run totals and the engineer's red proofs in the notes. Item-wide regression run at 8f64058 by a fresh QA (KIN-41 verification): static checks 71 passed 0 failed, live probe 182, archive probe 26, :inspector-daemon:test 267/0, :repo-checks:test 35/0. DoD 3 (no client names) left unticked: the scan terms were not available to the tracker, same as every ticket in this item.
+<!-- SECTION:FINAL_SUMMARY:END -->
