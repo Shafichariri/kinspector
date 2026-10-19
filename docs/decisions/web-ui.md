@@ -221,7 +221,9 @@ arrived while the whole-session read was between pages was in neither the read n
 a live row joined a copy only once the copy was marked as the session's, and the mark is set when the
 read lands; paging widened that window from one request to every page. Now, from the first page
 request until the read lands, a live row for that session is buffered (`admitLive`, `state.arriving`),
-and the landed copy is the read plus every buffered row whose id it lacks, for both copies. Opening
+and the landed copy is the read plus every buffered row whose id it lacks, for both copies. A copy
+already marked is read again when it is empty, and the read replaces it, so a live row goes into an
+open buffer whether or not its copy is marked (`mid-read calls empty`, `mid-read signals empty`). Opening
 the buffer before the first request is enough because the daemon stores a row before it broadcasts it,
 so a row broadcast earlier is already in the read; and the merge is by id because a row can be in a
 page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mid-read calls once`,

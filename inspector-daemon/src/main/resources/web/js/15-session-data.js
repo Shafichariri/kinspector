@@ -236,18 +236,18 @@ async function syncAllSignals(filter, isLatest = () => true) {
  * A row joins a copy only once the copy is marked as the session's, and the mark is set when the
  * whole-session read lands, so a row that arrived between the read's first page and its last was in
  * neither the read nor the copy. While a read of that kind is in flight for this session, the row
- * goes into the read's buffer instead, and the read takes it in by id when it lands. Opening the
+ * also goes into the read's buffer, and the read takes it in by id when it lands. Opening the
  * buffer before the first page is asked for is enough: the daemon stores a row before it broadcasts
  * it (`SessionManager.append`), so a row broadcast earlier is already in what the read returns.
- * With no copy marked and no read in flight the row is dropped, because the next load reads the
- * copy whole.
+ *
+ * The buffer takes the row whether or not the copy is marked. A marked copy that is empty is read
+ * again under a filter, and the landed read replaces it, so a row pushed onto the marked copy alone
+ * went with the array it was pushed into. With neither a marked copy nor a read in flight the row
+ * is dropped, because the next load reads the copy whole.
  */
 function admitLive(kind, row) {
   const marked = kind === 'transactions' ? state.allSessionId : state.allSignalsSessionId;
-  if (marked === state.sessionId) {
-    (kind === 'transactions' ? state.allTransactions : state.allSignals).push(row);
-    return;
-  }
+  if (marked === state.sessionId) (kind === 'transactions' ? state.allTransactions : state.allSignals).push(row);
   const buffer = state.arriving[kind];
   if (buffer && buffer.sessionId === state.sessionId) buffer.rows.push(row);
 }

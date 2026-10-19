@@ -104,7 +104,7 @@ class ProbeFixtureTest {
 
     /**
      * The model's duplicate key, which is `internal` there: method, URL, status and both byte counts,
-     * the same four fields the web UI's `duplicateKey` joins.
+     * the same five fields the web UI's `duplicateKey` joins.
      */
     private fun sameRequest(t: NetworkTransaction) = listOf(t.method, t.url, t.status, t.reqBytes, t.resBytes)
 

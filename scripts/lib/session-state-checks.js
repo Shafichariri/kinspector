@@ -471,6 +471,79 @@ async function checkMidRead(sources) {
   return lines;
 }
 
+/** A gate a stub route waits on: `asked` settles when the route reaches it, `open` lets it answer. */
+function routeGate() {
+  const gate = {};
+  gate.held = new Promise((resolve) => { gate.open = resolve; });
+  gate.asked = new Promise((resolve) => { gate.reached = resolve; });
+  return gate;
+}
+
+/**
+ * A copy already marked as the session's but empty is read again by a filtered load, and the read
+ * replaces it. A live row arriving meanwhile went onto the marked copy alone, and the landed read
+ * threw it away with the array it was pushed into. The route reads its rows as each request
+ * arrives, so the row, stored after the only page was read, can reach the landed copy only through
+ * the buffer.
+ */
+async function checkMidReadEmpty(sources) {
+  const lines = [];
+  for (const kind of ['calls', 'signals']) {
+    const calls = kind === 'calls';
+    const rows = [];
+    const gate = routeGate();
+    const behave = (filter) => (filter ? null : (gate.reached(), gate.held));
+    const api = calls ? callRoute(rows, { behave }) : signalRoute(rows, behave);
+    const state = sessionState(calls ? 'path:/b' : 'tag:cache');
+    if (calls) state.allSessionId = 'S'; else state.allSignalsSessionId = 'S';
+    const page = sessionData(sources, api, state);
+    const read = calls ? page.syncAllTransactions(state.filter) : page.syncAllSignals(state.filter);
+    await gate.asked;
+    const live = calls ? { id: 'live', path: '/a', mono: 1 } : { id: 'live', tag: 'screen', mono: 1 };
+    rows.push(live);
+    page.admitLive(calls ? 'transactions' : 'signals', live);
+    gate.open();
+    await read;
+    const copy = calls ? state.allTransactions : state.allSignals;
+    const times = copy.filter((r) => r.id === 'live').length;
+    lines.push([`mid-read ${kind} empty`, times === 1
+      ? 'yes (a live row arriving while a marked, empty copy is read again is in the landed copy once)'
+      : `NO - the landed copy holds the live row ${times} time(s); the marked, empty copy took it and the read replaced it`]);
+  }
+  return lines;
+}
+
+/**
+ * Two whole-session reads of the calls overlap: an older load's, then a newer one's, which opens
+ * its own buffer. The older read lands, overtaken, while the newer one's only page is held, and a
+ * live row arrives after that. An overtaken read that cleared whatever buffer was open, rather
+ * than its own, took the newer read's with it, and the row was in neither the read nor the copy.
+ */
+async function checkMidReadOvertaken(sources) {
+  const rows = [{ id: 't0', path: '/a', mono: 0 }];
+  const gates = [routeGate(), routeGate()];
+  let asked = 0;
+  const behave = (filter, url) => (filter || url.searchParams.get('offset') !== '0' ? null : gates[asked++].held);
+  const state = sessionState('path:/b');
+  const page = sessionData(sources, callRoute(rows, { behave }), state);
+  let latest = 1;
+  const older = page.syncAllTransactions(state.filter, () => latest === 1);
+  latest = 2;
+  const newer = page.syncAllTransactions(state.filter, () => latest === 2);
+  await pause(0);
+  gates[0].open();
+  await older;
+  const live = { id: 'live', path: '/a', mono: 1 };
+  rows.push(live);
+  page.admitLive('transactions', live);
+  gates[1].open();
+  await newer;
+  const times = state.allTransactions.filter((r) => r.id === 'live').length;
+  return times === 1
+    ? `yes (a live row arriving after an overtaken read landed is in the newer read's copy once, ${state.allTransactions.length} rows)`
+    : `NO - the newer read's copy holds the live row ${times} time(s); the overtaken read closed its buffer`;
+}
+
 async function checkSessionState(sources) {
   return [
     ['last capture whole', checkLastCapture(sources)],
@@ -484,6 +557,8 @@ async function checkSessionState(sources) {
     ['unfiltered then filter', await checkUnfilteredThenFilter(sources)],
     ['no-filter count', await checkNoFilterCount(sources)],
     ...(await checkMidRead(sources)),
+    ...(await checkMidReadEmpty(sources)),
+    ['mid-read overtaken kept', await checkMidReadOvertaken(sources)],
   ];
 }
 
