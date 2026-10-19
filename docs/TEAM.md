@@ -61,6 +61,39 @@ which. The full rule is in the skill, under "Tracks"; this table is its summary.
 | **Standard** | An M item, or an S item that has to be designed | Architect design note and tickets | One QA |
 | **Large** | An L item, or one that crosses surfaces, touches API, schema or the boundary, or changes loading, paging or layout across views | design-council | verify-panel for the first round, plus UX |
 
+How the conductor picks a track, and who works on each one. Purple is a team phase, gray is a
+single role:
+
+```mermaid
+flowchart LR
+    item(["Roadmap item,<br/>ordered"]) --> q1{"Crosses surfaces, or touches<br/>API, schema or the boundary?<br/>Size L, or loading, paging or<br/>layout across several views?"}
+    q1 -- "yes" --> large
+    q1 -- "no" --> q2{"Size M, or an S<br/>that needs a design?"}
+    q2 -- "yes" --> std
+    q2 -- "no: an S item<br/>or a bug" --> small
+
+    subgraph small["Small"]
+        direction LR
+        s1["delivery-tracker<br/>files tickets"] --> s2["engineer<br/>plan in ticket, builds"] --> s3["one qa-verifier<br/>renders UI changes"]
+    end
+    subgraph std["Standard"]
+        direction LR
+        m1["architect<br/>design note, tickets"] --> m2["engineer<br/>builds"] --> m3["one qa-verifier<br/>renders UI changes"]
+    end
+    subgraph large["Large"]
+        direction LR
+        l1["design-council"] --> l2["engineer<br/>builds"] --> l3["verify-panel<br/>first round"] --> l4["ux-reviewer<br/>renders, looks"]
+    end
+
+    classDef team fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef sub fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+    class l1,l3 team
+    class s1,s2,s3,m1,m2,m3,l2,l4 sub
+```
+
+Every fix round, on any track, is one fresh `qa-verifier`. A Small plan that turns out to touch a
+recorded decision stops for you before it moves up to Standard.
+
 On every track:
 - A fix round is re-checked by one fresh QA.
 - QA renders any UI change, live and in an export, at the widths the criteria name.
@@ -119,8 +152,8 @@ flowchart TD
     you{{"You: priority, approvals"}} --> lead["Main session<br/>conducts roadmap-cycle"]
     lead --> strat["business-strategist<br/>market, pricing"]
     lead --> po["product-owner<br/>what, why, order"]
-    lead --> arch["architect<br/>design, splits tickets"]
-    lead --> tracker["delivery-tracker<br/>done, with evidence"]
+    lead --> arch["architect<br/>design, splits tickets<br/>(Standard, Large)"]
+    lead --> tracker["delivery-tracker<br/>done, with evidence;<br/>files Small tickets"]
     strat -.-> private[("Private notes<br/>outside the repo")]
     strat -- "paid features" --> po
     subgraph repo["Committed, public"]
@@ -250,9 +283,9 @@ the branch — and are public.
 
 ```mermaid
 flowchart LR
-    item["Roadmap item<br/>item:slug · product-owner"] --> todo["To Do<br/>architect creates"]
-    todo --> prog["In Progress<br/>engineer builds"]
-    prog --> qa{"qa-verifier<br/>evidence per criterion"}
+    item["Roadmap item<br/>item:slug · product-owner"] --> todo["To Do<br/>architect creates;<br/>Small: delivery-tracker"]
+    todo --> prog["In Progress<br/>engineer builds<br/>(Small: plan in the ticket first)"]
+    prog --> qa{"one qa-verifier<br/>evidence per criterion"}
     qa -- "Verified" --> done["Done<br/>delivery-tracker closes"]
     qa -- "Failed" --> bug["bug ticket, same item<br/>delivery-tracker files"]
     bug --> prog
