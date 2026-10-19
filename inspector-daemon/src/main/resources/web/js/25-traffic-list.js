@@ -269,6 +269,11 @@ function filterNote(node, hidden, emptied, lead = 'nothing matches') {
   node.append(emptied ? `${lead} the filter ` : `${what} hidden by the filter `);
   node.appendChild(el('code', null, state.filter));
   if (emptied && what) node.append(` — ${what} hidden`);
+  // The header counts the rows held, and past the route's clamp that is not every match: said here,
+  // or "1000 of 3016 calls" above "1 call hidden" reads as 2015 calls gone with no reason.
+  if (state.matched !== null && state.transactions.length < state.matched) {
+    node.append(` — newest ${state.transactions.length} of ${state.matched} matches loaded`);
+  }
   node.append(' — ');
   node.appendChild(clearFilterButton());
   return node;

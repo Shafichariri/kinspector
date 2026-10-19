@@ -141,7 +141,8 @@ function stubPage(sources, state) {
     return nodes.get(id);
   };
   const page = runFile(sources, ['js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
-    state, $, el: (tag, cls) => stubNode(null, cls || ''), document: { getElementById: $ },
+    state, $, document: { getElementById: $ },
+    el: (tag, cls, text) => Object.assign(stubNode(null, cls || ''), { textContent: text === undefined ? '' : String(text) }),
     getComputedStyle: () => ({ top: '0' }), sessionIsLive: () => false,
     fmtMs: (ms) => `${ms}ms`, fmtBytes: (n) => `${n} B`, ageNode: () => stubNode(),
     selectSignal() {}, source: { fetch: async () => ({ ok: false }) }, ARCHIVE: null,
@@ -225,4 +226,78 @@ async function checkLongSession(sources) {
   return lines;
 }
 
-module.exports = { checkLongSession, auditNoArgumentSpread, stubNode, stubPage };
+/** A stub node's text with its children's, as `textContent` reads a real one. */
+const textOf = (node) => (typeof node === 'string' ? node
+  : `${node.textContent || ''}${node.children.map(textOf).join('')}`);
+
+/** Every node under [node] whose class list holds [cls], depth first. */
+function findAll(node, cls, out = []) {
+  if (typeof node === 'string') return out;
+  if ((node.className || '').split(/\s+/).includes(cls)) out.push(node);
+  for (const child of node.children) findAll(child, cls, out);
+  return out;
+}
+
+/**
+ * The path on a session past the route's clamp: 2816 calls, all but the first to `/v3/shop`, over
+ * `Home` from 0, `Idle` from 300 with no call, `Cart` from 500 and `Checkout` from 1000. `Idle`
+ * holds nothing below the oldest held call either, so it still says "nothing" rather than claiming
+ * calls exist that were not loaded. The list holds what a load holds there,
+ * the newest 1000 rows of what the route matched, so `Home` and `Cart` began before the oldest held
+ * call. Counting the held rows called them "0 of 500 match" under `path:/v3/shop`, which matched
+ * 3015, and "nothing recorded" with no filter; they say their calls are not loaded, `Checkout` says
+ * that its older calls are not, and the filter note says how many of the matches the list holds,
+ * which is the number the header counts. A filter matching only the first call is not clamped, so
+ * there `Cart` still says "0 of 500 match".
+ */
+function checkPathPastTheClamp(sources) {
+  const calls = Array.from({ length: 3016 }, (_, i) => ({
+    id: `t${i}`, mono: i, ms: 5, method: 'GET', host: 'shop.invalid', path: i === 0 ? '/v3/auth' : '/v3/shop', status: 200,
+  })).filter((t) => t.mono < 300 || t.mono >= 500);
+  const screens = [
+    { id: 'home', tag: 'screen', name: 'Home', mono: 0 },
+    { id: 'idle', tag: 'screen', name: 'Idle', mono: 300 },
+    { id: 'cart', tag: 'screen', name: 'Cart', mono: 500 },
+    { id: 'checkout', tag: 'screen', name: 'Checkout', mono: 1000 },
+  ];
+  const lines = [];
+  const notLoaded = { Home: 'calls not loaded', Idle: 'nothing', Cart: 'calls not loaded' };
+  const auth = { Home: '1 network', Idle: 'nothing', Cart: '0 of 500 match' };
+  for (const [filter, want] of [['path:/v3/shop', notLoaded], ['', notLoaded], ['path:/v3/auth', auth]]) {
+    const matched = calls.filter((t) => !filter || `path:${t.path}` === filter);
+    const held = matched.slice(-1000);
+    const state = {
+      sessionId: 'S', filter, view: 'path', newestFirst: false, liveTail: false, timeRange: null,
+      transactions: held, allTransactions: calls, sessionTotal: calls.length, matched: matched.length,
+      signals: [], allSignals: screens, screens, markers: [], recording: [],
+      expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,
+      screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null,
+    };
+    const { page } = stubPage(sources, state);
+    page.renderPath();
+    const root = page.$('path');
+    const stations = findAll(root, 'pv-stop').map((stop) => {
+      const name = findAll(stop, 'pv-stop-name').map(textOf).join('');
+      return `${name}=${findAll(stop, 'pv-stop-stat').map(textOf).join('')}`;
+    });
+    const stat = (name) => (stations.find((s) => s.startsWith(`${name}=`)) || '').slice(name.length + 1);
+    const checkout = findAll(root, 'pv-stats').map(textOf).find((t) => t.includes('network')) || '';
+    const note = findAll(root, 'filter-note').map(textOf).join('');
+    const label = `path clamp ${filter || 'no filter'}`;
+    const clamped = held.length < matched.length;
+    const problems = [];
+    for (const [name, text] of Object.entries(want)) {
+      if (stat(name) !== text) problems.push(`${name} reads "${stat(name)}", where "${text}" was due`);
+    }
+    if (clamped && !checkout.includes('older calls not loaded')) problems.push(`Checkout reads "${checkout}", without "older calls not loaded"`);
+    if (clamped && filter && !note.includes(`newest ${held.length} of ${matched.length} matches loaded`)) {
+      problems.push(`the note reads "${note.slice(0, 90)}", without what its count covers`);
+    }
+    lines.push([label, problems.length
+      ? `NO - ${problems.join('; ')} (${held.length} of ${matched.length} matches held)`
+      : `yes (${stations.join(' | ')}; ${held.length} of ${matched.length} matches held)`]);
+  }
+  return lines;
+}
+
+module.exports = { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread, stubNode, stubPage };

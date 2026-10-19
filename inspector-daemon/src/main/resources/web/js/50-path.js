@@ -80,6 +80,7 @@ function renderPath() {
   }
 
   if (state.filter) countRecorded(list);
+  markUnloaded(list);
   const header = el('div', 'pv-top');
   const hidden = state.filter ? hiddenByFilter({ screens: false }) : { calls: 0, signals: 0 };
   if (hidden.calls + hidden.signals) header.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
@@ -130,6 +131,20 @@ function countRecorded(list) {
   const whole = visits(state.screens, state.allTransactions, state.markers, state.allSignals, sessionStartMono());
   if (whole.length !== list.length) return;
   list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
+}
+
+/**
+ * Marks each visit holding a call, in the whole-session skeleton, older than the oldest the list
+ * holds, while the list is short of what the route matched: it stops at the clamp, so whether those
+ * calls match is unknown. Counting the held rows said "0 of 5 match" of visits whose calls matched.
+ */
+function markUnloaded(list) {
+  if (state.matched === null || state.transactions.length >= state.matched) return;
+  let oldest = Infinity;
+  for (const txn of state.transactions) if (txn.mono < oldest) oldest = txn.mono;
+  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
+  if (whole.length !== list.length) return;
+  list.forEach((visit, i) => { visit.unloaded = whole[i].txns.some((txn) => txn.mono < oldest); });
 }
 
 const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');
@@ -185,9 +200,11 @@ const segmentText = (segments) => segments.map((s) => `${s.count} ${s.key}`).joi
 
 /**
  * What a visit with nothing to show says. "Nothing recorded" only when that is true: under a filter
- * it is "0 of N match", N counted over the whole session by `renderPath`.
+ * it is "0 of N match", N counted over the whole session by `renderPath`; and where the visit began
+ * before the oldest call loaded (`markUnloaded`) neither is known, so it says that instead.
  */
-const emptyVisitText = (visit, fallback) => (visit.recorded ? `0 of ${visit.recorded} match` : fallback);
+const emptyVisitText = (visit, fallback) =>
+  (visit.unloaded ? 'calls not loaded' : visit.recorded ? `0 of ${visit.recorded} match` : fallback);
 
 /** The segments as a thin bar, each kind as wide as its share, in its lane colour. */
 function segmentBar(segments) {
@@ -252,7 +269,8 @@ function pathStop(visit, index, list, colour) {
   }
   const failed = visit.txns.filter(isFailure).length;
   if (failed) stop.appendChild(el('span', 'pv-stop-fail', `${failed} failed`));
-  stop.title = `${visitName(visit, list)}${segments.length ? ` — ${segmentText(segments)}` : ''}\nopen its line in the log`;
+  stop.title = `${visitName(visit, list)}${segments.length ? ` — ${segmentText(segments)}` : ''}` +
+    `${visit.unloaded && segments.length ? `, ${visit.txns.length ? 'older ' : ''}calls not loaded` : ''}\nopen its line in the log`;
 
   stop.addEventListener('click', () => {
     state.pathFocus = key;
@@ -323,7 +341,9 @@ function pathRow(visit, index, list, colour, lastMono) {
   const failed = visit.txns.filter(isFailure).length;
   const stats = el('span', 'pv-stats muted');
   stats.dataset.calls = String(visit.txns.length);
-  stats.textContent = segmentText(visitSegments(visit)) || emptyVisitText(visit, 'nothing recorded');
+  const segments = segmentText(visitSegments(visit));
+  stats.textContent = segments || emptyVisitText(visit, 'nothing recorded');
+  if (segments && visit.unloaded) stats.append(visit.txns.length ? ' · older calls not loaded' : ' · calls not loaded');
   if (failed) stats.appendChild(el('span', 'pv-failed', ` · ${failed} failed`));
   head.appendChild(stats);
   if (!list.some((v) => v.screen)) {
@@ -336,7 +356,9 @@ function pathRow(visit, index, list, colour, lastMono) {
   row.appendChild(head);
 
   if (!visit.entries.length) {
-    row.appendChild(el('div', 'pv-nothing muted', visit.recorded ? 'hidden by the filter' : 'nothing recorded'));
+    row.appendChild(el('div', 'pv-nothing muted', visit.unloaded
+      ? `calls not loaded — the list holds the newest ${state.transactions.length} of ${state.matched}`
+      : visit.recorded ? 'hidden by the filter' : 'nothing recorded'));
     return row;
   }
   row.appendChild(open ? visitBody(visit, index, list) : visitChips(visit, index, list));

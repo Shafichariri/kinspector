@@ -244,7 +244,16 @@ and the note says "at least" when the stretch reaches below it (`hidden past the
 whole session's rows less the filtered ones, within a brushed stretch where the pane brushes, and
 without `screen` signals on the path, which draws every screen whatever the filter. A visit the
 filter emptied reads "0 of N match", N counted from the same skeleton over the whole session, and
-"nothing recorded" is said only where nothing was. The timeline decides it is empty on calls and
+"nothing recorded" is said only where nothing was. Neither is said of a visit holding a call older
+than the oldest the list holds while the list is short of what the route matched: the list stops at
+the clamp, so whether those calls match is unknown, and on the 3016-call session under
+`path:/v3/shop`, which matched 3015, five visits read "0 of N match" over calls that matched. Such a
+visit says "calls not loaded", and one with some calls drawn adds "older calls not loaded" in the log;
+the visits are asked of the whole-session skeleton, so a visit with no call below that point is not
+marked. With no filter the same visits had read "nothing recorded". The note then says
+"newest 1000 of 3015 matches loaded", which is the number the header counts — beside "1 call hidden"
+it had left 2015 calls unaccounted for (`path clamp …` in `check-web-static.js`). The waterfall's stubs
+do not take this rule yet: a visit there whose calls were not loaded still reads "no matching calls". The timeline decides it is empty on calls and
 signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
 calls"; the waterfall as a whole never did, which is what this paragraph used to claim. An emptied
 waterfall asks in a fixed order: a filter that hid calls in range, then a brushed stretch in a session

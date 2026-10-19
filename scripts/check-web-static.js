@@ -26,6 +26,7 @@
  *     session past the route's clamp;
  *   - a session too long to spread into an argument list: no `f(...rows)` anywhere in the scripts,
  *     and the axis, the waterfall, the stretch note, the timeline and the path run over 200,000 rows;
+ *     and the path, past the clamp, says which visits' calls are not loaded rather than "0 of N";
  *   - the timeline under live tail: a run opened or closed leaves the pane where it is, a new row is
  *     followed only from the end it follows, and opening the view follows once.
  *
@@ -48,7 +49,7 @@ const {
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
 const { checkSessionState } = require('./lib/session-state-checks');
-const { checkLongSession, auditNoArgumentSpread } = require('./lib/long-session-checks');
+const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow } = require('./lib/follow-checks');
 
 const results = [];
@@ -115,6 +116,7 @@ async function main() {
   console.error('--- long session ---');
   report('no argument spread', auditNoArgumentSpread(scripts));
   for (const [label, value] of await checkLongSession(scripts)) report(label, value);
+  for (const [label, value] of checkPathPastTheClamp(scripts)) report(label, value);
 
   console.error('--- live follow ---');
   for (const [label, value] of await checkTimelineFollow(scripts)) report(label, value);
