@@ -106,4 +106,4 @@ async function probeLongSession(ctx) {
   return verdicts;
 }
 
-module.exports = { LONG_LABELS, LONG_SESSION_ID, probeLongSession, readLongSession, waitFor };
+module.exports = { LONG_LABELS, LONG_SESSION_ID, choose, probeLongSession, readLongSession, waitFor };
