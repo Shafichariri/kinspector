@@ -458,7 +458,12 @@ function applyFilter() {
   }
   clearTimeout(filterTimer);
   filterTimer = setTimeout(() => {
-    state.filter = $('filter').value;
+    // Only spaces is no filter, because the daemon reads it as none (`filterText.isBlank()`). This
+    // is the one place the page decides whether there is a filter; everything after asks
+    // `state.filter` for truthiness. Kept as typed, a space drew the filtered `1000 of 1203 calls`
+    // where nothing typed draws `newest 1000 of 1203 shown`, and made every live row a re-read.
+    const typed = $('filter').value;
+    state.filter = typed.trim() ? typed : '';
     for (const chip of document.querySelectorAll('#chips .chip, #endpoint-chips .chip')) {
       chip.classList.toggle('active', chip.dataset.filter === state.filter);
     }

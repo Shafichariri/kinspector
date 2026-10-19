@@ -83,6 +83,8 @@ const sessionState = (filter) => ({
   sessionId: 'S', filter, signals: [], allSignals: [], allSignalsSessionId: null, screens: [], view: 'network',
   transactions: [], allTransactions: [], allSessionId: null, markers: [], callLoad: 0, signalLoad: 0,
   arriving: { transactions: null, signals: null },
+  reread: { transactions: false, signals: false, timer: null, busy: false },
+  readSent: { transactions: 0, signals: 0 }, readWritten: { transactions: 0, signals: 0 },
 });
 
 /**

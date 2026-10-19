@@ -323,4 +323,4 @@ async function probeWaterfallText(ctx) {
   return result;
 }
 
-module.exports = { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText };
+module.exports = { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText, typeFilter, press };

@@ -57,6 +57,15 @@ back: `now failed read empty` fails). Verified in headless Chrome only. Not run:
 and the iOS, Android and overlay targets (nothing there changed). Accepted trade-off: a failed
 `/current` read always empties the strip, also on an unchanged session.
 
+**`item:web-live-rows-filtered` is done** (2026-10-19, uncommitted on branch
+`shafic/web-live-rows-filtered`, base `4e5491c`, not pushed, so CI has not run). KIN-52 to KIN-55 are
+Done on qa-verifier evidence over two passes (round 2 re-ran everything after the KIN-55 fix). Counts
+on the working tree, per target and not a full-repository total: web static checks 87/0 (base 79),
+live probe 197 passed 0 failed 1 n/a (base 187), archive probe 37/0, `:inspector-daemon:test` 268/0,
+`:repo-checks:test` 35/0; client-name scan clean. Guards proven red both ways (push-everything put
+back: 191/6; the two `rereadLive` and `stands()` rules: 87/1 each; the `50-path.js` break: 195/2).
+Not run: `:inspector-model` and the iOS, Android and overlay targets (nothing there changed).
+
 **`item:signals-query-one-rule` is done, with one deferred bug** (2026-10-19, on branch
 `shafic/roadmap-batch-2026-10-18`, not pushed, so CI has not run). Tickets KIN-24 to KIN-41 and KIN-26
 are Done on verifier evidence over four panels (`5f6b610`, `e1711a3`, `a86dde2`, `8082e02`) and a fresh
@@ -102,6 +111,15 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **With a filter set, a live call or signal the filter does not match is not drawn in the list,
+  timeline or path, and the header and traffic tab follow live calls, in headless Chrome 131 and the
+  web probes only.** Working tree on `4e5491c`: `live rows list/timeline/path`, `live rows whole`,
+  `live free no filter`, `live paused no read`, `live header plain` and `live header filter` pass in
+  the 197; the burst bound (100 rows in 1003 ms: 3 list reads; with reads held 1.5 s: 6, one at a
+  time) was measured in Chrome and is `reread burst of 100` in the static checks. Filter edit, session
+  switch and a dropped socket during a re-read end on the daemon's own rows. A whitespace-only filter
+  behaves as no filter (`blank filter header`, `blank filter free`, and curl `filter=%20%20%20` =
+  16 of 16).
 - **The web list draws the newest 1000 calls and says so, and an export draws every embedded call,
   in headless Chrome 131 and the static checks.** At `68315b4`: static 79/0, live probe 185/0
   (`long count no filter` reads `newest 1000 of 1203 shown`; `long chips count oldest` and `long repeat
@@ -213,6 +231,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **`item:web-live-rows-filtered` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it.
+  `-Pinspector=off` was not run (no consumer signature changed). Not on CI: the branch is not pushed.
+- **The burst bound counts re-read requests only.** Each live signal also reads `/current`, with or
+  without a filter (50 signals gave 53 requests in total); that predates the item.
+- **The probe's restore has no guard of its own.** Deleting the restore of `state.lastCaptureTs` and
+  `state.expandedVisits` alone leaves 197/0; a later probe that opens a path visit could empty
+  `failures unfolded` again without anything failing.
+- **The page and the daemon disagree on two invisible characters**: U+FEFF (the page sends no filter,
+  the daemon would answer 400) and U+001C (the daemon reads it as no filter, the page as a filter).
+  Spaces and the usual whitespace agree.
+- **`state.reread.busy` is reset only when the read finishes**, so a request that never settles would
+  stop re-reads until a reload. Not observed.
 - **`item:web-transactions-paged` on CI**: the branch is not pushed. KIN-43 AC#4 ("passes with it in
   CI") is the one criterion left unticked for that reason. `-Pinspector=off` was not run (no consumer
   signature changed).

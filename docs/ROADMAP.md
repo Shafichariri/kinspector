@@ -240,6 +240,8 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
   appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
   sense that nothing moves. It predates this item and is not in KIN-42; it needs placing in the order.
+  **Placed 2026-10-19 by the product owner** in `item:web-live-calls-reach-every-pane`, §3 → Bugs
+  found, not fixed, after QA on `item:web-live-rows-filtered` found it again with two siblings.
 
 ### Bugs found, not fixed
 
@@ -259,76 +261,7 @@ not worth doing. Where each sits in the order is in §5 → "Order from here".*
 
 - ~~**The web traffic list stops at 1000 calls and does not say so.**~~ Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-transactions-paged`.
 
-- **Live rows ignore the filter until the next reload.** *Ticket label:*
-  `item:web-live-rows-filtered`. **Ordered 2026-10-18, scheduled in Order from here**, conditional
-  on its size (see the end of this entry).
-
-  `ws.onmessage` in `web/js/05-network.js` pushes every live call into `state.transactions` and
-  every live signal into `state.signals`, whatever the filter. Type `status:5xx` with live on, and
-  every 200 that arrives is drawn under that filter, and the count goes up with it, until the filter
-  is edited or the page reloads. KIN-24 keeps signals consistent with calls here, so both stay wrong
-  together. Once `item:signals-query-one-rule` makes the filter reach signals on a reload, the live
-  socket is the only path by which anything escapes the filter.
-
-  **The constraint that shapes the fix.** The page must not decide whether a row matches. The
-  grammar is frozen and has one parser, in `:inspector-model`, and the export already records that
-  its filter is "disabled, not reimplemented" (`docs/decisions/exports.md`) because a JavaScript
-  evaluator would be a second parser, the drift this repository refuses. So the daemon answers:
-  the live message carries whether the row matches the page's filter, or a live row under a filter
-  triggers a throttled re-read of the filtered set. The architect chooses.
-
-  **The user and the problem.** A web UI user on a Mac who filters while watching live traffic,
-  which is the commonest way to watch for one failure. The list shows rows the filter excludes, so
-  the filter appears not to work at the moment it is most needed.
-
-  **Acceptance criteria.**
-
-  - With a filter set, a live call or signal the filter does not match does not appear in the
-    list, the timeline or a path visit's contents. One it does match appears without a reload.
-    `render-web-ui.js` drives one live row of each kind and fails with the push-everything line put
-    back.
-  - `state.allTransactions` and `state.allSignals` still receive every live row, so chips, repeat
-    marks, tab counts and the path skeleton still describe the whole session.
-  - No filter is evaluated in `web/js`. The match comes from the daemon.
-  - With no filter set, a live row costs no request.
-  - If the re-read option is chosen, it is throttled, and the design states the most requests a
-    burst of 100 live rows can cause.
-  - Pausing is unchanged: it still drops rows and re-reads on resume (`docs/decisions/web-ui.md`).
-
-  - **The header and the tab count follow live rows.** *(Added 2026-10-19, from the first verify
-    panel on `item:web-transactions-paged`.)* Today `renderCounts` runs on a load and from
-    `setTimeRange`, never when a live row arrives, so `16 of 16 calls` stays while 20 rows are drawn,
-    and the tab reads `traffic 1000` while the list grows. After this item, once a live row has been
-    admitted or refused, the header and the tab count say what the list and the session now hold,
-    under a filter and without one. A live-row probe asserts the header after two live rows and
-    fails with the counts left to the next load. *Why here:* this item decides what a live row does
-    to the lists, and a count that ignores the decision is the same defect one line lower.
-  - **A whitespace-only filter is no filter on the page, as it is on the daemon.** *(Added
-    2026-10-19, from the same panel.)* The daemon treats a blank filter as none
-    (`SessionRepository`, `filterText.isBlank()`), so `filter=%20` returns the whole session. The
-    page reportedly treats it as a filter and draws the filtered `N of M calls` shape. This was read
-    from the code and a curl, not driven in the page, so the architect confirms it first. The
-    criterion holds either way: with only spaces typed, the header, the notes and the live path
-    behave as with nothing typed, and a live row costs no request. The page decides "is there a
-    filter" in one place, and a check fails with a space typed if it disagrees with the daemon.
-    *Why here:* the "no filter, no request" criterion above needs exactly that test, and getting it
-    wrong costs a re-read on every live row for a user who typed a space.
-
-  **Out of scope.** The filter grammar. The overlay, which filters in process on every change.
-  Surfaces: web UI, and the daemon's live route if the architect puts the match there. No public
-  API. Release-notes line when it ships.
-
-  **The two criteria added 2026-10-19 may push this item above S**, which under the condition below
-  moves it to after phase I. The product owner judges both belong here anyway: the stale count is
-  the same live-row decision, and the blank-filter test is one the item must write. The architect
-  sizes it with them in. **Decided 2026-10-19 by the maintainer: both criteria stay.** If that
-  sizes the item above S, it moves after phase I, and the maintainer accepted that. Size: S, to be
-  confirmed.
-
-  **The condition on its place.** It is ahead of the structure moves because it shows a user
-  something false today, the same reason the maintainer put the two defects ahead of them. If the
-  architect sizes it above S, it moves to after phase I and stays ahead of 1a. A live bug is worth more than a structure move only while
-  it costs about the same.
+- ~~**Live rows ignore the filter until the next reload.**~~ Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-live-rows-filtered`.
 
 - **Row labels drop a non-default port.** *Ticket label:* `item:row-label-port`. **Ordered
   2026-10-18, scheduled in Order from here**, after the `McpTest.kt` split.
@@ -570,10 +503,77 @@ probe's fixture.*
   Size S, to be confirmed by the architect. Release-notes line, because a user could have seen the
   switch window.
 
-  **Why not only a criterion on 1a.** 1a rebuilds the session switch, but it is the fifth item
-  after this one and sized L, and folding this in would leave a false fact on screen until then,
+  **Why not only a criterion on 1a.** 1a rebuilds the session switch, but it comes well after
+  this one in "Order from here" and is sized L, and folding this in would leave a false fact on screen until then,
   the same argument that made KIN-51 its own item. 1a carries one criterion instead: the probes
   this item adds stay green through its rebuild.
+
+*The three defects below were found on 2026-10-19 by QA on `item:web-live-rows-filtered` (KIN-52 to
+KIN-55). Each is true at base `4e5491c`, before that item's diff, so none joins its fix round.
+Placed by the product owner the same day. Two make one new item; the third was already owned.*
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| 1. The session glance (`calls 27` while the session had 29) and the picker label (`6 calls`) follow only a load, not live calls | **new item**, `item:web-live-calls-reach-every-pane` | KIN-54 made the header and the tab follow live calls and stopped there; the same handler owes the rest. Not `item:web-now-strip-follows-session`, whose scope is the switch window and which puts the counts out of scope; not 1b's (f3), which is about labels and is far off |
+| 2. A live call with no filter set does not redraw the timeline | **new item**, with 1 | the same `txn` branch of `ws.onmessage` (`web/js/05-network.js`), and the same probe. It was recorded in §3 → Guards as unplaced since KIN-41, and in `docs/STATUS.md` → Not verified; this places it |
+| 3. At 400 px the header count is clipped, `5 of 31 call` | 1a, `item:web-foundation-shell`, under (e), "The call count is on screen at 400px" | already owned: that criterion asks for the whole count text inside the window at 400px. Noted there as seen again, under a filter |
+
+- **A live call reaches the list but not the timeline, the glance or the picker.** *Ticket label:*
+  `item:web-live-calls-reach-every-pane`. **Proposed 2026-10-19 by the product owner: straight after
+  `item:web-now-strip-follows-session`**, with the other web defects. Not yet placed by the maintainer
+  (§5 → "Order from here").
+
+  Since KIN-54 a live call moves the header and the traffic tab. Three other things on the page still
+  describe the session as of the last load:
+
+  - **The timeline, with no filter set.** The `txn` branch of `ws.onmessage` pushes the call and
+    redraws the list, the waterfall and the path, and never calls `renderTimeline`. A marker and a
+    signal both do. So a call appears on the timeline only at the next redraw for some other reason.
+    Under a filter the re-read redraws it, which is why only the no-filter case shows.
+  - **The session glance** (the detail pane with no call selected) reads `calls 27` while the
+    header says 29, and its hosts and slowest calls are as stale.
+  - **The session picker's label**, `6 calls`, is the daemon's `txnCount` from the last
+    `loadSessions`, and nothing re-reads it while the session records.
+
+  **The user and the problem.** A web UI user on a Mac watching a session record, which is what live
+  tail is for. One screen states two different call counts for one session, and the timeline, the
+  view that exists to show calls beside screens and signals, leaves out the newest ones. Each is a
+  false fact, and each corrects itself only when the reader does something unrelated.
+
+  **Why now.** It is the last of what a live call owes the page, in the handler KIN-52 to KIN-55 just
+  rewrote, while its probes (`live header plain`, `live header filter`) are fresh and can be extended
+  rather than rebuilt. Small, and it shows a user something false today.
+
+  **Acceptance criteria.**
+
+  - With no filter and live on, a call arriving while the timeline is shown is drawn on the timeline
+    without any other action. The follow rule in `docs/decisions/web-ui.md` still holds: a timeline
+    at its end follows the new call, a timeline scrolled back does not move, and an open run stays
+    open. The existing `socket …` follow checks stay green, and a new check fails with the redraw
+    removed.
+  - A burst does not redraw the timeline once per call without bound. The architect chooses the
+    shape (throttle, or the frame the list already draws in); the bound is measured the way
+    `reread burst of 100` measured the re-read, and stated in the change.
+  - With live on, the glance's `calls` row equals the session count the header states, after any
+    number of live calls, with or without a filter, and its hosts and slowest calls include those
+    calls. A probe sends calls with the glance shown and fails with the redraw removed.
+  - The selected session's picker label states the same call count as the header after live calls,
+    without a reload and without opening the picker. A probe fails with the old behaviour put back.
+  - With live paused, none of the three moves, as the header does not. A live call for another session
+    changes none of them.
+  - No filter is evaluated in `web/js`, and no new route is added. If the picker label is kept
+    current by re-reading `/api/sessions`, the re-read is throttled as the filtered re-read is.
+
+  **Out of scope.** The labels of sessions other than the selected one; 1a moves the session list to
+  a Sessions page, which is where every session's count being live belongs, if it does. The glance's
+  signal side after a switch, which is `item:web-now-strip-follows-session`. The count clipped at
+  400px, which is 1a's (e). The overlay, which redraws from one `StateFlow`. Surfaces: web UI only.
+  No public API, no `:inspector-model` change, no daemon change. Size S, to be confirmed by the
+  architect. Release-notes line, because a user could have read the stale count.
+
+  **Not a decision overturned.** `docs/decisions/web-ui.md` records that the glance reads the
+  whole-session copy so a filter never shrinks it; this keeps that copy's readers current, which is
+  what that rule assumes.
 
 ### Open questions
 
@@ -718,17 +718,17 @@ here. Phases A to G are merged (see `ROADMAP-DONE.md` → §5). They are not in 
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 1 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S; both 2026-10-19 criteria kept, maintainer 2026-10-19)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed *(if above S, moves after phase I; maintainer accepted 2026-10-19)* |
 | 3 | The traffic list does not say when it holds only part of what it counts *(added 2026-10-19; placed by the maintainer)* | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
 | 4 | The now strip and the signal panes can show what is no longer true *(added 2026-10-19)* | §3 → Bugs found | `item:web-now-strip-follows-session` | S, to be confirmed |
-| 5 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 6 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
-| 7 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 8 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
-| 10 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
-| 11 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
-| 12 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| 5 | A live call reaches the list but not the timeline, the glance or the picker *(added 2026-10-19; **a proposal for the maintainer**, not yet placed)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S, to be confirmed |
+| 6 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 7 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 8 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 9 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 10 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
 wait for the next one.
@@ -773,6 +773,15 @@ shows a user something false today. The maintainer's rows keep their relative or
 after it move down one. If the maintainer takes the web defects after phase I instead (§5 → "Open
 questions only the human can answer"), this row moves with them. Where each defect went is in §3,
 above the item.
+
+**One row proposed 2026-10-19 by the product owner**, `item:web-live-calls-reach-every-pane`, from QA
+on `item:web-live-rows-filtered`: the timeline, the glance and the picker label do not follow a live
+call. **This is a proposal; the maintainer has not placed it.** It is proposed straight after
+`item:web-now-strip-follows-session`, with the other web defects, for their reason: small, and it
+shows a user something false today. The maintainer's rows keep their relative order and the rows
+after it move down one. If the maintainer places it elsewhere, or takes the web defects after phase I
+(§5 → "Open questions only the human can answer"), this row moves accordingly. Where each defect
+went is in §3, above the item.
 
 **Why this order.** By value per hour. The two defects come ahead of the structure moves: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -940,7 +949,8 @@ decision or a known trap:
   confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
   web defects straight after phase I. Either way they stay ahead of 1a.
   `item:web-list-says-what-it-holds`, placed with them on 2026-10-19, moves with them. So does
-  `item:web-now-strip-follows-session`, placed with them later the same day.
+  `item:web-now-strip-follows-session`, placed with them later the same day, and
+  `item:web-live-calls-reach-every-pane`, proposed with them after that and not yet placed.
 
 ---
 
@@ -1062,7 +1072,9 @@ In **1a, the shell**:
   overflowing top bar, so it was off-screen entirely. That is the overflow above, but the criterion
   above covers controls and the count is not one, so it is stated here: at 400px the whole count
   text is inside the window. If 1b moves the count into its one-row toolbar (f2), the same check
-  moves with it into 1b.
+  moves with it into 1b. *(Seen again 2026-10-19 by QA on `item:web-live-rows-filtered`, at base
+  `4e5491c` too: at 400px under a filter the count read `5 of 31 call`, cut mid-word. The same
+  criterion covers it; a count cut short is not the whole count text.)*
 - **(e) Keep the session's start time visible when the picker truncates.** *(Added 2026-10-19, from
   the UX reviewer on `item:web-transactions-paged`.)* Since KIN-49 the closed picker can shrink to
   "com.example." at 600-700 px, so two sessions of one app look alike until it is opened. After 1a,

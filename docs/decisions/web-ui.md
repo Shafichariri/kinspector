@@ -232,6 +232,29 @@ so a row broadcast earlier is already in the read; and the merge is by id becaus
 page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mid-read calls once`,
 `mid-read signals once`).
 
+**Under a filter a live row waits for the daemon to say whether it matches.** The socket handler
+pushed every live call and signal into the filtered lists, so under `status>=500` every 200 that
+arrived was drawn, and counted, until the filter was edited. The page cannot decide the match
+itself: that would be a second parser of the shared grammar, which is why an export disables the
+filter (`exports.md`). The daemon could have said instead, as a flag on each live message, but
+`/api/live` is one broadcast with no per-page state. It would have had to learn each page's
+filter over a socket that any web page can open, and a flag computed against a filter the page
+has since changed needs a read to settle anyway. So a live row under a filter joins only the
+whole-session copies on arrival, and owes a re-read of the filtered rows of its kind through the
+routes a load reads (`oweReread`, `rereadLive`). With no filter it is pushed as before and costs no
+request. Only spaces typed is no filter, decided once in `applyFilter`, as the daemon reads a blank
+filter. A re-read fires a second after the first row that owes it, and never while another is out;
+rows arriving meanwhile ride on the one armed when it lands. So a burst of 100 rows inside a second
+costs at most two re-reads: two requests if all are calls, and `2 × (1 + ⌈S/1000⌉ + 1)` with
+signals among them, where S is how many signals the filter matches. Of a load and a re-read
+for the same rows, the one sent last is kept whichever lands last (`readSent`, `readWritten`), and a
+re-read is dropped once the session, the filter or live tail has changed. Pausing still drops rows
+first. The live probe's `blank filter …` and `live …` lines drive rows through the page's
+socket. They were proven red with the push put back, with the whole-session push removed, with the
+re-read run while paused, with the counts left to the next load, and with spaces kept as a filter.
+`check-web-static.js`'s `reread …` and `older reread …` lines hold the ordering and the
+burst, each proven red with its rule removed.
+
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
 enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls
