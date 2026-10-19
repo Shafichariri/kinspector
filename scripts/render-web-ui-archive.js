@@ -21,7 +21,7 @@
  */
 const fs = require('fs');
 const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
-const { LONG_LABELS, readLongSession, waitFor } = require('./lib/long-session-probes');
+const { LONG_LABELS, LONG_SESSION_ID, readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 
 let JSDOM, VirtualConsole;
@@ -385,13 +385,33 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     console.error(`--- exported session ${long.dom.window.INSPECTOR_ARCHIVE?.meta?.sessionId ?? '(no metadata)'} ---`);
     // The shared verdicts read `yes (…)` or `NO - …`; the verdict word is check's to print.
     const detail = (verdict) => verdict.replace(/^(yes|NO)\s*(- )?/, '');
-    for (const [label, value] of readLongSession(longDoc, calls)) check(label, value.startsWith('yes'), detail(value));
+    for (const [label, value] of readLongSession(longDoc, calls, { exported: true })) check(label, value.startsWith('yes'), detail(value));
+    // The pager's second question, the only one with a middle offset: the first page and the
+    // whole-route lines above pass against a route that slices to `limit` rather than to
+    // `offset + limit`, or that ignores `offset`, and this one does not.
+    const oldest = calls.slice().sort((a, b) => b.mono - a.mono).slice(1000).map((t) => t.id);
+    const longRoute = `/api/sessions/${encodeURIComponent(LONG_SESSION_ID)}/transactions`;
+    const second = await (await long.dom.window.eval('source').fetch(`${longRoute}?offset=1000&limit=1000`)).json();
+    const secondIds = (second.items || []).map((t) => t.id);
+    check('long offset 1000 sliced', calls.length > 1000 && secondIds.join(',') === oldest.join(','),
+      `offset=1000&limit=1000: ${secondIds.length} rows, the ${oldest.length} oldest due`);
+    // The oldest stretch, which only an export drawing every call it embeds can show: drawn from
+    // the newest 1000, it read "0 of 1203 calls" and "no calls in the selected stretch" while the
+    // glance's THIS STRETCH counted them.
+    const byMono = calls.slice().sort((a, b) => a.mono - b.mono);
+    if (byMono.length > 150) long.dom.window.eval(`setTimeRange({ from: ${byMono[0].mono}, to: ${byMono[150].mono} })`);
+    await settle(() => `${longDoc.querySelectorAll('#list .row').length}|${longDoc.getElementById('counts').textContent}`);
+    const stretchText = longDoc.getElementById('counts').textContent;
+    const stretchRows = longDoc.querySelectorAll('#list .row').length;
+    const stretchDue = `151 of ${calls.length} calls`;
+    check('long stretch oldest', stretchText === stretchDue && stretchRows === 151,
+      `"${stretchText}", ${stretchRows} rows drawn; "${stretchDue}" and 151 rows due`);
     check('long no network attempts', long.attempts.length === 0, long.attempts.slice(0, 3).join(' | ') || 'none');
     check('long no page errors', long.errors.length === 0, long.errors.slice(0, 3).join(' | ') || 'none');
     long.dom.window.close();
   } else {
     // Information: CI sets INSPECTOR_UI_ARCHIVE_LONG, and its expected count notices these missing.
-    for (const label of [...LONG_LABELS, 'long no network attempts', 'long no page errors']) {
+    for (const label of [...LONG_LABELS, 'long offset 1000 sliced', 'long stretch oldest', 'long no network attempts', 'long no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_LONG is not set)');
     }
   }

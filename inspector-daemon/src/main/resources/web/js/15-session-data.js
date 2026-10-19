@@ -87,9 +87,11 @@ function showSessionLabel() {
 }
 
 /**
- * How many calls the list asks for, newest first. The page's own number rather than the daemon's
- * clamp happening to match it, so an export, which answers whatever limit it is asked, draws the
- * same list a live page does. The whole-session copy is read past it in pages (`routePages`).
+ * How many calls the live list asks for, newest first: the page's own number rather than the
+ * daemon's clamp happening to match it. The whole-session copy is read past it in pages
+ * (`routePages`). An export asks for every call it embeds instead, because it has no filter to
+ * reach past a ceiling: at 1000 its oldest calls could not be opened at all, and a stretch brushed
+ * over them said they did not exist.
  */
 const LIST_CEILING = 1000;
 
@@ -112,7 +114,7 @@ async function loadTransactions() {
   const isLatest = () => load === state.callLoad;
   const filter = state.filter;
   const id = encodeURIComponent(state.sessionId);
-  const q = new URLSearchParams({ filter, limit: String(LIST_CEILING) });
+  const q = new URLSearchParams({ filter, limit: String(ARCHIVE ? ARCHIVE.transactions.length : LIST_CEILING) });
   let page = null;
   let error = null;
   try {

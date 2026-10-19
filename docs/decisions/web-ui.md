@@ -191,8 +191,10 @@ removed. The whole-session calls are paged under a filter, and without one when 
 short of the session total, because the path counts what each visit recorded from that copy: stopped
 at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
 list draws the newest 1000 calls by the page's own limit (`LIST_CEILING`), not by the route's clamp
-happening to match what it asked, so an export, which answers whatever limit it is asked, draws the
-same list. With no filter and no brushed stretch the header then says `newest 1000 of 4210 shown`,
+happening to match what it asked. An export asks for every embedded call instead: it has no filter
+to reach past a ceiling, and at 1000 its oldest calls could not be opened at all, while a brushed
+stretch over them said they did not exist. With no filter and no brushed stretch the header then
+says `newest 1000 of 4210 shown`,
 because `1000 of 4210 calls` is the shape a filter produces and sent readers looking for one;
 `no-filter count` in `check-web-static.js` and `long count no filter` in both probes hold it.
 

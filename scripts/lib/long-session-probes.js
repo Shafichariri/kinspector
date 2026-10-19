@@ -6,13 +6,13 @@
  * the newest 1000, so one page of the route draws it and holds nothing it repeats. The endpoint
  * chips and the repeat marks read the page's whole-session copy, and only a copy read past the clamp
  * makes the `twice` chip count 2 and marks #203; read from the first page alone, it counts 1 and
- * marks nothing. With no filter the list itself draws the page's own 1000, and the header says
- * `newest 1000 of 1203 shown` in both, never the `1000 of 1203 calls` a filter produces; an export
- * asked for more than 1000 would draw more, and say so.
+ * marks nothing. With no filter the live list draws the page's own 1000, and the header says
+ * `newest 1000 of 1203 shown`, never the `1000 of 1203 calls` a filter produces. An export draws
+ * every call it embeds and says `1203 of 1203 calls`: it has no filter to reach past a ceiling.
  *
  * `render-web-ui.js` switches its page to the session and back through `probeLongSession`;
  * `render-web-ui-archive.js` opens the session's export and asks `readLongSession` the same
- * questions, so the lines mean the same thing in both. Each returns `[label, verdict]` pairs, one
+ * questions, so the lines mean the same thing in both, the count's due text aside. Each returns `[label, verdict]` pairs, one
  * per line the caller prints, so a new line here needs no wiring there.
  */
 
@@ -43,15 +43,18 @@ function twicePair(calls) {
 const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter'];
 const every = (why) => LONG_LABELS.map((label) => [label, why]);
 
-/** The verdicts, read from a page that is showing the long session with no filter. */
-function readLongSession(doc, calls) {
+/**
+ * The verdicts, read from a page that is showing the long session with no filter; `exported` says
+ * the page is an export, which draws every call rather than the newest 1000.
+ */
+function readLongSession(doc, calls, { exported = false } = {}) {
   const pair = twicePair(calls);
   if (pair.length !== 2) return every(`n/a (the session has ${pair.length} calls to /twice, not 2)`);
   const chip = [...doc.querySelectorAll('#endpoint-chips .chip')].find((c) => c.firstChild?.textContent === 'twice');
   const count = chip?.querySelector('.chip-count')?.textContent;
   const newer = doc.querySelector(`#list .row[data-id="${pair[1].id}"]`);
   const counts = doc.getElementById('counts').textContent;
-  const due = `newest 1000 of ${calls.length} shown`;
+  const due = exported ? `${calls.length} of ${calls.length} calls` : `newest 1000 of ${calls.length} shown`;
   return [
     [LONG_LABELS[0], count === '2'
       ? 'yes (the twice chip counts 2, the oldest call included)'
@@ -62,7 +65,7 @@ function readLongSession(doc, calls) {
         ? `yes (${pair[1].id} is marked as a repeat of ${pair[0].id}, past the clamp)`
         : `NO - ${pair[1].id} is drawn unmarked (its repeat is older than the newest 1000)`],
     [LONG_LABELS[2], counts === due
-      ? `yes ("${counts}", which no filter reads like)`
+      ? `yes ("${counts}", ${exported ? 'every call the export embeds' : 'which no filter reads like'})`
       : `NO - "${counts}", where "${due}" was due`],
   ];
 }
