@@ -45,6 +45,14 @@ body { display: flex; flex-direction: column; }
   font-size: 12px;
   max-width: 380px;
 }
+/* The picker is what gives way when the bar runs short, down to a width that still shows the start
+   of a session's name. Without it the count below is the first thing to shrink, and kept on one
+   line it pushes restart and stop off the right edge instead. 1a rebuilds the bar. */
+#session-picker { min-width: 120px; flex: 0 1 380px; }
+
+/* The count must not wrap. The bar's 44px shows two of its lines, and a wrapped
+   "newest 1000 of 1203 shown" read as "1000 of 1203", the shape only a filter produces. */
+#counts { white-space: nowrap; }
 
 /* Whether the list follows new rows. Names its state; the dot is green only while following. */
 .live-btn {
