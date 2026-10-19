@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 22:45'
-updated_date: '2026-10-19 00:27'
+updated_date: '2026-10-19 05:04'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -24,9 +24,9 @@ Found by the third verify panel (head a86dde2), blocking. On the 3016-call sessi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A visit older than the oldest loaded filtered row does not claim 0 matches: it says the calls are not loaded, or it counts correctly
-- [ ] #2 A check on a >1000-match session, red against a86dde2
-- [ ] #3 The header's count and the note agree, or the note says what its count covers
+- [x] #1 A visit older than the oldest loaded filtered row does not claim 0 matches: it says the calls are not loaded, or it counts correctly
+- [x] #2 A check on a >1000-match session, red against a86dde2
+- [x] #3 The header's count and the note agree, or the note says what its count covers
 <!-- AC:END -->
 
 ## Definition of Done
@@ -45,4 +45,6 @@ RED PROOFS: a86dde2's 50-path.js + 25-traffic-list.js -> 'path clamp path:/v3/sh
 REAL DATA (scale3.js on the 3016-call session, jsdom): path:/v3/shop stations were 'before first=0 of 2 match | Home=0 of 2 | Product=0 of 2 | Cart=0 of 5 | Product=0 of 1 | Checkout=1000 network · 249 failed', now 'calls not loaded' x5 and 'Checkout=1000 network · older calls not loaded · 249 failed'; path note '1 call and 13 signals hidden by the filter path:/v3/shop — newest 1000 of 3015 matches loaded — clear filter'. path:/v3/shop/stock (4 matches, not clamped) unchanged: '0 of 2/2/2/5/1 match', 'Checkout=4 network · 3 failed'.
 MEASUREMENTS: first wording ('— the newest 1000 of 3015 matches are loaded') wrapped the note at 1440 on the 3016-call session under path:/v3/shop and moved the sticky box 14px (timeline ceiling 282->296, path ceiling 347->361, station gap 0->1, measure.js still 88/0); shortened to '— newest N of M matches loaded', after which every layout number in measure.js, k33.js, m3.js and runjump.js is identical to KIN-38's run at 1440 and 400 on both sessions; only m3's 'texts' lines differ (the note's words, under the shop filter). Live probe 182/0, archive 26/0, :inspector-daemon:test 267/0, :repo-checks:test 35/0 (first run failed FileBudgetTest, 50-path.js at 606 lines; my own comments trimmed to 600, no budget entry added), huge37 on 160,016 calls green.
 OPEN, NOT FIXED (outside the ticket): the waterfall's stub visits read 'no matching calls' / 'no calls' for visits whose calls were not loaded (45-visits.js:238); recorded in web-ui.md as not yet taking this rule.
+
+QA (fourth verify panel doug-4, charles-4, simon-4, head 8082e02): every AC of this ticket Verified; ACs ticked, ticket left In Progress because the item closes together. Panel reports filed as received; the per-AC command and decisive line are in the panel reports, not copied here.
 <!-- SECTION:NOTES:END -->

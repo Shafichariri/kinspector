@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 22:45'
-updated_date: '2026-10-18 23:47'
+updated_date: '2026-10-19 05:04'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -22,9 +22,9 @@ Found by the third verify panel (head a86dde2), blocking. Introduced by KIN-33. 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With live on, expanding or collapsing a run leaves scrollTop unchanged in both orders at 1440 and 400
-- [ ] #2 A newly arriving row is still followed when the pane was already at the end it follows, as logAtEnd does in 50-path.js
-- [ ] #3 A check that is red against a86dde2: a jsdom probe if it can see it, otherwise a documented Chrome check
+- [x] #1 With live on, expanding or collapsing a run leaves scrollTop unchanged in both orders at 1440 and 400
+- [x] #2 A newly arriving row is still followed when the pane was already at the end it follows, as logAtEnd does in 50-path.js
+- [x] #3 A check that is red against a86dde2: a jsdom probe if it can see it, otherwise a documented Chrome check
 <!-- AC:END -->
 
 ## Definition of Done
@@ -45,4 +45,6 @@ EVERY OTHER NUMBER UNCHANGED: measure.js 88/0 and k33.js 0 FAIL on both sessions
 OBSERVED, NOT FIXED (outside the ticket): renderList's own follow (25-traffic-list.js, 'Follow the newest row') also scrolls the shared pane whenever it runs, including while the timeline is shown — a live call arriving while the reader is scrolled back in the timeline moves the pane through renderList, not renderTimeline. Same shape as ROADMAP's 1b item 'Each traffic view opens where it was left'.
 
 Measured, the observation above: on the 3016-call session at 1440 with the timeline shown and the pane at 14900, one call pushed and renderList() called (what the socket does for a 'txn') -> scrollTop 0. Not touched by c69dd4c.
+
+QA (fourth verify panel doug-4, charles-4, simon-4, head 8082e02): every AC of this ticket Verified; ACs ticked, ticket left In Progress because the item closes together. Panel reports filed as received; the per-AC command and decisive line are in the panel reports, not copied here.
 <!-- SECTION:NOTES:END -->

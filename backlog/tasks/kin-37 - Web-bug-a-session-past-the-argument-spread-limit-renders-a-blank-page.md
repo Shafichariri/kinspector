@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-18 22:45'
-updated_date: '2026-10-18 23:31'
+updated_date: '2026-10-19 05:04'
 labels:
   - 'item:signals-query-one-rule'
 dependencies:
@@ -22,9 +22,9 @@ Found by the third verify panel (head a86dde2), blocking. Introduced by KIN-34, 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No spread of a row array into an argument list anywhere in web/js; loops instead
-- [ ] #2 A static check at 200k rows, red if any spread returns, green now
-- [ ] #3 On a >160k-call session in headless Chrome: rows and the axis are drawn, no page exception, and the dot reaches connected; recorded as a documented check
+- [x] #1 No spread of a row array into an argument list anywhere in web/js; loops instead
+- [x] #2 A static check at 200k rows, red if any spread returns, green now
+- [x] #3 On a >160k-call session in headless Chrome: rows and the axis are drawn, no page exception, and the dot reaches connected; recorded as a documented check
 <!-- AC:END -->
 
 ## Definition of Done
@@ -42,4 +42,6 @@ NEW CHECKS (check-web-static.js, new section 'long session', scripts/lib/long-se
 RED PROOFS (each file put back from HEAD alone, then restored): 25-traffic-list.js -> 'no argument spread: NO - 1 ... js/25-traffic-list.js:247' and 'stretch note 200k: NO - RangeError: Maximum call stack size exceeded'; 40-copy-export.js -> 'no argument spread: NO - 1 ... js/40-copy-export.js:116'; 45-visits.js -> NO 2 (181,182) and 'waterfall 200k: NO - RangeError'; 50-path.js -> NO 1 (:89) and 'path 200k: NO - RangeError'; 55-axis.js -> NO 3 (38,39,88), 'axis window 200k' and 'waterfall 200k' RangeError; 70-timeline.js -> NO 4 (108,109,151,152) and 'timeline 200k: NO - RangeError'; only runRow's spread put back -> NO 2 (153,154) and 'timeline 200k: NO - RangeError'. All green again after restore (51 checks, 0 failed). The scanner on HEAD's tree finds exactly the 12 sites the ticket lists (plus copy-export).
 AC3 CHROME (documented check; harness kept in the engineer's scratch, tools/huge37.js, headless Chrome 131 on CDP 9477, 1440x900, Doug's 160,016-call session from $TMPDIR/doug3/huge): HEAD 3c08719 web (same as a86dde2) after 181 s: rows 0, axis hidden, 0 bars, conn 'connecting…', 5 page exceptions 'RangeError: Maximum call stack size exceeded at sessionWindow (55-axis.js:38:21)', one per view. 1aaf3cb after 24 s: rows 1000, axis drawn with 205 rects, conn 'connected', counts '1000 of 160016 calls', views path/all/waterfall/network each drew (2/1017/6/1002 children), exceptions: none. jsdom huge.js: 160016 whole, rows drawn 1000, 0 page errors, sessionWindow {from:900,to:169999}.
 RUNS: live probe 182 passed 0 failed (ci.yml unchanged), archive 26 passed, :inspector-daemon:test --rerun 267/0, :repo-checks:test --rerun 35/0 (first run failed FileBudgetTest: web-audits.js 679 > 600 lines; the audit moved into long-session-checks.js instead of adding a budget). Chrome measurements on fixture and 3016-call session at 1440 and 400 (bob/measure.js, doug3 k33.js, simon3 m3.js, doug3 runjump.js): every output byte-identical to HEAD, including m3's two pre-existing FAILs (KIN-38). Client-name scan NOT RUN: no terms available to the engineer.
+
+QA (fourth verify panel doug-4, charles-4, simon-4, head 8082e02): every AC of this ticket Verified; ACs ticked, ticket left In Progress because the item closes together. Panel reports filed as received; the per-AC command and decisive line are in the panel reports, not copied here.
 <!-- SECTION:NOTES:END -->
