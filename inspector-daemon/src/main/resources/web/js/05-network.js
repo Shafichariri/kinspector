@@ -171,12 +171,20 @@ function connectLive() {
     if (!state.liveTail) return;
 
     if (message.type === 'txn') {
-      state.transactions.push(message.txn);
       admitLive('transactions', message.txn);
-      // The list takes the row as one more match, so both counts move and what the filter hides
-      // stays what it was.
       if (state.sessionTotal !== null) state.sessionTotal++;
-      if (state.matched !== null) state.matched++;
+      // Under a filter the daemon says whether the row matches (`rereadLive`); pushed here, every
+      // 200 drew under `status>=500` until the next load. With none it is one more match.
+      if (state.filter) {
+        oweReread('transactions');
+      } else {
+        state.transactions.push(message.txn);
+        if (state.matched !== null) state.matched++;
+      }
+      // The header and the traffic tab say what the list and the session hold now, not at the last
+      // load: `16 of 16 calls` stood above 20 rows. Under a filter only the session moved yet.
+      renderCounts();
+      renderTabs();
       renderList();
       renderWaterfall();
       renderPath();
@@ -189,8 +197,9 @@ function connectLive() {
     } else if (message.type === 'signal') {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
-      state.signals.push(message.signal);
       admitLive('signals', message.signal);
+      if (state.filter) oweReread('signals');
+      else state.signals.push(message.signal);
       if (tagOf(message.signal) === 'screen') {
         state.screens.push(message.signal);
         if (state.view === 'path') loadScreenPayloads().then(renderPath);

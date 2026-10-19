@@ -69,6 +69,13 @@ const state = {
   // Live rows that arrived while a whole-session read of that kind was in flight, as
   // `{ sessionId, rows }`, or null when none is. Merged by id when the read lands (`admitLive`).
   arriving: { transactions: null, signals: null },
+  // Live rows under a filter wait for the daemon to say which match (`rereadLive`): the kinds a
+  // re-read is owed for, its timer, and whether one is in flight.
+  reread: { transactions: false, signals: false, timer: null, busy: false },
+  // Filtered reads of each kind sent, and the newest one written. A load and a re-read for the same
+  // filter can be in flight together, and the one sent first must not overwrite the other's rows.
+  readSent: { transactions: 0, signals: 0 },
+  readWritten: { transactions: 0, signals: 0 },
   // How many endpoint chips to show. 0 hides them.
   endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
   // App-state observations for this session as the daemon matched them against the filter, and

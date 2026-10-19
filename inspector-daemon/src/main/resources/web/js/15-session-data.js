@@ -115,6 +115,7 @@ async function loadTransactions() {
   const filter = state.filter;
   const id = encodeURIComponent(state.sessionId);
   const q = new URLSearchParams({ filter, limit: String(ARCHIVE ? ARCHIVE.transactions.length : LIST_CEILING) });
+  const ticket = ++state.readSent.transactions;
   let page = null;
   let error = null;
   try {
@@ -123,17 +124,21 @@ async function loadTransactions() {
     error = e;
   }
   if (!isLatest()) return;
-  if (page) {
-    state.transactions = page.items;
-    state.sessionTotal = page.total;
-    state.matched = page.matched;
-    showFilterError(null);
-  } else {
-    // Parser messages are written to be shown verbatim, so show them verbatim.
-    showFilterError(error.message);
-    state.transactions = [];
-    state.sessionTotal = null;
-    state.matched = null;
+  // A live re-read sent after this load, for the same filter, may have landed first with newer rows.
+  if (ticket > state.readWritten.transactions) {
+    state.readWritten.transactions = ticket;
+    if (page) {
+      state.transactions = page.items;
+      state.sessionTotal = page.total;
+      state.matched = page.matched;
+      showFilterError(null);
+    } else {
+      // Parser messages are written to be shown verbatim, so show them verbatim.
+      showFilterError(error.message);
+      state.transactions = [];
+      state.sessionTotal = null;
+      state.matched = null;
+    }
   }
   renderCounts();
   const markers = await api(`/api/sessions/${id}/markers`).catch(() => []);
@@ -174,9 +179,13 @@ async function loadSignals(filter = state.filter) {
   const isLatest = () => load === state.signalLoad;
   const sessionId = state.sessionId;
   const id = encodeURIComponent(sessionId);
+  const ticket = ++state.readSent.signals;
   const signals = await signalPages(api, sessionId, filter).catch(() => []);
   if (!isLatest()) return;
-  state.signals = signals;
+  if (ticket > state.readWritten.signals) {
+    state.readWritten.signals = ticket;
+    state.signals = signals;
+  }
   await syncAllSignals(filter, isLatest);
   if (!isLatest()) return;
   // Taken from the whole session, so the skeleton ignores the filter without a request of its own.
@@ -230,6 +239,92 @@ async function syncAllSignals(filter, isLatest = () => true) {
     state.allSignals = state.signals.slice();
     state.allSignalsSessionId = null;
   }
+}
+
+/**
+ * How long a live row under a filter waits before the filtered rows are read again.
+ *
+ * The rows that arrive while it waits, or while that read is in flight, ride on it or on the one
+ * armed when it lands, so a burst of 100 rows inside a second costs at most two re-reads: two
+ * requests if they are all calls, and with signals among them `2 × (1 + ⌈S/1000⌉ + 1)`, where S is
+ * how many signals the filter matches — six below a thousand.
+ */
+const LIVE_REREAD_MS = 1000;
+
+/**
+ * A live row of `kind` arrived under a filter: owe that kind a re-read, and arm one unless one is
+ * armed or in flight already. A filter the daemon refused has nothing to re-read — the list says
+ * why — and asking again on every row would only repeat the refusal.
+ */
+function oweReread(kind) {
+  if (state.matched === null) return;
+  const owed = state.reread;
+  owed[kind] = true;
+  // Never two in flight: a row arriving during a read is covered by the one armed when it lands.
+  if (owed.timer === null && !owed.busy) owed.timer = setTimeout(rereadLive, LIVE_REREAD_MS);
+}
+
+/**
+ * The filtered rows of every kind a live row is owed for, read again from the daemon.
+ *
+ * Whether a live row matches the filter is the daemon's to say. The grammar has one parser, in
+ * `:inspector-model`, and a JavaScript evaluator here would be a second, which is why an export
+ * disables the filter rather than reimplementing it. So under a filter a live row joins only the
+ * whole-session copies when it arrives, and the list, the timeline and the visits take whatever
+ * the daemon's filtered answer holds once this lands. It reads only the routes a load reads.
+ *
+ * Its answer is dropped when the session, the filter or live tail changed under it. Of a load and a
+ * re-read for the same rows, whichever was sent last is the one kept, whatever order they land in
+ * (`readSent`, `readWritten`): the daemon stores a row before it broadcasts it, so the later read
+ * holds everything the earlier one does.
+ */
+async function rereadLive() {
+  const owed = state.reread;
+  owed.timer = null;
+  const kinds = ['transactions', 'signals'].filter((kind) => owed[kind]);
+  owed.transactions = false;
+  owed.signals = false;
+  // Paused, the page drops rows and resuming reads the session again, so nothing is owed here.
+  if (!kinds.length || !state.liveTail || !state.sessionId || !state.filter) return;
+  const { sessionId, filter } = state;
+  const stands = () => state.liveTail && state.sessionId === sessionId && state.filter === filter;
+  let wrote = false;
+  owed.busy = true;
+  try {
+    if (kinds.includes('transactions')) {
+      const ticket = ++state.readSent.transactions;
+      const q = new URLSearchParams({ filter, limit: String(LIST_CEILING) });
+      const page = await api(`/api/sessions/${encodeURIComponent(sessionId)}/transactions?${q}`);
+      if (stands() && ticket > state.readWritten.transactions) {
+        state.readWritten.transactions = ticket;
+        state.transactions = page.items;
+        state.sessionTotal = page.total;
+        state.matched = page.matched;
+        wrote = true;
+      }
+    }
+    if (kinds.includes('signals')) {
+      const ticket = ++state.readSent.signals;
+      const signals = await signalPages(api, sessionId, filter);
+      if (stands() && ticket > state.readWritten.signals) {
+        state.readWritten.signals = ticket;
+        state.signals = signals;
+        wrote = true;
+      }
+    }
+  } catch {
+    // The list stays as the last answer drew it; the next live row or load asks again.
+  } finally {
+    owed.busy = false;
+    if (owed.transactions || owed.signals) owed.timer = setTimeout(rereadLive, LIVE_REREAD_MS);
+  }
+  if (!wrote || !stands()) return;
+  renderCounts();
+  renderTabs();
+  renderList();
+  renderWaterfall();
+  renderPath();
+  renderTimeline();
 }
 
 /**

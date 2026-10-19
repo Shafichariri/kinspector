@@ -124,6 +124,8 @@ function socketPage(sources, view, newestFirst) {
     screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null, timelineFresh: true,
     callLoad: 0, signalLoad: 0, allSessionId: 'S', allSignalsSessionId: 'S', serverState: 'running',
     arriving: { transactions: null, signals: null },
+    reread: { transactions: false, signals: false, timer: null, busy: false },
+    readSent: { transactions: 0, signals: 0 }, readWritten: { transactions: 0, signals: 0 },
   };
   state.allSignals.push(state.screens[0]);
   const sockets = [];

@@ -45,6 +45,7 @@ const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes }
 const { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText } = require('./lib/filter-probes');
 const { probeLongSession } = require('./lib/long-session-probes');
 const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
+const { probeLiveRows } = require('./lib/live-filter-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -926,12 +927,13 @@ function runScripts() {
   }
   const filterOnTimeline = await probeFilterOnTimeline();
   // Probes that need the whole page, kept in lib/filter-probes.js; see its header.
-  const filterCtx = { window, doc, ORIGIN, settle, sessionTransactions, sessionSignals, lastSocket: () => lastSocket };
+  const filterCtx = { window, doc, ORIGIN, settle, sessionTransactions, sessionSignals, lastSocket: () => lastSocket, pageState: () => vm.runInContext('state', vmContext) };
   const wholeSession = await probeWholeSessionRefresh(filterCtx);
   const filterPanes = await probeFilterPanes(filterCtx);
   const waterfallText = await probeWaterfallText(filterCtx);
   const longSession = await probeLongSession(filterCtx); // switches to the 1203-call session and back
   const currentGuard = await probeCurrentAfterSwitch(filterCtx); // the now strip across a switch; and back
+  const liveRows = await probeLiveRows(filterCtx); // live rows under a filter and without one; ends unfiltered
 
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
@@ -2538,6 +2540,7 @@ function runScripts() {
   // The long session's lines, labelled in lib/long-session-probes.js; each value is a verdict.
   for (const [label, value] of longSession) console.error(`${label.padEnd(19)}:`, value);
   for (const [label, value] of currentGuard) console.error(`${label.padEnd(19)}:`, value); // lib/current-guard-probes.js
+  for (const [label, value] of liveRows) console.error(`${label.padEnd(19)}:`, value); // lib/live-filter-probes.js
   console.error('timeline emptied   :', filterPanes.timelineEmptied, '(markers ignore the filter and must not hide this)');
   console.error('timeline thinned   :', filterPanes.timelineThinned);
   console.error('filter panes tabs  :', filterPanes.tabsSteady, '(the tab bar never moves under a filter)');
