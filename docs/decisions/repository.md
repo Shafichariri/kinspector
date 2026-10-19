@@ -67,6 +67,17 @@ secrets, and an unset secret arrives empty. In both cases the script prints `NOT
 case exit 1. CI does not pass it yet, because the secret has not been created and `main` would go
 red. Add it to the push-to-`main` run once the secret exists.
 
+**A term matches as a whole word, not as a substring.** It counts only where the characters on
+both sides are not letters or digits, so it is caught in a domain, a path, beside `_` or `-`, or in
+quotes, and not inside an ordinary word. Substring matching was measured on 2026-10-19 against the
+real list: two short terms produced 16 hits, every one inside an unrelated identifier (`iPhoneOS`,
+`lineOf`, `instantaneous`), so the scan failed on clean code and would have turned every CI run red.
+The cost is a term run into another word with no separator (`fooBar`): list such forms as terms of
+their own. File contents go through `git grep`; paths, commit messages and the branch name are
+padded with a space and go through plain `grep`, because macOS grep does not match `^` inside an
+alternation group. Proven both ways in a scratch repository: the old script failed on every
+ordinary word and the new one passes them, and both catch the term in each of those positions.
+
 `scripts/check-commit-identity.sh <base> <head>` enforces the root `AGENTS.md`'s "Agents commit as
 the maintainer" rule over every commit in a range, merges included, and CI's `repo` job runs it
 over what a pull request adds and what a push to `main`
