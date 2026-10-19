@@ -243,6 +243,136 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   **Placed 2026-10-19 by the product owner** in `item:web-live-calls-reach-every-pane`, §3 → Bugs
   found, not fixed, after QA on `item:web-live-rows-filtered` found it again with two siblings.
 
+- **A check that finds nothing to check passes.** *Ticket label:* `item:guard-probe-finds-nothing-fails`.
+  Found in the retrospective of `item:web-live-rows-filtered` (PR #98, 2026-10-19), from KIN-55. The
+  roadmap-cycle skill now tells an engineer who adds a probe to the shared page to break one
+  neighbouring guard and watch it fail. This item is the mechanical version of that rule, so the
+  rule still holds on a day when nobody remembers it.
+
+  **For whom.** Whoever changes the web UI and trusts a green `render-web-ui.js`, and the maintainer
+  reading CI. Behind them, the web UI user on a Mac: a guard that checked nothing is how a 500 hidden
+  behind "+N more" comes back.
+
+  **Why it is unguarded.** The probes share one page. The new live probe in
+  `scripts/lib/live-filter-probes.js` left a path visit open, so the path probe that runs after it
+  found no collapsed visit. `failures unfolded` then printed `yes (0 summarised lines in this
+  session)`, and `expanded unfolded` passed with nothing to check as well. Nothing counted either as
+  wrong. `INSPECTOR_UI_EXPECT_CHECKS` pins how many checks pass, and a check that passes over nothing
+  still counts as a pass. KIN-55 fixed the leak, not the guard: the live probe now puts the page state
+  back, and the comment at the top of that file says why. The next probe that leaks state will
+  reproduce it. QA found this one only by breaking a neighbouring guard by hand.
+
+  **What it would take.** Acceptance criteria:
+
+  - On the CI fixture, `failures unfolded` fails when it sees 0 summarised lines, and
+    `expanded unfolded` fails when it sees no expanded line. When either passes, it prints how many it
+    checked.
+  - The same rule, generalised. A probe in `scripts/render-web-ui.js` or `scripts/lib/` that scans for
+    a shape (rows, lines, bars, elements matching a selector) and passes when none breaks the rule
+    also asserts that it found at least one, and prints the count. Among them, as a heuristic and not
+    a complete list: `currentHasAge` (`#current .current-item`), `barsVisible` (`.wf-bar`), the lane
+    list behind `unknownTagRendered`, and `noRepeatedHost` and `uncoveredNameTheirHost` in
+    `render-web-ui.js`, plus `onTop` in `lib/measure-cases.js`. The tree already does this in places:
+    `everyHeaderHasOne` and `labelled` require `length > 0`, and the CSS brace audit in
+    `lib/web-audits.js` says "found no rule blocks, so this checked nothing". The architect finds the
+    rest.
+  - When a probe's shape is legitimately absent from a fixture, the probe says so in an `n/a (…)` or
+    a `note()`, never in a `yes`.
+  - Proven both ways. Reintroduce a leak like KIN-55's by leaving a path visit open before the path
+    probe runs: the run goes red, and the failure names the empty scan. Remove the leak and the run
+    is green again.
+
+  **Out of scope.** Repairing whatever a leaking probe leaves behind (KIN-55 already did that for the
+  live probe). Giving each probe its own page. Changing what any check judges beyond the empty case.
+  If a check on the fixture turns from `yes` to `n/a`, the pinned `INSPECTOR_UI_EXPECT_CHECKS` count
+  moves, and the change says which check and why. Surfaces: none a user sees. This touches only the
+  web UI's check scripts, so there is no public API, no noop twin and no golden file.
+
+- **QA's live-traffic Chrome driver is still in a scratch directory.** *Ticket label:*
+  `item:guard-live-traffic-driver`. From the same retrospective. The roadmap-cycle rule "Promote a
+  harness the first time it earns it" says this driver should have moved into `scripts/lib/` within
+  `item:web-live-rows-filtered`. It did not.
+
+  **For whom.** The web UI user on a Mac who watches a session live, under a filter. Also whoever next
+  changes the live socket or the re-read, which `item:web-live-calls-reach-every-pane` is about to do.
+
+  **Why it is unguarded.** `docs/STATUS.md` lists the following as verified in headless Chrome: the
+  live re-read burst bound, a filter edit, a session switch and a dropped socket during a re-read.
+  They were verified by a driver QA wrote in a temporary scratch directory. It streams real rows into
+  a real daemon's `/ingest` and drives the served web UI over CDP. QA also used it to prove pause and
+  resume. No committed check does any of this. The committed checks each cover a piece:
+
+  - `lib/live-reread-checks.js` runs the races and `reread burst of 100` against stubbed routes,
+    with no browser and no daemon.
+  - `lib/measure-cases.js`'s `liveArrival` hands messages to the page's own `onmessage`, so nothing
+    goes through `/ingest`.
+  - `lib/live-filter-probes.js` fakes a row's arrival by wrapping `fetch`.
+
+  Nothing runs the whole path (ingest, broadcast, page, re-read) in a browser, and nothing exercises
+  pause and resume or reconnect there.
+
+  **Where the driver is.** Copies are kept outside the repository, in the maintainer's notes. They
+  are also posted as a comment on the pull request that placed this item, which
+  `git log -S'item:guard-live-traffic-driver' -- docs/ROADMAP.md` finds. If both copies are gone,
+  this is enough to rewrite them:
+
+  - `ingest.js` (about 30 lines) is a minimal app-side stream client. It opens a WebSocket to
+    `<origin>/ingest` and sends `{type:'hello', client:{v:1, appId, appVersion, platform:'desktop',
+    device, osVersion, buildType:'debug'}}`, then waits for `{type:'helloAck', sessionId}`. After
+    that it exposes two calls. `call(path, status, tag)` sends `{type:'txn', txn:{v:1, id, ts, mono,
+    method:'GET', scheme, host:'api.qa.invalid', path, query, status, ms, callId, resContentType},
+    resBody}`. `signal(tag, name, text)` sends `{type:'signal', signal:{v:1, id, ts, mono, tag, name},
+    data}`.
+  - `live-ui.js` (about 215 lines) launches Chrome with `launchChrome` and `sleep` from
+    `lib/measure-cdp.js` and opens a CDP page target. Through `Page.addScriptToEvaluateOnNewDocument`
+    it installs two wrappers. A fetch wrapper records every request in `window.__asked` (path,
+    filter, offset, time) and can hold a URL through `window.__delay`. A WebSocket wrapper exposes
+    `window.__sockets`, so the driver can drop the page's socket. A snapshot reads the counts, the tab
+    counts, the view, the filter and the list rows. It also reads the lengths of
+    `state.transactions`, `allTransactions`, `signals` and `allSignals`, which panes (list,
+    timeline, path, waterfall) hold given ids, and how many times the list was read. The scenarios:
+    - Setup: two sessions, an older B and the newest A.
+    - Live rows under a filter on the list, timeline and path, both on arrival and once settled, also
+      at 400 px wide.
+    - A burst of 50 calls and 50 signals in one second, counting list re-reads against the daemon's
+      own matched and total.
+    - No filter, and a filter of spaces only: a live row costs no list read.
+    - A filter edit mid re-read, with the call read held for 2 s.
+    - A session switch mid re-read.
+    - Pause with a re-read in flight, then resume.
+    - Reconnect after dropping the socket with a re-read armed.
+
+    It records page exceptions throughout.
+  - `live-ui-2.js` (about 70 lines) adds three cases that reuse `live-ui.js`'s page:
+    - Spaces versus nothing on the timeline: the header, the notes and the chips.
+    - A live screen signal on the path tab, under a filter that refuses it: the path skeleton still
+      gains the visit.
+    - A burst that straddles the re-read timer, 100 rows over 1.4 s against a daemon delayed 1.5 s,
+      counting reads.
+
+  **What it would take.** Acceptance criteria:
+
+  - The `/ingest` client and the CDP page helpers live in `scripts/lib/`. Chrome is launched through
+    `lib/measure-cdp.js`, which already wraps `WebSocket` as `window.__sockets` and collects page
+    exceptions. The fetch recorder and the delay hook join it or sit beside it, and nothing adds a
+    second Chrome launcher.
+  - It is wired into `scripts/measure-web-ui.js` as a case `--only` can select. Three readings are
+    judged and exit 1 when they fail: the burst bound (list reads for a burst, against the daemon's
+    own matched and total), the filter-edit race and the session-switch race. They are asserted, not
+    logged.
+  - Each judged reading is proven red by breaking the rule it guards, for example by re-reading on
+    every live row, or by letting a re-read land that answers for an old filter or session. Each goes
+    green again when the rule is restored.
+  - It reaches nothing beyond 127.0.0.1, and every host in a streamed row ends in `.invalid`.
+  - Future QA briefs name it among the existing `scripts/lib/` harnesses, so the next reviewer reuses
+    it rather than writing another.
+
+  **Out of scope.** Running `measure-web-ui.js` in CI. Today it runs once per web fix round and needs
+  Chrome, JDK 21 and a built daemon, so putting it in CI is a separate decision. Porting every
+  scratch scenario: pause and resume, reconnect, 400 px and the spaces-only cases are welcome but not
+  required. Changing any live behaviour. Surfaces: the web UI's check scripts, plus the daemon's
+  `/ingest` used as a client. There is no public API, no noop twin and no golden file.
+
 ### Bugs found, not fixed
 
 - **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
