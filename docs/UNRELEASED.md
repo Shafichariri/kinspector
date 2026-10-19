@@ -37,3 +37,13 @@ daemon they download.
 *"Web UI: switching sessions could show the previous session's \"now\" values in the now strip; it now
 shows the selected session's own values, or none."* A failed read of the now values also empties the
 strip, on an unchanged session too, until the next signal or load.
+`item:web-live-rows-filtered` (done 2026-10-19) owes a seventh, in the same daemon-only entry:
+*"Web UI: with a filter set, a call or signal arriving live that the filter does not match is no
+longer drawn in the list, the timeline or the path's visit lines (screens still mark the path,
+as on a load), and one that matches appears without a reload; the header count and the traffic tab
+follow live calls; a filter of only spaces counts as no filter."*
+It also settles the fourth line above: "rows arriving live follow the filter once
+item:web-live-rows-filtered lands" is now true, and the "Loaded is load-bearing" caveat no longer
+applies, so the release-steward drops it when the lines are merged. "Follow" is a throttled re-read,
+not an instant check: a matching live row appears about a second after the first row of a burst, and
+a burst of 100 rows in a second costs at most 2 re-reads. Daemon and wire unchanged.

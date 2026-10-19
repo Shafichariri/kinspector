@@ -646,6 +646,118 @@ Android only looked right because 120px clears a status bar at that density.
 
   cost: 5 calls (delivery-tracker 2, engineer 1, QA 1, release-steward 1), ~0.4M tokens, ~45 min, Small, 1 round
 
+- ~~**Live rows ignore the filter until the next reload.**~~ **Done, 2026-10-19.** *Ticket label:*
+  `item:web-live-rows-filtered`. **Ordered 2026-10-18, scheduled in Order from here**, conditional
+  on its size (see the end of this entry).
+
+  `ws.onmessage` in `web/js/05-network.js` pushes every live call into `state.transactions` and
+  every live signal into `state.signals`, whatever the filter. Type `status:5xx` with live on, and
+  every 200 that arrives is drawn under that filter, and the count goes up with it, until the filter
+  is edited or the page reloads. KIN-24 keeps signals consistent with calls here, so both stay wrong
+  together. Once `item:signals-query-one-rule` makes the filter reach signals on a reload, the live
+  socket is the only path by which anything escapes the filter.
+
+  **The constraint that shapes the fix.** The page must not decide whether a row matches. The
+  grammar is frozen and has one parser, in `:inspector-model`, and the export already records that
+  its filter is "disabled, not reimplemented" (`docs/decisions/exports.md`) because a JavaScript
+  evaluator would be a second parser, the drift this repository refuses. So the daemon answers:
+  the live message carries whether the row matches the page's filter, or a live row under a filter
+  triggers a throttled re-read of the filtered set. The architect chooses.
+
+  **The user and the problem.** A web UI user on a Mac who filters while watching live traffic,
+  which is the commonest way to watch for one failure. The list shows rows the filter excludes, so
+  the filter appears not to work at the moment it is most needed.
+
+  **Acceptance criteria.**
+
+  - With a filter set, a live call or signal the filter does not match does not appear in the
+    list, the timeline or a path visit's contents. One it does match appears without a reload.
+    `render-web-ui.js` drives one live row of each kind and fails with the push-everything line put
+    back.
+  - `state.allTransactions` and `state.allSignals` still receive every live row, so chips, repeat
+    marks, tab counts and the path skeleton still describe the whole session.
+  - No filter is evaluated in `web/js`. The match comes from the daemon.
+  - With no filter set, a live row costs no request.
+  - If the re-read option is chosen, it is throttled, and the design states the most requests a
+    burst of 100 live rows can cause.
+  - Pausing is unchanged: it still drops rows and re-reads on resume (`docs/decisions/web-ui.md`).
+
+  - **The header and the tab count follow live rows.** *(Added 2026-10-19, from the first verify
+    panel on `item:web-transactions-paged`.)* Today `renderCounts` runs on a load and from
+    `setTimeRange`, never when a live row arrives, so `16 of 16 calls` stays while 20 rows are drawn,
+    and the tab reads `traffic 1000` while the list grows. After this item, once a live row has been
+    admitted or refused, the header and the tab count say what the list and the session now hold,
+    under a filter and without one. A live-row probe asserts the header after two live rows and
+    fails with the counts left to the next load. *Why here:* this item decides what a live row does
+    to the lists, and a count that ignores the decision is the same defect one line lower.
+  - **A whitespace-only filter is no filter on the page, as it is on the daemon.** *(Added
+    2026-10-19, from the same panel.)* The daemon treats a blank filter as none
+    (`SessionRepository`, `filterText.isBlank()`), so `filter=%20` returns the whole session. The
+    page reportedly treats it as a filter and draws the filtered `N of M calls` shape. This was read
+    from the code and a curl, not driven in the page, so the architect confirms it first. The
+    criterion holds either way: with only spaces typed, the header, the notes and the live path
+    behave as with nothing typed, and a live row costs no request. The page decides "is there a
+    filter" in one place, and a check fails with a space typed if it disagrees with the daemon.
+    *Why here:* the "no filter, no request" criterion above needs exactly that test, and getting it
+    wrong costs a re-read on every live row for a user who typed a space.
+
+  **Out of scope.** The filter grammar. The overlay, which filters in process on every change.
+  Surfaces: web UI, and the daemon's live route if the architect puts the match there. No public
+  API. Release-notes line when it ships.
+
+  **The two criteria added 2026-10-19 may push this item above S**, which under the condition below
+  moves it to after phase I. The product owner judges both belong here anyway: the stale count is
+  the same live-row decision, and the blank-filter test is one the item must write. The architect
+  sizes it with them in. **Decided 2026-10-19 by the maintainer: both criteria stay.** If that
+  sizes the item above S, it moves after phase I, and the maintainer accepted that. Size: S, to be
+  confirmed.
+
+  **The condition on its place.** It is ahead of the structure moves because it shows a user
+  something false today, the same reason the maintainer put the two defects ahead of them. If the
+  architect sizes it above S, it moves to after phase I and stays ahead of 1a. A live bug is worth more than a structure move only while
+  it costs about the same.
+
+  **Done, 2026-10-19** (KIN-52 to KIN-55, one QA pass and one fix round, size S as sized). **Design
+  chosen: a throttled re-read under a filter.** With a filter set, a live row goes only into
+  `state.allTransactions` / `state.allSignals` and arms one re-read, which fires 1 s after the first
+  row that needs one and never while another is in flight, through the same routes a load uses. With
+  no filter, rows are pushed as before and cost no request. The daemon and the wire are unchanged,
+  and so is every `:inspector-model` type. **Burst bound:** 100 rows in a second cause at most 2
+  re-reads, which is 6 requests with signals under 1000 matches. The bound counts re-read requests
+  only. Each live signal also reads `/current`, with or without a filter, which predates this item.
+  The header and the traffic tab redraw on every live call and when a re-read lands. A
+  whitespace-only filter is stored as empty in `applyFilter`, the one place `state.filter` is set, so
+  the page and the daemon agree that spaces are no filter.
+
+  Learned: the first QA pass found a regression in the harness, not the page. The new live probe
+  opened and unfolded the newest path visit and never closed it, so `probePath`, which runs later on
+  the same page, found no collapsed visit and `failures unfolded` and `expanded unfolded` passed with
+  nothing to test (`0 summarised lines`; `marker dividers` 5 instead of 4; the `lastCapture` check
+  read the other text). That became KIN-55. The fix puts back `state.lastCaptureTs` and
+  `state.expandedVisits` after the probe. The same pass found two rules no check guarded, the
+  signals-ticket test inside `rereadLive` and the session clause of `stands()`; each now has a check
+  (`older reread signals`, `reread session changed`). Proof in both directions: push-everything put
+  back in `ws.onmessage`, 191 passed 6 failed; the redraw removed from the handler, from the
+  re-read, and from both; the busy guard removed (`2 out at once`); `liveTail` check removed from
+  `rereadLive` (`live paused no read` fails); `state.filter = typed` put back (`blank filter
+  header` and `blank filter free` fail); `chip.dataset.failed = "0"` in `50-path.js` (`failures
+  unfolded` and `expanded unfolded` fail, 195/2). Headless Chrome 1440, 1000 and 400 px, filter
+  `status>=500 | tag:state`: at arrival nothing unmatched is drawn and the header reads `2 of 27
+  calls`; a filter edit, a session switch and a dropped socket during a re-read all end on the
+  daemon's own rows. Counts: `render-web-ui.js` 197 passed 0 failed, 1 n/a (base 187),
+  `check-web-static.js` 87/0 (base 79), archive probe 37/0, `:repo-checks:test` 35/0,
+  `:inspector-daemon:test` 268/0; client-name scan clean.
+
+  Left as found, not fixed here: the page and the daemon disagree on two invisible characters, U+FEFF
+  (the page sends no filter where the daemon would answer 400) and U+001C (the daemon reads it as no
+  filter, the page as a filter). Nothing resets `state.reread.busy` except the read finishing, so a
+  request that never settles would stop re-reads until a reload; not observed. The probe's restore
+  has no check of its own. Older than this item and for the product owner: the session glance and the
+  picker label do not follow live rows, a live call with no filter does not redraw the timeline, and
+  the header count is clipped at 400 px.
+
+  cost: not recorded by the delivery-tracker, Small, 1 fix round
+
 
 ---
 
@@ -704,6 +816,7 @@ tag cut before any of this existed.
 | ~~The signals sort and clamp exist twice~~ **Done, 2026-10-19, with one deferred bug, KIN-42** (KIN-24 to KIN-41, KIN-26; four verify rounds; KIN-42 open, deferred: false empty state for ~25 s on a ~160k-call session) | §3 → Guards | `item:signals-query-one-rule` | S |
 | ~~The web traffic list stops at 1000 calls~~ **Done, 2026-10-19** (KIN-43 to KIN-50, QA at `68315b4`; KIN-42 stays deferred and owns whether the whole-session read is capped) *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | ~~S~~ M *(re-sized 2026-10-19; KIN-43 to KIN-46, approved; KIN-47 to KIN-50 from the verify panel)* |
 | ~~One session's "now" values can land under another~~ **Done, 2026-10-19** (KIN-51, `eaaadce`; a failed `/current` read now always empties the strip) *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
+| ~~Live rows ignore the filter until the next reload~~ **Done, 2026-10-19** (KIN-52 to KIN-55; a throttled re-read under a filter, no daemon or wire change; size S) *(added 2026-10-18)* | §3 → Bugs found | `item:web-live-rows-filtered` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
