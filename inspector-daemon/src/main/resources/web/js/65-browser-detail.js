@@ -41,7 +41,7 @@ function renderSessionGlance() {
    */
   const txns = (state.allTransactions.length ? state.allTransactions : state.transactions)
     .filter((txn) => inRange(txn.mono));
-  if (!txns.length && !state.signals.length) {
+  if (!txns.length && !state.allSignals.length) {
     pane.className = 'empty muted';
     pane.textContent = 'select a transaction';
     return;
@@ -87,10 +87,10 @@ function renderSessionGlance() {
     }
   }
 
-  if (state.signals.length) {
+  if (state.allSignals.length) {
     pane.appendChild(el('div', 'glance-title', 'Recorded alongside'));
     const byTag = new Map();
-    for (const signal of state.signals) {
+    for (const signal of state.allSignals) {
       const tag = tagOf(signal);
       byTag.set(tag, (byTag.get(tag) || 0) + 1);
     }
@@ -207,7 +207,7 @@ function valueBlock(row) {
     // Not fetched yet — every tag but cache loads a payload only when someone opens it.
     head.appendChild(el('span', 'muted', 'loading…'));
     box.appendChild(head);
-    const signal = state.signals.find((s) => s.id === row.signalId);
+    const signal = state.allSignals.find((s) => s.id === row.signalId);
     loadPayload(signal).then(renderBrowser);
     return box;
   }
@@ -334,7 +334,9 @@ async function pullProviders() {
     return;
   }
   status.textContent = `pulled ${names.length} at ${fmtClock(new Date().toISOString())}`;
-  // The pulled rows arrive over the live socket; re-read so they are on screen either way.
+  // The pulled rows arrive over the live socket; re-read so they are on screen either way. Under a
+  // filter the whole-session copy is cached, and it would not have them, so it is read again too.
+  state.allSignalsSessionId = null;
   await loadSignals();
   await loadPayloadsFor(tag);
   renderBrowser();

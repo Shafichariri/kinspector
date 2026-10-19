@@ -2,7 +2,13 @@
 /* --- list --------------------------------------------------------------- */
 
 #list-pane, #detail-pane { overflow-y: auto; position: relative; }
-#list-pane { border-right: 1px solid var(--divider); }
+/* `--sticky-top` is where anything else sticky in the pane must stop: under the scope bar while it
+   is drawn, at the top otherwise. Every pane sticks something — the timeline's filter note, the
+   path's map, the waterfall's group heads, the new-visit pill — and each stuck at `top: 0`, so the
+   one that came later in the document covered the bar. The bar's height is fixed so the offset is
+   a number rather than a measurement. */
+#list-pane { border-right: 1px solid var(--divider); --scope-bar-h: 33px; --sticky-top: 0px; }
+#scope-bar:not([hidden]) ~ * { --sticky-top: var(--scope-bar-h); }
 /* One column, so the divider has nothing to divide. */
 #panes.panes-wide #list-pane { border-right: 0; }
 
@@ -75,11 +81,13 @@
 /* The shared path prefix, above the list rather than in it.
 
    Sticky, because it is a claim about every row below it: scrolled away, the stripped paths in
-   those rows read as the whole path. `top: 0` inside #list-pane, which is the scrolling box. */
+   those rows read as the whole path. `top: 0` inside #list-pane, which is the scrolling box, and
+   nothing else sticky in the pane stops above `--sticky-top`, which is this bar's height. */
 .scope-bar {
   position: sticky;
   top: 0;
   z-index: 2;
+  height: var(--scope-bar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -184,3 +192,8 @@
 
 .empty { padding: 24px; text-align: center; }
 
+/* What a filter took out of the timeline, the waterfall or the path, above what it left. Held in
+   view where the pane follows live rows away from its top: the timeline's sticks under the scope
+   bar, and the path's rides in the sticky box with its map. */
+.filter-note { padding: 6px 12px; font-size: 12px; border-bottom: 1px solid var(--divider); background: var(--bg); }
+#timeline > .filter-note { position: sticky; top: var(--sticky-top); z-index: 2; }

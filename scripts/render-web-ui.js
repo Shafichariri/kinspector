@@ -42,6 +42,7 @@ try {
 const vm = require('vm');
 const { loadScripts, loadStyles, loadIndexHtml, STYLES_SLOT, SCRIPTS_SLOT } = require('./lib/web-sources');
 const { auditMinTextSize, auditLongTokenWrap, auditDrawerCss, auditHiddenPanes } = require('./lib/web-audits');
+const { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText } = require('./lib/filter-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -855,6 +856,79 @@ function runScripts() {
   }
   const timelineTie = await probeTimelineTie();
 
+  /**
+   * A filter reaches the timeline's signals by the grammar's exclusion rule, and only there.
+   *
+   * The route ignored `filter` until KIN-25, so the timeline drew every signal whatever was typed.
+   * Now `path:` drops every signal and `tag:screen` drops every call and every other tag, while the
+   * tab bar still describes the whole session — a tab that vanished under a filter would be a view
+   * of the session nobody could get back to without clearing it. The path term is one of the
+   * session's own calls, so it matches at least one wherever this runs.
+   */
+  async function probeFilterOnTimeline() {
+    const na = (why) => ({ pathDrops: `n/a (${why})`, tagKeeps: `n/a (${why})`, restores: `n/a (${why})`, tabsSteady: `n/a (${why})` });
+    const allTab = doc.querySelector('#tabs .tab[data-view="all"]');
+    if (!allTab) return na('no timeline tab');
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    const call = ((await sessionTransactions(sessionId)).items || [])[0];
+    if (!call) return na('no calls in this session');
+    await click(allTab);
+    await new Promise((r) => setTimeout(r, 400));
+    const input = doc.getElementById('filter');
+    const tabIds = () => [...doc.querySelectorAll('#tabs .tab')].map((t) => t.dataset.view).join(',');
+    const drawn = () => {
+      const kids = [...doc.getElementById('timeline').children];
+      const signals = kids.filter((n) => n.dataset.kind === 'signal' || n.dataset.kind === 'run');
+      return {
+        calls: kids.filter((n) => n.dataset.kind === 'txn').length,
+        signals: signals.length,
+        offLane: signals.filter((n) => n.dataset.lane !== 'screen').map((n) => n.dataset.tag),
+      };
+    };
+    const type = async (text) => {
+      input.value = text;
+      input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      await settle();
+      await new Promise((r) => setTimeout(r, 300));
+    };
+    const tabsBefore = tabIds();
+    const before = drawn();
+    const tabsDuring = [];
+
+    const pathTerm = `path:${call.path}`;
+    await type(pathTerm);
+    const byPath = drawn();
+    tabsDuring.push(tabIds());
+    await type('tag:screen');
+    const byTag = drawn();
+    tabsDuring.push(tabIds());
+    await type('');
+    const after = drawn();
+    const tabsAfter = tabIds();
+
+    return {
+      pathDrops: byPath.calls > 0 && byPath.signals === 0
+        ? `yes (${pathTerm}: ${byPath.calls} call rows, no signal rows)`
+        : `NO - ${pathTerm}: ${byPath.calls} call rows, ${byPath.signals} signal rows`,
+      tagKeeps: byTag.calls === 0 && byTag.signals > 0 && byTag.offLane.length === 0
+        ? `yes (${byTag.signals} signal rows, all in the screen lane, no calls)`
+        : `NO - ${byTag.calls} call rows, ${byTag.signals} signal rows, off the screen lane: ${byTag.offLane.join(',') || 'none'}`,
+      restores: after.calls === before.calls && after.signals === before.signals
+        ? `yes (${after.calls} calls, ${after.signals} signal rows back)`
+        : `NO - ${after.calls}/${after.signals} back, ${before.calls}/${before.signals} before`,
+      tabsSteady: tabsDuring.every((ids) => ids === tabsBefore) && tabsAfter === tabsBefore
+        ? `yes (${tabsBefore.split(',').length} tabs throughout)`
+        : `NO - before ${tabsBefore}; during ${tabsDuring.join(' / ')}; after ${tabsAfter}`,
+    };
+  }
+  const filterOnTimeline = await probeFilterOnTimeline();
+  // Probes that need the whole page, kept in lib/filter-probes.js; see its header.
+  const filterCtx = { window, doc, ORIGIN, settle, sessionTransactions, sessionSignals, lastSocket: () => lastSocket };
+  const wholeSession = await probeWholeSessionRefresh(filterCtx);
+  const filterPanes = await probeFilterPanes(filterCtx);
+  const waterfallText = await probeWaterfallText(filterCtx);
+
   // probeSignals selects a signal, which replaces the transaction detail. Put a transaction back
   // before the report reads the detail pane, or `detail sections` measures the wrong pane.
   await click(doc.querySelector('#tabs .tab[data-view="network"]'));
@@ -888,6 +962,9 @@ function runScripts() {
         ? 'yes'
         : `NO - first tab is '${ids[0]}'`,
       labels: tabs.map((t) => t.querySelector('.tab-label')?.textContent).join(', '),
+      // What the signal tabs claim the session holds, summed; checked against the daemon's own rows.
+      signalTabTotal: tabs.filter((t) => !BUILT_IN_VIEWS.includes(t.dataset.view))
+        .reduce((sum, t) => sum + Number(t.querySelector('.tab-count')?.textContent ?? NaN), 0),
       // Drawn whatever the session holds; it used to vanish with a single view and move the page.
       alwaysShown: !doc.getElementById('tabs').hidden ? 'yes' : 'NO - the tab bar is hidden',
       // Exactly one separator, on the first tab that is a tag rather than a traffic view.
@@ -2440,6 +2517,23 @@ function runScripts() {
   note('trigger badges     :', signalProbe.triggers.join(', ') || 'none', '(provenance is never inferred)');
   console.error('traffic + signals  :', signalProbe.merged);
   console.error('marker at a tie    :', timelineTie, "(before the call at its millisecond, as timeline() places it)");
+  console.error('filter path drops  :', filterOnTimeline.pathDrops, '(a path: term excludes every signal)');
+  console.error('filter tag keeps   :', filterOnTimeline.tagKeeps, '(tag:screen excludes every call and every other tag)');
+  console.error('filter clear back  :', filterOnTimeline.restores);
+  console.error('filter tabs steady :', filterOnTimeline.tabsSteady, '(the tabs describe the whole session)');
+  console.error('resume refreshes   :', wholeSession.resumeRefresh, '(rows missed while paused reach the tabs and chips)');
+  console.error('reconnect refreshes:', wholeSession.reconnectRefresh, '(and rows missed while the daemon was away)');
+  console.error('drop refreshes     :', wholeSession.dropRefresh, '(and after a drop nobody asked for)');
+  console.error('waterfall emptied  :', filterPanes.waterfallEmptied);
+  console.error('waterfall thinned  :', filterPanes.waterfallThinned);
+  console.error('waterfall stretch  :', waterfallText.stretchUnderFilter, '(a filter does not make an empty stretch read as an empty session)');
+  console.error('waterfall order    :', waterfallText.filterInStretch, '(a filter that hid calls in the stretch says so first)');
+  console.error('waterfall calls    :', waterfallText.callsMatch, '(tag:screen matched signals; no calls match)');
+  console.error('path 0 of N match  :', filterPanes.pathCounts, '("nothing recorded" only where nothing was)');
+  console.error('path filter note   :', filterPanes.pathNote);
+  console.error('timeline emptied   :', filterPanes.timelineEmptied, '(markers ignore the filter and must not hide this)');
+  console.error('timeline thinned   :', filterPanes.timelineThinned);
+  console.error('filter panes tabs  :', filterPanes.tabsSteady, '(the tab bar never moves under a filter)');
   note('now panel rows     :', signalProbe.currentRows);
   console.error('now rows show age  :', signalProbe.currentHasAge);
   console.error('payload viewer     :', signalProbe.payloadShown);
@@ -2473,6 +2567,15 @@ function runScripts() {
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
   note('unknown tags tabbed:', tabProbe.unknownTagsTabbed.join(', ') || 'none in this session', '(that they render is "unknown tag renders")');
   console.error('traffic tab first  :', tabProbe.trafficFirst);
+  /*
+   * The tabs count the whole session, which the page reads through its pager. The probe's own
+   * reader pages independently, so a page that read one clamped page would come up short here on
+   * any session bigger than that page.
+   */
+  const everySignal = await sessionSignals(encodeURIComponent(doc.getElementById('session-picker').value));
+  console.error('signal tabs count  :', tabProbe.signalTabTotal === everySignal.length
+    ? `yes (${everySignal.length}, every signal in the session)`
+    : `NO - the tabs count ${tabProbe.signalTabTotal}, the session holds ${everySignal.length}`);
   console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
   console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');

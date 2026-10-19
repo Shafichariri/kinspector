@@ -79,12 +79,19 @@ function renderPath() {
     return;
   }
 
+  if (state.filter) countRecorded(list);
+  markUnloaded(list);
+  const header = el('div', 'pv-top');
+  const hidden = state.filter ? hiddenByFilter({ screens: false }) : { calls: 0, signals: 0 };
+  if (hidden.calls + hidden.signals) header.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
+
   const colour = screenColours();
-  const lastMono = Math.max(
-    ...[...state.allTransactions, ...state.signals, ...state.markers, ...state.screens].map((x) => x.mono),
-  );
+  let lastMono = -Infinity;
+  for (const rows of [state.allTransactions, state.allSignals, state.markers]) {
+    for (const x of rows) if (x.mono > lastMono) lastMono = x.mono;
+  }
   // Tag colours go out in the order tags first happened, not the order they are drawn in.
-  for (const s of [...state.signals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
+  for (const s of [...state.allSignals].sort((a, b) => a.mono - b.mono)) tagColour(tagOf(s));
   const metro = el('div', 'pv-metro');
   metro.setAttribute('role', 'list');
   metro.setAttribute('aria-label', 'Screens visited');
@@ -93,7 +100,8 @@ function renderPath() {
     metro.appendChild(pathStop(visit, index, list, colour));
     log.appendChild(pathRow(visit, index, list, colour, lastMono));
   });
-  root.appendChild(metro);
+  header.appendChild(metro);
+  root.appendChild(header);
   root.appendChild(log);
 
   const fresh = state.pathFresh;
@@ -112,6 +120,31 @@ function renderPath() {
     pill.textContent = `new visit: ${newest.screen ? newest.screen.name : 'unnamed'} ↓`;
     pill.hidden = false;
   }
+}
+
+/**
+ * Under a filter, each visit also carries how much it recorded, from the same skeleton over the
+ * whole session — so an emptied visit reads "0 of 9 match" rather than "nothing recorded". The
+ * whole-session copies are read past the route's clamp, so N counts every call the visit holds.
+ */
+function countRecorded(list) {
+  const whole = visits(state.screens, state.allTransactions, state.markers, state.allSignals, sessionStartMono());
+  if (whole.length !== list.length) return;
+  list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
+}
+
+/**
+ * Marks each visit holding a call, in the whole-session skeleton, older than the oldest the list
+ * holds, while the list is short of what the route matched: it stops at the clamp, so whether those
+ * calls match is unknown. Counting the held rows said "0 of 5 match" of visits whose calls matched.
+ */
+function markUnloaded(list) {
+  if (state.matched === null || state.transactions.length >= state.matched) return;
+  let oldest = Infinity;
+  for (const txn of state.transactions) if (txn.mono < oldest) oldest = txn.mono;
+  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
+  if (whole.length !== list.length) return;
+  list.forEach((visit, i) => { visit.unloaded = whole[i].txns.some((txn) => txn.mono < oldest); });
 }
 
 const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');
@@ -164,6 +197,14 @@ function tagColour(tag) {
 }
 
 const segmentText = (segments) => segments.map((s) => `${s.count} ${s.key}`).join(' · ');
+
+/**
+ * What a visit with nothing to show says. "Nothing recorded" only when that is true: under a filter
+ * it is "0 of N match", N counted over the whole session by `renderPath`; and where the visit began
+ * before the oldest call loaded (`markUnloaded`) neither is known, so it says that instead.
+ */
+const emptyVisitText = (visit, fallback) =>
+  (visit.unloaded ? 'calls not loaded' : visit.recorded ? `0 of ${visit.recorded} match` : fallback);
 
 /** The segments as a thin bar, each kind as wide as its share, in its lane colour. */
 function segmentBar(segments) {
@@ -224,20 +265,34 @@ function pathStop(visit, index, list, colour) {
     const more = segments.length - shown.length;
     stop.appendChild(el('span', 'pv-stop-stat muted', segmentText(shown) + (more ? ` +${more}` : '')));
   } else {
-    stop.appendChild(el('span', 'pv-stop-stat muted', 'nothing'));
+    stop.appendChild(el('span', 'pv-stop-stat muted', emptyVisitText(visit, 'nothing')));
   }
   const failed = visit.txns.filter(isFailure).length;
   if (failed) stop.appendChild(el('span', 'pv-stop-fail', `${failed} failed`));
-  stop.title = `${visitName(visit, list)}${segments.length ? ` — ${segmentText(segments)}` : ''}\nopen its line in the log`;
+  stop.title = `${visitName(visit, list)}${segments.length ? ` — ${segmentText(segments)}` : ''}` +
+    `${visit.unloaded && segments.length ? `, ${visit.txns.length ? 'older ' : ''}calls not loaded` : ''}\nopen its line in the log`;
 
   stop.addEventListener('click', () => {
     state.pathFocus = key;
     state.expandedVisits.add(key);
     renderPath();
     const row = $('path').querySelector(`.pv-visit[data-visit="${index}"]`);
-    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'start' });
+    if (row) scrollBelowMap(row);
   });
   return stop;
+}
+
+/**
+ * Scrolls the pane so `row` starts just under the sticky box — the scope bar, then the map and any
+ * filter note. A fixed `scroll-margin-top` did this and was always wrong by something: the note
+ * wraps to two lines on a narrow pane and the bar is there or not, so a clicked station's line
+ * landed 27px under the box at 1440 and 41px at 400 under a filter. Measured instead, at click time.
+ */
+function scrollBelowMap(row) {
+  const pane = $('path').parentElement;
+  const box = $('path').querySelector('.pv-top');
+  const stuck = box ? (parseFloat(getComputedStyle(box).top) || 0) + box.offsetHeight : 0;
+  pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top - stuck;
 }
 
 /** One line of the log: the visit's name and length, then what happened there, in order. */
@@ -286,7 +341,9 @@ function pathRow(visit, index, list, colour, lastMono) {
   const failed = visit.txns.filter(isFailure).length;
   const stats = el('span', 'pv-stats muted');
   stats.dataset.calls = String(visit.txns.length);
-  stats.textContent = segmentText(visitSegments(visit)) || 'nothing recorded';
+  const segments = segmentText(visitSegments(visit));
+  stats.textContent = segments || emptyVisitText(visit, 'nothing recorded');
+  if (segments && visit.unloaded) stats.append(visit.txns.length ? ' · older calls not loaded' : ' · calls not loaded');
   if (failed) stats.appendChild(el('span', 'pv-failed', ` · ${failed} failed`));
   head.appendChild(stats);
   if (!list.some((v) => v.screen)) {
@@ -299,7 +356,9 @@ function pathRow(visit, index, list, colour, lastMono) {
   row.appendChild(head);
 
   if (!visit.entries.length) {
-    row.appendChild(el('div', 'pv-nothing muted', state.filter ? '0 matching' : 'nothing recorded'));
+    row.appendChild(el('div', 'pv-nothing muted', visit.unloaded
+      ? `calls not loaded — the list holds the newest ${state.transactions.length} of ${state.matched}`
+      : visit.recorded ? 'hidden by the filter' : 'nothing recorded'));
     return row;
   }
   row.appendChild(open ? visitBody(visit, index, list) : visitChips(visit, index, list));

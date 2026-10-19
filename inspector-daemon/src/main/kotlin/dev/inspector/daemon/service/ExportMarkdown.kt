@@ -155,7 +155,8 @@ object ExportMarkdown {
             appendLine()
             appendLine("### $n. ${heading("${txn.method} ${txn.path} → ${outcome(txn)}")}")
             appendLine()
-            appendLine("- **URL:** ${inlineCode(txn.url + (txn.query?.let { "?$it" } ?: ""))}")
+            // `url` already carries the query; appending it again printed it twice.
+            appendLine("- **URL:** ${inlineCode(txn.url)}")
             appendLine(
                 "- **Started:** ${clock(txn.ts)} UTC (${offset(txn.mono, origin)}) · " +
                     "**Duration:** ${txn.ms?.let(::ms) ?: "none — still in flight when the session ended"}"

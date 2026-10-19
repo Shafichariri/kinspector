@@ -110,7 +110,7 @@ const RULES = {
 };
 
 /** Blocks that are checked by something other than a case file. */
-const NON_RULE_BLOCKS = ['jsonParser'];
+const NON_RULE_BLOCKS = ['jsonParser', 'routePages'];
 
 const txns = (input, d) => (input.transactions || []).map((row) => ({ ...d.txn, ...row }));
 const markers = (input, d) => (input.markers || []).map((row) => ({ ...d.marker, ...row }));
@@ -218,4 +218,91 @@ function checkJsonParser(sources) {
     : 'yes (ids, key order, duplicates, escapes, layout, rejection)';
 }
 
-module.exports = { CASES, RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser };
+/**
+ * The web UI's pagers, `signalPages` and `transactionPages` — one `routePages` under two answer
+ * shapes — against stub routes rather than a daemon. Each stub answers like its route — a bare
+ * array for signals, `{ total, matched, items }` for calls, newest first, sliced by `offset` and
+ * `limit` — and then misbehaves in one way a real server can: a clamp below the limit asked for,
+ * `offset` ignored, a live row arriving between two pages. Returns `[label, verdict]` pairs, one
+ * per check, because each is a separate claim and a compound line hides which half failed. The
+ * signal lines keep their labels; the call lines repeat them under `calls`.
+ *
+ * Every stub refuses a 100th request, so a pager that would loop forever fails here instead of
+ * hanging the build.
+ */
+async function checkSignalPages(sources) {
+  const pagers = lift(sources, ['routePages'], 'signalPages, transactionPages');
+  const results = [];
+  for (const [pager, prefix, wrap] of [
+    [pagers.signalPages, 'pages', (rows) => rows],
+    [pagers.transactionPages, 'calls', (rows, all) => ({ total: all.length, matched: all.length, items: rows })],
+  ]) {
+    results.push(...(await checkPager(pager, prefix, wrap)));
+  }
+  return results;
+}
+
+/** The four cases for one pager; `wrap(page, all)` shapes a page of rows as its route answers. */
+async function checkPager(pager, prefix, wrap) {
+  const total = 1001;
+  const original = Array.from({ length: total }, (_, i) => ({ id: `s${String(i).padStart(4, '0')}`, mono: i }))
+    .sort((a, b) => b.mono - a.mono);
+  const want = original.map((s) => s.id).join(',');
+
+  const stub = ({ clamp = Infinity, ignoreOffset = false, arriving = null } = {}) => {
+    const rows = original.slice();
+    const asked = [];
+    const get = async (path) => {
+      if (asked.length >= 100) throw new Error('more than 100 requests: the pager does not stop');
+      const url = new URL(path, 'http://stub.invalid');
+      asked.push(url);
+      const offset = ignoreOffset ? 0 : Number(url.searchParams.get('offset')) || 0;
+      const limit = Math.min(Number(url.searchParams.get('limit')) || 100, clamp);
+      const page = wrap(rows.slice(offset, offset + limit), rows);
+      // A row captured after the first page was served: everything older moves down by one.
+      if (arriving && asked.length === 1) rows.unshift(arriving);
+      return page;
+    };
+    return { get, asked };
+  };
+  const read = async (server, filter = '') => {
+    try {
+      return { ids: (await pager(server.get, 'probe session', filter)).map((s) => s.id) };
+    } catch (e) {
+      return { error: e.message };
+    }
+  };
+  const verdict = (got, expected) => {
+    if (got.error) return `NO - threw: ${got.error}`;
+    const twice = got.ids.length - new Set(got.ids).size;
+    if (twice) return `NO - ${twice} id(s) returned twice`;
+    if (got.ids.join(',') !== expected) return `NO - ${got.ids.length} ids, not the ${expected.split(',').length} expected newest first`;
+    return null;
+  };
+
+  const results = [];
+  const plain = stub();
+  const all = await read(plain, 'tag:cache');
+  const filterSent = plain.asked.every((u) => u.searchParams.get('filter') === 'tag:cache');
+  results.push([`${prefix} 1001 by 1000`, verdict(all, want) ||
+    (filterSent ? `yes (${all.ids.length} ids in ${plain.asked.length} requests, newest first, the filter on each)` : 'NO - a request dropped the filter')]);
+
+  const clamped = stub({ clamp: 500 });
+  const underClamp = await read(clamped);
+  results.push([`${prefix} under a 500 clamp`, verdict(underClamp, want) ||
+    `yes (${underClamp.ids.length} ids in ${clamped.asked.length} requests)`]);
+
+  const deaf = stub({ ignoreOffset: true });
+  const ignored = await read(deaf);
+  const firstPage = original.slice(0, 1000).map((s) => s.id).join(',');
+  results.push([`${prefix} ignoring offset`, verdict(ignored, firstPage) ||
+    `yes (stopped after ${deaf.asked.length} requests, ${ignored.ids.length} ids each once)`]);
+
+  const live = stub({ arriving: { id: 'live', mono: total } });
+  const seam = await read(live);
+  results.push([`${prefix} repeat at a seam`, verdict(seam, want) ||
+    `yes (${seam.ids.length} ids each once across ${live.asked.length} requests)`]);
+  return results;
+}
+
+module.exports = { CASES, RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages };

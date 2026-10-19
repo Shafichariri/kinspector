@@ -20,16 +20,28 @@ run. Tickets KIN-1 to KIN-9 are Done on verifier evidence (last pass at `753d9cf
 and no full-repository count has been taken. Not verified: the no-client-names check, whose term list is
 kept out of the repository. `docs/ROADMAP.md` §5 has the detail.
 
-**Phase F (`app.js` and CSS split behind the manifest) is built, and done once its PR is merged and CI
-is green**: it is on `shafic/structure-phase-f`, not pushed, so CI has not run. Tickets KIN-10 to KIN-22
+**Phase F (`app.js` and CSS split behind the manifest) is done**: PR #88 merged to `main` as `1913cf7`,
+and CI run 39146369617 on that push passed `build`, `release-swap` and `web`. `repo` was red on that push,
+only on the commit-identity check: the merge commit was authored with the maintainer's work address by
+GitHub's merge dialog, not by anything in the branch. PR #89 has since made the check accept the
+maintainer's personal address; the dialog setting is the maintainer's to change. Tickets KIN-10 to KIN-22
 are Done on verifier evidence (last pass on `b733aa4`). Counts at `e065f11`, per module and not a
 full-repository total: `:inspector-daemon:test` 259, `:inspector-ui:jvmTest` 134,
 `:inspector-model:jvmTest` 159, repo-checks 35 (35/0 again after `b733aa4`). Web probes: live 164 passed,
 1 n/a, 42 notes and archive 21, both per-label identical to base `f574bda`; static checks 24. Headless
 Chrome 131: 16 configurations, served and exported under `file:`, computed-style, text and PNG hashes
-identical to base, 0 page errors. Not verified: Safari and Firefox, CI, Android host tests (no SDK), the
+identical to base, 0 page errors. Not verified: Safari and Firefox, Android host tests (no SDK), the
 no-client-names check, and how the page looks to a human. Six layout defects that predate the phase are
 listed for the product-owner in `docs/ROADMAP.md` §5. `docs/ROADMAP.md` §5 has the detail.
+
+**`item:signals-query-one-rule` is done, with one deferred bug** (2026-10-19, on branch
+`shafic/roadmap-batch-2026-10-18`, not pushed, so CI has not run). Tickets KIN-24 to KIN-41 and KIN-26
+are Done on verifier evidence over four panels (`5f6b610`, `e1711a3`, `a86dde2`, `8082e02`) and a fresh
+QA at `8f64058`. Counts at `8f64058`, per target and not a full-repository total:
+`:inspector-daemon:test` 267/0, `:repo-checks:test` 35/0, web static checks 71/0, live probe 182
+passed, archive probe 26 passed. KIN-42 is open and deferred by the maintainer. Not run for this item:
+`:inspector-model` and the iOS, Android and overlay test targets (nothing there changed).
+Not verified: the no-client-names check (term list not available to the tracker).
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -55,6 +67,16 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **The web UI follows live rows without moving a scrolled-back pane, in headless Chrome 131 only.**
+  `scripts/measure-web-ui.js` against a snapshot of `8082e02`: 184 readings, 22 failed at base and 2 at
+  `8f64058`. The 20 readings that moved are all "scrolled back: moves -> stays" (timeline and waterfall,
+  live call and marker, both orders, 1440 and 400 wide; path at 400). The pane at the end still follows,
+  and the order toggle, a filter load and a brushed range still follow. The 2 left are KIN-42's.
+- **The web UI reads every signal, not the first 1000, and a filter reaches them.** `SignalQueryTest`
+  (route and `list_signals` return the same ids in the same order; 1205-signal paging) and the web
+  probes at `8f64058` (static 71, live 182, archive 26). The 500-signal page break is invisible in CI,
+  whose fixture holds 19 signals; the engineer reproduced it on a 1219-signal session, and no QA panel
+  re-ran that.
 - Redirect and retry each produce one row per attempt, sharing a `callId`.
 - App receives byte-identical bodies with the inspector installed: 10 MB, gzip, chunked, empty,
   binary.
@@ -146,8 +168,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
-- **Phase F in Safari, Firefox and on CI.** Only Chrome 131 was driven, the branch is not pushed, the
-  Android host tests need an SDK this machine lacks, and the no-client-names term list is not here.
+- **A ~160,000-call session shows a false empty state for about 25 s before the first rows**, in
+  headless Chrome (rows at 26 to 27 s, connected at 26 to 29 s, over the 3000 ms bar). KIN-42, introduced
+  by KIN-34, deferred by the maintainer on 2026-10-19.
+- **A live call never redraws the timeline**: the socket's `txn` branch does not call `renderTimeline`.
+  Predates the signals item and is unplaced (ROADMAP §3).
+- **Follow behaviour on a live socket in Safari, Firefox, or on a real phone-width browser.** Only
+  headless Chrome 131 was driven, at 1440 and 400.
+
+- **The merge commits for PRs #84 to #91 carry a work address on `main`**, so the `repo` job was red on
+  each of those pushes. The cause is the merge dialog's author setting, not the branches. #89 relaxed the
+  check; it did not rewrite those commits or change the setting.
+- **Phase F in Safari and Firefox.** Only Chrome 131 was driven, the Android host tests need an SDK this machine lacks, and the no-client-names term list is not here.
   Nobody has looked at the split page: hash equality proves "identical to before", not "looks right".
 - **Six web UI layout defects found at base by UX, unfixed** (closed drawer focusable at 1000px and
   widening the page; endpoint cut at 400px; drawer close button over the header's last action at

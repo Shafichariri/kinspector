@@ -22,8 +22,6 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
@@ -148,33 +146,10 @@ class McpTest {
     // --- protocol ----------------------------------------------------------------------------
 
     /** Feeds lines through a real [McpServer] and returns the response frames. */
-    private fun exchange(vararg requests: String, version: String? = null): List<JsonObject> {
-        val out = ByteArrayOutputStream()
-        val err = ByteArrayOutputStream()
-        val input = requests.joinToString("\n").reader().buffered()
-        val server = if (version == null) {
-            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true))
-        } else {
-            McpServer(tools = tools, input = input, output = PrintStream(out, true), log = PrintStream(err, true), version = version)
-        }
-        server.run()
-        return out.toString().lineSequence()
-            .filter { it.isNotBlank() }
-            .map { Json.parseToJsonElement(it).jsonObject }
-            .toList()
-    }
+    private fun exchange(vararg requests: String, version: String? = null): List<JsonObject> =
+        mcpExchange(tools, *requests, version = version)
 
-    private fun callTool(name: String, args: String = "{}"): String {
-        val frames = exchange(
-            """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"$name","arguments":$args}}"""
-        )
-        val result = frames.single().getValue("result").jsonObject
-        assertFalse(
-            result.getValue("isError").jsonPrimitive.content.toBoolean(),
-            "tool $name failed: ${result.getValue("content").jsonArray}",
-        )
-        return result.getValue("content").jsonArray.single().jsonObject.getValue("text").jsonPrimitive.content
-    }
+    private fun callTool(name: String, args: String = "{}"): String = mcpCallTool(tools, name, args)
 
     /** Like [callTool] but asserts the call failed, and returns the message. */
     private fun callToolExpectingError(name: String, args: String): String {
@@ -515,13 +490,7 @@ class McpTest {
     // --- explain -----------------------------------------------------------------------------
 
     /** A second session, so a test can shape the exact case it is about. */
-    private fun session(id: String, build: (SessionWriter) -> Unit): String {
-        val dir = config.sessionsDir.resolve(id)
-        val writer = SessionWriter(dir, clientInfo().toSessionMeta(id, "2026-08-17T09:00:00.000Z"))
-        build(writer)
-        writer.close()
-        return id
-    }
+    private fun session(id: String, build: (SessionWriter) -> Unit): String = mcpSession(config, id, build)
 
     @Test
     fun explain_joins_the_screen_the_app_was_on_to_the_call() {

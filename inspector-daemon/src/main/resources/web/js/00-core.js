@@ -39,8 +39,9 @@ const state = {
   filter: '',
   liveTail: true,
   activeSessionId: null,
-  // 'running' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem to
-  // reconnect from or the outcome the user asked for.
+  // 'running' | 'away' | 'restarting' | 'stopped' — decides whether a dropped socket is a problem
+  // to reconnect from or the outcome the user asked for. `away` is a drop nobody asked for; every
+  // state but `running` makes the next open re-read the session.
   serverState: 'running',
   // The newest capture this page has seen arrive, from any session: what the stopped banner
   // means by "last capture". Null until the live socket delivers a row.
@@ -61,14 +62,26 @@ const state = {
   // looking for.
   allTransactions: [],
   allSessionId: null,
+  // How many list loads and signal loads have started. Each load keeps its own number and drops
+  // its answer once a newer one has started, because the daemon may answer them out of order.
+  callLoad: 0,
+  signalLoad: 0,
   // How many endpoint chips to show. 0 hides them.
   endpointLimit: Number(prefs.get('inspector.endpointChipLimit') ?? 10),
-  // App-state observations for this session, and the latest per (tag, name).
+  // App-state observations for this session as the daemon matched them against the filter, and
+  // the latest per (tag, name). Only the timeline tab's entries and the path view's visit lines
+  // read `signals`; they are the two places a filter is meant to thin signals.
   signals: [],
   current: [],
+  // Every signal in the session, ignoring the filter, and the session it belongs to — the same
+  // split as `allTransactions`, for the same reason: tabs, their counts, the tag browsers, the
+  // glance and the axis describe the session, and a filter that emptied a tab would make the tab
+  // claim the app recorded nothing.
+  allSignals: [],
+  allSignalsSessionId: null,
   // Every `screen` signal in the session, ignoring the filter: the skeleton `visits()` is built
-  // from. `signals` is filtered by the daemon, and a transaction term such as `path:` drops every
-  // signal — screens included — so a route drawn from it vanished the moment a filter was typed.
+  // from. Taken from `allSignals`; a transaction term such as `path:` drops every signal, screens
+  // included, so a route drawn from the filtered list vanished the moment a filter was typed.
   screens: [],
   // Screen payloads as the text that was captured, by signal id, for the path view's "same
   // payload" note on a repeated screen. Text rather than parsed: comparing and summarising the
@@ -84,6 +97,8 @@ const state = {
   // opened — which lands on the newest visit rather than wherever the shared pane was scrolled.
   pathFocus: null,
   pathFresh: true,
+  // The timeline was just opened, so it follows once whatever the pane's position (`renderTimeline`).
+  timelineFresh: true,
   // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
   // them — a session can hold thousands — but every field a browser row shows lives in one.
   payloads: new Map(),
@@ -100,8 +115,11 @@ const state = {
   browserFacets: {},
   browserKey: null,
   browserObservation: null,
-  // How many rows the daemon's text filter matched, before the axis narrows it further.
-  matchTotal: null,
+  // The route's two counts, which no list the page holds can stand in for: a page stops at the
+  // route's clamp of 1000 rows. `sessionTotal` is every call in the session, `matched` is how many
+  // the text filter matched — before the axis narrows it further.
+  sessionTotal: null,
+  matched: null,
   // Which face of the transaction detail is showing. Remembered across selections: comparing
   // request bodies down a list means picking the same tab on every row otherwise.
   detailTab: 'res',

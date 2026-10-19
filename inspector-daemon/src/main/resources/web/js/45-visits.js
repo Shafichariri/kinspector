@@ -128,14 +128,14 @@ function screenColours() {
 }
 
 /**
- * The earliest `mono` this page holds for the session, unfiltered as far as it can be: every
- * call, every marker and every screen. Signals other than screens are only held filtered, so a
- * session whose launch stretch held nothing but those can still lose its launch column under a
- * filter; that is the one gap left, and it needs a signal-only launch to show.
+ * The earliest `mono` this page holds for the session, unfiltered: every call, every marker and
+ * every signal, screens among them. It read the filtered signals until the page kept a whole-session
+ * copy of them, so a launch stretch holding nothing but non-screen signals lost its column under a
+ * filter that dropped them.
  */
 function sessionStartMono() {
   let start = null;
-  for (const item of [...state.allTransactions, ...state.markers, ...state.screens, ...state.signals]) {
+  for (const item of [...state.allTransactions, ...state.markers, ...state.allSignals]) {
     if (start === null || item.mono < start) start = item.mono;
   }
   return start;
@@ -176,10 +176,13 @@ function waterfallGroups() {
       dim: !visitInRange(visit),
     };
     if (group.rows.length) {
-      const starts = group.rows.map((t) => t.mono);
-      const ends = group.rows.map((t) => t.mono + (t.ms ?? 0));
-      group.from = Math.min(...starts);
-      group.to = Math.max(...ends);
+      group.from = Infinity;
+      group.to = -Infinity;
+      for (const t of group.rows) {
+        const end = t.mono + (t.ms ?? 0);
+        if (t.mono < group.from) group.from = t.mono;
+        if (end > group.to) group.to = end;
+      }
     } else {
       group.from = group.segment.from;
       group.to = group.segment.from;
@@ -199,8 +202,23 @@ function renderWaterfall() {
   const root = $('waterfall');
   root.innerHTML = '';
   const groups = waterfallGroups();
-  $('waterfall-empty').hidden = groups.length > 0;
-  if (!groups.length) return;
+  const empty = $('waterfall-empty');
+  empty.hidden = groups.length > 0;
+  const hidden = hiddenByFilter({ signals: false, ranged: true });
+  if (!groups.length) {
+    // Which of three things emptied it, asked in this order: a filter that hid calls here, then a
+    // brushed stretch in a session with calls, and only then a session with none. The stretch used
+    // to be asked of the *filtered* calls, so a filter plus an empty stretch fell through to "no
+    // calls were recorded" of a session that had them. The note leads with calls, because the
+    // waterfall draws nothing else: under `tag:screen` "nothing matches" was false of six screens.
+    const sessionCalls = state.sessionTotal ?? state.allTransactions.length;
+    if (state.filter && hidden.calls) filterNote(empty, hidden, true, 'no calls match');
+    else if (state.timeRange && sessionCalls) empty.textContent = 'no calls in the selected stretch';
+    else if (!sessionCalls) empty.textContent = 'no calls were recorded in this session';
+    else empty.textContent = state.filter ? 'no calls match' : 'no calls to lay out';
+    return;
+  }
+  if (state.filter && hidden.calls) root.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
 
   for (const group of groups) {
     const block = el('div', `wf-group${group.dim ? ' wf-dim' : ''}${group.rows.length ? '' : ' wf-stub'}`);

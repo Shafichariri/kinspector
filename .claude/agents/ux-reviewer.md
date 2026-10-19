@@ -29,6 +29,11 @@ the palette, before proposing a change; a proposal that contradicts one quotes i
 - **Integration:** read `docs/INTEGRATION.md` as a newcomer would, top to bottom, and note every
   step where you had to know something it did not say.
 
+To compare revisions, copy them with `P=$(scripts/qa-snapshot.sh head=HEAD base=<rev>)`, run as
+its own command, and never `rm -rf` a variable path or chain `cd <repo>` with a deletion — that asks
+the human for approval even in bypass mode (`docs/TEAM.md`, "Snapshots"). Stop every daemon and
+Chrome you started before you report.
+
 ## What to judge
 
 - **Honesty first.** The UI must never assert what capture could not determine: a body absent for

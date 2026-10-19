@@ -72,31 +72,58 @@ const runIdOf = (run) => {
 };
 // @mirror-end timelineRuns
 
-function renderTimeline() {
+/**
+ * The merged timeline. `follow` is false for a redraw the reader asked for — a run expanded or
+ * collapsed — which must leave the pane where it is.
+ */
+function renderTimeline({ follow = true } = {}) {
   if (state.view !== 'all') return;
   const root = $('timeline');
+  const pane = root.parentElement;
+  // Measured before the rows are replaced. The timeline flows in the pane since KIN-33, so a follow
+  // here scrolls the whole pane: following on every redraw threw a reader who expanded a run in the
+  // middle of a 3016-call session to its end. It follows only when the pane was already at the end
+  // it follows, or the view was just opened, as the path's log does.
+  const atEnd = state.newestFirst
+    ? pane.scrollTop <= 8
+    : pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 8;
+  const fresh = state.timelineFresh;
+  state.timelineFresh = false;
   root.innerHTML = '';
 
-  const ends = spanEndsFor(state.signals);
+  const ends = spanEndsFor(state.allSignals);
   // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
   // call's `mono` is drawn before it. One stable sort over all three streams with markers added
   // last put a tied marker after the call it introduced — the opposite of the list beside it.
-  const entries = timelineEntries(
-    state.transactions.filter((txn) => inRange(txn.mono)),
-    state.markers.filter((marker) => inRange(marker.mono)),
-    state.signals.filter((signal) => inRange(signal.mono)),
-  );
+  const calls = state.transactions.filter((txn) => inRange(txn.mono));
+  const signals = state.signals.filter((signal) => inRange(signal.mono));
+  const entries = timelineEntries(calls, state.markers.filter((marker) => inRange(marker.mono)), signals);
 
   if (state.newestFirst) entries.reverse();
 
-  $('timeline-empty').hidden = entries.length > 0;
+  // Empty is counted on calls and signals, never markers: markers ignore the filter, so a marker in
+  // range hid the empty state of a pane the filter had emptied. And what the filter took out is
+  // said, emptied or only thinned, because rows that silently vanish read as rows never recorded.
+  const empty = $('timeline-empty');
+  const hidden = state.filter ? hiddenByFilter({ ranged: true }) : { calls: 0, signals: 0 };
+  const filtered = hidden.calls + hidden.signals > 0;
+  empty.hidden = calls.length + signals.length > 0;
+  if (!empty.hidden) {
+    if (filtered) filterNote(empty, hidden, true);
+    else empty.textContent = state.timeRange ? 'nothing in the selected stretch' : 'nothing was recorded in this session';
+  } else if (filtered) {
+    root.appendChild(filterNote(el('div', 'filter-note muted'), hidden, false));
+  }
 
   // Spans are scaled against the session's own duration, not a fixed divisor. A fixed one
   // made a cache snapshot held for 230ms draw narrower than an instantaneous screen event,
   // which reads as the opposite of what it means.
-  const monos = entries.map((e) => e.mono);
-  const first = monos.length ? Math.min(...monos) : 0;
-  const last = monos.length ? Math.max(...monos) : 0;
+  let first = entries.length ? Infinity : 0;
+  let last = entries.length ? -Infinity : 0;
+  for (const e of entries) {
+    if (e.mono < first) first = e.mono;
+    if (e.mono > last) last = e.mono;
+  }
   const span = Math.max(1, last - first);
   for (const run of timelineRuns(entries)) {
     const collapsible = run.entries.length >= RUN_THRESHOLD;
@@ -108,9 +135,10 @@ function renderTimeline() {
     for (const entry of run.entries) root.appendChild(timelineRow(entry, ends, last, span));
   }
 
-  if (state.liveTail) {
-    const pane = root.parentElement;
-    pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
+  if (state.liveTail && follow && (fresh || atEnd)) {
+    // An empty timeline has nothing newest to follow, and its note sits above it: following the
+    // foot of the pane scrolled the note out of sight under whatever markers were left.
+    pane.scrollTop = state.newestFirst || !empty.hidden ? 0 : pane.scrollHeight;
   }
 }
 
@@ -135,9 +163,12 @@ function runRow(run, { expanded = false } = {}) {
   node.appendChild(el('span', 'tl-name', first.name));
   node.appendChild(el('span', 'tl-run-count mono', `\u00d7${run.entries.length}`));
 
-  const monos = run.entries.map((entry) => entry.mono);
-  const from = Math.min(...monos);
-  const to = Math.max(...monos);
+  let from = Infinity;
+  let to = -Infinity;
+  for (const entry of run.entries) {
+    if (entry.mono < from) from = entry.mono;
+    if (entry.mono > to) to = entry.mono;
+  }
   const held = el('span', 'tl-mono muted mono', from === to ? `${from}ms` : `${from}\u2013${to}ms`);
   held.title = expanded
     ? 'collapse these observations'
@@ -148,7 +179,7 @@ function runRow(run, { expanded = false } = {}) {
     const id = runIdOf(run);
     if (state.expandedRuns.has(id)) state.expandedRuns.delete(id);
     else state.expandedRuns.add(id);
-    renderTimeline();
+    renderTimeline({ follow: false });
   };
   node.addEventListener('click', toggle);
   node.addEventListener('keydown', (event) => {
@@ -269,8 +300,7 @@ async function selectSignal(id) {
   state.selectedSignalId = id;
   state.selectedId = null;
   const signal =
-    state.signals.find((s) => s.id === id) ||
-    state.screens.find((s) => s.id === id) ||
+    state.allSignals.find((s) => s.id === id) ||
     state.current.find((s) => s.id === id);
   if (!signal) return;
 

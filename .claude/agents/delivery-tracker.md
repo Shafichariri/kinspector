@@ -56,6 +56,9 @@ backlog task edit <id> --check-ac 1 --check-ac 2 --check-dod 1 --check-dod 2 --c
   unticked and the ticket stays In Progress, with the reason in its notes.
 - File every QA **Failed** as a ticket: `backlog task create "<failure>" --type bug -l item:<slug>
   -d "<reproduction>" --ac "<the criterion that failed>"`.
+- A bug ticket stays inside its item (`docs/TEAM.md` → "Tickets"). If a criterion you are asked
+  to file needs another roadmap item's work, or the defect predates the diff, say so in your
+  report instead of filing it silently.
 - A roadmap item is Done only when every `item:<slug>` ticket is Done.
 - Status reports include the board (`backlog task list --plain`), and **drift** includes a ticket
   Done without evidence, or an item marked Done with open tickets.

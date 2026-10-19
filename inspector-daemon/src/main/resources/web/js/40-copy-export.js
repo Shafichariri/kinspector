@@ -58,7 +58,7 @@ function bundleHeader() {
 
 function nearbyLines(mono) {
   const near = [
-    ...state.signals.map((s) => ({ mono: s.mono, text: `${s.tag} ${s.name}` })),
+    ...state.allSignals.map((s) => ({ mono: s.mono, text: `${s.tag} ${s.name}` })),
     ...state.markers.map((m) => ({ mono: m.mono, text: `marker "${m.label}"` })),
     ...state.allTransactions
       .filter((t) => t.mono !== mono)
@@ -113,7 +113,8 @@ async function transactionBundle(txn) {
     lines.push(absent !== null ? absent : clip(body, BUNDLE_BODY_CAP));
   }
 
-  lines.push('', `## Around it (±${fmtMs(BUNDLE_NEAR_MS)})`, ...nearbyLines(txn.mono));
+  lines.push('', `## Around it (±${fmtMs(BUNDLE_NEAR_MS)})`);
+  for (const line of nearbyLines(txn.mono)) lines.push(line);
   lines.push(
     '',
     '## Read more (MCP server "inspector")',

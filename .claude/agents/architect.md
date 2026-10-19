@@ -65,7 +65,10 @@ both directions), and the risks. Keep it short enough that the `engineer` can fo
 
 Run `git diff` against the base branch and check it against the list above, plus: no second copy
 of a rule, no `TODO` markers (they belong in the roadmap), comments explain *why*. Report findings
-ranked by severity with a concrete failure scenario each; skip style opinions.
+ranked by severity with a concrete failure scenario each; skip style opinions. To run old and new
+side by side, copy them with `P=$(scripts/qa-snapshot.sh head=HEAD base=<rev>)` as its own
+command; never `rm -rf` a variable path or chain `cd <repo>` with a deletion (`docs/TEAM.md`,
+"Snapshots").
 
 ## Recording decisions
 
@@ -89,3 +92,9 @@ backlog task create "<what changes>" -l item:<slug> --type feature \
 Use the item's own label, copy acceptance criteria from the note rather than inventing new ones,
 and give tickets no priority — order lives in `docs/ROADMAP.md`. You never set Done, archive or
 delete; `.claude/hooks/backlog-guard.js` refuses it. In a diff review, cite findings by ticket ID.
+
+**Scope review of bug tickets.** Before a fix round is built, the conductor sends you the round's
+new bug tickets. For each criterion answer in one line: inside the item, or not. Not inside means
+it needs work another roadmap item owns (check `docs/ROADMAP.md`), or it fixes a defect the
+ticket itself says predates the diff. Name the item it belongs to and propose the narrower
+criterion that keeps the ticket inside its own item.

@@ -89,7 +89,10 @@ are wrong in the same single case, a clock change mid-session.
 **Signals go through the same filter as the traffic, and did not until stage 2.** The overlay
 filtered the rows and passed every observation to `timeline()` untouched, so `path:/v2` thinned the
 calls and left the signals sitting between them. The web UI has always sent its filter to the
-signal route; this was the surface that disagreed.
+signal route, and the route ignored it until `item:signals-query-one-rule`: it filtered on `tag=`
+alone, so the web timeline and the path view's visit lines disagreed exactly as the overlay had. It
+now reads `SessionRepository.querySignals`, the function `list_signals` reads, and
+`SignalQueryTest` holds the two to the same ids in the same order.
 
 The exclusion rule then does the interesting half, and it is the feature rather than a side effect:
 `tag:` is a `SignalTerm` so a tag chip **drops every transaction**, and `path:` is a

@@ -75,10 +75,13 @@ function showStoppedBanner() {
  * What "last capture" can honestly name. A row this page watched arrive is a capture from any
  * session, so it wins. Failing that, the newest row of the session on screen is still true, but
  * only of that session — and it is labelled as such rather than passed off as the daemon's.
+ *
+ * Read from the whole session, never `transactions`: under a filter that kept only older calls,
+ * the filtered list dated the session by the newest call the filter happened to keep.
  */
 function lastCapture() {
   if (state.lastCaptureTs) return { ts: state.lastCaptureTs, what: 'last capture' };
-  const newest = [...state.transactions, ...state.signals]
+  const newest = [...state.allTransactions, ...state.allSignals]
     .map((r) => r.ts)
     .filter(Boolean)
     .sort()

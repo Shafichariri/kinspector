@@ -158,8 +158,153 @@ wrong source for anything describing the session as a whole. `state.allTransacti
 session; endpoint chips and duplicate detection both read it. Endpoint chips built from the
 filtered view would collapse to the one chip you just clicked, making every other endpoint a dead
 end, and duplicate highlighting would vanish under exactly the filter you applied to investigate
-it. It costs one extra request per *session* — not per keystroke — and nothing at all when no
-filter is set, because then the rows already are the whole session.
+it. Under a filter it costs one paged read per *session*, not per keystroke. With no filter it costs
+nothing only while the list's own page holds the whole session; past the route's clamp that page is
+the newest 1000 calls, so the copy is the same paged read. Copying the page there instead was trusted
+once a filter was typed, and the path counted every older visit from the clamp (`unfiltered then
+filter` in `check-web-static.js`, red with the copy taken whenever no filter is set; the filter-first
+checks cannot see it, because a filtered load always reads the copy whole). The stopped banner's
+"newest row in this session" reads it too, with `allSignals`. It used to read the filtered calls, and under
+a filter that kept only older calls it dated the session by the newest one the filter happened to
+keep. `check-web-static.js`'s `last capture whole` holds it.
+
+Signals are split the same way. `state.signals` is what the daemon matched against the filter, and
+only three readers take it: the timeline tab's entries and the path view's `visits(...)` call, the
+two places a filter is meant to thin signals, and `hiddenByFilter`, which counts what the filter
+took out of them. `state.allSignals` is the whole session, and the tabs and
+their counts, the tag browsers, the glance, the axis, tag colours, `sessionStartMono`, id lookups,
+the agent bundle, "last capture" and `state.screens` all read it — a tab counted from the filtered
+list would shrink or vanish under a filter and claim the app recorded less than it did. The
+waterfall tab is offered from `allTransactions` for the same reason: once the route honoured
+`filter`, `tag:screen` matched no calls and the tab vanished mid-filter. `allSignals` is cached per
+session under a filter, as `allTransactions` is, and a signal pull clears that cache because the
+rows it asked for are new. Both are read through `routePages` — as `signalPages`, and the
+whole-session calls as `transactionPages` — which asks the route for one page at a time, newest first, de-duplicates by id, and **stops at an empty page or one that adds no new id —
+never at a short page.** The route clamps a page to 1000 today; stopping when a page came back
+shorter than asked would truncate again the day that clamp is lowered, and would never stop against
+a source that ignores `offset`. A row arriving mid-read shifts every newest-first page by one, which
+is why the seam is de-duplicated. A page that fails fails the whole read: a quietly partial list is
+the defect the pager exists to fix. `check-web-static.js` lifts it by its `routePages` anchors and
+runs both shapes against stub routes — 1001 rows by 1000, a 500 clamp, `offset` ignored, a repeat
+across the seam — and was proven red with a `page.length < 1000` stop and with the de-duplication
+removed. The whole-session calls are paged under a filter, and without one when the list's page is
+short of the session total, because the path counts what each visit recorded from that copy: stopped
+at the clamp it made every visit older than the newest 1000 calls read as having recorded less. The
+list itself still stops at the clamp; that is `item:web-transactions-paged`.
+
+The two cached copies have gone stale in the ways below, and all but the last are closed; this is
+what has been found, not every way there is. Resuming the list and the socket opening again after
+the daemon was away clear both (`forgetWholeSession`): the live socket is the only thing that keeps either copy current, so rows that arrived while nothing listened are in
+neither, and the tabs, the route and the endpoint chips went on without them until the filter was
+cleared. "The daemon was away" covers a drop nobody asked for as well as a stop or a restart:
+`ws.onclose` moves `serverState` from `running` to `away`, and it used to leave it at `running`, so
+after a plain drop the next open took the page for one that had never been gone. The live probe's
+`resume refreshes`, `reconnect refreshes` and `drop refreshes` play rows arriving in each gap under
+`tag:screen`; the last closes the page's socket and lets its own redial open the next, because the
+reconnect line reaches `onopen` through the stubbed stop, which marks the daemon away by itself and
+so could never show whether a drop does. Forgetting also overtakes every load in flight (`callLoad`, `signalLoad`),
+because a whole-session read sent before the gap answers from before it, and landing afterwards it
+marked the copy again with the old rows (`forget drops calls read`, `forget drops signals read`);
+deleting the session on screen clears through the same function (`session change forgets`). A
+whole-session read that fails leaves the filtered rows standing in and does not mark them as the
+session, for the calls as for the signals, or every later load would trust them — and the list,
+reading the mark, said a session with calls had recorded none (`whole read failure`,
+`whole calls read failure` in `check-web-static.js`). And each load reads the filter once and hands it down, and a load a newer
+one has overtaken drops its answer rather than writing it (`callLoad`, `signalLoad`): the daemon may
+answer two loads out of order, and a slow unfiltered read that landed last put every row back under
+the filter just typed (`older call load dropped`, `older signal load dropped`). Open: a live row that
+arrives while the whole-session read is between pages is in neither the read nor the copy, because a
+live row joins a copy only once the copy is marked as the session's, and the mark is set when the read
+lands. Paging widened that window from one request to every page. `item:web-transactions-paged` owns
+it.
+
+**No row array is spread into an argument list.** Every argument is a stack slot, so
+`Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
+enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls
+were read past the clamp, a 160,000-call session threw in `sessionWindow` before anything was
+drawn: no rows, no axis, and the dot stuck at "connecting…". Minimum and maximum are loops now, in
+the axis, the waterfall, the timeline, a run's row, the path and the stretch note. Spreading into an
+array literal, `[...a, ...b]`, is not a call and is fine. `check-web-static.js`'s long session
+section holds it twice: `no argument spread` reads every script, with comments and strings blanked,
+for a `...` whose innermost bracket is a call's `(`; and `axis window 200k` to `path 200k` run those
+functions out of the real files over 200,000 rows. Each was proven red with each file's spreads put
+back. What jsdom cannot show — rows and the axis drawn and the dot at "connected" on a real
+160,016-call session in headless Chrome, red at `a86dde2` and green after — is recorded in KIN-37's
+notes. Holding that many rows at all is a cost this does not settle; `item:web-transactions-paged`
+owns whether the whole-session read is capped.
+
+**A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
+list always did; the waterfall, the path and the timeline did not. Under a filter that matched
+nothing the waterfall said "no calls to lay out" beside a header counting sixteen, the path called
+four visits in six "nothing recorded", and the timeline either said "no entries" or — with a marker
+in range, which the filter does not touch — nothing at all. Each now draws `filterNote`: emptied,
+"nothing matches the filter `…` — N calls and M signals hidden", or on the waterfall, which draws
+only calls, "no calls match the filter `…`" — under `tag:screen` "nothing matches" was false of the
+six screens it matched; thinned, "N calls and M signals
+hidden by the filter `…`" above the rows, both with the list's own `clear filter` button. Hidden
+calls are the route's own two numbers, `sessionTotal` less `matched` — never a difference of the rows
+held, because the filtered list stops at the clamp: on a 3016-call session that read "1000 calls
+hidden" where 3016 were, and drew no note for a filter matching 1200. A brushed stretch has no route
+number, so there the held rows are counted from the oldest mono at which both lists are still whole,
+and the note says "at least" when the stretch reaches below it (`hidden past the clamp`,
+`stretch past the clamp`, `hidden when none match` and `path N past the clamp` in
+`check-web-static.js`, over a 3016-call stub clamped as the daemon clamps). Hidden signals are the
+whole session's rows less the filtered ones, within a brushed stretch where the pane brushes, and
+without `screen` signals on the path, which draws every screen whatever the filter. A visit the
+filter emptied reads "0 of N match", N counted from the same skeleton over the whole session, and
+"nothing recorded" is said only where nothing was. Neither is said of a visit holding a call older
+than the oldest the list holds while the list is short of what the route matched: the list stops at
+the clamp, so whether those calls match is unknown, and on the 3016-call session under
+`path:/v3/shop`, which matched 3015, five visits read "0 of N match" over calls that matched. Such a
+visit says "calls not loaded", and one with some calls drawn adds "older calls not loaded" in the log;
+the visits are asked of the whole-session skeleton, so a visit with no call below that point is not
+marked. With no filter the same visits had read "nothing recorded". The note then says
+"newest 1000 of 3015 matches loaded", which is the number the header counts — beside "1 call hidden"
+it had left 2015 calls unaccounted for (`path clamp …` in `check-web-static.js`). The waterfall's stubs
+do not take this rule yet: a visit there whose calls were not loaded still reads "no matching calls". The timeline decides it is empty on calls and
+signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
+calls"; the waterfall as a whole never did, which is what this paragraph used to claim. An emptied
+waterfall asks in a fixed order: a filter that hid calls in range, then a brushed stretch in a session
+with calls, and "no calls were recorded" only of a session with none — the stretch was asked of the
+filtered calls, so a filter plus an empty stretch called a session with calls empty. The live
+probe's lines from `waterfall emptied` to `filter panes tabs` press each pane's button and
+check the tab bar never moves; `waterfall stretch`, `waterfall order` and `waterfall calls` hold
+the order and the wording, the stretch set through `setTimeRange`, which the brush calls. Where the note sits is layout, which jsdom does not do, so it was checked in
+headless Chrome at 1440 and 400 wide: the timeline's empty note is above the timeline, and an
+empty timeline does not follow its foot under live tail, or the note scrolled out of sight; the
+thinned note is sticky, and the path's rides in one sticky box with the map.
+
+**Nothing sticky in the list pane stops above the scope bar.** The bar is sticky at the top of
+`#list-pane` and is a standing claim about every path below it (`shared-rules.md`), and every view
+in the pane sticks something of its own: the timeline's filter note, the path's map, the waterfall's
+group heads, the new-visit pill. Each stuck at `top: 0`, so whichever came later in the document
+drew over the bar — the timeline's note under any filter, the path's map at 400 wide. They stop at
+`--sticky-top` now, which is the bar's height while it is drawn and 0 otherwise, set by
+`#scope-bar:not([hidden]) ~ *`; the bar's height is fixed so the offset is a number, not a
+measurement. The timeline is no longer its own full-height scroller: beside the bar it made the pane
+overflow by the bar's height, live follow scrolled the pane that far, and the bar sat on the first
+row while the timeline's own foot was never followed. It flows in the pane as the list does. That
+made its follow move the whole pane on every redraw, so expanding a run in the middle of a 3016-call
+session threw the reader to the end — 24 to 29934 oldest-first, 29800 to 0 newest-first. It now
+follows as the path's log does: on opening the view, and on a redraw only when the pane was already
+at the end it follows; a run opened or closed never moves it (`renderTimeline({ follow: false })`).
+The list's own follow moved the same pane, and it ran whatever view was shown: on the 3016-call
+session one live call or marker moved a timeline scrolled to the middle from 14927 to its end
+oldest-first and to 0 newest-first, and a path or a waterfall the same way. It follows only while
+the list is shown now. The order toggle, a load and a brushed stretch had followed on the timeline
+only because that follow moved the pane first, so each sets `state.timelineFresh`. The waterfall has
+no follow of its own, so it no longer moves under live tail at all. `check-web-static.js`'s live follow
+section drives the real file over a stub pane in both orders, red at `a86dde2` on the run and on a
+row arriving while scrolled back; its `socket …` and `timeline asked follows` lines send calls,
+markers and signals through the real `05-network.js` handler with the timeline, the path and the
+waterfall shown, red at `8082e02` on all three views scrolled back. KIN-38's and KIN-41's notes record
+the headless Chrome numbers. A
+clicked station scrolls its visit to just under the sticky box by measuring the box at click time;
+the fixed `scroll-margin-top: 96px` it replaced did not count the filter note, and landed the row 19
+to 33px under the box. Layout again, so not a probe: KIN-33's notes record the headless Chrome
+measurement — the element at the bar's centre, the first and newest timeline rows, and each
+station's row against the box, at 1440 and 400, with and without a filter — red at e1711a3 and
+green after.
 
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as

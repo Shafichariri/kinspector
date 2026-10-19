@@ -131,8 +131,8 @@ Four rules are decisions, and each was argued before it was built:
   in the sample's own route on the first look at the map. `seq` is one counter in `Clocks.kt`,
   taken right after `monoMs()` at every capture site; when either side lacks it the tie still goes
   to the arrival, so older archives read exactly as before.
-- **The skeleton ignores the filter.** `state.screens` is fetched with `tag:screen` whatever the
-  filter is, and the leading "before first screen" visit is skeleton too, so `visits()` takes
+- **The skeleton ignores the filter.** `state.screens` is taken from the whole session
+  (`state.allSignals`, see `web-ui.md`) whatever the filter is, and the leading "before first screen" visit is skeleton too, so `visits()` takes
   `sessionStart`. Without that, a filter matching nothing at launch removed the launch column —
   found by the probe on its first run, which is why it is a parameter rather than a comment.
 - **Consecutive same-name screens are one visit.** Later ones are `repeats`, drawn in place as a

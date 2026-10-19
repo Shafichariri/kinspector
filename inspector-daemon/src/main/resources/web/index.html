@@ -177,8 +177,10 @@
       <div id="scope-bar" class="scope-bar" hidden></div>
       <div id="list" role="listbox" aria-label="Transactions"></div>
       <div id="list-empty" class="empty muted">loading…</div>
-      <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
+      <!-- Above the timeline: below it, this was pushed to the foot of the pane, under whatever
+           markers the timeline still drew. -->
       <div id="timeline-empty" class="empty muted" hidden>no entries</div>
+      <div id="timeline" role="listbox" aria-label="Timeline" hidden></div>
 
       <!--
         A key list beside one key's detail, rather than a row per observation.

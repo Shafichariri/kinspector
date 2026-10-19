@@ -73,7 +73,16 @@ function archiveSource(archive) {
         const blob = (archive.signalData || {})[decodeURIComponent(m[1])];
         return blob ? reply(200, bytesOf(blob)) : refuse(404, `no payload for signal ${m[1]}`);
       }
-      if (/^\/api\/sessions\/[^/]+\/signals$/.test(p)) return reply(200, signals);
+      if (/^\/api\/sessions\/[^/]+\/signals$/.test(p)) {
+        if (url.searchParams.get('filter')) {
+          return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
+        }
+        // Sliced as asked, with no clamp of its own: the page reads signals a page at a time, and
+        // an export that ignored `offset` would be answering a different question from the daemon.
+        const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+        const limit = url.searchParams.has('limit') ? Math.max(0, Number(url.searchParams.get('limit')) || 0) : signals.length;
+        return reply(200, signals.slice(offset, offset + limit));
+      }
       if (/^\/api\/sessions\/[^/]+\/current$/.test(p)) return reply(200, archive.current || []);
       if (/^\/api\/sessions\/[^/]+\/markers$/.test(p)) return reply(200, archive.markers || []);
       return refuse(404, `not in this export: ${p}`);
@@ -159,6 +168,10 @@ function connectLive() {
     if (message.type === 'txn') {
       state.transactions.push(message.txn);
       if (state.allSessionId === state.sessionId) state.allTransactions.push(message.txn);
+      // The list takes the row as one more match, so both counts move and what the filter hides
+      // stays what it was.
+      if (state.sessionTotal !== null) state.sessionTotal++;
+      if (state.matched !== null) state.matched++;
       renderList();
       renderWaterfall();
       renderPath();
@@ -172,6 +185,7 @@ function connectLive() {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
       state.signals.push(message.signal);
+      if (state.allSignalsSessionId === state.sessionId) state.allSignals.push(message.signal);
       if (tagOf(message.signal) === 'screen') {
         state.screens.push(message.signal);
         if (state.view === 'path') loadScreenPayloads().then(renderPath);
@@ -198,7 +212,12 @@ function connectLive() {
       return;
     }
     setConn('reconnecting');
+    // A drop nobody asked for marks the daemon away, as a stop or a restart does. Left at
+    // `running`, the next open took the page for one that had never been gone, and rows that
+    // arrived while nothing listened stayed out of the whole-session copies until the filter
+    // was cleared.
     if (state.serverState === 'running') {
+      state.serverState = 'away';
       showServerBanner('Lost the daemon — reconnecting…', true);
     }
     setTimeout(connectLive, 1000);
@@ -209,9 +228,11 @@ function connectLive() {
     state.serverState = 'running';
     showServerBanner(null, false);
     setControlsEnabled(true);
-    // A restart means a new process with a fresh session list; a reconnect after a blip may
-    // also have missed rows. Either way the page's data is stale, so re-read it.
+    // A restart means a new process with a fresh session list; a reconnect after a drop or a
+    // blip may also have missed rows. Either way the page's data is stale, so re-read it — the
+    // whole-session copies too, or a filter keeps them as they were before the gap.
     if (wasAway) {
+      forgetWholeSession();
       loadServerInfo();
       loadSessions().then(loadTransactions);
     }

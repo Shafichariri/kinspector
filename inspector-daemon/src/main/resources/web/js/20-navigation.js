@@ -16,10 +16,10 @@ const TAG_LABELS = { screen: 'screens' };
 // @mirror-begin tagOf
 const tagOf = (signal) => String(signal.tag).toLowerCase();
 // @mirror-end tagOf
-const signalsForTag = (tag) => state.signals.filter((signal) => tagOf(signal) === tag);
+const signalsForTag = (tag) => state.allSignals.filter((signal) => tagOf(signal) === tag);
 
 function tagsInSession() {
-  const tags = [...new Set(state.signals.map(tagOf))];
+  const tags = [...new Set(state.allSignals.map(tagOf))];
   const rank = (tag) => {
     const at = TAB_ORDER.indexOf(tag);
     return at === -1 ? TAB_ORDER.length : at;
@@ -44,7 +44,7 @@ function availableViews() {
     title: 'The screens the user moved through, and what happened on each',
   });
   // Merging is only worth a tab when there is something to merge with the traffic.
-  if (state.signals.length) {
+  if (state.allSignals.length) {
     views.push({
       id: 'all',
       label: 'timeline',
@@ -52,8 +52,10 @@ function availableViews() {
     });
   }
   // Grouping by screen needs both halves. With traffic but no screen signals it would be one
-  // unnamed block, which the traffic tab already draws better.
-  if (state.transactions.length && state.screens.length) {
+  // unnamed block, which the traffic tab already draws better. Asked of the whole session, not
+  // the filtered calls: once the route honoured `filter`, `tag:screen` matched no calls and took
+  // the tab away mid-filter. The waterfall says itself that no calls match the filter.
+  if (state.allTransactions.length && state.screens.length) {
     views.push({
       id: 'waterfall',
       label: 'waterfall',
@@ -132,6 +134,7 @@ function applyView() {
 
   $('list').hidden = !network;
   $('list-empty').hidden = !network || state.transactions.length > 0;
+  if ($('timeline').hidden && all) state.timelineFresh = true;
   $('timeline').hidden = !all;
   $('timeline-empty').hidden = true;
   $('waterfall').hidden = !waterfall;

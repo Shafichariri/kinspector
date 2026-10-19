@@ -12,6 +12,7 @@ import dev.inspector.model.SessionMeta
 import dev.inspector.model.Signal
 import dev.inspector.model.SignalTags
 import dev.inspector.model.SignalTrigger
+import dev.inspector.model.TagTerm
 // Aliased: inside [SessionRepository] a bare `timeline(` resolves to the member, not the rule.
 import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.Serializable
@@ -287,14 +288,24 @@ class SessionRepository(private val config: DaemonConfig) {
     /**
      * Filtered, paginated read of the signal stream. Same grammar, same errors as
      * [queryTransactions] — a `status:` term simply matches nothing here, by the exclusion rule.
+     *
+     * The one place signals are filtered, sorted and clamped: `GET …/signals` and the MCP
+     * `list_signals` both read it, so a route and a tool cannot disagree about which rows a
+     * filter keeps or what order they come in.
+     *
+     * [tag] is ANDed in as a constructed [TagTerm], never pasted into [filterText]. A tag value is
+     * a caller's string, and one containing `|` or whitespace would otherwise rewrite the query —
+     * `screen | path:x` would become an OR rather than a tag nobody has.
      */
     fun querySignals(
         sessionDir: Path,
         filterText: String = "",
         offset: Int = 0,
         limit: Int = 50,
+        tag: String? = null,
     ): SignalPage {
-        val filter = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
+        val parsed = if (filterText.isBlank()) Filter.MatchAll else FilterParser.parseOrThrow(filterText)
+        val filter = if (tag == null) parsed else Filter.And(listOf(TagTerm(tag), parsed))
         val all = readSignals(sessionDir)
         val context = FilterContext(readMarkers(sessionDir))
         val matched = all.filter { filter.matches(it, context) }

@@ -200,6 +200,14 @@ The limits are hooks, not prose, for the same reason as `block-repo-writes.js`:
   the conductor rule already asks; **`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=4`** (default 20).
 - **`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`** — current models get the Task tools only on opt-in, and
   without them teammates coordinate by message alone instead of through the shared task list.
+- **Snapshots: reviewers copy revisions with `scripts/qa-snapshot.sh`, never with a hand-written
+  loop.** `P=$(scripts/qa-snapshot.sh head=HEAD base=<rev>)` puts each revision in a fresh
+  `mktemp -d` directory and deletes nothing. Bypass mode skips permission rules but not Claude
+  Code's own check on a Bash command it cannot prove safe, and the reviewers' old pattern (`cd`
+  into the repository, then `rm -rf $D/$n` in a loop over revisions, then `git init` in a
+  subshell) tripped it three times on 2026-10-18 and 2026-10-19. The approval card waits for the
+  human with no timeout: one `qa-verifier` teammate sat on it for 3 h 54 min while the rest of the
+  panel had finished. Also never chain `cd <repo>` with a deletion in one command.
 
 What a team costs: every teammate loads the project context — `AGENTS.md` and the decision files
 its role reads — into its own context window, so a three-member phase pays for it three more times. Teams need an interactive session — under `claude -p` or the
@@ -237,13 +245,28 @@ The rules that keep it from becoming a second backlog:
 
 - **Every ticket hangs under a roadmap item**, labelled `item:<slug>` with the slug the item names
   under its heading. A defect found outside any item goes to the `product-owner` first.
+- **Pace rules from the signals item (2026-10-19).** The conductor's list is in the skill under
+  "Pace": decide a round's scope before spawning its engineer and give a large ticket its own round;
+  a fresh engineer per item; size the panel to the change (one fresh QA for narrow fixes); one owner
+  per finding; a close verdict that blocks only on this item's criteria and regressions; heuristics
+  documented as heuristics. The engineer runs fast checks per ticket and the full set, Chrome
+  included, once per round (`.claude/agents/engineer.md`); QA's bar for documentation is a false
+  claim, not one more missed case (`.claude/agents/qa-verifier.md`).
+- **A bug ticket stays inside its item.** Before a fix round is built, the `architect` reads each
+  new bug ticket's criteria for scope. A criterion that needs another roadmap item's work, or a
+  defect whose own text says it predates the diff, goes to the `product-owner` instead of into the
+  round. In the signals item, one criterion ("the path's '0 of N' uses an uncapped N") pulled in
+  the next item's whole-session paging, and it and a pre-existing layout fix caused all six
+  blocking tickets of the two later rounds (KIN-37 to KIN-42).
 - **No priority on tickets.** Order lives in `ROADMAP.md`; dependencies between tickets use `--dep`.
 - **Tickets come after the design gate**, split by the `architect` from the agreed note, so a
   rejected design leaves no orphans.
 - **Only the `delivery-tracker` closes**, ticking only criteria the `qa-verifier` showed Verified,
   with the evidence in `--final-summary`. A roadmap item is Done when all its tickets are.
 - **Definition of Done** (in `backlog/config.yml`, added to every ticket): QA evidence per
-  criterion, every guard proven both ways, no client, employer or product name anywhere.
+  criterion, every guard proven both ways, no client, employer or product name anywhere. A ticket
+  that touches `web/` is also done only when `scripts/measure-web-ui.js --base <round's base>`
+  shows nothing moved that the ticket did not mean to move, and nothing on head failed that passed on base.
 - **Public:** the `release-steward`'s hygiene scan covers `backlog/`. Commercial work never
   becomes a ticket.
 

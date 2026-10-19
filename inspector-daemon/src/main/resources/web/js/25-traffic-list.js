@@ -211,6 +211,74 @@ function renderScopeBar() {
   bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
 }
 
+/** The list's "clear filter" control, shared by every pane a filter can empty or thin. */
+function clearFilterButton() {
+  const clear = el('button', 'btn btn-sm', 'clear filter');
+  clear.type = 'button';
+  clear.addEventListener('click', () => {
+    $('filter').value = '';
+    applyFilter();
+  });
+  return clear;
+}
+
+/**
+ * How many calls and signals the session holds that the filter left out — within the brushed
+ * stretch when `ranged`, since a pane that brushes is not hiding what lies outside it, and without
+ * `screen` signals when `screens` is false, for the path, which draws every screen whatever the filter.
+ *
+ * Calls are counted from the route's own numbers, the session total less the filter's matches,
+ * never from the rows held: the filtered list stops at the route's clamp of 1000 rows, so a
+ * difference of two lists was a difference of two clamps — "1000 calls hidden" where 3016 were, and
+ * no note at all for a filter matching 1200. A brushed stretch has no route number, so there the
+ * held rows are counted, only from the oldest row at which every list holding them is still whole,
+ * and `atLeast` says that some of the stretch lay below it. Signals are read whole and need neither.
+ */
+function hiddenByFilter({ signals = true, ranged = false, screens = true } = {}) {
+  const stretch = ranged && state.timeRange;
+  const count = (rows, floor = -Infinity) => rows.filter((row) => row.mono >= floor && (!stretch || inRange(row.mono))).length;
+  const kept = (rows) => (screens ? rows : rows.filter((s) => tagOf(s) !== 'screen'));
+  const signalCount = signals ? Math.max(0, count(kept(state.allSignals)) - count(kept(state.signals))) : 0;
+  if (!stretch && state.sessionTotal !== null && state.matched !== null) {
+    return { calls: Math.max(0, state.sessionTotal - state.matched), signals: signalCount, atLeast: false };
+  }
+  // Each list is the newest rows of what it holds, so it is whole from its oldest row up, or whole
+  // outright when it is as long as the route says.
+  const oldest = (rows) => rows.reduce((m, r) => (r.mono < m ? r.mono : m), Infinity);
+  const wholeFrom = (rows, total) => (rows.length && rows.length < (total ?? 0) ? oldest(rows) : -Infinity);
+  const floor = Math.max(wholeFrom(state.transactions, state.matched), wholeFrom(state.allTransactions, state.sessionTotal));
+  return {
+    calls: Math.max(0, count(state.allTransactions, floor) - count(state.transactions, floor)),
+    signals: signalCount,
+    atLeast: floor > -Infinity && (!stretch || state.timeRange.from < floor),
+  };
+}
+
+/**
+ * What the filter took out of a pane, said in the pane, naming the filter and offering to clear
+ * it as the list's empty state does. `emptied` when nothing is left: a pane that went blank under a
+ * filter, or one reading "nothing recorded", says the app did nothing — which is false, and sends
+ * someone to debug the app instead of the query. `lead` opens the emptied note; a pane that draws
+ * only calls says "no calls match", since the filter may well have matched signals.
+ */
+function filterNote(node, hidden, emptied, lead = 'nothing matches') {
+  const count = (n, noun) => (n ? `${n} ${noun}${n === 1 ? '' : 's'}` : null);
+  const calls = count(hidden.calls, 'call');
+  const what = [calls && hidden.atLeast ? `at least ${calls}` : calls, count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
+  node.replaceChildren();
+  node.append(emptied ? `${lead} the filter ` : `${what} hidden by the filter `);
+  node.appendChild(el('code', null, state.filter));
+  if (emptied && what) node.append(` — ${what} hidden`);
+  // The header counts the rows held, and past the route's clamp that is not every match: said here,
+  // or "1000 of 3016 calls" above "1 call hidden" reads as 2015 calls gone with no reason.
+  if (state.matched !== null && state.transactions.length < state.matched) {
+    node.append(` — newest ${state.transactions.length} of ${state.matched} matches loaded`);
+  }
+  node.append(' — ');
+  node.appendChild(clearFilterButton());
+  return node;
+}
+
 /**
  * Why the list is empty, and what would fix it.
  *
@@ -229,13 +297,7 @@ function renderListEmpty() {
     node.textContent = 'no calls in the selected stretch';
   } else if (state.filter && inSession !== 0) {
     node.append('no calls match — ');
-    const clear = el('button', 'btn btn-sm', 'clear filter');
-    clear.type = 'button';
-    clear.addEventListener('click', () => {
-      $('filter').value = '';
-      applyFilter();
-    });
-    node.appendChild(clear);
+    node.appendChild(clearFilterButton());
   } else if (!state.sessionId) {
     node.textContent = 'waiting for an app with inspector-stream to connect';
   } else if ((state.recording || []).includes(state.sessionId)) {
@@ -283,8 +345,11 @@ function renderList() {
     );
   }
 
-  // Follow the newest row, wherever it now lives.
-  if (state.liveTail) {
+  // Follow the newest row, wherever it now lives — only while the list is the view shown. The
+  // timeline, the path and the waterfall flow in the same pane, and following here whatever view was
+  // shown moved a reader scrolled back in one of them on every live call or marker. Each of those
+  // views follows by its own rule (`renderTimeline`, `renderPath`); the waterfall has none.
+  if (state.liveTail && state.view === 'network') {
     const pane = list.parentElement;
     pane.scrollTop = state.newestFirst ? 0 : pane.scrollHeight;
   }
@@ -297,6 +362,8 @@ function setSortOrder(newestFirst) {
   $('order-newest').classList.toggle('on', newestFirst);
   $('order-oldest').setAttribute('aria-pressed', String(!newestFirst));
   $('order-newest').setAttribute('aria-pressed', String(newestFirst));
+  // The timeline follows a change of order to its newest end, as the list does.
+  state.timelineFresh = true;
   renderList();
   renderTimeline();
   // Order is a reading preference, not a view: it applies to the key list and to every
@@ -402,9 +469,10 @@ function applyFilter() {
 /**
  * Follow new traffic, or hold the list where it is.
  *
- * Paused drops live rows rather than queueing them, so resuming re-reads the session: a list
- * that picked up from wherever the next message happened to land would be missing everything
- * that arrived while it was paused, with nothing on screen to say so.
+ * Paused drops live rows rather than queueing them, so resuming re-reads the session, the
+ * whole-session copies included: a list that picked up from wherever the next message happened to
+ * land would be missing everything that arrived while it was paused, with nothing on screen to say
+ * so.
  */
 function setLiveTail(on) {
   state.liveTail = on;
@@ -416,5 +484,9 @@ function setLiveTail(on) {
   button.title = on
     ? 'Following new traffic as it arrives. Click to pause.'
     : 'Paused: new traffic is not added to the list. Click to catch up and follow again.';
-  if (on) loadTransactions();
+  if (on) {
+    // The rows missed while paused are missing from the whole-session copies too.
+    forgetWholeSession();
+    loadTransactions();
+  }
 }

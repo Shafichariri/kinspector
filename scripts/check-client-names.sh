@@ -12,7 +12,14 @@
 #   check-client-names.sh [--terms-file F] [--range BASE..HEAD] [--branch NAME] [--require-terms]
 #
 # Terms: one per line, from --terms-file if given, else from $CLIENT_NAME_TERMS. Case-insensitive,
-# fixed strings. Blank lines and CR are ignored.
+# matched as whole words: a term counts only where the character before and after it is not a
+# letter or digit (or is the start or end), so it is caught beside `.`, `-`, `_`, `/` or a space -
+# in a domain, a path or a separated identifier - and not inside an ordinary word. With
+# substring matching, a three-letter term flagged `iPhoneOS`, `lineOf` and `instantaneous` all
+# over the repository, and a scan that always fails is one nobody reads. The cost: a term run
+# into another word with no separator (`fooBar`, `foobar`) is not caught, so list such forms as
+# terms of their own. Terms are fixed strings; regex characters in them are escaped. Blank lines
+# and CR are ignored.
 #
 # What it prints, and what it never prints. CI logs on a public repository are public, and GitHub
 # masks a secret only where its whole value appears -- one term out of a list would print in clear.
@@ -92,6 +99,19 @@ fi
 sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' "$PATTERNS" > "$PATTERNS.clean"
 mv "$PATTERNS.clean" "$PATTERNS"
 
+# Each term becomes one extended regex bounded by non-alphanumerics, its own regex characters
+# escaped first so a term is still a fixed string. `[^[:alnum:]]` treats `_` as a boundary, which
+# is what catches `term_x` in an identifier; `grep -w` would not, because it counts `_` as a word
+# character.
+WORDS="$WORK/words"
+sed -e 's#[][\.^$*+?(){}|]#\\&#g' -e 's#.*#(^|[^[:alnum:]])&([^[:alnum:]]|$)#' "$PATTERNS" > "$WORDS"
+# macOS grep (BSD) does not match `^` inside an alternation group, though git grep and GNU grep do.
+# So the checks that go through plain grep - paths, commit messages, the branch name - pad each
+# line with a space at both ends and use a pattern that needs a non-alphanumeric on both sides.
+EDGES="$WORK/edges"
+sed -e 's#[][\.^$*+?(){}|]#\\&#g' -e 's#.*#[^[:alnum:]]&[^[:alnum:]]#' "$PATTERNS" > "$EDGES"
+pad() { sed 's/.*/ & /'; }
+
 if [[ ! -s "$PATTERNS" ]]; then
   echo "client-name scan: NOT RUN — no terms (fork PR or secret not set)"
   echo "::warning::client-name scan NOT RUN: no terms were provided, so nothing was scanned."
@@ -107,7 +127,8 @@ found=0
 # and quoted, so a term with an accent neither matched the path count nor stayed out of the
 # file:line list, where the escaped form spelled it out.
 git -c core.quotePath=false ls-files --cached --others --exclude-standard > "$WORK/paths"
-grep -i -F -f "$PATTERNS" "$WORK/paths" > "$WORK/named" || true
+pad < "$WORK/paths" | grep -n -i -E -f "$EDGES" | cut -d: -f1 > "$WORK/named.lines" || true
+awk 'NR==FNR { want[$1]; next } FNR in want' "$WORK/named.lines" "$WORK/paths" > "$WORK/named"
 paths=$(wc -l < "$WORK/named" | tr -d ' ')
 if [[ "$paths" -gt 0 ]]; then
   echo "$paths file path(s) match a term (not listed: the path would print the term)."
@@ -119,7 +140,7 @@ fi
 # file:line survives `cut`; the matched line itself is discarded before anything is printed.
 # Exit 1 is "no match"; anything else is git failing, and a scan that failed is not a clean one.
 status=0
-git -c core.quotePath=false grep --untracked -I -n -i -F -f "$PATTERNS" > "$WORK/content" 2>/dev/null || status=$?
+git -c core.quotePath=false grep --untracked -I -n -i -E -f "$WORDS" > "$WORK/content" 2>/dev/null || status=$?
 if [[ $status -gt 1 ]]; then
   echo "ERROR: git grep failed (exit $status); nothing was scanned." >&2
   exit 2
@@ -147,14 +168,14 @@ fi
 if [[ -n "$RANGE" ]]; then
   for sha in $shas; do
     message="$(git log -1 --format='%B' "$sha")"
-    if grep -q -i -F -f "$PATTERNS" <<< "$message"; then
+    if pad <<< "$message" | grep -q -i -E -f "$EDGES"; then
       echo "Commit message matches a term: ${sha:0:12}"
       found=1
     fi
   done
 fi
 
-if [[ -n "$BRANCH" ]] && grep -q -i -F -f "$PATTERNS" <<< "$BRANCH"; then
+if [[ -n "$BRANCH" ]] && pad <<< "$BRANCH" | grep -q -i -E -f "$EDGES"; then
   echo "The branch name matches a term."
   found=1
 fi

@@ -536,8 +536,36 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
   published, so there is no noop twin or golden file to carry.
 
-- **The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**
-  *Ticket label:* `item:signals-query-one-rule`. **Known violation, not yet fixed.**
+- ~~**The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**~~
+  **Done, 2026-10-19, with one deferred bug, KIN-42.** *Ticket label:* `item:signals-query-one-rule`.
+  Tickets KIN-24 to KIN-41 and KIN-26 are Done on QA evidence; KIN-42 stays open and deferred (below).
+  Four verify rounds found and closed the defects (heads `5f6b610`, `e1711a3`, `a86dde2`, `8082e02`),
+  and a fresh QA at `8f64058` found no regression: static checks 71/0, live probe 182, archive probe 26,
+  `:inspector-daemon:test` 267/0, `:repo-checks:test` 35/0. Each round's findings were filed back under
+  the item (KIN-27 to KIN-41), which is why 18 tickets cover what was sized S. KIN-26 was the follow-up
+  to KIN-23: its test pushed `McpTest.kt` past its budget, and `:repo-checks` caught what a daemon-only
+  run had not. What was learned: the route and `list_signals` now share `SessionRepository.querySignals`
+  (pinned by `SignalQueryTest`); the web UI keeps a whole-session copy of signals beside the filtered one,
+  as it already did for calls, and every round found another way that copy went stale (pause and resume,
+  an unplanned reconnect, a slow older load, a clamp on counts), so the rule is written down in
+  `docs/decisions/web-ui.md` and each way has a check. The Chrome suite `scripts/measure-web-ui.js` showed
+  22 failures at the base of KIN-41 and 2 at head; the 20 that moved are all "scrolled back: moves ->
+  stays", and the 2 left are KIN-42's. The release-notes line owed (below, the fourth) still stands
+  and is unchanged.
+  **Open, deferred by the maintainer on 2026-10-19: KIN-42.** On a session of about 160,000 calls, the
+  web UI shows a false empty state ("waiting for an app" / "nothing recorded") for about 25 seconds
+  before the first rows appear, and the live socket connects only after. KIN-34 introduced it, when the
+  filter-note counts began reading the whole session. The fix is to draw the first page at once and
+  read the whole-session copy in the background (ACs in the ticket); it is not scheduled. The item is
+  Done without it by that decision, not because the defect is closed.
+  **For the product-owner, unplaced:** a live call never redraws the timeline. The `txn` branch of the
+  socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
+  appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
+  sense that nothing moves. It predates this item and is not in KIN-42; it needs placing in the order.
+  *Original statement of the defect, kept as the record:*
+  **Ordered 2026-10-18: second in the order from here** (§5 → "Order from here"), right after the
+  Markdown export bug. It is a live web UI defect: a filter a user types does not reach the
+  signals, and a long session loses its oldest screens without saying so.
   `docs/decisions/daemon-and-mcp.md` now says "a rule both adapters serve lives in `service/` or
   `archive/`, never in a route or tool body". The signal list is served by both adapters, and it
   is not built that way:
@@ -589,17 +617,43 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   **Out of scope.** The filter grammar, which is frozen. MCP's argument names or its page shape.
 
   Surfaces: daemon, web UI. No public API. It changes what a web UI user sees under a filter, so it
-  gets a release-notes line when it ships.
+  gets a release-notes line when it ships; the line is owed with phase A's, under "Release notes"
+  below.
 
 ### Bugs found, not fixed
 
-- **`ExportMarkdown.kt:158` prints the query twice.** The line is
+- ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
   `inlineCode(txn.url + (txn.query?.let { "?$it" } ?: ""))`, but `NetworkTransaction.url` already
   includes the query (`docs/decisions/shared-rules.md` records that web's `urlOf` mirrors that, empty `?` included). Every
   call with a query string shows `…/path?a=1?a=1` in the Markdown export's **URL** line. Found while
   reconciling phase A; **out of phase A's scope** (daemon, not `app.js`) and not fixed. Fixing it needs a
   `ExportMarkdown` test with a query-bearing row, which asserts the URL appears once, and it is a visible
   change to the export, so it gets a release-notes line when it is fixed. Product owner to order it.
+
+  *Ticket label:* `item:export-md-query-once`.
+
+  **Done, 2026-10-18** (KIN-23, QA at `2b1b650`). The Markdown URL line is `inlineCode(txn.url)` and
+  nothing else. The same cause was in MCP `explain`: `ExplainTool.kt` hand-built `CallLine.url` as
+  scheme, host and path, which dropped the query and a non-default port, the defect
+  `docs/decisions/capture.md` already records. It reads `txn.url` now. Red proofs against the old
+  lines: `…?a=1&b=2?a=1&b=2`, `…me??`, and an `explain` url without port or query. 263 daemon tests,
+  0 failures. Exporting a real session changed exactly 8 URL lines. HAR, Replayer, the overlay and
+  the web `urlOf` already read the shared rule. **Release-notes line still owed**, listed under
+  phase A's pending daemon-only `INTEGRATION.md` entry below.
+
+  **Ordered 2026-10-18: first in the order from here** (§5 → "Order from here"). The maintainer's
+  call. It is a wrong fact in a file people hand to others, and the fix is one line and one test.
+
+  **The user and the problem.** Anyone who exports a session as Markdown and pastes a URL out of it,
+  often into a ticket or an agent's prompt. The URL they copy was never called.
+
+  **Acceptance criteria.** An `ExportMarkdown` test with a query-bearing row asserts the query
+  appears once on the **URL** line. It fails with the old line put back. A row with an empty query
+  (`?` and nothing after) renders as the web's `urlOf` does, per `docs/decisions/shared-rules.md`.
+  The release notes carry one line.
+
+  **Out of scope.** The HTML and JSON exports, which read `url` and are not affected. Any other
+  change to the Markdown layout. Surfaces: daemon only. No public API.
 - **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
   stable-sorted by `mono` alone, so two signals in one millisecond keep file order, and a signal and
   a call in one millisecond put the call first — whatever capture order `seq` recorded. That is the
@@ -608,6 +662,249 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   comparator (as `visits()` does with `seq ?: Long.MIN_VALUE`) and a decision about markers that
   carry `seq`, which today are interleaved by `mono` with `<=` only. **Phase E ships as "MCP
   equals the model"** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn), so MCP inherits this rather than diverging from it. Not scheduled.
+
+*The four entries below were found on 2026-10-18, outside any item: the first by the architect and
+QA while verifying `item:export-md-query-once`, the other three by the architect while designing
+`item:signals-query-one-rule`. Placed by the product owner the same day. Three are items and one is
+not worth doing. Where each sits in the order is in §5 → "Order from here".*
+
+- **The web traffic list stops at 1000 calls and does not say so.** *Ticket label:*
+  `item:web-transactions-paged`. **Ordered 2026-10-18: third in the order from here**, straight
+  after the signals item whose pager fixes it.
+
+  `loadTransactions` and `syncAllTransactions` (`web/js/15-session-data.js`) ask for `limit=2000`.
+  `SessionRepository.queryTransactions` clamps every page to 1000. So on any session over 1000 calls:
+
+  - **The count reads `1000 of 4210 calls`** with no filter set. That is exactly the shape a filter
+    produces, so the reader concludes something is filtering and goes looking for it.
+  - **Endpoint chips and repeat marks miss every call older than the newest 1000.** Both read
+    `state.allTransactions`, and `docs/decisions/web-ui.md` ("The web UI keeps an unfiltered copy of
+    the session") records that copy as *the whole session*. Past 1000 calls it is not, so the
+    decision is false on the sessions long enough to need it.
+
+  It is the same class as the signals item, and as the HAR export that stopped at 1000 rows
+  (`docs/decisions/exports.md`, "All three exports read the raw readers"). Three times now a reader
+  asked for more than the clamp and trusted what came back.
+
+  **Why its own item and not folded into `item:signals-query-one-rule`.** That item is mid-build:
+  KIN-24 is in progress and KIN-25 is cut. Adding transactions to it would reopen its design gate
+  and hold a signals fix that is nearly done behind a new one. But the fix is the same, so it is
+  ordered straight after and must reuse what KIN-24 builds rather than write a second pager.
+
+  **The user and the problem.** A web UI user on a Mac with a long session: an app left running
+  through a test pass, or a live tail of an hour. The list, the count, the chips and the repeat marks
+  all describe the newest 1000 calls while claiming to describe the session.
+
+  **Acceptance criteria.**
+
+  - In a session of 1001 or more calls, `state.allTransactions` holds every call. The endpoint chips
+    count the oldest call and a repeat group that includes it is marked. A probe proves it on a
+    1001-call session and fails when the read is put back to one page.
+  - **One pager, not two.** Transactions are read through the function KIN-24 adds for signals
+    (`signalPages`, generalised or renamed as the architect chooses), and `check-web-static.js` runs
+    the same cases against it: a server clamping at 500, a source that ignores `offset`, a row
+    repeated across a page seam.
+  - **A count never reads as a filter that is not there.** Either the list draws every matching
+    call, or the architect sets a render ceiling and the count says so in words that cannot be taken
+    for a filter, such as `newest 1000 of 4210 shown`. The item's design says which, and why. With
+    no filter set, `1000 of 4210 calls` does not appear.
+  - An exported session of 1001 or more calls behaves the same offline, checked by
+    `render-web-ui-archive.js`.
+  - The daemon's clamp is unchanged. It protects the server; the page reads past it by paging.
+
+  **Out of scope.** The clamp itself. MCP's page shape. Virtualising the list, unless the ceiling
+  option needs it. Surfaces: web UI only. No public API. It changes what a user sees on a long
+  session, so it gets a release-notes line.
+
+  **Where it stands, 2026-10-19 (the architect's note, placed by the product owner).** Part of this
+  item has already been built, under another label. The "one pager" criterion is **met** by KIN-34's
+  `routePages` (`web/js/15-session-data.js`). KIN-34 was filed under `item:signals-query-one-rule`
+  and reads both whole-session copies through that one function. What is left:
+
+  - **The count with no filter.** A 3016-call session still reads `1000 of 3016 calls` with nothing
+    typed. The count criterion above is unmet.
+  - **A live probe at 1001 or more calls** for the endpoint chips and the repeat marks. The first
+    criterion above needs it, and nothing runs it yet.
+  - **The export honouring `offset` and `limit`** (below).
+  - **A decision on capping the full read.** The read has no ceiling now. A session of about
+    160,000 calls hit the argument-spread limit and drew a blank page. KIN-37 fixes that crash
+    by replacing the spreads with loops. It does not answer whether the page should hold 160,000
+    rows in memory. The design says whether the whole-session read is capped, and if so, how the
+    page says what it left out without reading as a filter. Whether a *labelled* 1000-call ceiling
+    on what the list draws is acceptable at all is the maintainer's call. It is under §5 → "Open
+    questions only the human can answer".
+
+  **Two criteria folded in, 2026-10-19,** from defects the signals verify panels found outside any
+  item. They go here because this item now owns the whole-session read, and the signals item is
+  closing and takes no more:
+
+  - **A live row that arrives during the whole-session read is in the copy when the read lands,
+    and is in it once.** Today a live row joins the copy only once the copy is marked as the
+    session's, and the mark is set when the read lands. So a row that arrives between the first
+    page and the last is in neither the read nor the copy. KIN-34's paging widened that window from
+    one request to every page. The criterion covers both copies, `state.allTransactions` and
+    `state.allSignals`, because `routePages` reads both. A committed check delivers a live row
+    between two pages of the read and fails with the mark-on-land rule put back. The panel's
+    harness lived in a scratch directory and is not in the repository, so it does not count as
+    the check.
+  - **The export's transactions route slices by `offset` and `limit`**, as its signals route already
+    does. Today `archiveSource` (`web/js/05-network.js:63-66`) returns every row whatever it is asked
+    for, so the archive half of the 1001-call criterion above cannot be checked against a real page
+    walk. The signals route's own comment says why it matters: an export that ignores `offset` is
+    answering a different question from the daemon. `render-web-ui-archive.js` asks the export for
+    a second page and gets the second page.
+
+  **Size.** It was ordered as S before these were added. The architect re-sizes it. Its place stays
+  third, because it still shows a user something false today: a filter that is not there.
+
+- **Live rows ignore the filter until the next reload.** *Ticket label:*
+  `item:web-live-rows-filtered`. **Ordered 2026-10-18: fourth in the order from here**, conditional
+  on its size (see the end of this entry).
+
+  `ws.onmessage` in `web/js/05-network.js` pushes every live call into `state.transactions` and
+  every live signal into `state.signals`, whatever the filter. Type `status:5xx` with live on, and
+  every 200 that arrives is drawn under that filter, and the count goes up with it, until the filter
+  is edited or the page reloads. KIN-24 keeps signals consistent with calls here, so both stay wrong
+  together. Once `item:signals-query-one-rule` makes the filter reach signals on a reload, the live
+  socket is the only path by which anything escapes the filter.
+
+  **The constraint that shapes the fix.** The page must not decide whether a row matches. The
+  grammar is frozen and has one parser, in `:inspector-model`, and the export already records that
+  its filter is "disabled, not reimplemented" (`docs/decisions/exports.md`) because a JavaScript
+  evaluator would be a second parser, the drift this repository refuses. So the daemon answers:
+  the live message carries whether the row matches the page's filter, or a live row under a filter
+  triggers a throttled re-read of the filtered set. The architect chooses.
+
+  **The user and the problem.** A web UI user on a Mac who filters while watching live traffic,
+  which is the commonest way to watch for one failure. The list shows rows the filter excludes, so
+  the filter appears not to work at the moment it is most needed.
+
+  **Acceptance criteria.**
+
+  - With a filter set, a live call or signal the filter does not match does not appear in the
+    list, the timeline or a path visit's contents. One it does match appears without a reload.
+    `render-web-ui.js` drives one live row of each kind and fails with the push-everything line put
+    back.
+  - `state.allTransactions` and `state.allSignals` still receive every live row, so chips, repeat
+    marks, tab counts and the path skeleton still describe the whole session.
+  - No filter is evaluated in `web/js`. The match comes from the daemon.
+  - With no filter set, a live row costs no request.
+  - If the re-read option is chosen, it is throttled, and the design states the most requests a
+    burst of 100 live rows can cause.
+  - Pausing is unchanged: it still drops rows and re-reads on resume (`docs/decisions/web-ui.md`).
+
+  **Out of scope.** The filter grammar. The overlay, which filters in process on every change.
+  Surfaces: web UI, and the daemon's live route if the architect puts the match there. No public
+  API. Release-notes line when it ships.
+
+  **The condition on its place.** It is fourth because it shows a user something false today, the
+  same reason the maintainer put the two defects first. If the architect sizes it above S, it moves
+  to after phase I and stays ahead of 1a. A live bug is worth more than a structure move only while
+  it costs about the same.
+
+- **Row labels drop a non-default port.** *Ticket label:* `item:row-label-port`. **Ordered
+  2026-10-18: sixth in the order from here**, after the `McpTest.kt` split.
+
+  Two places build a call's label from host and path by hand:
+
+  - `SessionRepository.kt:62`, `label = "${txn.method} ${txn.host}${txn.path}"`. This is the label
+    on every MCP `timeline` entry, and `export.json` and the HTML export carry the same
+    `TimelineEntry`.
+  - `ExportMarkdown.kt:122`, the Markdown export's timeline table.
+
+  Neither has the port. Two local servers on `127.0.0.1:8080` and `127.0.0.1:9090` read as one
+  endpoint, and on a real session a call to `:9090` was labelled `GET 127.0.0.1/json`.
+  `docs/decisions/capture.md` ("Capture records the port, and `url` omits it only when it is the
+  default") records this exact defect for URLs. KIN-23 fixed the same cause in MCP `explain`.
+  Leaving the query out of a label is reasonable, because a label names an endpoint. Leaving the
+  port out is not, because the port is part of which server answered.
+
+  **The user and the problem.** An agent over MCP reading a timeline, and anyone handed a Markdown
+  export. Both are told that calls to two different servers went to one. On a phone, the common case
+  is a local mock server beside the real backend, which is exactly when the difference matters.
+
+  **Acceptance criteria.**
+
+  - Both labels show `host:port` when the port is not the scheme's default, and the bare host when
+    it is or when `port` is null, so archives written before the port existed read as before.
+  - **No third copy of the rule.** The labels get the default-port decision from `defaultPortFor`
+    in `:inspector-model`, the function `url` already uses, through one helper that both call sites
+    share. If the architect puts that helper in `:inspector-model`, it is a new public declaration
+    in a published module. That module has no twin and no golden file, but the item says so.
+  - A daemon test with calls on `:8080` and `:9090` asserts two different labels in the MCP
+    `timeline` output and in the Markdown table, and a call on `:443` over https has no port. It
+    fails with either old line put back. Its test goes in the split test files, not in
+    `McpTest.kt`.
+  - The label still has no query.
+
+  **Why after the split.** Its test belongs with the timeline tests, which the split moves. Landing
+  it first would add to the file being split, which is how KIN-26 happened.
+
+  **Out of scope.** The web UI and overlay rows, which draw the host separately and are not this
+  defect. Any other change to the label's shape. Surfaces: daemon, MCP, exports. An agent sees a
+  different label, so it gets a release-notes line.
+
+- **Two path-view tooltips drop an empty query's `?`.** **Not worth doing, 2026-10-18.**
+  `web/js/50-path.js:338` and `:458` test `txn.query ?` for truth, so a call to `/a?` shows `/a` in
+  the tooltip. `docs/decisions/shared-rules.md` records that `urlOf` keeps an empty `?`, but that
+  rule is about **URLs**, which are evidence: what was sent, copied and replayed. These two are
+  labels for a path chip, and a label may drop the query entirely, as `item:row-label-port` says.
+  Clicking either one selects the row, and the detail pane, the copies and every export show the URL
+  with its `?`. Making the tooltips agree would spread the empty-`?` rule to two more call sites
+  that carry no evidence. If someone edits those lines for another reason, `txn.query != null` is
+  the one-word change.
+
+*The six defects below were found by the signals verify panels on 2026-10-18, while verifying
+`item:signals-query-one-rule`. They are should-fixes, not blockers of that item; two were widened
+or brought into view by its tickets, and the entries say which. Placed
+by the product owner on 2026-10-19. None joins the signals item, which is closing. One is its own
+item, here. The other five became acceptance criteria on items that already rebuild the code
+involved:*
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| A live row arriving during the whole-session read is lost from the copy | `item:web-transactions-paged` | that item owns the whole-session read; KIN-34's paging widened the window |
+| `refreshCurrent` has no session guard | **its own item**, below | no open item touches `/current` |
+| KIN-33's sticky list-pane layout has no committed guard | 1b, `item:web-foundation-list-room` | 1b rebuilds the bands above the list, so the guard must exist before 1b moves them |
+| List, timeline, waterfall and path share one scroll position | 1b, `item:web-foundation-list-room` | 1b rebuilds the list pane, and 1a's hash routes give each view an address to remember a position by |
+| The export's transactions route ignores `offset`/`limit` | `item:web-transactions-paged` | that item's export criterion cannot be checked without it |
+| The "Lost the daemon" banner shows only on the first close after an unplanned drop | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
+
+- **One session's "now" values can land under another.** *Ticket label:*
+  `item:web-current-session-guard`. **Ordered 2026-10-19: straight after
+  `item:web-live-rows-filtered`** (§5 → "Order from here").
+
+  `refreshCurrent` (`web/js/70-timeline.js:347-352`) awaits `GET /api/sessions/{id}/current` and
+  writes `state.current` with no check that the session it asked about is still the one on screen.
+  It is the one async writer of session state without a load or session guard. KIN-29 gave the
+  others one. It runs on every session load and on every live signal, so with live traffic a read
+  is often in flight. Switch sessions while one is, and the old session's values are drawn in the
+  new session's now strip. There is a second way in: on a failed read it keeps `state.current` as
+  it was, and right after a switch that is the other session's.
+
+  **The user and the problem.** A web UI user on a Mac who switches sessions, most often to compare
+  a run with the previous one. The now strip claims to show what this app holds now. Showing
+  another session's values there is the confidently wrong reading that the strip's age and
+  provenance exist to prevent.
+
+  **Acceptance criteria.**
+
+  - A `/current` reply for a session that is no longer selected is dropped. The strip shows the
+    selected session's values or none, never another session's.
+  - A failed `/current` read after a switch leaves the strip empty for the new session. It does not
+    keep the previous session's values.
+  - A `render-web-ui.js` probe holds a `/current` reply, switches session, then releases it, and
+    asserts what the strip shows. It fails with the guard removed, and with the `catch` fallback
+    put back.
+  - No other state writer changes.
+
+  **Out of scope.** What the daemon derives for `/current`. The overlay, which holds one session.
+  Surfaces: web UI only. No public API. Size S. It gets a release-notes line with its neighbours,
+  because a user could have seen it.
+
+  **Why its own item.** `item:web-live-rows-filtered` changes which live rows join the lists, not what
+  a session switch leaves behind. The signals item is closing. Folding it into 1a would leave a
+  false fact on screen for three more items, to save one small ticket.
 
 ### Open questions
 
@@ -667,6 +964,8 @@ tag cut before any of this existed.
 ## 5. Next: the structure and architecture pass — planned 2026-10-18
 
 **This comes first. Nothing in §6 starts until the items below marked "before §6" have landed.**
+*(Extended 2026-10-18: phases H and I and the `McpTest.kt` split now also come before §6, as do the
+two §3 defects. See "Order from here", below.)*
 This section was inserted on 2026-10-18 ahead of what had been §5. The daemon and web UI plan is §6
 now. Anything written before that date, including the review recorded inside that section, calls
 it §5.
@@ -737,6 +1036,7 @@ They are recorded together here because several items depend on more than one of
 2. **`noop-ui`: `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`**
    in `:inspector-ui`. They are not mirrored into the noop. This closes the divergence recorded
    under §3 → Guards and unblocks the phase I item. **It is a public API removal**; see that item.
+   *Decided 2026-10-18: it may ship in a minor release.*
 3. **Stats and findings rules live in the daemon's `service/` layer**, not in `:inspector-model`.
    This matches §6's premise of no model change and no new `app.js` mirror.
 4. **A `:repo-checks` module holds the structural checks, with no detekt or ktlint.** It is a
@@ -764,10 +1064,10 @@ scheme.
 | 4 | Phase B — module graph, dependency goldens, budgets, TODO, identity and name checks | S | before §6 |
 | 5 | Phase G — `AGENTS.md` as an index, `docs/decisions/`, per-module guides | M | before §6 |
 | 6 | Phase D — daemon packages; split `Server.kt` and `McpTools.kt`; layering check | M | before §6 |
-| 7 | Phase F — `app.js` and CSS split behind the manifest (built 2026-10-18; done once PR merged and CI green) | M | before 1a |
-| 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 |
-| 9 | Phase H — split the two large overlay files | S | later |
-| 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D |
+| 7 | Phase F — `app.js` and CSS split behind the manifest **Done, 2026-10-18** (PR #88, merge `1913cf7`; `build`, `release-swap` and `web` green, `repo` red on the merge commit's author address only) | M | before 1a |
+| 8 | Phase I — `noop-ui` golden file | M | after decision 2, now decided; does not gate §6 *(superseded 2026-10-18: fifth in "Order from here", before §6)* |
+| 9 | Phase H — split the two large overlay files | S | later *(superseded 2026-10-18: fourth in "Order from here", before §6)* |
+| 10 | Later — split `McpTest.kt` | S | later; added 2026-10-18, left over from phase D *(superseded 2026-10-18: third in "Order from here", before §6)* |
 
 E goes first because it is small and it is the only item where something is wrong today: an agent
 asking for a timeline gets an answer that disagrees with both UIs. C is next because it is small and
@@ -779,6 +1079,94 @@ later item pays for the 126 KB file, and because D and F each restate decisions.
 restate them in their new home than to move them twice. H is last because nothing in §6 touches the
 overlay. The `McpTest.kt` split was added after it, out of phase D. It changes nothing anyone sees,
 and the ratchet stops the file growing until then.
+
+*(The reasoning in the last three sentences is overturned for order, not for content, on
+2026-10-18. Nothing in §6 touches the overlay still holds. The maintainer chose to finish the
+structure pass before §6 rather than leave it trailing. See below.)*
+
+### Order from here — decided 2026-10-18
+
+The maintainer set this order on 2026-10-18. It runs across §3, §5 and §6, so it is recorded once,
+here. Phases C, A, B, D and F are built and waiting on their PRs and CI. They are not in this table.
+
+| Order | Item | Where | Ticket label | Size |
+|---|---|---|---|---|
+| 1 | ~~`ExportMarkdown.kt` prints the query twice~~ **Done, 2026-10-18** | §3 → Bugs found | `item:export-md-query-once` | S |
+| 2 | ~~The signals sort and clamp exist twice~~ **Done, 2026-10-19, with one deferred bug, KIN-42** (KIN-24 to KIN-41, KIN-26; four verify rounds; KIN-42 open, deferred: false empty state for ~25 s on a ~160k-call session) | §3 → Guards | `item:signals-query-one-rule` | S |
+| 3 | The web traffic list stops at 1000 calls *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | S |
+| 4 | Live rows ignore the filter *(added 2026-10-18; moves after phase I if sized above S)* | §3 → Bugs found | `item:web-live-rows-filtered` | S, to be confirmed |
+| 5 | One session's "now" values can land under another *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
+| 6 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 7 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 8 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 9 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 10 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
+| 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
+| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+
+§6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
+wait for the next one.
+
+**Three rows added 2026-10-18 by the product owner**, from defects found that day outside any item.
+The maintainer's order is unchanged: every one of the maintainer's rows keeps its place relative to
+the others, and the new rows only sit between them. Where an item elsewhere names its place in
+words ("second", "fourth", "6th in §5"), it names the place as the maintainer set it, before these
+rows were added. The tooltip defect found at the same time is in §3 as not worth doing.
+
+The reason for each place is the maintainer's own rule above: a defect that shows someone a false
+fact comes before a move that changes nothing anyone sees. The two web defects go straight after
+the signals item because they are in the same files and the same class, and the first reuses its
+pager. The port label is the exception and goes one step later, after the `McpTest.kt` split,
+because its test belongs in the files the split creates.
+
+**One row added 2026-10-19 by the product owner**, `item:web-current-session-guard`, from the
+signals verify panels' should-fixes. Five more from the same batch were folded into rows already
+here, as acceptance criteria: two into `item:web-transactions-paged`, one into 1a and two into 1b.
+The table of where each went is in §3, above that item. The new row goes with the other web defects
+for the same reason they go first: it shows a user something false, and it is small. Whether the web
+defects should go ahead of the `McpTest.kt` split and phases H and I at all is still open for the
+maintainer (§5 → "Open questions only the human can answer"). If the answer is no, this row moves
+with them. The maintainer's rows keep their order relative to each other.
+
+**Why this order.** By value per hour. The two defects come first: each is small, and each shows a
+user something false today. The Markdown export prints a URL that was never called. The web UI
+shows signals a filter should have hidden, and silently drops the oldest past 1000. The `McpTest.kt`
+split, H and I come next, while the structure pass is still fresh. They are cheap now, and each one
+is a move that is easier to review on a quiet tree than under §6's diffs. I is last of the three
+because it is the only one that changes something a consumer sees (see its item). Then §6 in its own
+dependency order.
+
+**The security advisory comes last, and this overturns a recorded decision.** §5 → "Open questions
+only the human can answer" said: "Decide both before §6's bulk endpoints are built." The maintainer
+moved it after 1a, 1b and 2 on 2026-10-18. The consequence, stated plainly: **1a's bulk delete and
+bulk kill endpoints will be built before the advisory's fix is chosen.** What keeps that from
+becoming rework is an acceptance criterion on 1a: the architect designs those endpoints so the fix
+can land without rebuilding them. Phase C's header test still covers both endpoints from the day
+they exist, because it reads the route list from the server.
+
+The advisory item carries a ticket label so its progress is not held only in conversation. Ticket
+files are public. A ticket under it names the advisory and never describes the gaps, until the
+advisory itself is published.
+
+**The six web UI layout defects UX found at base `f574bda`** are folded into 1a and 1b as
+acceptance criteria, because those items rebuild the code each one lives in. None is a standalone
+item. Where each went:
+
+| Defect | Goes to | Why there |
+|---|---|---|
+| (a) Closed drawer focusable and widening the page | 1b | 1b rebuilds the list/detail split |
+| (b) Endpoint cut away at 400px | 1b | 1b reworks the row and density |
+| (c) Drawer `✕` overlaps the header's last action | 1b | the detail header sits in the same split |
+| (d) Closed drawer's shadow shows as a strip | 1b | same drawer |
+| (e) Top bar and tab bar overflow at 400px | 1a | 1a rebuilds the top bar and moves its controls |
+| (f1) Session picker clipped at 1440px | 1a | the picker is top-bar chrome that 1a rebuilds |
+| (f2) `16 of 16 calls` wraps at 1000px | 1b | the count sits in the toolbar 1b makes one row |
+| (f3) Two counts that read as disagreeing | 1b | same toolbar and overview line |
+
+One condition on (a). It is the only one of the six that traps a keyboard user, and §6 lets 1b slip
+to 1.5. **If 1b slips, (a) comes out of 1b as its own item and goes ahead of 2.** It is small, and
+a keyboard trap should not wait a release for a redesign.
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -1000,6 +1388,14 @@ announced too (decided by the agent team on 2026-10-18 under the maintainer's de
 same rule on a third surface: *"MCP: `timeline` and `explain` place a marker dropped at the same
 millisecond as a call before that call, as both UIs do, and `explain` counts an earlier call at
 that millisecond as leading to it; in 1.3.0 and earlier both came after."*
+The Markdown-export fix (`item:export-md-query-once`, done 2026-10-18) owes a third line in the same
+entry: *"Daemon: the Markdown export's URL line no longer repeats the query string, and MCP explain
+reports the full URL, port and query included."*
+`item:signals-query-one-rule` owes a fourth: *"Web UI: a filter now applies to the signals loaded on
+the timeline and path views (rows arriving live follow the filter once item:web-live-rows-filtered
+lands), and a session with more than 1000 signals shows all of them."* "Loaded" is load-bearing: a
+signal pushed over the live socket is drawn whatever the filter until that item lands, so a line
+saying the filter applies to every signal would be false on a live session.
 "1.3.0 and earlier" is right only if this ships in the next release after 1.3.0; the
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 
@@ -1277,9 +1673,13 @@ the working tree; `RestApiTest` holds the served half. F1 also fixes a measured 
 `PaletteParityTest` reported UP-TO-DATE on a CSS-only change, so palette drift passed an ordinary
 build.
 
-**Status, 2026-10-18: built; done once its PR is merged and CI is green.** It is on
-`shafic/structure-phase-f`, which is not pushed, so CI has not run. Tickets KIN-10 to KIN-22 are Done on
-QA evidence from fresh verifier runs, the last on the wording pass `b733aa4`. What landed, against base
+**Status, 2026-10-18: done.** PR #88 merged to `main` as `1913cf7`. CI run 39146369617 on that push
+passed `build`, `release-swap` and `web`. **`repo` was red on that push, and only on the commit-identity
+check**: GitHub's merge dialog authored the merge commit with the maintainer's work address, which
+nothing in the branch set. PR #89 (merged) has since made the check accept the maintainer's personal
+address; the setting that stops the dialog choosing the work address is the maintainer's to change, and is
+not changed. PRs #90 and #91 (team tooling and names) also merged. Tickets KIN-10 to KIN-22 are Done on QA
+evidence from fresh verifier runs, the last on the wording pass `b733aa4`. What landed, against base
 `f574bda`:
 
 - **F1 `8b20dcc`, manifest plumbing.** `web/scripts.txt` and `web/styles.txt`, with `index.html` holding
@@ -1316,27 +1716,21 @@ no dependency were added.
 Messaging between teammates then worked in the second panel (qa2 and arch2), while the task tools still
 did not reach them.
 
-**Not verified.** Safari and Firefox (Chrome only). CI (branch not pushed). Android host tests (no SDK on
+**Not verified.** Safari and Firefox (Chrome only). Android host tests (no SDK on
 this machine). The no-client-names check (term list kept out of the repository), so that DoD item is
 unticked on all of KIN-10 to KIN-22. How the page looks to a human: the hash comparison proves "identical
 to before", not "looks right".
 
-**Follow-up for the product-owner, not a ticket under phase F.** UX found six web UI layout defects at
-base, so phase F neither caused nor fixed them. Screenshots are in `$TMPDIR/ux-f/shots/`.
-
-1. The closed drawer is still focusable at 1000px, and it widens the page.
-2. The endpoint is cut off at 400px.
-3. The drawer's close button overlaps the header's last action at 1000px.
-4. A strip of the closed drawer's shadow shows.
-5. The top bar and tab bar overflow at 400px.
-6. Small items.
-
-Scope and order are the product-owner's. Item 6 needs itemising before it can be ticketed, and 1a, which
-rebuilds the rail and pages, may overtake some of them.
+**Six web UI layout defects UX found at base `f574bda`.** Phase F neither caused nor fixed them.
+*Placed 2026-10-18:* they are acceptance criteria under §6 → Web UI foundation now, (e) and (f1) in
+1a and the rest in 1b. The table of where each went, and why, is in §5 → "Order from here".
 
 ### Phase I — `noop-ui` golden file
 
-**Audit finding 9. Unblocked by decision 2. Does not gate §6.**
+*Ticket label:* `item:structure-phase-i`.
+
+**Audit finding 9. Unblocked by decision 2. Does not gate §6.** *(Scheduled 2026-10-18: fifth in
+"Order from here", so it lands before §6 starts, although nothing in §6 depends on it.)*
 
 **This changes public API for `:inspector-ui`, and needs the noop twin and golden-file treatment
 sized honestly.** `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`.
@@ -1348,7 +1742,10 @@ Guards called this "a decision rather than a tidy-up" for that reason. Two follo
 - `docs/INTEGRATION.md` gets a version bump and a changelog entry that says what to *do*: "if you
   referenced these, copy the colours you need". The recorded rule is that any change affecting a
   consumer gets one.
-- **Open for the human:** whether a removal from public API ships in a minor release.
+- ~~**Open for the human:** whether a removal from public API ships in a minor release.~~
+  **Decided 2026-10-18: yes, it may ship in a minor release.** The changelog entry above is what a
+  consumer gets in place of a major version, so it must say plainly that three public types are
+  gone and what to do instead.
 
 **Acceptance criteria.**
 
@@ -1368,9 +1765,12 @@ diff, which is on the "do not" list.
 
 ### Phase H — split the two large overlay files
 
+*Ticket label:* `item:structure-phase-h`.
+
 **Audit finding 10. Later.** `ListChrome.kt` (703 lines) and `InspectorList.kt` (758) are the
 overlay's list and its chrome. Nothing in §6 touches the overlay, so the work can wait. The phase B
-ratchet stops them growing in the meantime.
+ratchet stops them growing in the meantime. *(Scheduled 2026-10-18: fourth in "Order from here",
+before §6. It still does not have to wait; the maintainer chose not to let it.)*
 
 **For whom.** Whoever next changes the overlay's list.
 
@@ -1384,7 +1784,8 @@ ratchet stops them growing in the meantime.
 
 *Ticket label:* `item:structure-split-mcp-test`.
 
-**Left over from phase D. Later.** `McpTools.kt` was split by tool group, and its test file was
+**Left over from phase D. Later.** *(Scheduled 2026-10-18: third in "Order from here", before
+§6.)* `McpTools.kt` was split by tool group, and its test file was
 not. `McpTest.kt` is 815 lines, and `structure/budgets.txt` lists it as deferred. Phase D could not
 split it, because its acceptance criterion was that every daemon test passes unchanged, and phase
 D added only five import lines to this file. Splitting the file would have moved every test in it.
@@ -1421,15 +1822,34 @@ decision or a known trap:
 
 ### Open questions only the human can answer
 
-- Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
-  removes public API from every published version up to now (phase I).
+- ~~Whether making the three `noop-ui` theme types `internal` ships in a minor release, given that it
+  removes public API from every published version up to now (phase I).~~ **Decided 2026-10-18 by the
+  maintainer: yes, a minor release.** Recorded in phase I.
 - ~~Whether the MCP `timeline` tie-order fix is announced as a behaviour change in the release notes,
   or only in the tool description (phase E).~~ **Announced in both the release notes and
   `DAEMON.md` §8** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn). The tool description states the rule without a version.
 - **Needs the maintainer: two security-boundary gaps, tracked privately.** Found while building
   phase C. The detail, the options and their breakage risks are in a private security advisory.
-  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. Decide
-  both before §6's bulk endpoints are built.
+  Neither has a chosen fix, and neither belongs inside §5, which allows no behaviour change. ~~Decide
+  both before §6's bulk endpoints are built.~~ **Overturned 2026-10-18 by the maintainer: the fix is
+  chosen and built last, after 1a, 1b and 2.** *Ticket label:* `item:control-boundary-advisory`.
+  The consequence is that 1a's bulk delete and bulk kill endpoints are built before the fix is
+  chosen. 1a carries an acceptance criterion so the fix lands without rebuilding them. The details
+  stay in the advisory; tickets under this label name the advisory and never describe the gaps.
+  See "Order from here".
+- **Do the web defects go ahead of the `McpTest.kt` split and phases H and I?** *(Raised 2026-10-18,
+  recorded 2026-10-19.)* The product owner placed `item:web-transactions-paged`,
+  `item:web-live-rows-filtered` and now `item:web-current-session-guard` between the maintainer's
+  rows, on the maintainer's own rule that a false fact comes before a move. The maintainer has not
+  confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
+  web defects straight after phase I. Either way they stay ahead of 1a.
+- **Is a labelled 1000-call ceiling acceptable?** *(Raised 2026-10-18, recorded 2026-10-19.)*
+  `item:web-transactions-paged` lets the architect cap what the list draws, provided the count says
+  so in words that cannot be read as a filter, such as `newest 1000 of 4210 shown`. A session of
+  about 160,000 calls has since shown that drawing and holding everything has a real cost. If the
+  answer is no, the list draws every call and the item likely needs virtualising, which it now
+  leaves out of scope, and its size goes up. If yes, the remaining question, whether the
+  *whole-session read* behind the chips and repeat marks is capped too, is the architect's.
 
 ---
 
@@ -1449,16 +1869,22 @@ pass is §5, and phase F there must land before 1a in particular.
 Order is by dependency, not by appeal: the page shell comes first because every later item adds a
 screen, and building those into the current single page would mean building them twice.
 
-| Order | Item | Size | Ships in |
-|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 |
-| 2 | Endpoint latency stats | M | 1.5 |
-| 3 | Session diff | L | 1.5 |
-| 4 | Findings framework, and the payment-safety rules | L | 1.6 |
-| 5 | Sensitive-data detection — detect, never redact | M | 1.6 |
-| 6 | Web UI polish, against the finished screens | M | 1.7 |
-| — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK |
+| Order | Item | Size | Ships in | Scheduled 2026-10-18 |
+|---|---|---|---|---|
+| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | ~~6th~~ ~~9th~~ 10th in §5 → "Order from here" |
+| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | ~~7th~~ ~~10th~~ 11th |
+| 2 | Endpoint latency stats | M | 1.5 | ~~8th~~ ~~11th~~ 12th |
+| — | The private security advisory's fix | not sized | not set | ~~9th~~ ~~12th~~ 13th, after 2 |
+| 3 | Session diff | L | 1.5 | not scheduled |
+| 4 | Findings framework, and the payment-safety rules | L | 1.6 | not scheduled |
+| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | not scheduled |
+| 6 | Web UI polish, against the finished screens | M | 1.7 | not scheduled |
+| — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
+
+*Last column added 2026-10-18, and shifted one place on 2026-10-19 when
+`item:web-current-session-guard` was added ahead of it.* The maintainer's decision that day ordered work across §3, §5 and
+§6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
+a §6 item; it sits here because it now comes after 2.
 
 Both halves of the foundation stay in 1.4: the shell is what every later page is built into, and
 room for the list is the half a user notices on the screen they already use, so shipping the shell
@@ -1476,6 +1902,9 @@ starting: *truncated bodies* adds an acceptance criterion to the Session diff; *
 duplicate* gates the Findings row badge.
 
 ### Web UI foundation
+
+*Ticket label:* `item:web-foundation-shell` for 1a, the shell.
+*Ticket label:* `item:web-foundation-list-room` for 1b, room for the list.
 
 Two complaints from use drive it: actions on lists are one item at a time (killing five processes
 is five confirms), and the main page stacks seven bands — top bar, tabs, two toolbar rows, filter
@@ -1519,6 +1948,94 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 What must still hold: the export still works offline (new pages either read the embedded archive
 or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
 lists; every new pane that sets `display` joins `auditHiddenPanes`; nothing new under 11px.
+
+**1a must leave room for the security advisory's fix** *(added 2026-10-18)*. The maintainer
+scheduled that fix after 1a, 1b and 2 (§5 → "Order from here"), so the bulk endpoints are built
+before it is chosen. Acceptance criterion: the architect's design for `POST /api/peers/kill` and
+`POST /api/sessions/delete` states how the advisory's fix, under any of the options the advisory
+lists, lands without rebuilding either endpoint, and the architect reads the advisory to write it.
+The design note in this public repository names the advisory and does not describe the gaps.
+
+**The web UI layout defects found at base `f574bda`** *(placed 2026-10-18; where each went and why
+is in §5 → "Order from here")*. These are acceptance criteria, stated as what a render shows. Each
+check that can be automated goes into the probes and is proven to fail when broken.
+
+In **1a, the shell**:
+
+- **(e) Nothing in the top bar is out of reach at a 400px window.** At base the bar measured
+  scrollWidth 936 against 400: the session picker was clipped, and live, settings, restart, stop
+  and delete could not be reached. After 1a, the top bar's scrollWidth is at most the window width
+  at 400px, and every control it still holds can be reached by pointer and by keyboard. Restart and
+  stop leave it for Processes anyway.
+- **(e) Every tab is reachable at a 400px window.** At base the tab bar measured 704 against 400,
+  and screens, state, analytics and tap were hidden. The bar need not *show* every tab at that
+  width, but each must be reachable without resizing: visible, or behind one control that is. The
+  architect chooses which. "The tab bar is always drawn" (`docs/decisions/web-ui.md`) still holds.
+- **(f1) The session picker shows its whole label at 1440px**, or clips it with an ellipsis and the
+  full label as a tooltip. It is not cut off mid-text.
+- **The "Lost the daemon" banner is on screen for as long as the page has lost the daemon.**
+  *(Added 2026-10-19, from the signals verify panels.)* As reported, `Lost the daemon — reconnecting…`
+  (`web/js/05-network.js`, `ws.onclose`) shows only on the first close after an unplanned drop.
+  The code that shows it runs only while `state.serverState` is `running`. The architect confirms
+  the reproduction and its cause first. The criterion holds either way: after any
+  unplanned drop the banner is visible until the page reconnects, and it clears then. That covers
+  the first drop, a second drop after a reconnect, and a drop during a restart that never comes
+  back. The stop probe's replayed `onclose`/`onopen` pair runs twice in a row and asserts the
+  banner both times, and fails with the `running` check put back. *Why 1a:* 1a moves restart and stop
+  into Processes and rebuilds the top bar the banner sits under, so the states this keys on
+  (`stopped`, `restarting`, `away`) are rewritten there anyway. The recorded rule that a stopped
+  daemon's banner offers no restart (`docs/decisions/web-ui.md`) still holds.
+
+In **1b, room for the list**:
+
+- **(a) A closed drawer is not focusable and does not widen the page.** At base, below 1200px, the
+  closed `#detail-pane` made the document 1646px wide at a 1000px window; Tab reached 13 controls
+  inside it, and the first one (`✕`) scrolled the window 646px sideways, half-opening the drawer
+  with no scrim. A trackpad swipe did the same. After 1b, at 1000px with the drawer closed, the
+  document's scrollWidth equals the window width, and a probe tabbing through the whole page never
+  lands focus inside the closed pane. That probe is new, and is proven to fail with the fix
+  removed. UX suggested clipping `#panes`'s overflow in the narrow block and `inert` or delayed
+  `visibility` on the closed pane; the architect chooses.
+- **(b) The endpoint survives at 400px.** At base, paths were cut to about four characters while
+  the clock, duration and byte columns kept full width, and the row
+  `POST auth.example.invalid /oauth/token` lost its whole path and its byte count. After 1b, at
+  400px, every row in the base session shows its path's last segment in full and its byte count.
+  The host and the clock give way before the path does. UX suggested dropping or shortening the clock column below about
+  520px.
+- **(c) The drawer's `✕` covers nothing.** At base, at 1000px, it sat over the header's last action
+  (`replay ▾` served, `copy for agent` in an export), so a click on that corner closed the drawer.
+  After 1b, the `✕` and every header action have disjoint boxes at 1000px, served and in an export.
+- **(d) A closed drawer casts no shadow.** At base a dark strip showed at the right edge, mostly in
+  light mode. After 1b the drawer's `box-shadow` applies only while it is open.
+- **(f2) The call count does not wrap at 1000px.** At base `16 of 16 calls` broke over two lines.
+- **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
+  top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
+  `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
+- **The sticky layout KIN-33 fixed is held by a committed check, and the check lands before 1b
+  moves anything.** *(Added 2026-10-19, from the signals verify panels.)* KIN-33 made every sticky
+  band in the list pane stop under the scope bar, through `--sticky-top`
+  (`web/css/35-list.css`). It was verified only by headless-Chrome scripts in a scratch directory,
+  so nothing in the repository fails if a new band goes back to `top: 0` and slides under the bar.
+  1b is about to add such a band, the overview line. The criterion: a CI check fails when a sticky
+  rule in the list pane, other than `.scope-bar` itself, takes its `top` from anything but
+  `--sticky-top`. It is proven red by putting `top: 0` back on `#timeline > .filter-note`. The panel
+  proposed a static audit in `check-web-static.js`, the shape of the 11px and `[hidden]` audits.
+  jsdom has no layout engine, so a computed-position check there would pass whatever the CSS says.
+  The architect chooses the shape. It is 1b's first commit, so that 1b's own changes are made under
+  it.
+- **Each traffic view opens where it was left, not where another view left off.** *(Added
+  2026-10-19, from the signals verify panels.)* Since KIN-33 the list, the timeline, the waterfall
+  and the path scroll one pane. With live off, a list scrolled to 5000 opens the timeline at 5000
+  of 29,800, a place nobody chose. After 1b, with live off, going list → timeline → list returns the
+  list to its own position. The timeline opens where it was last left, or at its start the first
+  time. With live on, each view still follows new rows as it does now, and expanding a run still
+  does not move the pane (KIN-38's rule). jsdom does not lay out, so this is a probe if jsdom can hold
+  the positions, or a documented browser check if it cannot. The architect says which. Out of scope:
+  remembering a position across a reload. *Why 1b:* 1b rebuilds the list pane, and 1a's hash routes
+  give each view an address to keep a position under.
+
+If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
+because it is a keyboard trap. See §5 → "Order from here".
 
 **The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
 they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
@@ -1567,6 +2084,8 @@ the archive probe opens each new page in an export and finds it either working f
 data or hidden under `body.archive`.
 
 ### Endpoint latency stats
+
+*Ticket label:* `item:endpoint-latency-stats`.
 
 - **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
   hex and long base64-ish segments become `{id}`, so `/users/123` and `/users/456` are one row.

@@ -304,6 +304,36 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     note('cache browser lists keys', 'n/a (no cache tab)');
   }
 
+  // --- the signal route, as the export answers it ---
+  // The page reads signals a page at a time with `offset` and `limit`, so the export has to slice
+  // as the daemon does. Asked of the page's own `source` — a global `const`, which only the page's
+  // global scope can name — and compared with the embedded rows sorted here, not by the page.
+  const source = window.eval('source');
+  const route = `/api/sessions/${encodeURIComponent(archive.meta?.sessionId ?? 'x')}/signals`;
+  const ask = async (query) => {
+    const res = await source.fetch(`${route}?${new URLSearchParams(query)}`);
+    return { status: res.status, body: await res.json() };
+  };
+  const newestFirst = archive.signals.slice().sort((a, b) => b.mono - a.mono).map((s) => s.id);
+  const total = newestFirst.length;
+  const page = (reply, want) => reply.status === 200 && Array.isArray(reply.body) &&
+    reply.body.map((s) => s.id).join(',') === want.join(',');
+  const few = Math.max(1, Math.min(3, total - 1));
+  const sliced = await ask({ offset: '0', limit: String(few) });
+  check('signals sliced by limit', page(sliced, newestFirst.slice(0, few)),
+    `limit=${few}: ${Array.isArray(sliced.body) ? sliced.body.length : sliced.status} of ${total}, newest first`);
+  const whole = await ask({ offset: '0', limit: String(total + 5) });
+  check('signals limit past total', page(whole, newestFirst),
+    `limit=${total + 5}: ${Array.isArray(whole.body) ? whole.body.length : whole.status} of ${total}`);
+  const beyond = await ask({ offset: String(total + 5), limit: '1000' });
+  check('signals offset past end', page(beyond, []), `${JSON.stringify(beyond.body).slice(0, 40)}`);
+  const filtered = await ask({ filter: 'tag:screen', offset: '0', limit: '1000' });
+  check('signals filter refused', filtered.status === 400, `status ${filtered.status}`);
+  const tabTotal = [...doc.querySelectorAll('#tabs .tab')]
+    .filter((t) => !['network', 'path', 'all', 'waterfall'].includes(t.dataset.view))
+    .reduce((sum, t) => sum + Number(t.querySelector('.tab-count')?.textContent ?? NaN), 0);
+  check('signal tabs count all', tabTotal === total, `${tabTotal} of ${total}`);
+
   // --- the proof ---
   check('no network attempts', attempts.length === 0, attempts.slice(0, 3).join(' | ') || 'none');
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | ') || 'none');
