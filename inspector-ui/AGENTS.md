@@ -23,7 +23,10 @@ open inspector-ui/build/screenshots/list-dark.png # ... what that render produce
 
 | Path | Why it matters |
 |---|---|
-| `inspector-ui/.../InspectorList.kt` | The overlay's list and row. Two lines per call, and the bar that lifts the shared path prefix out of them. |
+| `inspector-ui/.../InspectorList.kt` | The overlay's list: what it holds, in which order, and which row each entry gets. |
+| `inspector-ui/.../ListRows.kt` | The rows. Two lines per call, one per observation, a collapsed run's header and a marker's divider. |
+| `inspector-ui/.../ListChrome.kt` | The bars above the rows — header, filter row, and the scope-and-now line that lifts the shared path prefix out of them — and the empty list's text. |
+| `inspector-ui/.../ListSheets.kt` | What opens over the list: the `⋮` menu and the filters sheet, the sheet's sections built from the session, and the term-at-a-time edits it makes to the filter text. |
 | `inspector-ui/.../Formatting.kt` | Row presentation, including `pathScope` — the shared-prefix rules, and the thresholds that decide whether the bar appears at all. |
 | `inspector-ui/.../InspectorSignalDetail.kt` | One observation: payload, provenance and the history of its key. Where stage 1's undrawn payloads went. |
 | `inspector-ui/.../NowStrip.kt` | What the app holds now — latest per `(tag, name)`, with age and provenance. Sorted stably, unlike `signalGroups`; read its doc before changing either. |
