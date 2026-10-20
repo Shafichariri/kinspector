@@ -17,10 +17,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * The `explain` tool's own cases, driven through real JSON-RPC frames like [dev.inspector.daemon.McpTest].
+ * The `explain` tool's own cases, driven through real JSON-RPC frames like [TransactionToolsTest].
  *
- * Each case writes the one session it is about, so this file needs none of that suite's shared
- * fixture — only its frame plumbing, which lives in `McpTestSupport.kt` rather than being copied.
+ * Each case writes the one session it is about, so this file needs none of [McpToolsFixture]'s
+ * shared session — only its frame plumbing, which lives in `McpTestSupport.kt` rather than being copied.
  */
 class ExplainToolTest {
 

@@ -128,7 +128,7 @@ was the literal `1.0.0` from 1.0.0 through 1.1.0 — the number an agent reads t
 it is talking to, and it never moved. `McpServer` now takes `daemonVersion()`, the manifest value a
 HAR export's `creator` already uses. Watch the name: `initialize()` had a local `version` holding
 the *protocol* date, and the first attempt at this fix shadowed the property with it and reported
-`2025-06-18` — `McpTest.initialize_reports_the_version_it_was_built_as` caught it.
+`2025-06-18` — `McpProtocolTest.initialize_reports_the_version_it_was_built_as` caught it.
 
 **`inspector mcp` owns stdout.** Anything printed there that is not a JSON-RPC frame
 desynchronises the client. Diagnostics go to stderr.

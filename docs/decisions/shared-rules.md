@@ -177,8 +177,9 @@ so a tied marker landed after its call there and before it in the list beside it
 could not see that, because the mirror was right and the tab did not call it — so
 `render-web-ui.js` checks the tie on the rendered tab as well. The MCP `timeline` and `explain`
 tools order through it too, never by a sort of their own, and `explain` splits before/after by
-position, not by `mono`. `McpTest` compares the `timeline` tool with the live model entry by
-entry, and checks that a marker at the call's own millisecond lands in `explain`'s `before`.
+position, not by `mono`. `SignalToolsTest` compares the `timeline` tool with the live model entry
+by entry, and `TransactionToolsTest` checks that a marker at the call's own millisecond lands in
+`explain`'s `before`.
 
 **A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
 the label and the grammar has **no escape inside the quotes**, so whether a label is expressible
