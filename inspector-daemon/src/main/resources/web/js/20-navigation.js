@@ -134,6 +134,7 @@ function applyView() {
 
   $('list').hidden = !network;
   $('list-empty').hidden = !network || state.transactions.length > 0;
+  renderListNote();
   if ($('timeline').hidden && all) state.timelineFresh = true;
   $('timeline').hidden = !all;
   $('timeline-empty').hidden = true;

@@ -406,12 +406,15 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     const stretchDue = `151 of ${calls.length} calls`;
     check('long stretch oldest', stretchText === stretchDue && stretchRows === 151,
       `"${stretchText}", ${stretchRows} rows drawn; "${stretchDue}" and 151 rows due`);
+    // An export draws every call it embeds, so the list is never short of its count: no note.
+    const listNote = longDoc.getElementById('list-note');
+    check('long list note absent', !!listNote && listNote.hidden, listNote ? `hidden ${listNote.hidden}, "${listNote.textContent}"` : 'no #list-note');
     check('long no network attempts', long.attempts.length === 0, long.attempts.slice(0, 3).join(' | ') || 'none');
     check('long no page errors', long.errors.length === 0, long.errors.slice(0, 3).join(' | ') || 'none');
     long.dom.window.close();
   } else {
     // Information: CI sets INSPECTOR_UI_ARCHIVE_LONG, and its expected count notices these missing.
-    for (const label of [...LONG_LABELS, 'long offset 1000 sliced', 'long stretch oldest', 'long no network attempts', 'long no page errors']) {
+    for (const label of [...LONG_LABELS, 'long offset 1000 sliced', 'long stretch oldest', 'long list note absent', 'long no network attempts', 'long no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_LONG is not set)');
     }
   }
