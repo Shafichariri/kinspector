@@ -196,4 +196,4 @@
    view where the pane follows live rows away from its top: the timeline's sticks under the scope
    bar, and the path's rides in the sticky box with its map. */
 .filter-note { padding: 6px 12px; font-size: 12px; border-bottom: 1px solid var(--divider); background: var(--bg); }
-#timeline > .filter-note { position: sticky; top: var(--sticky-top); z-index: 2; }
+#timeline > .filter-note, #list-note { position: sticky; top: var(--sticky-top); z-index: 2; }

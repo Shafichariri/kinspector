@@ -1,9 +1,10 @@
 ---
 id: KIN-56
 title: 'Web: the list says when it holds only part of what it counts'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-20 20:25'
+updated_date: '2026-10-20 20:50'
 labels:
   - 'item:web-list-says-what-it-holds'
 dependencies: []
@@ -27,3 +28,20 @@ Built in the 2026-10-20 run without an architect or QA before merge, by the main
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Plan (engineer, no team). Written into the ticket once it reached main mid-build (PR #101 merged after work began); the plan itself was fixed before code.
+
+Criteria, copied from docs/ROADMAP.md (item:web-list-says-what-it-holds), with the check for each and how it is shown red:
+
+1. Filtered header numbers the matches from the route's `matched`: `newest 1000 of 1200 matches shown`; `1000 of 3016 calls` never appears.
+   Files: web/js/15-session-data.js `renderCounts`. Checks: `filtered count` (check-web-static.js, 3016-call clamped stub), `long filtered count` (live probe, 1203-call session under `path:/v3/long/bulk`, 1201 matched). Red: the new branch disabled, header reads `1000 of 3016 calls` / `1000 of 1203 calls`.
+2. The list draws the same `newest N of M matches loaded` note through `filterNote`. Files: web/js/25-traffic-list.js `renderListNote`, index.html `#list-note` (outside the listbox), css/35-list.css (sticky at --sticky-top), 20-navigation.js `applyView`. Checks: `list note past the clamp` (static), `long list note` (live). Red: note never drawn / kept hidden.
+3. An empty brushed stretch with calls below the oldest loaded never reads `no calls in the selected stretch`; says they are older than what the list loaded and how to reach them; "at least" below where the whole copy is whole. Files: 25-traffic-list.js `olderThanLoaded`, `renderListEmpty`. Checks: `stretch older than loaded` (static, no filter, under a filter, and an "at least" case), `long stretch older` (live). Red: old wording put back; "at least" removed.
+4. Boundary row: not built; the note and the stretch text meet criteria 2 and 3 (architect's choice was the engineer's here).
+5. Export offline: `long list note absent` in render-web-ui-archive.js; existing `long stretch oldest` stays green. Red: export edited to show the note.
+6. List still draws at most 1000, daemon clamp unchanged: no change to LIST_CEILING or any Kotlin.
+Pace rule: neighbouring `long count no filter` re-proven red in the same run.
+<!-- SECTION:NOTES:END -->

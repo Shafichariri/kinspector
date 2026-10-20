@@ -266,7 +266,9 @@ function filterNote(node, hidden, emptied, lead = 'nothing matches') {
   const calls = count(hidden.calls, 'call');
   const what = [calls && hidden.atLeast ? `at least ${calls}` : calls, count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
   node.replaceChildren();
-  node.append(emptied ? `${lead} the filter ` : `${what} hidden by the filter `);
+  // A filter can thin the list without hiding a call — `method:GET` matching all 1203 — and still
+  // match more than the list holds, so the thinned lead has a form with nothing hidden.
+  node.append(emptied ? `${lead} the filter ` : what ? `${what} hidden by the filter ` : 'the filter ');
   node.appendChild(el('code', null, state.filter));
   if (emptied && what) node.append(` — ${what} hidden`);
   // The header counts the rows held, and past the route's clamp that is not every match: said here,
@@ -294,7 +296,7 @@ function renderListEmpty() {
   node.replaceChildren();
   const inSession = state.allSessionId === state.sessionId ? state.allTransactions.length : null;
   if (state.timeRange && state.transactions.length) {
-    node.textContent = 'no calls in the selected stretch';
+    node.textContent = olderThanLoaded() || 'no calls in the selected stretch';
   } else if (state.filter && inSession !== 0) {
     node.append('no calls match — ');
     node.appendChild(clearFilterButton());
@@ -305,6 +307,48 @@ function renderListEmpty() {
   } else {
     node.textContent = 'no calls were recorded in this session';
   }
+}
+
+/**
+ * What a brushed stretch holds below the oldest call the list loaded, while the list is short of
+ * what it counts — the session with no filter, the route's `matched` under one — or null. The list
+ * draws the newest 1000, so a stretch older than that drew nothing and said "no calls in the
+ * selected stretch" while the glance's THIS STRETCH counted them. The calls are counted from the
+ * whole-session copy, and only from the oldest mono at which it is whole, saying "at least" when
+ * the stretch reaches below that, as `hiddenByFilter` does for a stretch.
+ */
+function olderThanLoaded() {
+  const held = state.transactions;
+  const counted = state.filter ? state.matched : state.sessionTotal;
+  if (!state.timeRange || !held.length || counted === null || held.length >= counted) return null;
+  const oldest = (rows) => rows.reduce((m, r) => (r.mono < m ? r.mono : m), Infinity);
+  const loadedFrom = oldest(held);
+  if (state.timeRange.from >= loadedFrom) return null;
+  const whole = state.allTransactions;
+  const wholeFrom = whole.length && whole.length < (state.sessionTotal ?? 0) ? oldest(whole) : -Infinity;
+  const calls = whole.filter((r) => r.mono < loadedFrom && r.mono >= wholeFrom && inRange(r.mono)).length;
+  const atLeast = state.timeRange.from < wholeFrom;
+  if (!calls && !atLeast) return null;
+  const what = calls
+    ? `${atLeast ? 'at least ' : ''}${calls} ${calls === 1 ? 'call' : 'calls'} in this stretch ${calls === 1 && !atLeast ? 'is' : 'are'}`
+    : 'the calls in this stretch are';
+  const loaded = state.filter ? `${held.length} of ${counted} matches` : `${held.length}`;
+  const how = state.filter ? 'narrow the filter to reach them' : 'filter to reach them';
+  return `${what} older than the newest ${loaded} the list loaded — ${how}`;
+}
+
+/**
+ * The list's filter note: the same `filterNote` the path, the waterfall and the timeline draw,
+ * drawn here only while the filter matched more calls than the list holds. Thinned within the
+ * ceiling, the header's `N of M calls` already counts what is drawn; past it, the header counts
+ * matches and this says how many are loaded and what the filter hid.
+ */
+function renderListNote() {
+  const node = $('list-note');
+  const capped = !!state.filter && state.matched !== null && state.transactions.length < state.matched;
+  node.hidden = state.view !== 'network' || !capped;
+  if (capped) filterNote(node, hiddenByFilter({ signals: false, ranged: true }), false);
+  else node.replaceChildren();
 }
 
 function renderList() {
@@ -326,6 +370,7 @@ function renderList() {
   const rows = orderedRows();
   $('list-empty').hidden = rows.length > 0;
   renderListEmpty();
+  renderListNote();
 
   // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the
   // only arrangement that makes causal sense, then reverse the whole thing. Reversing after

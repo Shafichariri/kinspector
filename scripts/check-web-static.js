@@ -50,6 +50,7 @@ const {
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
 const { checkSessionState } = require('./lib/session-state-checks');
+const { checkListHolds } = require('./lib/list-holds-checks');
 const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
@@ -120,6 +121,7 @@ async function main() {
   report('no argument spread', auditNoArgumentSpread(scripts));
   for (const [label, value] of await checkLongSession(scripts)) report(label, value);
   for (const [label, value] of checkPathPastTheClamp(scripts)) report(label, value);
+  for (const [label, value] of await checkListHolds(scripts)) report(label, value);
 
   console.error('--- live follow ---');
   for (const [label, value] of await checkTimelineFollow(scripts)) report(label, value);

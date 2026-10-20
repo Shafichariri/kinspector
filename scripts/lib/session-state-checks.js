@@ -318,8 +318,8 @@ function clampPage(sources) {
     renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {}, $: () => element,
   });
   // The files declare their own renderers over the stubs; drawing is not what is checked here. The
-  // real header count is kept aside for the check that reads it.
-  const real = { renderCounts: page.renderCounts };
+  // real header count and empty text are kept aside for the checks that read them.
+  const real = { renderCounts: page.renderCounts, renderListEmpty: page.renderListEmpty };
   for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState']) {
     page[name] = () => {};
   }
@@ -564,4 +564,4 @@ async function checkSessionState(sources) {
   ];
 }
 
-module.exports = { checkSessionState, runFile };
+module.exports = { checkSessionState, clampPage, runFile };
