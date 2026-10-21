@@ -650,8 +650,9 @@ Placed by the product owner the same day. Two make one new item; the third was a
 
 - **A live call reaches the list but not the timeline, the glance or the picker.** *Ticket label:*
   `item:web-live-calls-reach-every-pane`. **Proposed 2026-10-19 by the product owner: straight after
-  `item:web-now-strip-follows-session`**, with the other web defects. Not yet placed by the maintainer
-  (§5 → "Order from here").
+  `item:web-now-strip-follows-session`**, with the other web defects. **Placed 2026-10-21 by the
+  maintainer after 1a and before 1b**, unsplit, because 1a reworks the session picker in the same
+  files (§5 → "Order from here").
 
   Since KIN-54 a live call moves the header and the traffic tab. Three other things on the page still
   describe the session as of the last load:
@@ -850,12 +851,12 @@ here. Phases A to G are merged (see `ROADMAP-DONE.md` → §5). They are not in 
 |---|---|---|---|---|
 | 3 | The traffic list does not say when it holds only part of what it counts *(added 2026-10-19; placed by the maintainer)* | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
 | 4 | The now strip and the signal panes can show what is no longer true *(added 2026-10-19)* | §3 → Bugs found | `item:web-now-strip-follows-session` | S, to be confirmed |
-| 5 | A live call reaches the list but not the timeline, the glance or the picker *(added 2026-10-19; **a proposal for the maintainer**, not yet placed)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S, to be confirmed |
-| 6 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
-| 7 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
-| 8 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
-| 9 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
-| 10 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 5 | Split `McpTest.kt` | §5 | `item:structure-split-mcp-test` | S |
+| 6 | Row labels drop a non-default port *(added 2026-10-18)* | §3 → Bugs found | `item:row-label-port` | S |
+| 7 | Phase H — split the two large overlay files | §5 | `item:structure-phase-h` | S |
+| 8 | Phase I — `noop-ui` golden file | §5 | `item:structure-phase-i` | M |
+| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
+| 10 | A live call reaches the list but not the timeline, the glance or the picker *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S, to be confirmed |
 | 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
 | 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
@@ -906,12 +907,12 @@ above the item.
 
 **One row proposed 2026-10-19 by the product owner**, `item:web-live-calls-reach-every-pane`, from QA
 on `item:web-live-rows-filtered`: the timeline, the glance and the picker label do not follow a live
-call. **This is a proposal; the maintainer has not placed it.** It is proposed straight after
-`item:web-now-strip-follows-session`, with the other web defects, for their reason: small, and it
-shows a user something false today. The maintainer's rows keep their relative order and the rows
-after it move down one. If the maintainer places it elsewhere, or takes the web defects after phase I
-(§5 → "Open questions only the human can answer"), this row moves accordingly. Where each defect
-went is in §3, above the item.
+call. The product owner proposed it straight after `item:web-now-strip-follows-session`, with the
+other web defects. **The maintainer placed it on 2026-10-21 after 1a and before 1b, unsplit and with
+its scope unchanged.** 1a's remaining pages (KIN-66 to KIN-69) rework the session picker and edit the
+same web files, so building this item's picker criterion first would mean doing it twice, or two
+writers on the same files. It no longer moves with the other web defects. Where each defect went is
+in §3, above the item.
 
 **Why this order.** By value per hour. The two defects come ahead of the structure moves: each is small, and each shows a
 user something false today. The Markdown export prints a URL that was never called. The web UI
@@ -1079,8 +1080,9 @@ decision or a known trap:
   confirmed it. The alternative is to finish the structure pass first, while it is fresh, and take the
   web defects straight after phase I. Either way they stay ahead of 1a.
   `item:web-list-says-what-it-holds`, placed with them on 2026-10-19, moves with them. So does
-  `item:web-now-strip-follows-session`, placed with them later the same day, and
-  `item:web-live-calls-reach-every-pane`, proposed with them after that and not yet placed.
+  `item:web-now-strip-follows-session`, placed with them later the same day.
+  `item:web-live-calls-reach-every-pane` does not: the maintainer placed it after 1a on 2026-10-21
+  (see "Order from here").
 
 ---
 
