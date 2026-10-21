@@ -12,7 +12,7 @@
  */
 const vm = require('vm');
 const { runFile } = require('./session-state-checks');
-const { HarnessError } = require('./web-audits');
+const { HarnessError, liftBlock } = require('./web-audits');
 
 const FILE = 'js/95-stats.js';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -134,6 +134,28 @@ async function checkStaleDropped(sources) {
     : 'yes (answers from before a filter, sort or session change were dropped; one that stood was drawn)';
 }
 
+/**
+ * A route row's server, `statsOrigin`, is named by the `urlOf` block's `hostPortOf` rather than a
+ * rule of its own. It joined host and port by hand and read an IPv6 server as `http://::1:8080`,
+ * which is not a URL and does not say where the address ends. The real file runs over the lifted
+ * block, so a stats file with its own join again fails here even while `urlOf`'s cases pass.
+ */
+function checkStatsOrigin(sources) {
+  const context = runFile(sources, FILE, { state: {}, api: null, ARCHIVE: null, clearTimeout, currentPage: () => 'stats' });
+  vm.runInContext(liftBlock(sources, 'urlOf'), context);
+  const statsOrigin = vm.runInContext('typeof statsOrigin === "function" ? statsOrigin : null', context);
+  if (!statsOrigin) throw new HarnessError(`statsOrigin is not declared in ${FILE}`);
+  // Route rows carry `port` only when it is not the scheme's default.
+  const cases = [
+    [{ scheme: 'http', host: '::1', port: 8080 }, 'http://[::1]:8080'],
+    [{ scheme: 'https', host: '[::1]', port: null }, 'https://[::1]'],
+    [{ scheme: 'http', host: '127.0.0.1', port: 9090 }, 'http://127.0.0.1:9090'],
+    [{ scheme: 'https', host: 'api.example.invalid', port: null }, 'https://api.example.invalid'],
+  ];
+  const wrong = cases.filter(([row, want]) => statsOrigin(row) !== want).map(([row, want]) => `${statsOrigin(row)} for ${want}`);
+  return wrong.length ? `NO - ${wrong.join(', ')}` : `yes (${cases.length} origins, IPv6 bracketed once)`;
+}
+
 async function checkStatsRefresh(sources) {
   return [
     ['stats refresh burst', await checkBurst(sources)],
@@ -141,6 +163,7 @@ async function checkStatsRefresh(sources) {
     ['stats refresh paused', await checkQuiet(sources, 'paused')],
     ['stats refresh hidden', await checkQuiet(sources, 'hidden')],
     ['stats refresh stale dropped', await checkStaleDropped(sources)],
+    ['stats origin', checkStatsOrigin(sources)],
   ];
 }
 

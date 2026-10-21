@@ -136,7 +136,8 @@ const statsPlural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 /** A rate as a percentage with up to one decimal, `—` where the daemon had no outcome to divide by. */
 const statsRate = (rate) => (rate === null || rate === undefined ? '—' : `${Number((rate * 100).toFixed(1))}%`);
 const statsBytes = (n) => (n === null || n === undefined ? '—' : n === 0 ? '0 B' : fmtBytes(n));
-const statsOrigin = (row) => `${row.scheme}://${row.host}${row.port ? `:${row.port}` : ''}`;
+// Through hostPortOf, so an IPv6 server reads `http://[::1]:8080` and not `http://::1:8080`.
+const statsOrigin = (row) => `${row.scheme}://${hostPortOf(row)}`;
 
 /**
  * The columns, in order: the header's text, its title, its sort key if it has one, and the cell.

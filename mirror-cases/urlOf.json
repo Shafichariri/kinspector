@@ -1,0 +1,81 @@
+{
+  "rule": "urlOf",
+  "cases": [
+    {
+      "name": "an IPv6 host is bracketed, so the url is a URL and the label says where the address ends",
+      "from": "PortTest.an IPv6 host is bracketed once whichever way capture stored it",
+      "input": {
+        "transactions": [
+          {"scheme": "http", "host": "::1", "port": 8080, "path": "/v6"}
+        ]
+      },
+      "expect": [{"url": "http://[::1]:8080/v6", "hostPort": "[::1]:8080"}]
+    },
+    {
+      "name": "a host already in brackets, as Ktor stores one, is not bracketed twice",
+      "from": "Ipv6CaptureTest.a_ktor_call_to_the_ipv6_loopback_records_a_bracketed_url",
+      "input": {
+        "transactions": [
+          {"scheme": "http", "host": "[::1]", "port": 8080, "path": "/v6"}
+        ]
+      },
+      "expect": [{"url": "http://[::1]:8080/v6", "hostPort": "[::1]:8080"}]
+    },
+    {
+      "name": "an archive recorded before the fix, with the bare host OkHttp gave, reads as a Ktor capture does",
+      "from": "Ipv6CaptureTest.an_okhttp_call_to_the_ipv6_loopback_records_a_bracketed_url",
+      "input": {
+        "transactions": [
+          {"id": "okhttp", "scheme": "http", "host": "::1", "port": 9090, "path": "/v6", "query": "a=1"},
+          {"id": "ktor", "scheme": "http", "host": "[::1]", "port": 9090, "path": "/v6", "query": "a=1"}
+        ]
+      },
+      "expect": [
+        {"url": "http://[::1]:9090/v6?a=1", "hostPort": "[::1]:9090"},
+        {"url": "http://[::1]:9090/v6?a=1", "hostPort": "[::1]:9090"}
+      ]
+    },
+    {
+      "name": "an IPv6 host on its scheme's default port, or with no port recorded, is bracketed with no port",
+      "from": "PortTest.an IPv6 host is bracketed once whichever way capture stored it",
+      "input": {
+        "transactions": [
+          {"scheme": "https", "host": "::1", "port": 443, "path": "/v6"},
+          {"scheme": "https", "host": "fe80::1", "path": "/v6"}
+        ]
+      },
+      "expect": [
+        {"url": "https://[::1]/v6", "hostPort": "[::1]"},
+        {"url": "https://[fe80::1]/v6", "hostPort": "[fe80::1]"}
+      ]
+    },
+    {
+      "name": "a default port is dropped and a non-default one kept",
+      "from": "PortTest.hostPort keeps only a port that is not the default",
+      "input": {
+        "transactions": [
+          {"scheme": "http", "host": "127.0.0.1", "port": 80, "path": "/json"},
+          {"scheme": "http", "host": "127.0.0.1", "port": 9090, "path": "/json"},
+          {"scheme": "http", "host": "api.example.invalid", "port": 443, "path": "/json"},
+          {"scheme": "https", "host": "api.example.invalid", "path": "/json"}
+        ]
+      },
+      "expect": [
+        {"url": "http://127.0.0.1/json", "hostPort": "127.0.0.1"},
+        {"url": "http://127.0.0.1:9090/json", "hostPort": "127.0.0.1:9090"},
+        {"url": "http://api.example.invalid:443/json", "hostPort": "api.example.invalid:443"},
+        {"url": "https://api.example.invalid/json", "hostPort": "api.example.invalid"}
+      ]
+    },
+    {
+      "name": "an empty query keeps its question mark",
+      "from": "NetworkTransaction.url",
+      "input": {
+        "transactions": [
+          {"scheme": "https", "host": "api.example.invalid", "path": "/a", "query": ""}
+        ]
+      },
+      "expect": [{"url": "https://api.example.invalid/a?", "hostPort": "api.example.invalid"}]
+    }
+  ]
+}

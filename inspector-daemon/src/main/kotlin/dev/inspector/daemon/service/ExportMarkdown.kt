@@ -107,7 +107,7 @@ object ExportMarkdown {
             val tail = { value: Long? -> value?.let(::ms) ?: row.tailWithheld ?: "—" }
             val cells = listOf(
                 row.method,
-                row.port?.let { "${row.host}:$it" } ?: row.host,
+                serverOf(row),
                 row.route,
                 "${row.calls}",
                 attempts,
@@ -134,6 +134,17 @@ object ExportMarkdown {
     }
 
     /** `3 (75%)`, or `0`: a share of attempts with an outcome, to at most one decimal. */
+    /**
+     * A route's server as a call label names it, from `NetworkTransaction.hostPort`, so an IPv6 host
+     * is bracketed by the one rule rather than a copy here. Joined by hand it read `::1:8080`. The row
+     * is put in a transaction's shape because the rule is a property of one; a public free function
+     * in `:inspector-model` would be API for the sake of this cell.
+     */
+    private fun serverOf(row: RouteStatsRow): String = NetworkTransaction(
+        id = "", ts = "", mono = 0, method = row.method, scheme = row.scheme,
+        host = row.host, port = row.port, path = "", callId = "",
+    ).hostPort
+
     private fun share(count: Int, rate: Double?): String {
         if (count == 0 || rate == null) return "$count"
         val percent = "%.1f".format(Locale.ROOT, rate * 100).removeSuffix(".0")

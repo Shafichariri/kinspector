@@ -23,7 +23,7 @@ import kotlinx.serialization.json.put
 /**
  * The Kotlin half of the shared mirror cases in `mirror-cases/` at the repository root.
  *
- * The web UI mirrors six rules from this module, and `scripts/check-web-static.js` runs the same
+ * The web UI mirrors seven rules from this module, and `scripts/check-web-static.js` runs the same
  * files against the functions it lifts out of the real web UI by their `@mirror-begin <name>`
  * anchors, whichever file holds each block. A case is therefore one fact asserted of both
  * surfaces, and one added on either side is run on the other. The commonTest suites stay as they
@@ -162,6 +162,18 @@ class MirrorCasesTest {
         )
     }
 
+    @Test
+    fun urlOf_cases() = runRule("urlOf", setOf("transactions")) { input ->
+        JsonArray(
+            txns(input).map {
+                buildJsonObject {
+                    put("url", it.url)
+                    put("hostPort", it.hostPort)
+                }
+            },
+        )
+    }
+
     // --- harness -------------------------------------------------------------------------------
 
     private fun runRule(rule: String, inputKeys: Set<String>, project: (JsonObject) -> JsonElement) {
@@ -222,7 +234,9 @@ class MirrorCasesTest {
 
     private companion object {
         val CASE_KEYS = setOf("name", "from", "input", "expect")
-        val RULES_HERE = setOf("timeline", "visits", "pathScope", "endpointShortcuts", "timelineRuns", "duplicates")
+        val RULES_HERE = setOf(
+            "timeline", "visits", "pathScope", "endpointShortcuts", "timelineRuns", "duplicates", "urlOf",
+        )
 
         /** `HOP_BY_HOP_HEADERS` lives in `Replay.kt`, so `HopByHopMirrorTest` in the daemon runs it. */
         val RULES_ELSEWHERE = setOf("hopByHop")

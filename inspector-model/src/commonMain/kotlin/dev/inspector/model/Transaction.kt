@@ -108,9 +108,18 @@ data class NetworkTransaction(
      * [url] and every call label in the daemon (the MCP `timeline`, the exports) are built on this,
      * so the default-port decision is made once. Labels built from `host` alone read calls to
      * `127.0.0.1:8080` and `127.0.0.1:9090` as one endpoint.
+     *
+     * An IPv6 literal is bracketed, because `http://::1:8080/v6` is not a URL and `::1:8080` cannot
+     * say where the address ends. The two capture paths disagree on [host]: OkHttp's `HttpUrl.host`
+     * drops the brackets and Ktor's `Url.host` keeps them, so a host that already starts with `[` is
+     * left alone rather than bracketed twice. Deciding it here, on read, rather than at capture is
+     * what makes an archive recorded before the rule read the same as one recorded after.
      */
     val hostPort: String
-        get() = port?.takeIf { it != defaultPortFor(scheme) }?.let { "$host:$it" } ?: host
+        get() {
+            val bracketed = if (':' in host && !host.startsWith('[')) "[$host]" else host
+            return port?.takeIf { it != defaultPortFor(scheme) }?.let { "$bracketed:$it" } ?: bracketed
+        }
 
     val url: String
         get() = buildString {

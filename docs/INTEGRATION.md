@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v62 — 2026-10-21.**
+**Document version: v63 — 2026-10-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1343,7 +1343,35 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v62 — 2026-10-21 (this document)
+### v63 — 2026-10-21 (this document)
+
+**Nothing to do, unless your code parses `NetworkTransaction.url` or `hostPort` for calls to an
+IPv6 address, or a script or agent of yours reads the session summary's `byHost` keys as bare
+host names. Then read the two bullets below before you upgrade past 1.3.0.**
+
+This one is in the library as well as the daemon: `url` and `hostPort` are public in
+`inspector-model`, which `inspector-core` brings in. It reaches you in the next library release
+after 1.3.0 and the next daemon release after 1.3.0. No signature changed; rebuild.
+
+- **A call to an IPv6 address has a URL that is one.** `url` and `hostPort` now bracket an IPv6
+  host: `http://[::1]:8080/v6`, labelled `GET [::1]:8080/v6`. An OkHttp capture used to give
+  `http://::1:8080/v6`, which no client parses; a Ktor capture already had the brackets, and they
+  are not doubled. So Copy URL and cURL in the overlay, URL, cURL and replay in the web UI, the
+  Stats page, the HAR and the exports' labels and routes table are valid for those calls.
+  Archives recorded before this version read the same way, because the brackets are added when
+  `url` is read, not when the call is captured. `host` itself is unchanged: `::1` from OkHttp,
+  `[::1]` from Ktor.
+- **The session summary's `byHost` names a server by host and port** (`GET
+  /api/sessions/{id}/summary`, the MCP tool `session_summary`, `inspector summary`, the exports).
+  Calls to `127.0.0.1:8080` and `127.0.0.1:9090` are now two entries, where they were one
+  `127.0.0.1`. A default port adds nothing, so `api.example.com` over HTTPS on 443 is still
+  `api.example.com`. Anything that looked a key up by bare host must now include the port when the
+  server is on a non-default one.
+- **The `host:` filter term is unchanged.** It still matches part of the stored host, not the
+  bracketed label, so `host:::1` finds an IPv6 loopback call from either capture path and
+  `host:[::1]` only a Ktor one, as before.
+
+### v62 — 2026-10-21
 
 **Nothing to do. Optionally, if the Stats page groups two of your paths wrongly, list templates
 under `routeTemplates` in `~/.inspector/config.json` on your Mac (§6e) and restart the daemon.**

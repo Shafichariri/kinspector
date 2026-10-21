@@ -129,6 +129,13 @@ The labels the daemon builds for a call (the MCP `timeline` entry, the Markdown 
 had the same defect after `url` was fixed, because they were assembled from `host` by hand; a call to
 `127.0.0.1:9090` read `GET 127.0.0.1/json`. They now use `NetworkTransaction.hostPort`, which `url`
 is built on too, so the default-port decision exists once. A label still leaves the query out.
+`hostPort` also brackets an IPv6 literal, decided on read rather than at capture so archives
+recorded before it read the same: OkHttp's `HttpUrl.host` gives `::1` and the interceptor stores it
+as it comes, which made `url` read `http://::1:8080/v6`, while Ktor's `Url.host` keeps `[::1]`, so a
+host already starting with `[` is not bracketed twice. `Ipv6CaptureTest` holds both paths to one
+`url` against a real server on `[::1]`, and skips with the reason where there is no IPv6 loopback.
+The session summary's `byHost` keys on `hostPort` too. The `host:` filter term does not: it still
+matches the stored `host`, which differs by capture path for an IPv6 literal.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.

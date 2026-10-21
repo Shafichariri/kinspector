@@ -166,9 +166,9 @@ class SerializationTest {
  */
 class PortTest {
 
-    private fun txn(scheme: String, port: Int?) = NetworkTransaction(
+    private fun txn(scheme: String, port: Int?, host: String = "example.com") = NetworkTransaction(
         id = "a", ts = "2026-08-18T00:00:00Z", mono = 0, method = "GET",
-        scheme = scheme, host = "example.com", port = port, path = "/x", callId = "c",
+        scheme = scheme, host = host, port = port, path = "/x", callId = "c",
     )
 
     @kotlin.test.Test
@@ -191,6 +191,19 @@ class PortTest {
         kotlin.test.assertEquals("example.com", txn("http", 80).hostPort)
         kotlin.test.assertEquals("example.com", txn("https", 443).hostPort)
         kotlin.test.assertEquals("example.com", txn("https", null).hostPort)
+    }
+
+    /**
+     * OkHttp stores an IPv6 literal bare and Ktor stores it bracketed; both must read as a URL, and
+     * neither may gain a second pair. The cases both surfaces run are in `mirror-cases/urlOf.json`.
+     */
+    @kotlin.test.Test
+    fun `an IPv6 host is bracketed once whichever way capture stored it`() {
+        kotlin.test.assertEquals("http://[::1]:8080/x", txn("http", 8080, "::1").url)
+        kotlin.test.assertEquals("[::1]:8080", txn("http", 8080, "::1").hostPort)
+        kotlin.test.assertEquals("[::1]:8080", txn("http", 8080, "[::1]").hostPort)
+        kotlin.test.assertEquals("[::1]", txn("https", 443, "::1").hostPort)
+        kotlin.test.assertEquals("[::1]", txn("https", null, "[::1]").hostPort)
     }
 
     /** Archives written before the field existed must still read. */

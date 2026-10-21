@@ -303,6 +303,22 @@ class ExportTest {
         )
     }
 
+    // The routes table names a route's server by the rule the timeline uses. Joined by hand it read
+    // `::1:8080`, which does not say where an IPv6 address ends.
+    @Test
+    fun `the routes table brackets an IPv6 server and keeps its port`() {
+        val dir = session {
+            it.append(txn("ipv6okhp", path = "/v6", mono = 100, host = "::1").copy(scheme = "http", port = 8080), null, null)
+            it.append(txn("loop9090", path = "/json", mono = 200, host = "127.0.0.1").copy(scheme = "http", port = 9090), null, null)
+            it.append(txn("dflt0443", path = "/json", mono = 300).copy(port = 443), null, null)
+        }
+        val hosts = ExportMarkdown.render(build(dir)).lines()
+            .filter { it.startsWith("| GET | ") }
+            .map { it.removePrefix("| GET | ").substringBefore(" |") }
+            .toSet()
+        assertEquals(setOf("[::1]:8080", "127.0.0.1:9090", "api.example.com"), hosts)
+    }
+
     // `NetworkTransaction.url` already carries the query, so the URL line is that and nothing more.
     // Appending `query` again printed it twice on every call that had one.
     private fun urlLine(md: String): String = md.lines().single { it.startsWith("- **URL:** ") }

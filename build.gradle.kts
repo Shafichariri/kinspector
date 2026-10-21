@@ -299,9 +299,13 @@ subprojects {
     // deliberately carry their evidence in that message — `describe()` prints the offending rows —
     // so the default threw away the only diagnosis available for a CI-only failure, which is
     // exactly the case where re-running locally does not help.
+    //
+    // Skips are printed too, because a skip the log never mentions reads as a pass. `Ipv6CaptureTest`
+    // skips on a machine with no IPv6 loopback; the reason is its assumption's message, which the
+    // test report carries and this log line does not.
     tasks.withType<AbstractTestTask>().configureEach {
         testLogging {
-            events(TestLogEvent.FAILED)
+            events(TestLogEvent.FAILED, TestLogEvent.SKIPPED)
             exceptionFormat = TestExceptionFormat.FULL
             showStackTraces = true
             showCauses = true

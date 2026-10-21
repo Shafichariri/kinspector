@@ -412,7 +412,8 @@ class SessionRepository(private val config: DaemonConfig) {
             endedAt = meta.endedAt,
             txnCount = txns.size,
             byStatusClass = txns.groupingBy { it.statusClass }.eachCount().toSortedMap().toMap(),
-            byHost = txns.groupingBy { it.host }.eachCount()
+            // A server, as the call labels name one: two ports on one machine are two entries.
+            byHost = txns.groupingBy { it.hostPort }.eachCount()
                 .entries.sortedByDescending { it.value }.take(10)
                 .associate { it.key to it.value },
             slowest = txns.filter { it.ms != null }
