@@ -119,7 +119,7 @@ object ExportMarkdown {
     ): String = when (entry) {
         is dev.inspector.model.TimelineEntry.Call -> {
             val txn = entry.txn
-            val label = cell("${txn.method} ${txn.host}${txn.path} → ${outcome(txn)}")
+            val label = cell("${txn.method} ${txn.hostPort}${txn.path} → ${outcome(txn)}")
             "| ${offset(txn.mono, origin)} | ${clock(txn.ts)} | call | " +
                 "[#${numbers[txn.id]}](#call-${txn.id}) $label |"
         }

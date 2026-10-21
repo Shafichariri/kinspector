@@ -183,6 +183,16 @@ class PortTest {
         kotlin.test.assertEquals("https://example.com/x", txn("https", 443).url)
     }
 
+    /** What call labels name a server by: the rule [NetworkTransaction.url] uses, without the scheme. */
+    @kotlin.test.Test
+    fun `hostPort keeps only a port that is not the default`() {
+        kotlin.test.assertEquals("example.com:8080", txn("http", 8080).hostPort)
+        kotlin.test.assertEquals("example.com:443", txn("http", 443).hostPort)
+        kotlin.test.assertEquals("example.com", txn("http", 80).hostPort)
+        kotlin.test.assertEquals("example.com", txn("https", 443).hostPort)
+        kotlin.test.assertEquals("example.com", txn("https", null).hostPort)
+    }
+
     /** Archives written before the field existed must still read. */
     @kotlin.test.Test
     fun `a row with no port at all still renders and still parses`() {

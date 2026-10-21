@@ -2,6 +2,7 @@ package dev.inspector.daemon.mcp
 
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.TimelineEntry
+import dev.inspector.daemon.txn
 import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -94,5 +95,37 @@ class SignalToolsTest : McpToolsFixture() {
         expected.indices.forEach { i ->
             assertEquals(expected[i], actual[i], "entry $i differs from the shared timeline()")
         }
+    }
+
+    /**
+     * Two local servers on one host are two endpoints, so the label carries a port that is not the
+     * scheme's default. It used to be `GET 127.0.0.1/json` for both. The query stays out: a label
+     * names an endpoint, and the URL is where the evidence is.
+     */
+    @Test
+    fun timeline_labels_keep_a_non_default_port_and_drop_the_default_one() {
+        val id = session("2026-08-17T09-00-07_ports_dev_debug") { writer ->
+            writer.append(txn("port8080", path = "/json", mono = 100, host = "127.0.0.1")
+                .copy(scheme = "http", port = 8080, query = "a=1"), null, null)
+            writer.append(txn("port9090", path = "/json", mono = 200, host = "127.0.0.1")
+                .copy(scheme = "http", port = 9090), null, null)
+            writer.append(txn("port0443", mono = 300).copy(port = 443), null, null)
+            writer.append(txn("portnone", mono = 400).copy(port = null), null, null)
+        }
+
+        val labels = Json.decodeFromString(
+            ListSerializer(TimelineEntry.serializer()),
+            callTool("timeline", """{"session":"$id"}"""),
+        ).map { it.label }
+
+        assertEquals(
+            listOf(
+                "GET 127.0.0.1:8080/json",
+                "GET 127.0.0.1:9090/json",
+                "GET api.example.com/v2/users/me",
+                "GET api.example.com/v2/users/me",
+            ),
+            labels,
+        )
     }
 }

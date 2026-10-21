@@ -102,7 +102,9 @@ screen.
 
 - `isError` — `status >= 400` or `error != null`. Backs `has:error`.
 - `statusClass` — `2xx`, `4xx`, … or `error`. Backs session summaries.
-- `url` — reassembled from scheme/host/port/path/query. The port is included only when it is not the default for the scheme.
+- `hostPort` — `host`, plus `:port` when the port is not the default for the scheme. `url` and the daemon's call labels
+  (MCP `timeline`, the exports) are built on it, so a label never reads two servers on one host as one.
+- `url` — reassembled from scheme/hostPort/path/query. The port is included only when it is not the default for the scheme.
 - `duplicateGroups(transactions, windowMs)` — separate calls that asked the same question inside a
   window. Requires **different `callId`s**, so retries and redirect hops are never reported; keys on
   method + url + status + byte counts, deliberately **excluding headers**, because a signed request

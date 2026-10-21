@@ -60,7 +60,7 @@ data class TimelineEntry(
             mono = txn.mono,
             ts = txn.ts,
             id = txn.id,
-            label = "${txn.method} ${txn.host}${txn.path}",
+            label = "${txn.method} ${txn.hostPort}${txn.path}",
             detail = txn.status?.toString() ?: txn.error ?: "in flight",
         )
 

@@ -125,6 +125,10 @@ entirely: `RequestSnapshot` took `url.host`, which excludes the port, so a captu
 silently wrong, and it went unnoticed for the whole life of the feature because the host was right
 and only the port was missing. Found when replay could not connect to the sample's own demo server.
 `port` is nullable so archives written before it existed still read.
+The labels the daemon builds for a call (the MCP `timeline` entry, the Markdown and HTML exports)
+had the same defect after `url` was fixed, because they were assembled from `host` by hand; a call to
+`127.0.0.1:9090` read `GET 127.0.0.1/json`. They now use `NetworkTransaction.hostPort`, which `url`
+is built on too, so the default-port decision exists once. A label still leaves the query out.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.
