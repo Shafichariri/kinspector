@@ -60,6 +60,8 @@ private fun configReply(config: DaemonConfig, file: ConfigFile, state: ConfigFil
             putJsonObject("signalCaps") {
                 config.signalCaps.toSortedMap().forEach { (tag, cap) -> put(tag, cap) }
             }
+            // What this daemon compiled at start, invalid entries skipped: the file's list is in `file`.
+            put("routeTemplates", buildJsonArray { config.routeTemplates.entries.forEach { add(JsonPrimitive(it)) } })
         }
         put("flags", buildJsonArray { config.flags.sorted().forEach { add(JsonPrimitive(it)) } })
     }.toString()

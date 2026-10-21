@@ -7,7 +7,10 @@ import dev.inspector.daemon.archive.SessionWriter
 import dev.inspector.daemon.service.ExportMarkdown
 import dev.inspector.daemon.service.ExportedBody
 import dev.inspector.daemon.service.HtmlExport
+import dev.inspector.daemon.service.RouteStatsReport
+import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.daemon.service.SessionExport
+import dev.inspector.daemon.service.StatsSort
 import dev.inspector.daemon.service.WebPage
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.SignalTags
@@ -67,7 +70,7 @@ class ExportTest {
     }
 
     private fun build(dir: Path) =
-        SessionExport.build(dir, repository, "9.9.9", Instant.parse("2026-10-10T12:00:00Z"))
+        SessionExport.build(dir, repository, config.routeTemplates, "9.9.9", Instant.parse("2026-10-10T12:00:00Z"))
 
     // --- the document --------------------------------------------------------------------------
 
@@ -111,6 +114,44 @@ class ExportTest {
         val document = build(dir)
         assertEquals(2001, document.transactions.size)
         assertEquals(2001, document.timeline.size)
+        assertEquals(2001, document.routeStats.routes.sumOf { it.attempts }, "the route table counts every row too")
+    }
+
+    // --- route stats ---------------------------------------------------------------------------
+
+    @Test
+    fun `routeStats is the service's whole-session report, in the JSON too`() {
+        val dir = session {
+            it.append(txn("aaaa1111", path = "/users/1", mono = 100, status = 503, callId = "c"), null, null)
+            it.append(txn("bbbb2222", path = "/users/2", mono = 200, attempt = 2, callId = "c"), null, null)
+            it.append(txn("cccc3333", path = "/a|b", mono = 300), null, null)
+        }
+        val expected = RouteStatsService(repository, config.routeTemplates).report(dir, "", StatsSort.ATTEMPTS, Int.MAX_VALUE)
+        val document = build(dir)
+        assertEquals(expected, document.routeStats)
+        val root = json.parseToJsonElement(SessionExport.toJson(document)).jsonObject
+        assertEquals(expected, json.decodeFromJsonElement(RouteStatsReport.serializer(), root.getValue("routeStats")))
+    }
+
+    @Test
+    fun `a session with no calls exports an empty route list, not a missing one`() {
+        val routeStats = json.parseToJsonElement(SessionExport.toJson(build(session { }))).jsonObject.getValue("routeStats").jsonObject
+        assertEquals(0, routeStats["routes"]?.jsonArray?.size, routeStats.toString())
+        assertContains(ExportMarkdown.render(build(session("2026-08-16T10-14-03_app_dev_debug") { })), "## Routes\n\nNo calls were recorded.")
+    }
+
+    @Test
+    fun `the Markdown has a routes table before the timeline`() {
+        val dir = session {
+            it.append(txn("aaaa1111", path = "/users/1", mono = 100, status = 503, callId = "c"), null, null)
+            it.append(txn("bbbb2222", path = "/users/2", mono = 200, attempt = 2, callId = "c"), null, null)
+            it.append(txn("cccc3333", path = "/a|b", mono = 300), null, null)
+        }
+        val md = ExportMarkdown.render(build(dir))
+        assertTrue(md.indexOf("## Routes") in 0 until md.indexOf("## Timeline"), md)
+        val users = md.lines().single { it.startsWith("| GET | api.example.com | /users/{id} |") }
+        assertEquals("| GET | api.example.com | /users/{id} | 1 | 2 (1 retry) | 0 | 1 (50%) | 0 | 143 ms | 143 ms | n<20 | n<20 | 143 ms | 0 B | 0 B |", users)
+        assertContains(md, "| GET | api.example.com | /a\\|b |")
     }
 
     @Test

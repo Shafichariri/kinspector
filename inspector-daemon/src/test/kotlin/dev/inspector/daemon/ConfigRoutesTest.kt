@@ -79,7 +79,7 @@ class ConfigRoutesTest {
         }
 
     private fun effective(maxSessions: Int) = json(
-        """{"port":${config.port},"maxSessions":$maxSessions,"maxTotalMb":300,"signalCaps":{"cache":500,"state":500}}"""
+        """{"port":${config.port},"maxSessions":$maxSessions,"maxTotalMb":300,"signalCaps":{"cache":500,"state":500},"routeTemplates":[]}"""
     )
 
     @Test
@@ -138,5 +138,43 @@ class ConfigRoutesTest {
 
         assertEquals(403, response.status.value)
         assertEquals(false, file.toFile().exists(), "a refused save wrote the file")
+    }
+
+    @Test
+    fun `a bad routeTemplates entry is a 400 naming it`() = runBlocking {
+        val response = save("""{"routeTemplates":["/articles/{slug}","/a/{bad name}"]}""")
+
+        assertEquals(400, response.status.value)
+        assertContains(response.bodyAsText(), "routeTemplates entry '/a/{bad name}'")
+        assertEquals(false, file.toFile().exists(), "a refused save wrote the file")
+    }
+
+    @Test
+    fun `effective routeTemplates is what was loaded at start, not what was just saved`() = runBlocking {
+        val saved = json(save("""{"routeTemplates":["/articles/{slug}"]}""").bodyAsText())
+        assertEquals(json("""{"routeTemplates":["/articles/{slug}"]}"""), saved.getValue("file"))
+        assertEquals(Json.parseToJsonElement("[]"), saved.getValue("effective").jsonObject.getValue("routeTemplates"))
+
+        // A daemon started on that file reports it, with an entry it skipped left out.
+        file.writeText("""{"routeTemplates":["/articles/{slug}","nope","/v2/{x}"]}""")
+        val restarted = DaemonConfig.load(dataDir = tmp, port = ServerSocket(0).use { it.localPort })
+        val second = InspectorDaemon(restarted)
+        second.start(wait = false)
+        try {
+            val reply = withTimeoutOrNull(10_000) {
+                var text: String? = null
+                while (text == null) {
+                    text = runCatching { http.get("http://127.0.0.1:${restarted.port}/api/config").bodyAsText() }.getOrNull()
+                    if (text == null) delay(50)
+                }
+                text
+            }
+            assertEquals(
+                Json.parseToJsonElement("""["/articles/{slug}","/v2/{x}"]"""),
+                json(reply!!).getValue("effective").jsonObject.getValue("routeTemplates"),
+            )
+        } finally {
+            second.stop()
+        }
     }
 }

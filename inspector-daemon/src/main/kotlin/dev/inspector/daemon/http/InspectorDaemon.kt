@@ -11,6 +11,7 @@ import dev.inspector.daemon.service.ProcessHandlePeerRegistry
 import dev.inspector.daemon.service.ProcessMcpControl
 import dev.inspector.daemon.service.ProcessServerControl
 import dev.inspector.daemon.service.Replayer
+import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.daemon.service.ServerControl
 import dev.inspector.daemon.service.SessionDeleter
 import dev.inspector.daemon.service.SessionManager
@@ -73,6 +74,7 @@ class InspectorDaemon(
     private val retention = Retention(config, repository)
     private val manager = SessionManager(config, repository, retention)
     private val deleter = SessionDeleter(repository, config.sessionsDir, manager::activeSessionIds)
+    private val stats = RouteStatsService(repository, config.routeTemplates)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var server: EmbeddedServer<*, *>? = null
@@ -156,7 +158,8 @@ class InspectorDaemon(
             ingestRoutes(manager, liveApps)
             liveRoutes(manager)
             sessionRoutes(repository, manager, deleter)
-            exportRoutes(repository)
+            exportRoutes(repository, config)
+            statsRoutes(repository, stats)
             signalRoutes(repository, liveApps)
             markerRoutes(repository, manager)
             lifecycleRoutes()

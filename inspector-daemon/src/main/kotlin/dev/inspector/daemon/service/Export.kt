@@ -1,8 +1,11 @@
 package dev.inspector.daemon.service
 
+import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionSummary
 import dev.inspector.daemon.archive.TimelineEntry
+import dev.inspector.model.Filter
+import dev.inspector.model.FilterContext
 import dev.inspector.model.InspectorJson
 import dev.inspector.model.Marker
 import dev.inspector.model.NetworkTransaction
@@ -99,6 +102,12 @@ data class SessionExportDocument(
     val current: List<Signal>,
     /** By `mono`, ascending. */
     val markers: List<Marker>,
+    /**
+     * The whole session's route table: no filter, no limit, ordered by attempts. Folded from
+     * [transactions] by the accumulator `GET …/stats` uses, so the two cannot disagree. No default,
+     * like the collections above, so a session with no calls says `"routes": []`.
+     */
+    val routeStats: RouteStatsReport,
 )
 
 /**
@@ -116,9 +125,14 @@ object SessionExport {
     /** The rows look exactly like `index.jsonl` lines, only indented. */
     val json: Json = Json(InspectorJson) { prettyPrint = true }
 
+    /**
+     * [templates] is required, not defaulted, so no caller can export heuristic-only routes while
+     * the daemon's Stats page groups by the config's.
+     */
     fun build(
         sessionDir: Path,
         repository: SessionRepository,
+        templates: RouteTemplates,
         exporterVersion: String,
         exportedAt: Instant = Instant.now(),
     ): SessionExportDocument {
@@ -156,6 +170,9 @@ object SessionExport {
                 .toMap(),
             current = repository.currentSignals(sessionDir),
             markers = markers,
+            routeStats = RouteStatsAccumulator(templates, Filter.MatchAll, FilterContext.EMPTY)
+                .apply { transactions.forEach(::add) }
+                .snapshot(sessionDir.fileName.toString(), "", StatsSort.ATTEMPTS, Int.MAX_VALUE),
         )
     }
 

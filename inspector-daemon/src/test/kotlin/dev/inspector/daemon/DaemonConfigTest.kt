@@ -1,10 +1,15 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionWriter
+import dev.inspector.daemon.service.RouteStatsService
+import dev.inspector.daemon.service.StatsSort
 import dev.inspector.model.SignalTags
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.writeText
@@ -193,5 +198,67 @@ class DaemonConfigTest {
             caps.getValue(SignalTags.CACHE) >= 100,
             "a per-entry cache stream needs room for more keys than a snapshot had moments",
         )
+    }
+
+    // --- routeTemplates ----------------------------------------------------------------------------
+
+    /** What [block] printed on stderr, for the lines `load` reports a skipped entry with. */
+    private fun stderrOf(block: () -> Unit): String {
+        val captured = ByteArrayOutputStream()
+        val original = System.err
+        System.setErr(PrintStream(captured, true))
+        try { block() } finally { System.setErr(original) }
+        return captured.toString()
+    }
+
+    @Test
+    fun route_templates_are_read_from_the_file_at_start() {
+        configFile("""{ "routeTemplates": ["/reports/2024", "/articles/{slug}"] }""")
+
+        val config = DaemonConfig.load(dataDir = tmp)
+
+        assertEquals(listOf("/reports/2024", "/articles/{slug}"), config.routeTemplates.entries)
+        assertEquals("/articles/{slug}", config.routeTemplates.routeOf("/articles/my-title").text)
+    }
+
+    @Test
+    fun an_invalid_route_template_is_named_once_on_stderr_and_skipped_while_the_rest_apply() {
+        configFile("""{ "routeTemplates": ["/articles/{slug}", "reports/{bad name}", "/v2/{x}"] }""")
+
+        lateinit var config: DaemonConfig
+        val err = stderrOf { config = DaemonConfig.load(dataDir = tmp) }
+
+        assertEquals(listOf("/articles/{slug}", "/v2/{x}"), config.routeTemplates.entries)
+        assertEquals(1, Regex("ignoring routeTemplates entry 'reports/\\{bad name\\}'").findAll(err).count(), err)
+        assertEquals(1, err.lines().count { it.startsWith("inspector: ") }, err)
+    }
+
+    @Test
+    fun a_route_templates_value_of_the_wrong_type_makes_the_file_malformed_and_routes_heuristic() {
+        for (value in listOf("\"/articles/{slug}\"", "[\"/a/{x}\", 5]", "{}")) {
+            configFile("""{ "port": 9001, "routeTemplates": $value }""")
+
+            val config = DaemonConfig.load(dataDir = tmp)
+
+            assertEquals(RouteTemplates.NONE, config.routeTemplates, value)
+            assertEquals(DaemonConfig.DEFAULT_PORT, config.port, "the whole file is ignored, as for any malformed key: $value")
+        }
+    }
+
+    @Test
+    fun stats_keep_the_templates_loaded_at_start_until_the_next_load() {
+        configFile("""{ "routeTemplates": ["/articles/{slug}"] }""")
+        val config = DaemonConfig.load(dataDir = tmp)
+        val dir = writeSession(config, "s1", "2026-08-16T10:14:02.311Z", listOf(txn("a", path = "/articles/my-title")))
+        val running = RouteStatsService(SessionRepository(config), config.routeTemplates)
+        fun routes(service: RouteStatsService) =
+            service.report(dir, "", StatsSort.ATTEMPTS, 10).routes.map { it.route }
+
+        assertEquals(listOf("/articles/{slug}"), routes(running))
+        configFile("""{ "routeTemplates": [] }""")
+
+        assertEquals(listOf("/articles/{slug}"), routes(running), "an edit applied before the next start")
+        val restarted = DaemonConfig.load(dataDir = tmp)
+        assertEquals(listOf("/articles/my-title"), routes(RouteStatsService(SessionRepository(restarted), restarted.routeTemplates)))
     }
 }

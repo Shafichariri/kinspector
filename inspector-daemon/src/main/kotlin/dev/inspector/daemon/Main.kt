@@ -9,6 +9,9 @@ import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.daemon.http.PortUnavailableException
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
+import dev.inspector.daemon.service.RouteStatsReport
+import dev.inspector.daemon.service.RouteStatsService
+import dev.inspector.daemon.service.StatsSort
 import dev.inspector.daemon.usb.UsbBridge
 import kotlin.io.path.Path
 import kotlin.system.exitProcess
@@ -22,10 +25,13 @@ Usage:
   inspector sessions
   inspector summary  [--session ID]
   inspector query    '<filter>' [--session ID] [--limit N] [--offset N]
+  inspector stats    ['<filter>'] [--session ID] [--sort KEY] [--limit N]
   inspector body     <txnId> --side req|res [--session ID]
   inspector prune
 
 --session accepts the literal 'latest' (the default).
+stats prints per-route latency and failure rates; --sort is attempts (the default), p50,
+p90, p95, p99, max or errors, and --limit defaults to 1000.
 
 serve also bridges a USB-attached iPhone when usbmuxd is present (every Mac): the app
 listens on the phone's own 127.0.0.1:<port> and the daemon dials it over the cable.
@@ -113,6 +119,19 @@ fun main(args: Array<String>) {
                 fail(e.message ?: "invalid filter")
             }
             println(dev.inspector.model.InspectorJsonPretty.encodeToString(TransactionPage.serializer(), page))
+        }
+
+        "stats" -> {
+            val filter = args.getOrNull(1)?.takeUnless { it.startsWith("--") }.orEmpty()
+            val dir = repository.resolve(flags["session"] ?: "latest") ?: fail("no such session")
+            val sort = StatsSort.parse(flags["sort"]) ?: fail(StatsSort.unknown(flags["sort"].orEmpty()))
+            val limit = (flags["limit"]?.toIntOrNull() ?: 1000).coerceIn(1, 5000)
+            val report = try {
+                RouteStatsService(repository, config.routeTemplates).report(dir, filter, sort, limit)
+            } catch (e: dev.inspector.model.FilterParseException) {
+                fail(e.message ?: "invalid filter")
+            }
+            println(dev.inspector.model.InspectorJsonPretty.encodeToString(RouteStatsReport.serializer(), report))
         }
 
         "body" -> {

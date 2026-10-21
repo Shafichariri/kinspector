@@ -156,6 +156,7 @@ class ConfigFile(private val dataDir: Path) {
                 "maxTotalMb" -> value.wholeNumber()?.takeIf { it in 1..MAX_TOTAL_MB }
                     .let { if (it == null) "maxTotalMb must be a whole number of megabytes, at least 1" else null }
                 "signalCaps" -> validateSignalCaps(value)
+                "routeTemplates" -> validateRouteTemplates(value)
                 else -> null
             }
             if (problem != null) return problem
@@ -176,6 +177,21 @@ class ConfigFile(private val dataDir: Path) {
         return null
     }
 
+    /**
+     * A list of strings that [RouteTemplates.problem] accepts, every one. Refused whole, unlike the
+     * file at start, where a bad entry is skipped: here somebody is looking at the reply, and a save
+     * that kept nine entries of ten would report success for the tenth.
+     */
+    private fun validateRouteTemplates(value: JsonElement): String? {
+        val entries = value as? JsonArray
+            ?: return "routeTemplates must be a list of path templates, for example [\"/articles/{slug}\"]"
+        val strings = entries.map { element ->
+            (element as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?: return "routeTemplates entry $element must be a string, as in \"/articles/{slug}\""
+        }
+        return RouteTemplates.problems(strings).firstOrNull()
+    }
+
     /** A JSON number with no fraction or exponent; `"8099"`, `true` and `1.5` are not. */
     private fun JsonElement.wholeNumber(): Long? {
         val primitive = this as? JsonPrimitive ?: return null
@@ -190,6 +206,6 @@ class ConfigFile(private val dataDir: Path) {
         /** The most megabytes [DaemonConfig.maxTotalBytes] can hold as bytes. */
         const val MAX_TOTAL_MB = Long.MAX_VALUE / (1024L * 1024L)
 
-        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps")
+        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps", "routeTemplates")
     }
 }

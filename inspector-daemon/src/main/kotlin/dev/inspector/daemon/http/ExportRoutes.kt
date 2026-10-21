@@ -1,5 +1,6 @@
 package dev.inspector.daemon.http
 
+import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.ExportMarkdown
 import dev.inspector.daemon.service.Har
@@ -18,7 +19,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 
-internal fun Route.exportRoutes(repository: SessionRepository) {
+internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonConfig) {
     /**
      * HAR 1.2, for sharing a session with a tool that is not Inspector.
      *
@@ -57,27 +58,28 @@ internal fun Route.exportRoutes(repository: SessionRepository) {
      * is the question these answer. Read-only, so no control header.
      */
     get("/api/sessions/{id}/export.json") {
-        call.respondExport(repository, "json", ContentType.Application.Json) { SessionExport.toJson(it) }
+        call.respondExport(repository, config, "json", ContentType.Application.Json) { SessionExport.toJson(it) }
     }
     get("/api/sessions/{id}/export.md") {
-        call.respondExport(repository, "md", ContentType("text", "markdown").withCharset(Charsets.UTF_8)) {
+        call.respondExport(repository, config, "md", ContentType("text", "markdown").withCharset(Charsets.UTF_8)) {
             ExportMarkdown.render(it)
         }
     }
     get("/api/sessions/{id}/export.html") {
-        call.respondExport(repository, "html", ContentType.Text.Html.withCharset(Charsets.UTF_8)) { HtmlExport.render(it) }
+        call.respondExport(repository, config, "html", ContentType.Text.Html.withCharset(Charsets.UTF_8)) { HtmlExport.render(it) }
     }
 }
 
 /** Builds the export document once and renders it as an attachment named for the session. */
 private suspend fun ApplicationCall.respondExport(
     repository: SessionRepository,
+    config: DaemonConfig,
     extension: String,
     contentType: ContentType,
     render: (SessionExportDocument) -> String,
 ) {
     val dir = resolveSession(repository) ?: return
-    val document = SessionExport.build(dir, repository, daemonVersion())
+    val document = SessionExport.build(dir, repository, config.routeTemplates, daemonVersion())
     val name = SessionExport.fileName(document, dir, extension)
     response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
     respondText(render(document), contentType)

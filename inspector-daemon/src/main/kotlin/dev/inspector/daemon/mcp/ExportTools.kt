@@ -70,7 +70,7 @@ internal class ExportTools(
         val target = args.string("dir")?.let { java.nio.file.Path.of(it) } ?: config.dataDir.resolve("exports")
         java.nio.file.Files.createDirectories(target)
 
-        val document = SessionExport.build(dir, repository, daemonVersion())
+        val document = SessionExport.build(dir, repository, config.routeTemplates, daemonVersion())
         val written = formats.map { ext ->
             val file = target.resolve(SessionExport.fileName(document, dir, ext))
             java.nio.file.Files.writeString(file, EXPORT_FORMATS.getValue(ext)(document))

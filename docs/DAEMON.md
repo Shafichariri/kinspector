@@ -408,7 +408,8 @@ curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
 ```json
 { "path": "/Users/you/.inspector/config.json",
   "file": { "maxSessions": 50, "signalCaps": { "cache": 2000 } },
-  "effective": { "port": 8099, "maxSessions": 100, "maxTotalMb": 300, "signalCaps": { "cache": 500, "state": 500 } },
+  "effective": { "port": 8099, "maxSessions": 100, "maxTotalMb": 300, "signalCaps": { "cache": 500, "state": 500 },
+                 "routeTemplates": [] },
   "flags": [] }
 ```
 
@@ -421,7 +422,8 @@ curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
   as it was, including ones this version does not know. `null` removes a key, so its default applies
   again (inside `signalCaps`, `null` still means uncapped).
 - **An unknown key is refused by name** with `400`, as is a value out of range (`port` 1–65535,
-  `maxSessions` and `maxTotalMb` at least 1, a `signalCaps` cap `null` or at least 0).
+  `maxSessions` and `maxTotalMb` at least 1, a `signalCaps` cap `null` or at least 0, a
+  `routeTemplates` entry that is not a valid template).
 - **A malformed file is refused with `409` and left untouched**: a save will not overwrite settings
   it could not read. Fix or remove it by hand; `GET` reports it as `fileError`.
 - **The write is atomic.** The new file is written beside the old one and renamed over it, so a
@@ -461,6 +463,31 @@ the rows it drops.
 Uncapped is the default for a reason worth knowing before you change it: `screen` rows are the
 backbone of the merged timeline, so losing old ones leaves gaps in the very thing signals exist to
 build.
+
+#### `routeTemplates` — how paths group into routes
+
+`GET …/stats`, `inspector stats` and the MCP tool `route_stats` group calls by **route**: the
+method, the host and the path with its id-like segments read as `{id}` — numeric (`123`), UUID,
+hex of 8 or more characters with a digit, and base64-like runs of 20 or more with a digit and both
+cases. That is a heuristic. Where it groups wrongly, list templates; the first that matches a path
+wins, and anything no template matches falls back to the heuristic:
+
+```json
+{ "routeTemplates": ["/reports/2024", "/articles/{slug}", "/v2/users/{userId}/avatar"] }
+```
+
+A template starts with `/` and matches a path with the same number of segments: a literal segment
+must be equal, case included, and `{name}` takes any one non-empty segment. `/reports/2024` keeps
+a year from reading as `{id}`; `/articles/{slug}` groups slugs the heuristic would keep apart.
+Trailing slashes count, so `/users/{id}` does not match `/users/1/`. No regular expressions. At
+most 200 entries.
+
+Like every key here, `routeTemplates` applies when the daemon next starts, and then to every
+recorded session, because routes are computed when they are read. `PUT /api/config` accepts it
+and refuses an invalid entry with a 400 that names it. An invalid entry written by hand is
+reported on stderr at start and skipped, and the rest apply. `inspector mcp` reads the file when
+your editor starts it, so after an edit, kill it under Processes and the editor starts a fresh
+one. Until then an agent's `route_stats` groups by the old templates.
 
 Nothing here is encrypted and, with redaction off (the default), bodies and headers contain real
 credentials. Treat `~/.inspector` as you would a log directory full of tokens.
@@ -550,6 +577,7 @@ inspector sessions                                  # list them
 inspector summary                                   # counts, hosts, error breakdown
 inspector query 'status>=400'                       # filter, same grammar as the UI
 inspector query 'has:error' --limit 10 --offset 0
+inspector stats 'status>=400' --sort p90   # per-route latency and failure rates
 inspector body <txnId> --side res                   # raw bytes to stdout
 inspector prune                                     # apply retention now
 inspector --help                                    # usage and the full filter grammar
@@ -612,8 +640,8 @@ can call the MCP tool `export_session`, which writes the files to `~/.inspector/
 | File | What it is |
 |---|---|
 | `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane and JSON tree all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), replay, adding markers, pulls, and process control. The time axis still narrows the view. |
-| `.md` | **A readable record.** The session's details, then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
-| `.json` | **The complete document**: session metadata and summary, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
+| `.md` | **A readable record.** The session's details, then a Routes table (calls, attempts and retries, failures and latency per route), then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
+| `.json` | **The complete document**: session metadata and summary, the route table as `routeStats`, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
 
 All three are the **whole session** — no filter, no page limit. That differs from the live web
 UI, which lists at most 1000 calls, so the export of a long session holds more than the page shows.
@@ -663,6 +691,33 @@ A response body that is not valid UTF-8 travels base64-encoded, which the format
 **request** body that is not valid UTF-8 does not: `postData.text` is a string and HAR offers no
 encoding escape for it, so it is reported as absent with the reason rather than decoded into
 replacement characters that would read as a captured body.
+
+### Route stats
+
+```bash
+curl -s 'http://127.0.0.1:8099/api/sessions/latest/stats'
+curl -s 'http://127.0.0.1:8099/api/sessions/latest/stats?filter=method:POST&sort=p95&limit=20'
+inspector stats 'host:api' --sort errors
+```
+
+One row per method, host and route, over the whole session or what `filter` keeps: `calls`
+(distinct calls) and `attempts` (each redirect hop or retry is one), `retries` and `retried`,
+counts per status class, `transportFailures`, rates over attempts that had an outcome, and
+`p50Ms`/`p90Ms`/`p95Ms`/`p99Ms`/`maxMs` over attempts that got a response. A transport failure is
+counted and never enters latency. Percentiles are nearest-rank; **below 20 samples `p95Ms` and
+`p99Ms` are absent and `tailWithheld` reads `n<20`**. A field that is null is absent from the
+reply. `sort` is `attempts` (default), `p50`, `p90`, `p95`, `p99`, `max` or `errors` (by
+`errorRate`), nulls last; `limit` defaults to 1000, at most 5000, and `routeCount` says how many
+there were.
+
+Each row's `filterTerm` finds the matching calls in the traffic list's filter, or in
+`list_transactions`. It is a **superset**: the filter grammar's `*` crosses `/`, so
+`path:/users/*/profile` also matches `/users/1/x/profile`, which the route keeps apart. When
+`filter` has no `|`, the term includes it; with one, it cannot, and the reply says
+`"filterCarried": false`.
+
+The JSON and HTML exports carry the whole session's table as `routeStats`, and the Markdown
+export as a Routes section. A HAR does not.
 
 ---
 

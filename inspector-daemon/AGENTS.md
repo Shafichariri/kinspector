@@ -49,6 +49,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `inspector-daemon/.../service/Har.kt` | HAR 1.2 export. Read the class doc before changing a field: most of it is about what the format asks for and capture cannot answer. |
 | `inspector-daemon/.../service/Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
 | `inspector-daemon/.../archive/SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
+| `inspector-daemon/.../service/RouteStats.kt` | Route stats: the accumulator `GET …/stats`, `route_stats`, `inspector stats` and the exports share, and its order. `RouteStatsService.kt` beside it is the cache that folds `index.jsonl` from where the last read stopped; the route rule is `archive/RouteTemplates.kt`. |
 | `repo-checks/.../DaemonLayersTest.kt` | Holds the layer table below, from the imports and inline qualified names in the daemon's main sources. |
 
 ## Layers
@@ -58,7 +59,7 @@ so `DaemonLayersTest` does; the reasoning is in `docs/decisions/daemon-and-mcp.m
 
 | Package | Holds | May import, beyond `kotlin.`, `kotlinx.serialization.`, `kotlinx.coroutines.`, `java.` and `dev.inspector.model.` |
 |---|---|---|
-| `archive/` | the on-disk archive: config, layout, reader, writer, retention | nothing else in the daemon |
+| `archive/` | the on-disk archive: config, layout, reader, writer, retention, route templates (the config's `routeTemplates` and the heuristic they override) | nothing else in the daemon |
 | `service/` | live sessions, live apps, replay, peers, MCP control, exports, `daemonVersion()` | `archive/` |
 | `http/` | the Ktor server, its route groups and the control gate | `archive/`, `service/`, `io.ktor.` |
 | `mcp/` | the MCP server and its tools | `archive/`, `service/` |
