@@ -10,9 +10,10 @@
  * opened from disk (`room 1000 close disjoint served` / `… export`); at 400px every row of the probe
  * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`);
  * and at 1440 the list pane starts no lower than 160px (`room 1440 bands list`), the timeline's
- * start reported beside it, with every band's height in the detail; and the toolbar is one row at
+ * start reported beside it, with every band's height in the detail; the toolbar is one row at
  * 1440 and 1000 (`room <w> toolbar one row`) and wraps without overflowing at 600 and 400 (`room <w>
- * toolbar fits`).
+ * toolbar fits`); and the divider, dragged with a real mouse at 1440, moves the list's edge by the
+ * drag and keeps it across a reload (`room 1440 divider`).
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -229,9 +230,45 @@ async function toolbar(page, url, rows) {
   }
 }
 
+// The list pane's width, the divider's centre and what it says, and whether it is drawn at all.
+const DIVIDER = `(() => { const d = document.getElementById('pane-divider'); const r = d.getBoundingClientRect();
+  return { list: document.getElementById('list-pane').getBoundingClientRect().width, x: r.left + r.width / 2, y: r.top + r.height / 2,
+    drawn: getComputedStyle(d).display !== 'none' && r.width > 0, now: d.getAttribute('aria-valuenow'), pref: localStorage.getItem('inspector.listShare') }; })()`;
+
+/**
+ * The divider at 1440, dragged 200px with a real mouse: the list grows by the drag, a reload keeps
+ * the share, and a double-click puts the default back and forgets it. At 1000 there are no two
+ * columns, so it is not drawn. Leaves no share stored.
+ */
+async function divider(page, url, rows) {
+  await load(page, url, 1440);
+  await page.ev(`localStorage.removeItem('inspector.listShare')`);
+  await load(page, url, 1440);
+  const before = await page.ev(DIVIDER);
+  await page.drag(before.x, before.y, before.x + 200);
+  await sleep(300);
+  const dragged = await page.ev(DIVIDER);
+  await load(page, url, 1440);
+  const reloaded = await page.ev(DIVIDER);
+  await page.ev(`document.getElementById('pane-divider').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+  await sleep(300);
+  const reset = await page.ev(DIVIDER);
+  await page.setWidth(1000);
+  await sleep(400);
+  const narrow = await page.ev(DIVIDER);
+  await page.ev(`localStorage.removeItem('inspector.listShare')`);
+  const grew = dragged.list - before.list;
+  const ok = Math.abs(grew - 200) <= 4 && Math.abs(reloaded.list - dragged.list) <= 1 && dragged.pref !== null
+    && Math.abs(reset.list - before.list) <= 1 && reset.pref === null && !narrow.drawn;
+  rows.push({ key: 'room 1440 divider', value: ok ? 'resizes' : 'wrong', ok,
+    detail: `list ${Math.round(before.list)} -> ${Math.round(dragged.list)}px (+${Math.round(grew)}, share ${dragged.now}, stored ${dragged.pref}); `
+      + `reloaded ${Math.round(reloaded.list)}; double-click ${Math.round(reset.list)} (stored ${reset.pref}); at 1000 drawn ${narrow.drawn}` });
+}
+
 async function room(page, url) {
   const rows = [];
   await drawer(page, url, rows);
+  await divider(page, url, rows);
   await narrowRows(page, url, rows);
   await bands(page, url, rows);
   await toolbar(page, url, rows);

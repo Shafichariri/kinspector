@@ -139,6 +139,37 @@ async function probeCapped(ctx, calls) {
   ];
 }
 
+/**
+ * `#/txn/<id>` for the oldest call, which the list's newest 1000 do not hold: the page reads it from
+ * the single-call route and shows it. The whole-session copy is emptied for the read and put back,
+ * standing in for an address opened before that copy has landed — on a loaded page the copy holds
+ * every call and the route is never needed. The page's `fetch` is watched for the request. Back then
+ * returns to the list's address.
+ */
+async function probeTxnPastCeiling(ctx, calls) {
+  const { window, doc } = ctx;
+  const oldest = calls.slice().sort((a, b) => a.mono - b.mono)[0];
+  const page = ctx.pageState();
+  if (!oldest || page.transactions.some((t) => t.id === oldest.id)) return [['txn route past ceiling', `n/a (the list holds the oldest call)`]];
+  const listHash = window.location.hash;
+  const asked = [];
+  const fetch = window.fetch;
+  window.fetch = (path, init) => { asked.push(String(path)); return fetch(path, init); };
+  const whole = page.allTransactions;
+  page.allTransactions = [];
+  window.location.hash = `#/txn/${encodeURIComponent(oldest.id)}?session=${encodeURIComponent(LONG_SESSION_ID)}`;
+  const shown = () => doc.querySelector('#detail .detail-head .path')?.textContent;
+  const drawn = await waitFor(() => doc.getElementById('panes').classList.contains('txn-full') && shown() === oldest.path, 5000);
+  page.allTransactions = whole;
+  window.fetch = fetch;
+  const read = asked.some((p) => p.endsWith(`/transactions/${encodeURIComponent(oldest.id)}`));
+  window.history.back();
+  const back = await waitFor(() => !doc.getElementById('panes').classList.contains('txn-full') && window.location.hash === listHash, 5000);
+  return [['txn route past ceiling', drawn && read && back
+    ? `yes (${oldest.id}, older than the newest 1000, read from its route and shown; Back returned to ${listHash || 'the list'})`
+    : `NO - drawn ${drawn} ("${shown()}", "${oldest.path}" due), single-call route read ${read}, Back returned ${back} (${window.location.hash})`]];
+}
+
 /** Picks a session through the picker's real `change` event. */
 function choose(ctx, sessionId) {
   const picker = ctx.doc.getElementById('session-picker');
@@ -157,7 +188,7 @@ async function probeLongSession(ctx) {
   const { doc } = ctx;
   const picker = doc.getElementById('session-picker');
   const before = picker.value;
-  const none = (why) => [...every(why), ...CAPPED_LABELS.map((label) => [label, why])];
+  const none = (why) => [...every(why), ['txn route past ceiling', why], ...CAPPED_LABELS.map((label) => [label, why])];
   if (![...picker.options].some((o) => o.value === LONG_SESSION_ID)) return none(`n/a (no session ${LONG_SESSION_ID})`);
   const calls = (await ctx.sessionTransactions(encodeURIComponent(LONG_SESSION_ID))).items || [];
   const pair = twicePair(calls);
@@ -165,6 +196,7 @@ async function probeLongSession(ctx) {
   if (pair.length === 2) await waitFor(() => doc.querySelector(`#list .row[data-id="${pair[1].id}"]`));
   await ctx.settle();
   const verdicts = readLongSession(doc, calls);
+  verdicts.push(...await probeTxnPastCeiling(ctx, calls));
   verdicts.push(...(calls.length > 1150 ? await probeCapped(ctx, calls) : CAPPED_LABELS.map((label) => [label, `n/a (${calls.length} calls)`])));
 
   choose(ctx, before);

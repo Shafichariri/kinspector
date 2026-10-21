@@ -342,7 +342,121 @@ async function probeDensity(ctx) {
       + `from Settings: class ${fromSettings.body}, pref ${fromSettings.pref}, item checked ${fromSettings.item}`]];
 }
 
+/**
+ * The divider between the list and the detail: a separator a keyboard can move. ArrowLeft takes 2
+ * points off the list's share and keeps it; a double-click forgets the choice and puts the default
+ * back, so the next load is not left on a share nobody can see was chosen. Left as it was found.
+ */
+async function probeDivider(ctx) {
+  const { window, doc } = ctx;
+  const divider = doc.getElementById('pane-divider');
+  const panes = doc.getElementById('panes');
+  if (!divider) return [['divider', 'NO - there is no #pane-divider']];
+  const stored = () => window.localStorage.getItem('inspector.listShare');
+  const share = () => panes.style.getPropertyValue('--list-share');
+  const was = stored();
+  const start = Number(divider.getAttribute('aria-valuenow'));
+  divider.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+  const moved = { now: Number(divider.getAttribute('aria-valuenow')), share: share(), pref: stored() };
+  divider.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+  const reset = { now: divider.getAttribute('aria-valuenow'), share: share(), pref: stored() };
+  if (was !== null) {
+    window.localStorage.setItem('inspector.listShare', was);
+    window.setListShare(Number(was), { save: false });
+  }
+  const due = Math.round((start - 2) * 10) / 10;
+  const ok = divider.getAttribute('role') === 'separator' && divider.hasAttribute('aria-valuenow')
+    && moved.now === due && moved.share === `${due}%` && moved.pref === String(due)
+    && reset.now === '47.6' && reset.share === '' && reset.pref === null;
+  return [['divider', ok
+    ? `yes (separator at ${start}; ArrowLeft -> ${moved.share}, kept; double-click -> 47.6, the choice forgotten)`
+    : `NO - role ${divider.getAttribute('role')}; ArrowLeft from ${start}: ${moved.now}, --list-share "${moved.share}", pref ${moved.pref} (${due} due); `
+      + `double-click: ${reset.now}, --list-share "${reset.share}", pref ${reset.pref} (47.6, unset, none due)`]];
+}
+
+/**
+ * Hiding the detail column is a choice about the layout: the restore tab appears naming the call
+ * shown, selecting another row keeps the column put away and renames the tab, and restore brings
+ * it back. Read on the traffic list, with a row open; left with the column shown.
+ */
+async function probeDetailHide(ctx) {
+  const { doc } = ctx;
+  const panes = doc.getElementById('panes');
+  const restore = doc.getElementById('detail-restore');
+  await press(ctx, tabOf(doc, 'network'), 400);
+  const rows = [...doc.querySelectorAll('#list .row')];
+  if (rows.length < 2) return [['detail hide', 'n/a (fewer than two rows to select between)']];
+  const named = (row) => {
+    const txn = ctx.pageState().transactions.find((t) => t.id === row.dataset.id);
+    return txn ? `${txn.method} ${txn.path}` : '?';
+  };
+  await press(ctx, rows[0], 300);
+  await press(ctx, doc.getElementById('detail-hide'), 60);
+  const hid = { cls: panes.classList.contains('detail-hidden'), shown: !restore.hidden, label: restore.textContent.trim() };
+  await press(ctx, rows[1], 300);
+  const kept = { cls: panes.classList.contains('detail-hidden'), shown: !restore.hidden, label: restore.textContent.trim() };
+  await press(ctx, restore, 60);
+  const back = { cls: panes.classList.contains('detail-hidden'), shown: !restore.hidden };
+  const ok = hid.cls && hid.shown && hid.label.endsWith(named(rows[0]))
+    && kept.cls && kept.shown && kept.label.endsWith(named(rows[1])) && !back.cls && !back.shown;
+  return [['detail hide', ok
+    ? `yes (hidden, the tab reads "${hid.label}"; another row keeps it hidden as "${kept.label}"; restore shows the column)`
+    : `NO - hide: class ${hid.cls}, tab ${hid.shown} "${hid.label}"; another row: class ${kept.cls}, tab ${kept.shown} "${kept.label}"; `
+      + `restore: class ${back.cls}, tab ${back.shown}`]];
+}
+
+/** Polls `ready` until it holds or `ms` passes; whether it held. */
+async function until(ready, ms = 4000) {
+  for (const end = Date.now() + ms; Date.now() < end; await pause(50)) if (ready()) return true;
+  return ready();
+}
+
+/**
+ * `⤢` opens the shown call on its own page: the address `#/txn/<id>?session=<s>`, the panes in
+ * `txn-full` and the detail that call's. `j` there moves nothing, since there is no list; Back
+ * returns to the list route with the panes as they were, and so does Escape after a second open.
+ * The call past the list's ceiling, read from the single-call route, is `txn route past ceiling` in
+ * `lib/long-session-probes.js`, on the session that has one.
+ */
+async function probeTxnRoute(ctx) {
+  const { window, doc } = ctx;
+  const panes = doc.getElementById('panes');
+  await press(ctx, tabOf(doc, 'network'), 400);
+  const rows = [...doc.querySelectorAll('#list .row')];
+  if (rows.length < 2) return [['txn route', 'n/a (fewer than two rows)']];
+  const listHash = window.location.hash;
+  const session = doc.getElementById('session-picker').value;
+  const txn = ctx.pageState().transactions.find((t) => t.id === rows[1].dataset.id);
+  await press(ctx, rows[1], 300);
+  const full = doc.getElementById('detail-full');
+  const shown = () => doc.querySelector('#detail .detail-head .path')?.textContent;
+  await press(ctx, full, 60);
+  const opened = await until(() => panes.classList.contains('txn-full') && shown() === txn.path);
+  const at = { hash: window.location.hash, path: shown() };
+  doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+  await pause(100);
+  const stayed = ctx.pageState().selectedId === txn.id;
+  window.history.back();
+  const back = await until(() => !panes.classList.contains('txn-full') && window.location.hash === listHash);
+  await press(ctx, full, 60);
+  await until(() => panes.classList.contains('txn-full'));
+  doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const escaped = await until(() => !panes.classList.contains('txn-full') && window.location.hash === listHash);
+  const due = `#/txn/${encodeURIComponent(txn.id)}?session=${encodeURIComponent(session)}`;
+  const ok = opened && at.hash === due && stayed && back && escaped;
+  return [['txn route', ok
+    ? `yes (⤢ -> ${due}, the page holds ${txn.method} ${txn.path}; j moves nothing; Back and Escape return to ${listHash || 'the list'})`
+    : `NO - opened ${opened} at ${at.hash} (${due} due) showing "${at.path}" ("${txn.path}" due); j left it ${stayed}; `
+      + `Back returned ${back}, Escape returned ${escaped}; now ${window.location.hash}, txn-full ${panes.classList.contains('txn-full')}`]];
+}
+
+/** The detail beside the list: the divider, hiding the column and a call's own page, in report order. */
+async function probeColumns(ctx) {
+  return [...await probeDivider(ctx), ...await probeDetailHide(ctx), ...await probeTxnRoute(ctx)];
+}
+
 module.exports = {
   probeDrawer, probeRowParts, probeNowStrip, probeOverview,
   probeToolbar, probeToolbarControls, probeEndpointsMenu, probeMoreMenu, probeDensity,
+  probeColumns,
 };

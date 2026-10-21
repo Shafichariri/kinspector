@@ -246,6 +246,22 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   );
   check('filter disabled', doc.getElementById('filter').disabled);
 
+  // A call's own page reads the call from the export's data, with no request — every one is
+  // forbidden here — and an id the export does not hold says so rather than drawing nothing.
+  const embedded = txns[Math.floor(txns.length / 2)];
+  const sid = encodeURIComponent(archive.meta?.sessionId ?? '');
+  const panes = doc.getElementById('panes');
+  const headPath = () => doc.querySelector('#detail .detail-head .path')?.textContent;
+  window.location.hash = `#/txn/${encodeURIComponent(embedded.id)}?session=${sid}`;
+  const opened = await waitFor(() => panes.classList.contains('txn-full') && headPath() === embedded.path, 3000);
+  window.location.hash = `#/txn/no-such-call?session=${sid}`;
+  const missing = await waitFor(() => doc.getElementById('detail').hidden && doc.getElementById('detail-empty').textContent.includes('not in this export'), 3000);
+  const said = doc.getElementById('detail-empty').textContent.slice(0, 60);
+  window.location.hash = '#/traffic';
+  const left = await waitFor(() => !panes.classList.contains('txn-full'), 3000);
+  check('txn route in export', opened && missing && left && attempts.length === 0,
+    `${embedded.method} ${embedded.path} drawn ${opened}; an unknown id: "${said}" ${missing}; left ${left}; ${attempts.length} requests`);
+
   // A marker item would ask for since:marker(...). It must leave the list alone and say why.
   const markerItem = [...doc.querySelectorAll('#markers li')].find((li) => !li.classList.contains('muted'))
     || doc.querySelector('#chips .chip');

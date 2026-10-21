@@ -453,6 +453,15 @@ row and never makes text smaller (`density`, red with the Settings control writi
 `room <w> toolbar one row` at 1440 and 1000 and `room <w> toolbar fits` at 600 and 400 measure it in
 Chrome.
 
+**`#/txn/{id}` is the detail pane given the page, not a second rendering of a call.** It reuses
+`renderDetail`, so the evidence on it is the evidence everywhere else, and it reads a call past the
+list's ceiling from the single-call route rather than saying it does not exist. The call is looked
+up in the whole-session copy, then the rows the list holds, and only then read; an export has no
+route and embeds every call, so there a missing id says `not in this export`. `route parse` holds
+the address, the live probe's `txn route` and `txn route past ceiling` the page, Back and Escape,
+and the archive probe's `txn route in export` the export, the last two red with the lookup made in
+the list's rows alone and with the page's class not set.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

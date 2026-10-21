@@ -12,10 +12,13 @@
 /* One column, so the divider has nothing to divide. */
 #panes.panes-wide #list-pane { border-right: 0; }
 
-/* The close control and the scrim exist only in drawer mode; as a column there is nothing to
-   close and nothing to dim. The tools row goes with the close control: as a column it holds
-   nothing else, and an empty row would push the header down. */
-.detail-tools { display: none; }
+/* The pane's tools row, above the header and in flow, at every width: open on its own page, hide
+   the column, or close the drawer. The close control and the scrim exist only in drawer mode; as a
+   column there is nothing to close and nothing to dim. */
+.detail-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0; }
+/* `⤢` is offered only while a call is shown; `hidden` alone loses to `.btn`'s own display. */
+.detail-full { text-decoration: none; }
+.detail-full[hidden] { display: none; }
 .drawer-close { display: none; }
 .drawer-scrim { display: none; }
 
@@ -69,8 +72,11 @@
   /* Nothing to open a drawer *to* while the tag browser owns the pane. */
   #panes.panes-wide #detail-pane { display: none; }
 
-  .detail-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0; }
   .drawer-close { display: block; }
+  /* Nothing beside a drawer to share the width with or to hide it in favour of. */
+  #pane-divider,
+  #detail-restore,
+  .detail-hide { display: none; }
 
   .drawer-scrim {
     display: block;

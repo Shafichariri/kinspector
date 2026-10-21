@@ -2025,7 +2025,7 @@ function runScripts() {
   const jsonTreeProbe = await probeJsonTree();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
-  const drawerLines = await room.probeDrawer(shellCtx);
+  const drawerLines = [...await room.probeDrawer(shellCtx), ...await room.probeColumns(shellCtx)];
   const toolbarLines = await room.probeToolbar(shellCtx);
   const nowLines = await room.probeNowStrip(shellCtx);
   const overviewLines = await room.probeOverview(shellCtx);

@@ -283,6 +283,14 @@
 
     </section>
 
+    <!--
+      The list's share of the width, dragged, or moved with the arrow keys; double-click or Home puts
+      the default back. Two columns only: a drawer has nothing beside it to share the width with.
+    -->
+    <div id="pane-divider" class="pane-divider" role="separator" tabindex="0" aria-orientation="vertical"
+         aria-controls="list-pane" aria-label="Resize the list and the detail" aria-valuemin="25"
+         aria-valuemax="75" aria-valuenow="47.6" title="Drag to resize; double-click to reset"></div>
+
     <section id="detail-pane">
       <!--
         The pane's own controls, in a row above the header rather than laid over it: the close
@@ -290,6 +298,12 @@
         actions. In flow, nothing below it can sit under it.
       -->
       <div id="detail-tools" class="detail-tools">
+        <!-- The shown call on a page of its own, `#/txn/<id>`; Back or Escape returns here. -->
+        <a id="detail-full" class="detail-full btn btn-sm btn-quiet" hidden
+           title="Open this call on its own page" aria-label="Open this call on its own page">&#10530;</a>
+        <!-- Column mode only: the list takes the width, and the tab at the right edge brings it back. -->
+        <button id="detail-hide" class="detail-hide btn btn-sm btn-quiet" type="button"
+                title="Hide the detail; the list takes the width" aria-label="Hide the detail">&#8677;</button>
         <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
         <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet" type="button"
                 title="Close (Esc)" aria-label="Close the detail">&#10005;</button>
@@ -297,6 +311,11 @@
       <div id="detail-empty" class="empty muted">select a transaction</div>
       <div id="detail" hidden></div>
     </section>
+
+    <!-- The detail column put away: a slim tab at the right edge, naming the call it would show. -->
+    <button id="detail-restore" class="detail-restore" type="button" hidden>
+      <span aria-hidden="true">&#9666;</span> <span id="detail-restore-label">detail</span>
+    </button>
 
     <!--
       Below the breakpoint the detail pane stops being a column and slides over the list, so the

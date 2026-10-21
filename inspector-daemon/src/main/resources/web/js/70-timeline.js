@@ -315,6 +315,7 @@ async function selectSignal(id) {
   detail.hidden = false;
   detail.innerHTML = '';
   openDrawer();
+  paintDetailTools();
 
   const head = el('div', 'detail-head');
   head.appendChild(el('span', 'tl-tag', signal.tag));

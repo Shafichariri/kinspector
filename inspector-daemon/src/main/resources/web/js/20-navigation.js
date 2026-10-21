@@ -281,3 +281,113 @@ function wirePops() {
     $(pop).addEventListener('click', (event) => event.stopPropagation());
   }
 }
+
+// --- the divider and the detail column --------------------------------------
+
+/**
+ * The list's share of `#panes` beside the detail column, in percent. The default is the
+ * `1fr : 1.1fr` split the grid had before there was a divider.
+ */
+const LIST_SHARE = { min: 25, max: 75, step: 2, initial: 47.6 };
+
+/**
+ * Sets the list's share, clamped, and keeps it in this browser; `null` resets it and forgets the
+ * choice. A share rather than pixels, so a split chosen at 1440 still splits a window resized to
+ * 1280 the same way. Only two-column mode reads it: below 1200px the stylesheet gives the list the
+ * whole width and does not draw the divider.
+ */
+function setListShare(share, { save = true } = {}) {
+  const panes = $('panes');
+  const divider = $('pane-divider');
+  if (share === null || !Number.isFinite(share)) {
+    if (save) prefs.remove('inspector.listShare');
+    panes.style.removeProperty('--list-share');
+    divider.setAttribute('aria-valuenow', String(LIST_SHARE.initial));
+    return;
+  }
+  const clamped = Math.round(Math.min(LIST_SHARE.max, Math.max(LIST_SHARE.min, share)) * 10) / 10;
+  panes.style.setProperty('--list-share', `${clamped}%`);
+  divider.setAttribute('aria-valuenow', String(clamped));
+  if (save) prefs.set('inspector.listShare', String(clamped));
+}
+
+const listShare = () => Number($('pane-divider').getAttribute('aria-valuenow')) || LIST_SHARE.initial;
+
+/**
+ * Drag, arrows and Home on the divider. A drag moves the share by the pointer's travel from where
+ * it was pressed, not to the pointer's position, so pressing it does not make the split jump by
+ * half the divider's width; it is saved once, when a drag that moved ends, rather than on every move.
+ */
+function wireDivider() {
+  const divider = $('pane-divider');
+  const saved = prefs.get('inspector.listShare');
+  setListShare(saved === null ? null : Number(saved), { save: false });
+  divider.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const width = $('panes').getBoundingClientRect().width;
+    const startX = event.clientX;
+    const startShare = listShare();
+    divider.classList.add('dragging');
+    let moved = false;
+    const move = (e) => {
+      moved = true;
+      setListShare(startShare + ((e.clientX - startX) / width) * 100, { save: false });
+    };
+    // A press with no travel saves nothing: each half of a double-click is one, and saving there
+    // would store the default as a choice.
+    const end = () => {
+      divider.classList.remove('dragging');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', end);
+      document.removeEventListener('pointercancel', end);
+      if (moved) setListShare(listShare());
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  });
+  divider.addEventListener('dblclick', () => setListShare(null));
+  divider.addEventListener('keydown', (event) => {
+    const step = { ArrowLeft: -LIST_SHARE.step, ArrowRight: LIST_SHARE.step }[event.key];
+    if (step) setListShare(listShare() + step);
+    else if (event.key === 'Home') setListShare(null);
+    else return;
+    event.preventDefault();
+  });
+}
+
+/**
+ * The detail column put away, and the tab at the right edge that brings it back, naming the call it
+ * would show. Selecting another row keeps it put away: hiding is a choice about the layout, and a
+ * click on a row is not a request to undo it. Not kept across reloads. Column mode only; below
+ * 1200px the stylesheet ignores the class, so the drawer still opens on a row.
+ */
+function hideDetail() {
+  $('panes').classList.add('detail-hidden');
+  paintDetailTools();
+}
+
+function restoreDetail() {
+  $('panes').classList.remove('detail-hidden');
+  paintDetailTools();
+  $('detail-hide').focus();
+}
+
+/**
+ * What the tools row and the restore tab say about the call the pane shows: `⤢` links to its own
+ * page and is offered only while a call is shown, and the restore tab, shown while the column is
+ * put away, names it.
+ */
+function paintDetailTools() {
+  const hidden = $('panes').classList.contains('detail-hidden');
+  const id = $('detail').hidden ? null : state.selectedId;
+  const txn = id && (state.transactions.find((t) => t.id === id) || state.allTransactions.find((t) => t.id === id));
+  const label = txn ? `${txn.method} ${txn.path}` : 'detail';
+  $('detail-restore').hidden = !hidden;
+  $('detail-restore-label').textContent = label;
+  $('detail-restore').title = `Show the detail again: ${label}`;
+  const full = $('detail-full');
+  full.hidden = !id;
+  if (id) full.href = routeHash({ page: 'txn', txn: id, session: state.sessionId });
+}

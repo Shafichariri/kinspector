@@ -90,7 +90,7 @@ function auditHiddenPanes(cssText) {
   const panes = [
     '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
     '.drawer-scrim', '.axis', '.waterfall', '.path-view', '.path-new', '.page', '.overview', '.axis-hint',
-    '#endpoint-chips',
+    '#endpoint-chips', '#detail-restore',
     // Hidden on the path tab, where order has no meaning; it rendered anyway until this was here.
     '.seg2',
   ];

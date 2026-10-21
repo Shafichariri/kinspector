@@ -13,12 +13,70 @@ function attemptOf(txn) {
   return txn.attempt ?? 1;
 }
 
+/**
+ * `#/txn/<id>`: the detail pane given the whole page, or with `null` the page put back. Not a second
+ * rendering of a call: it is `renderDetail`, so the evidence there is the evidence everywhere else.
+ *
+ * The call is looked up in the whole-session copy, then the rows the list holds, and failing both is
+ * read from the single-call route, so a call past the list's ceiling, or one named by an address
+ * opened before the session has loaded, is shown rather than said not to exist. An export has no
+ * route behind it and embeds every call it has, so there a missing id is `not in this export`. A
+ * later address overtakes a read still in flight.
+ */
+async function showTxnFull(id) {
+  const panes = $('panes');
+  const was = panes.classList.contains('txn-full');
+  panes.classList.toggle('txn-full', Boolean(id));
+  $('page-traffic').classList.toggle('txn-page', Boolean(id));
+  const ticket = ++state.txnRead;
+  if (!id) {
+    if (!was) return;
+    state.txnPushed = false;
+    // Whatever the call's page said in the empty pane — `not in this export` — is not the session's.
+    if ($('detail').hidden) renderSessionGlance();
+    paintDetailTools();
+    return;
+  }
+  if (state.selectedId === id && !$('detail').hidden && was) return;
+  const held = (rows) => rows.find((t) => t.id === id);
+  let txn = held(state.allTransactions) || held(state.transactions);
+  let why = null;
+  if (!txn && ARCHIVE) why = `call ${id} is not in this export`;
+  else if (!txn && !state.sessionId) why = 'loading…';
+  else if (!txn) {
+    txn = await api(`/api/sessions/${encodeURIComponent(state.sessionId)}/transactions/${encodeURIComponent(id)}`)
+      .catch((e) => { why = e.message; return null; });
+  }
+  if (ticket !== state.txnRead) return;
+  if (!txn) {
+    state.selectedId = null;
+    $('detail').hidden = true;
+    $('detail-empty').className = 'empty muted';
+    $('detail-empty').textContent = why;
+    $('detail-empty').hidden = false;
+    paintDetailTools();
+    return;
+  }
+  state.selectedId = txn.id;
+  await renderDetail(txn);
+}
+
+/**
+ * Leaves a call's page the way it came: Back when the page pushed it (`⤢`), so the list is where it
+ * was left; otherwise, opened from an address, to the session's list in its place.
+ */
+function leaveTxnFull() {
+  if (state.txnPushed) history.back();
+  else navigate({ page: 'traffic', session: state.sessionId }, { replace: true });
+}
+
 async function renderDetail(txn) {
   const pane = $('detail');
   $('detail-empty').hidden = true;
   pane.hidden = false;
   pane.innerHTML = '';
   openDrawer();
+  paintDetailTools();
 
   const head = el('div', 'detail-head');
   head.appendChild(el('span', `status s${statusClass(txn.status)}`, txn.status ?? 'ERR'));

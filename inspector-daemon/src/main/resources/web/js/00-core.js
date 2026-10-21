@@ -28,6 +28,7 @@ const ARCHIVE = window.INSPECTOR_ARCHIVE || null;
 const prefs = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* a preference, not data */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* a preference, not data */ } },
 };
 
 const state = {
@@ -165,6 +166,10 @@ const state = {
   // Session ids an app is connected to right now, from `/api/recording`. Not derivable from
   // `endedAt`: a session whose daemon was killed has neither an `endedAt` nor an open app.
   recording: [],
+  // `#/txn/<id>`: reads of a call's own page, counted so a later address overtakes an earlier one
+  // still reading, and whether the page pushed the address, so leaving it can go Back.
+  txnRead: 0,
+  txnPushed: false,
   // A stretch of the session selected on the axis, in device `mono` ms, or null for all of it.
   // Client-side on purpose: the text filter round-trips to the daemon, and a brush you drag
   // across a chart cannot wait for a fetch per pixel.
