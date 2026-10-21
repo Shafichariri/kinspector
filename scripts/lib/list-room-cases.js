@@ -1,7 +1,8 @@
 'use strict';
 /*
  * The traffic page's room for the list, read in Chrome (group `room` in scripts/measure-web-ui.js):
- * what jsdom cannot see, because each is layout, focus or paint. On the probe session.
+ * what jsdom cannot see, because each is layout, focus or paint. On the probe session, but for one
+ * reading on the 3016-call session.
  *
  * Judged: below 1200px the closed drawer neither widens the document (`room <w> doc width closed`)
  * nor takes focus from Tab, which is walked with real key presses until focus comes back round
@@ -14,7 +15,8 @@
  * 1440 and 1000 (`room <w> toolbar one row`) and wraps without overflowing at 600 and 400 (`room <w>
  * toolbar fits`); and the divider, dragged with a real mouse at 1440, moves the list's edge by the
  * drag and keeps it across a reload (`room 1440 divider`); and the overview hint's words are whole
- * at 1440 and 1000 on the list (`room <w> hint whole`).
+ * at 1440 and 1000 on the list (`room <w> hint whole`). On the 3016-call session, each view opens
+ * where it was left while live tail is paused (`room views keep place`).
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -289,7 +291,33 @@ async function hint(page, url, rows) {
   }
 }
 
-async function room(page, url) {
+const PANE = `(() => { const p = document.getElementById('list-pane'); return { top: Math.round(p.scrollTop), max: p.scrollHeight - p.clientHeight }; })()`;
+
+/**
+ * Each view's own place on the 3016-call session at 1440, oldest first. Paused: the list scrolled
+ * to 5000, the timeline opens at its start the first time, and the list comes back at 5000. Live:
+ * nothing is restored, and the timeline still opens at its end, which it follows.
+ */
+async function keepPlace(page, url, rows) {
+  await load(page, url, 1440);
+  const view = async (v) => { await page.ev(`selectView(${JSON.stringify(v)})`); await sleep(700); return page.ev(PANE); };
+  await page.ev(`setSortOrder(false); setLiveTail(false)`);
+  await view('network');
+  await page.ev(`document.getElementById('list-pane').scrollTop = 5000`);
+  await sleep(300);
+  const list = await page.ev(PANE);
+  const timeline = await view('all');
+  const back = await view('network');
+  await page.ev(`setLiveTail(true)`);
+  await sleep(3000);
+  const live = await view('all');
+  const ok = list.top === 5000 && timeline.top === 0 && back.top === 5000 && live.max > 50 && live.top >= live.max - 1;
+  rows.push({ key: 'room views keep place', value: ok ? 'keeps' : 'moves', ok,
+    detail: `paused: list ${list.top} -> timeline ${timeline.top} of ${timeline.max} -> list ${back.top}; live: the timeline opens at ${live.top} of ${live.max}` });
+}
+
+async function room(page, urls) {
+  const url = urls.probe;
   const rows = [];
   await drawer(page, url, rows);
   await divider(page, url, rows);
@@ -297,6 +325,7 @@ async function room(page, url) {
   await bands(page, url, rows);
   await toolbar(page, url, rows);
   await hint(page, url, rows);
+  await keepPlace(page, urls.big, rows);
   const seen = [...new Set(page.exceptions)];
   rows.push({ key: 'room page exceptions', value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') });
   return rows;

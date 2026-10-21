@@ -410,6 +410,17 @@ measurement — the element at the bar's centre, the first and newest timeline r
 station's row against the box, at 1440 and 400, with and without a filter — red at e1711a3 and
 green after.
 
+**Each traffic view keeps its own place in the shared pane while live tail is paused.** Since KIN-33
+the list, the timeline, the waterfall and the path scroll one pane, so a list left at row 5000 opened
+the timeline at 5000 of 29,800, a place nobody chose. Leaving a view now saves the pane's position
+under its view id, and opening it restores that, or the view's own first-open rule. Only while
+paused: with live tail on each view follows as before, and KIN-38's rule that opening a run never
+moves the pane is untouched. A new session, filter, order or stretch drops every saved place, since
+each is a new list; the places are kept with the list they were saved on and dropped the first time
+a view opens on another, so no loader has to remember to clear them. `views keep place` drives it in
+jsdom, which holds an assigned `scrollTop`, and Chrome confirms it on the 3016-call session (`room
+views keep place`); both were red with the restore removed.
+
 **A closed drawer is hidden from the keyboard and from the page's width, not only moved off screen.**
 Below 1200px the closed pane was translated past the right edge and nothing else, so the document
 was 1646px wide at 1000, Tab reached thirteen controls inside it, and focusing its `✕` scrolled the

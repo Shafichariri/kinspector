@@ -128,6 +128,10 @@ const state = {
   pathFresh: true,
   // The timeline was just opened, so it follows once whatever the pane's position (`renderTimeline`).
   timelineFresh: true,
+  // The traffic view the shared pane last showed, and each view's place in it by view id, saved
+  // while live tail is paused, with the list they were saved on (`viewPlaces`).
+  paneView: null,
+  viewScroll: { list: null, places: new Map() },
   // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
   // them — a session can hold thousands — but every field a browser row shows lives in one.
   payloads: new Map(),

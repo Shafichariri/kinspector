@@ -450,9 +450,46 @@ async function probeTxnRoute(ctx) {
       + `Back returned ${back}, Escape returned ${escaped}; now ${window.location.hash}, txn-full ${panes.classList.contains('txn-full')}`]];
 }
 
+/**
+ * Each traffic view keeps its own place in the pane they share while live tail is paused. jsdom
+ * holds an assigned `scrollTop` though it lays nothing out, so the rule is driven on the real page:
+ * the list at 300 opens the timeline at its start, 0; the timeline set to 120 and the list opened
+ * again is back at 300, and the timeline then at 120. A filter is a new list, so after one the
+ * timeline opens at 0 again. Chrome confirms it on the 3016-call session (`room views keep place`).
+ * Left unfiltered, live, on the list.
+ */
+async function probeViewsKeepPlace(ctx) {
+  const { window, doc, settle } = ctx;
+  const pane = doc.getElementById('list-pane');
+  const live = doc.getElementById('live-btn');
+  if (!tabOf(doc, 'all')) return [['views keep place', 'n/a (no timeline tab in this session)']];
+  const open = async (view) => { await press(ctx, tabOf(doc, view), 300); return pane.scrollTop; };
+  await open('network');
+  if (ctx.pageState().liveTail) await press(ctx, live, 60);
+  pane.scrollTop = 300;
+  const timelineFirst = await open('all');
+  pane.scrollTop = 120;
+  const listBack = await open('network');
+  const timelineBack = await open('all');
+  await open('network');
+  const filter = doc.getElementById('filter');
+  const type = async (text) => { filter.value = text; filter.dispatchEvent(new window.Event('input', { bubbles: true })); await settle(); };
+  await type('status>=200');
+  const afterFilter = await open('all');
+  await open('network');
+  await type('');
+  if (!ctx.pageState().liveTail) await press(ctx, live, 60);
+  await settle();
+  const ok = timelineFirst === 0 && listBack === 300 && timelineBack === 120 && afterFilter === 0;
+  return [['views keep place', ok
+    ? 'yes (paused: list 300 -> timeline opens at 0, left at 120 -> list back at 300 -> timeline back at 120; after a filter the timeline opens at 0)'
+    : `NO - paused: the timeline opened at ${timelineFirst} (0 due), the list came back at ${listBack} (300 due), `
+      + `the timeline at ${timelineBack} (120 due), and after a filter at ${afterFilter} (0 due)`]];
+}
+
 /** The detail beside the list: the divider, hiding the column and a call's own page, in report order. */
 async function probeColumns(ctx) {
-  return [...await probeDivider(ctx), ...await probeDetailHide(ctx), ...await probeTxnRoute(ctx)];
+  return [...await probeDivider(ctx), ...await probeDetailHide(ctx), ...await probeTxnRoute(ctx), ...await probeViewsKeepPlace(ctx)];
 }
 
 module.exports = {

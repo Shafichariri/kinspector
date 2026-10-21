@@ -158,7 +158,7 @@ async function main() {
     // After the parallel batch, one window per tree: twelve windows opened at once made Chrome's
     // DevTools endpoint drop a request, failing the whole run before anything was measured.
     if (opts.only.includes('room')) {
-      await Promise.all(sides.map((side) => onPage(chrome, (p) => room(p, side.urls.probe))
+      await Promise.all(sides.map((side) => onPage(chrome, (p) => room(p, side.urls))
         .then((rows) => results[side.name].push(...rows))));
     }
     if (opts.only.includes('shell')) {

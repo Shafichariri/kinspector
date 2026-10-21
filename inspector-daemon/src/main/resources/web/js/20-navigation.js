@@ -168,6 +168,10 @@ function applyView() {
   const waterfall = state.view === 'waterfall';
   const path = state.view === 'path';
   const browsing = !all && !network && !waterfall && !path;
+  // The traffic view the pane showed until now, whose place is saved before the pane changes hands.
+  const left = state.paneView;
+  const switching = left !== state.view;
+  if (switching) saveViewPlace(left);
 
   $('list').hidden = !network;
   $('list-empty').hidden = !network || state.transactions.length > 0;
@@ -212,6 +216,41 @@ function applyView() {
   if (waterfall) renderWaterfall();
   if (path) renderPath();
   if (browsing) renderBrowser();
+  if (switching) openViewPlace(state.view);
+  state.paneView = state.view;
+}
+
+/**
+ * Each traffic view's own place in the pane they share, while live tail is paused.
+ *
+ * Since KIN-33 the list, the timeline, the waterfall and the path scroll one pane, so a list left at
+ * row 5000 opened the timeline at 5000 of 29,800, a place nobody chose. Leaving a view saves the
+ * pane's position under its id; opening one restores its own, or the first time its own rule: the
+ * top for the list, the timeline and the waterfall, and for the path whatever `renderPath` chose on
+ * opening it. With live tail on neither runs, and each view follows as it always did — restoring a
+ * place under rows that keep arriving would undo the follow.
+ *
+ * A new session, filter, order or stretch is a new list, where no saved place means anything, so
+ * each place is kept with the list it was saved on (`viewPlaces`) and every one is dropped the first
+ * time a view opens on another. Kept with the place rather than cleared by each of the four changes,
+ * so no loader has to remember to clear it.
+ */
+function viewPlaces() {
+  const list = JSON.stringify([state.sessionId, state.filter, state.newestFirst, state.timeRange]);
+  if (state.viewScroll.list !== list) state.viewScroll = { list, places: new Map() };
+  return state.viewScroll.places;
+}
+
+function saveViewPlace(view) {
+  if (state.liveTail || !TRAFFIC_VIEWS.includes(view)) return;
+  viewPlaces().set(view, $('list-pane').scrollTop);
+}
+
+function openViewPlace(view) {
+  if (state.liveTail || !TRAFFIC_VIEWS.includes(view)) return;
+  const saved = viewPlaces().get(view);
+  if (saved !== undefined) $('list-pane').scrollTop = saved;
+  else if (view !== 'path') $('list-pane').scrollTop = 0;
 }
 
 /**
