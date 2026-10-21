@@ -1,11 +1,11 @@
 ---
 id: KIN-90
 title: 'Guard: core and stream twin pairs get the ui pair''s guards'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 18:15'
-updated_date: '2026-10-21 18:40'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:guard-twin-pairs-alike'
 dependencies: []
@@ -20,14 +20,14 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:guard-twin-pairs-alike in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:guard-twin-pairs-alike in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -62,3 +62,9 @@ Red proofs, each restored and re-run green (JAVA_HOME per RUN-RULES):
 
 Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #125 merge 623c571, one round, no blocking findings. '--rerun' on the four jvmTest tasks: 2 parity tests green in :inspector-core, :inspector-noop, :inspector-stream, :inspector-noop-stream. Red: class StrayProbe in core -> completeness FAIL '+ dev.inspector.StrayProbe [class]' with the golden test green; top-level fun strayProbe() in :inspector-noop-stream -> FAIL '+ dev.inspector.stream.StrayProbeKt [strayProbe]'. Golden-only edit of both golden files, --build-cache --continue, no --rerun: all four jvmTest FAILED (PUBLIC API differs). twins.txt: misspelt -> 'These pairs name a golden file that does not exist'; core line without file -> 'These pairs name no golden file in structure/twins.txt'. 'git diff b1bbcac 623c571 -- api/' empty. check-release-clean.sh: self-test found the canary, plain run found nothing (JVM jars only locally). Not run locally: Android SDK/xcrun, rests on CI (build, release-swap passed). JVM-only guard; native surface is item:guard-twin-native-surface. The hand-over's claim that root AGENTS.md says the ui pair has no golden file was false at 623c571.
+<!-- SECTION:FINAL_SUMMARY:END -->

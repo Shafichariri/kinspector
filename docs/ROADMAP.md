@@ -166,45 +166,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - ~~**`:inspector-noop-ui` still has no golden file, and already diverges.**~~ Done 2026-10-21, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:structure-phase-i`.
 
-- **"A probe leaves no process behind" is a claim nothing tests.** *Ticket label:*
-  `item:guard-mcp-probe-cleanup`. Found during §5 → Phase D, and left alone because phase D allowed
-  no behaviour change. `docs/decisions/daemon-and-mcp.md` ("There is no 'start the MCP server'
-  endpoint") points here for it.
-
-  **For whom.** A web UI user on a Mac who presses the MCP probe in settings. Every press spawns a
-  real `inspector mcp`. If one outlived its probe, it would show up in the peer list as an `mcp`
-  process, which is exactly the kind of process that list warns people not to kill, because it
-  might be the editor's. A probe that leaks makes the daemon's own control panel lie about what is
-  connected.
-
-  **Why it is unguarded.** The whole property rests on one line in `ProcessMcpControl.probe`,
-  `finally { process.destroyForcibly() }`. `McpControlTest` (in `PeerRegistryTest.kt`) does test the
-  real control, but it runs in a Gradle worker. That worker's argv carries no `MainKt`, so
-  `commandLine()` returns null, the probe reports "this process cannot report its own command line",
-  and **nothing is ever spawned**. The test's own comment says either outcome is a pass. So the test
-  passes with the `finally` deleted, and it would pass with it deleted on every machine the suite
-  runs on.
-
-  **What adding it would take.** A production seam in `ProcessMcpControl`, so a test can hand the
-  probe a command to run in place of the one it derives from its own argv. The architect chooses
-  its shape. It has to stay off `InspectorDaemon`'s constructor, or phase C's parameter-count
-  tripwire goes red for a reason unrelated to side effects. That seam is a change to production code,
-  and it is why this could not ride along with phase D. Acceptance criteria:
-
-  - The child the probe started is not alive once `probe` returns, on the success path, on the
-    timeout path (the child never answers `tools/list`), and when writing to the child throws.
-  - **The stub child must ignore EOF.** The real MCP server stops when its stdin closes, and the
-    probe closes stdin before it reads anything. A test driving the real server would pass with the
-    `finally` deleted. Only a child that keeps running after EOF can tell a probe that kills it from
-    one that is lucky.
-  - Proven to fail when broken: delete the `destroyForcibly()` and the test goes red, naming the
-    surviving pid.
-  - The existing "either answers or explains why it cannot" test stays. It covers the case where the
-    command line cannot be built, which this one does not.
-
-  **Out of scope.** Changing what the probe reports, its timeout, or the `POST /api/mcp/probe`
-  route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
-  published, so there is no noop twin or golden file to carry.
+- ~~**"A probe leaves no process behind" is a claim nothing tests.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-mcp-probe-cleanup`.
 
 - ~~**The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**~~
   Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:signals-query-one-rule`.
@@ -222,173 +184,11 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   found, not fixed, after QA on `item:web-live-rows-filtered` found it again with two siblings.
   **Done 2026-10-21** in that item.
 
-- **A check that finds nothing to check passes.** *Ticket label:* `item:guard-probe-finds-nothing-fails`.
-  Found in the retrospective of `item:web-live-rows-filtered` (PR #98, 2026-10-19), from KIN-55. The
-  roadmap-cycle skill now tells an engineer who adds a probe to the shared page to break one
-  neighbouring guard and watch it fail. This item is the mechanical version of that rule, so the
-  rule still holds on a day when nobody remembers it.
+- ~~**A check that finds nothing to check passes.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-probe-finds-nothing-fails`.
 
-  **For whom.** Whoever changes the web UI and trusts a green `render-web-ui.js`, and the maintainer
-  reading CI. Behind them, the web UI user on a Mac: a guard that checked nothing is how a 500 hidden
-  behind "+N more" comes back.
+- ~~**QA's live-traffic Chrome driver is still in a scratch directory.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-live-traffic-driver`.
 
-  **Why it is unguarded.** The probes share one page. The new live probe in
-  `scripts/lib/live-filter-probes.js` left a path visit open, so the path probe that runs after it
-  found no collapsed visit. `failures unfolded` then printed `yes (0 summarised lines in this
-  session)`, and `expanded unfolded` passed with nothing to check as well. Nothing counted either as
-  wrong. `INSPECTOR_UI_EXPECT_CHECKS` pins how many checks pass, and a check that passes over nothing
-  still counts as a pass. KIN-55 fixed the leak, not the guard: the live probe now puts the page state
-  back, and the comment at the top of that file says why. The next probe that leaks state will
-  reproduce it. QA found this one only by breaking a neighbouring guard by hand.
-
-  **What it would take.** Acceptance criteria:
-
-  - On the CI fixture, `failures unfolded` fails when it sees 0 summarised lines, and
-    `expanded unfolded` fails when it sees no expanded line. When either passes, it prints how many it
-    checked.
-  - The same rule, generalised. A probe in `scripts/render-web-ui.js` or `scripts/lib/` that scans for
-    a shape (rows, lines, bars, elements matching a selector) and passes when none breaks the rule
-    also asserts that it found at least one, and prints the count. Among them, as a heuristic and not
-    a complete list: `currentHasAge` (`#current .current-item`), `barsVisible` (`.wf-bar`), the lane
-    list behind `unknownTagRendered`, and `noRepeatedHost` and `uncoveredNameTheirHost` in
-    `render-web-ui.js`, plus `onTop` in `lib/measure-cases.js`. The tree already does this in places:
-    `everyHeaderHasOne` and `labelled` require `length > 0`, and the CSS brace audit in
-    `lib/web-audits.js` says "found no rule blocks, so this checked nothing". The architect finds the
-    rest.
-  - When a probe's shape is legitimately absent from a fixture, the probe says so in an `n/a (…)` or
-    a `note()`, never in a `yes`.
-  - Proven both ways. Reintroduce a leak like KIN-55's by leaving a path visit open before the path
-    probe runs: the run goes red, and the failure names the empty scan. Remove the leak and the run
-    is green again.
-
-  **Out of scope.** Repairing whatever a leaking probe leaves behind (KIN-55 already did that for the
-  live probe). Giving each probe its own page. Changing what any check judges beyond the empty case.
-  If a check on the fixture turns from `yes` to `n/a`, the pinned `INSPECTOR_UI_EXPECT_CHECKS` count
-  moves, and the change says which check and why. Surfaces: none a user sees. This touches only the
-  web UI's check scripts, so there is no public API, no noop twin and no golden file.
-
-- **QA's live-traffic Chrome driver is still in a scratch directory.** *Ticket label:*
-  `item:guard-live-traffic-driver`. From the same retrospective. The roadmap-cycle rule "Promote a
-  harness the first time it earns it" says this driver should have moved into `scripts/lib/` within
-  `item:web-live-rows-filtered`. It did not.
-
-  **For whom.** The web UI user on a Mac who watches a session live, under a filter. Also whoever next
-  changes the live socket or the re-read, as `item:web-live-calls-reach-every-pane` did (done 2026-10-21).
-
-  **Why it is unguarded.** `docs/STATUS.md` lists the following as verified in headless Chrome: the
-  live re-read burst bound, a filter edit, a session switch and a dropped socket during a re-read.
-  They were verified by a driver QA wrote in a temporary scratch directory. It streams real rows into
-  a real daemon's `/ingest` and drives the served web UI over CDP. QA also used it to prove pause and
-  resume. No committed check does any of this. The committed checks each cover a piece:
-
-  - `lib/live-reread-checks.js` runs the races and `reread burst of 100` against stubbed routes,
-    with no browser and no daemon.
-  - `lib/measure-cases.js`'s `liveArrival` hands messages to the page's own `onmessage`, so nothing
-    goes through `/ingest`.
-  - `lib/live-filter-probes.js` fakes a row's arrival by wrapping `fetch`.
-
-  Nothing runs the whole path (ingest, broadcast, page, re-read) in a browser, and nothing exercises
-  pause and resume or reconnect there.
-
-  **Where the driver is.** Copies are kept outside the repository, in the maintainer's notes. They
-  are also posted as a comment on the pull request that placed this item, which
-  `git log -S'item:guard-live-traffic-driver' -- docs/ROADMAP.md` finds. If both copies are gone,
-  this is enough to rewrite them:
-
-  - `ingest.js` (about 30 lines) is a minimal app-side stream client. It opens a WebSocket to
-    `<origin>/ingest` and sends `{type:'hello', client:{v:1, appId, appVersion, platform:'desktop',
-    device, osVersion, buildType:'debug'}}`, then waits for `{type:'helloAck', sessionId}`. After
-    that it exposes two calls. `call(path, status, tag)` sends `{type:'txn', txn:{v:1, id, ts, mono,
-    method:'GET', scheme, host:'api.qa.invalid', path, query, status, ms, callId, resContentType},
-    resBody}`. `signal(tag, name, text)` sends `{type:'signal', signal:{v:1, id, ts, mono, tag, name},
-    data}`.
-  - `live-ui.js` (about 215 lines) launches Chrome with `launchChrome` and `sleep` from
-    `lib/measure-cdp.js` and opens a CDP page target. Through `Page.addScriptToEvaluateOnNewDocument`
-    it installs two wrappers. A fetch wrapper records every request in `window.__asked` (path,
-    filter, offset, time) and can hold a URL through `window.__delay`. A WebSocket wrapper exposes
-    `window.__sockets`, so the driver can drop the page's socket. A snapshot reads the counts, the tab
-    counts, the view, the filter and the list rows. It also reads the lengths of
-    `state.transactions`, `allTransactions`, `signals` and `allSignals`, which panes (list,
-    timeline, path, waterfall) hold given ids, and how many times the list was read. The scenarios:
-    - Setup: two sessions, an older B and the newest A.
-    - Live rows under a filter on the list, timeline and path, both on arrival and once settled, also
-      at 400 px wide.
-    - A burst of 50 calls and 50 signals in one second, counting list re-reads against the daemon's
-      own matched and total.
-    - No filter, and a filter of spaces only: a live row costs no list read.
-    - A filter edit mid re-read, with the call read held for 2 s.
-    - A session switch mid re-read.
-    - Pause with a re-read in flight, then resume.
-    - Reconnect after dropping the socket with a re-read armed.
-
-    It records page exceptions throughout.
-  - `live-ui-2.js` (about 70 lines) adds three cases that reuse `live-ui.js`'s page:
-    - Spaces versus nothing on the timeline: the header, the notes and the chips.
-    - A live screen signal on the path tab, under a filter that refuses it: the path skeleton still
-      gains the visit.
-    - A burst that straddles the re-read timer, 100 rows over 1.4 s against a daemon delayed 1.5 s,
-      counting reads.
-
-  **What it would take.** Acceptance criteria:
-
-  - The `/ingest` client and the CDP page helpers live in `scripts/lib/`. Chrome is launched through
-    `lib/measure-cdp.js`, which already wraps `WebSocket` as `window.__sockets` and collects page
-    exceptions. The fetch recorder and the delay hook join it or sit beside it, and nothing adds a
-    second Chrome launcher.
-  - It is wired into `scripts/measure-web-ui.js` as a case `--only` can select. Three readings are
-    judged and exit 1 when they fail: the burst bound (list reads for a burst, against the daemon's
-    own matched and total), the filter-edit race and the session-switch race. They are asserted, not
-    logged.
-  - Each judged reading is proven red by breaking the rule it guards, for example by re-reading on
-    every live row, or by letting a re-read land that answers for an old filter or session. Each goes
-    green again when the rule is restored.
-  - It reaches nothing beyond 127.0.0.1, and every host in a streamed row ends in `.invalid`.
-  - Future QA briefs name it among the existing `scripts/lib/` harnesses, so the next reviewer reuses
-    it rather than writing another.
-
-  **Out of scope.** Running `measure-web-ui.js` in CI. Today it runs once per web fix round and needs
-  Chrome, JDK 21 and a built daemon, so putting it in CI is a separate decision. Porting every
-  scratch scenario: pause and resume, reconnect, 400 px and the spaces-only cases are welcome but not
-  required. Changing any live behaviour. Surfaces: the web UI's check scripts, plus the daemon's
-  `/ingest` used as a client. There is no public API, no noop twin and no golden file.
-
-- **Phase I gave the ui pair three guards that the core and stream pairs lack.** *Ticket label:*
-  `item:guard-twin-pairs-alike`. From the phase I hand-over (`item:structure-phase-i`), placed by the
-  product owner on 2026-10-21 with the run's other follow-ups (§3 → Bugs found, not fixed).
-
-  **For whom.** A consuming team building with `-Pinspector=off`. A public declaration in
-  `:inspector-core` or `:inspector-stream` that the noop lacks compiles in debug and fails in
-  release, the `lastError` and theme-type failure again. Behind them, whoever trusts a green
-  `jvmTest` after editing a golden file.
-
-  **Why it is unguarded.** Phase I gave the ui pair three guards. The other two pairs have none of
-  them:
-  - The completeness check (`publicHolders`) in `UiApiParityTest`. Without it, a public class or
-    facade outside `ApiSurface`'s named classes passes, which is how the theme types went unseen.
-  - Golden files declared as test inputs. Only the ui pair's builds declare theirs, so an edit to
-    `api/inspector-public-api.txt` or `api/inspector-stream-public-api.txt` alone can be a build-cache
-    hit and stay green.
-  - Golden files named in `structure/twins.txt`. It lists pairs but not their golden files, so
-    nothing fails a pair that has none, as the ui pair had none for eleven releases.
-
-  **Acceptance criteria.**
-  - The core and stream pairs fail on a public declaration outside their contract, the way the ui
-    pair does. For stream, the contract is the one with Ktor-typed members filtered out.
-  - Each module of the core and stream pairs declares its golden file as a `jvmTest` input, with
-    `inputs.files`. An edit to the golden file alone re-runs the test and fails it, with the build
-    cache on.
-  - `structure/twins.txt` names each pair's golden file, and `:repo-checks` fails a pair whose file is
-    missing or unnamed.
-  - Each guard is proven red: a stray public class in each module, a golden-only edit, a pair line
-    without its file.
-
-  **Out of scope.** Declarations that exist only in `iosMain` or `androidMain`, which are
-  `item:guard-twin-native-surface`. Rebuilding the class-set diff between twins, which §5 → "Deliberately not doing" rules out.
-  The completeness check is not that diff, as `twins-and-api.md` explains. **If the check finds a
-  public declaration outside the contract in core or stream today, that is a public API question for
-  the maintainer**, as the theme types were, and the item stops there. Surfaces: library API guards
-  only, `api-parity/`, the published modules' build files and `:repo-checks`. No golden file
-  changes. **Size:** S.
+- ~~**Phase I gave the ui pair three guards that the core and stream pairs lack.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-twin-pairs-alike`.
 
 - **No pair guards a public declaration that exists only on iOS or Android.** *Ticket label:*
   `item:guard-twin-native-surface`. Phase I's design named it as its first risk, and its QA and
@@ -408,8 +208,61 @@ Not new, and not forgotten. Collected here because they were spread across nine 
     `gradle.lockfile` says so, and §5's "no new tools" is the bar it argues against.
 
   **Out of scope.** Binary compatibility between released versions. The JVM half, which phase I and
-  `item:guard-twin-pairs-alike` cover. Surfaces: library API guards only, with no consumer-visible
+  `item:guard-twin-pairs-alike` (done 2026-10-22) cover. Surfaces: library API guards only, with no consumer-visible
   change. **Size:** M, until the architect sizes the mechanism.
+
+*The two guards below were left open by the batch closed on 2026-10-22, from QA on
+`item:guard-probe-finds-nothing-fails` and the hand-over of `item:guard-live-traffic-driver`, and
+recorded in `docs/STATUS.md` → Not verified. Placed by the product owner on 2026-10-22 and checked
+against the code at `5b21593`. **Neither is in "Order from here" yet**: the maintainer orders them.*
+
+- **`expanded unfolded` judges a line with no failure on it.** *Ticket label:*
+  `item:guard-expanded-unfolded-has-failures`.
+
+  **For whom.** Whoever changes the path view and trusts a green `render-web-ui.js` in CI. Behind
+  them, the web UI user on a Mac who opens a visit's line to find the 500 in it.
+
+  **Why.** The probe opens the second station (`stops()[1]` in `scripts/render-web-ui.js`), which on
+  the CI fixture is Home, and Home has no failed call. So the line reads `yes (1 expanded line, 0
+  failures drawn)`: it passes, prints its count, and compares 0 with 0. The empty-scan rule cannot
+  see this, because the scan found a line. QA saw the rule work (`4 failures drawn`) only with
+  KIN-55's leak put back.
+
+  **Acceptance criteria.**
+  - The probe opens a station whose visit holds at least one failed call, chosen from the
+    daemon's rows rather than from what the page drew. On the fixture it prints a count of at least
+    one failure drawn.
+  - With no visit holding a failure in the session, it reads `n/a (no visit holds a failure)`,
+    never `yes`.
+  - Proven red: with an expanded line made to drop its failed calls' status, the line fails.
+  - If the pinned `INSPECTOR_UI_EXPECT_CHECKS` count moves, the change says why.
+
+  **Out of scope.** `failures unfolded`, which is read before anything opens. The fixture's content,
+  unless no visit in it holds a failure. Surfaces: none a user sees; scripts only. **Size:** XS.
+
+- **A measure run hangs when Chrome dies mid-case.** *Ticket label:*
+  `item:guard-measure-chrome-exit-fails`.
+
+  **For whom.** The engineer or QA running `measure-web-ui.js` once per web fix round, as the
+  roadmap-cycle skill asks. A hang reads as a slow case, so the run is waited on, then killed and
+  rerun, and its readings are lost.
+
+  **Why.** `scripts/lib/measure-cdp.js` resolves each DevTools command from `ws.onmessage` alone.
+  Nothing listens for the socket closing or for Chrome's process exiting after start-up, and no
+  command has a deadline, so every pending `send` waits for ever. It happened once during
+  `item:guard-live-traffic-driver`, and a rerun was clean.
+
+  **Acceptance criteria.**
+  - When Chrome exits or its DevTools socket closes during a case, every pending command fails
+    with an error naming the case and the cause, and the run ends with a non-zero exit within
+    seconds. It never prints a reading as passed.
+  - The runner stops the daemons and the Chrome it started on that path, as it does on success.
+  - Proven by killing Chrome during a case: before the fix the run hangs, after it the run exits.
+
+  **Out of scope.** Retrying a case. Putting `measure-web-ui.js` in CI. A deadline on commands
+  while Chrome is alive: if the architect wants one, it comes with a number the slowest case
+  (first rows on 160,000 calls) is shown to meet. Surfaces: none a user sees; scripts only.
+  **Size:** S.
 
 ### Bugs found, not fixed
 
@@ -529,9 +382,9 @@ from here" yet**: the maintainer reviews the list first.*
 | A live signal or marker redraws the timeline once per message | **new item**, `item:web-live-signal-burst-bounded` | the `drawLive` timer from `item:web-live-calls-reach-every-pane` already exists, and the same branch reads `/current` once per signal, which `docs/STATUS.md` records (50 signals, 53 requests). One item takes both |
 | `#/txn/<id>` has no visible way back | **new item**, `item:web-txn-page-way-back` | a missing control, not a look. Web UI polish is far off |
 | The `⤢` and `⇥` glyphs are 13px and nobody has judged them | §6 → Web UI polish | a judgement with no defect in it, and that item is the first human design pass |
-| At 400px the Stats page's route cell breaks hostnames mid-word | **new item**, `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
-| IPv6 hosts are not bracketed in `url` or the row label | **new item**, `item:host-port-everywhere` | both this and the next row are places where the rule `item:row-label-port` set (a server is its host plus a non-default port) has not reached |
-| The session summary's `byHost` merges `:8080` and `:9090` | **new item**, with the IPv6 row | the key becomes `hostPort`, and once `hostPort` brackets IPv6 the key is right for IPv6 as well |
+| ~~At 400px the Stats page's route cell breaks hostnames mid-word~~ **Done 2026-10-22** (KIN-93; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
+| ~~IPv6 hosts are not bracketed in `url` or the row label~~ **Done 2026-10-22** (KIN-92; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:host-port-everywhere` | both this and the next row are places where the rule `item:row-label-port` set (a server is its host plus a non-default port) has not reached |
+| ~~The session summary's `byHost` merges `:8080` and `:9090`~~ **Done 2026-10-22**, with the IPv6 row (KIN-92) | `item:host-port-everywhere` | the key becomes `hostPort`, and once `hostPort` brackets IPv6 the key is right for IPv6 as well |
 | During a session switch the timeline's call rows and the endpoint chips show the session just left | **new item**, `item:web-switch-clears-call-panes` | the same class of false fact as `item:web-now-strip-follows-session`, which put calls out of scope. 1a, where QA suggested it go, has shipped without it |
 | A brushed stretch with some loaded rows says nothing of older unloaded matches under a filter | **new item**, `item:web-stretch-says-older-matches` | `item:web-list-says-what-it-holds` covered only a stretch the list draws nothing of |
 | Small doc fixes: `architect.md`, two INTEGRATION.md headings, the root `AGENTS.md` table, the Sessions page's path | **new item**, `item:docs-housekeeping-2026-10-21` | four edits, none of them worth an item on its own |
@@ -586,58 +439,9 @@ from here" yet**: the maintainer reviews the list first.*
   Web UI polish's. This does not overturn a recorded decision: `web-ui.md` records that Back and
   Escape leave the page, not that nothing else may. Surfaces: web UI only. **Size:** S.
 
-- **At 400px the Stats page breaks a route's host mid-word.** *Ticket label:*
-  `item:web-stats-route-breaks-whole`. From QA on `item:endpoint-latency-stats`, and
-  `docs/STATUS.md` → Not verified.
+- ~~**At 400px the Stats page breaks a route's host mid-word.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-stats-route-breaks-whole`.
 
-  **For whom.** A web UI user on a narrow window reading the Stats page. `.stats-host` is
-  `overflow-wrap: anywhere`, so the cell reads `api.qa.invali` / `d`, and `http://127.0.0.1:808` /
-  `0`, which a reader takes for port 808.
-
-  **Acceptance criteria.**
-  - At 400px, served and exported, no line of a route cell ends inside a host label, a port or a path
-    segment. A host breaks only at a `.`, a `:` or a `/`.
-  - A route too long to break that way is still on screen in full within the table's own sideways
-    scroll, and the page itself never scrolls sideways (`shell <w> page stats fits` stays green).
-  - A Chrome reading in `measure-web-ui.js` at 400px is proven red with `overflow-wrap: anywhere`
-    put back.
-
-  **Out of scope.** The table's columns and order, and the term a row links with. Offering
-  `sort=errors` on the page. Surfaces: web UI only. **Size:** S.
-
-- **A server is its host and a non-default port, but not yet everywhere.** *Ticket label:*
-  `item:host-port-everywhere`. From QA and the hand-over on `item:row-label-port`, and
-  `docs/STATUS.md` → Not verified.
-
-  **For whom.** Anyone who copies a URL for an IPv6 call: a cURL or a replay from the web UI, the
-  overlay's Copy URL, an agent reading an export. Also an agent or a CLI user reading the session
-  summary. `NetworkTransaction.url` writes `http://::1:8080/v6`, which is not a URL, and the label
-  `GET ::1:8080/v6` cannot say where the address ends. OkHttp's `HttpUrl.host` gives an IPv6 literal
-  with no brackets, and the OkHttp interceptor stores it as it comes. Whether Ktor's does too is
-  unchecked. Separately, `SessionRepository.summarize` groups `byHost` by bare `host`, so two
-  servers on one machine are one entry in `GET …/summary`, MCP `session_summary`,
-  `inspector summary` and the exports' summary.
-
-  **Acceptance criteria.**
-  - `hostPort` brackets a host that holds a `:`, so the `url` of a call to `::1` on `:8080` is
-    `http://[::1]:8080/v6` and its label reads `GET [::1]:8080/v6`. A host already in brackets is
-    not bracketed twice.
-  - It is decided in `:inspector-model` and in the web UI's `urlOf` mirror, with a mirror case run by
-    both sides, so an archive recorded before the fix reads the same way.
-  - A real call to the IPv6 loopback, captured through Ktor and through OkHttp, gives that `url`. If
-    a CI runner has no IPv6 loopback, the test says it was skipped and why, not that it passed.
-  - `byHost` keys on `hostPort`: `127.0.0.1:8080` and `127.0.0.1:9090` are two entries, and a default
-    port adds nothing to its key.
-  - Proven red with each rule removed.
-
-  **Out of scope.** The filter grammar, which is frozen and has no port term, so two ports of one
-  host still share a `host:` term (a documented superset). The route key, which already keeps ports
-  apart. Zone ids (`%en0`). Surfaces: `:inspector-model` (overlay, web UI, daemon, MCP and exports
-  through it), the web UI mirror and the daemon summary. **Public API:** no signature changes, but
-  `url` is public in the published `:inspector-model` and its value changes for IPv6 hosts, and
-  `byHost`'s keys change for agents. Both need an `UNRELEASED.md` line. Whether INTEGRATION.md
-  needs a version is the release-steward's call. No noop twin applies (the model is exempt), and no
-  golden file changes. **Size:** S, or M if the capture tests need a fallback for CI.
+- ~~**A server is its host and a non-default port, but not yet everywhere.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:host-port-everywhere`.
 
 - **During a session switch the timeline's calls and the endpoint chips are the session just left.**
   *Ticket label:* `item:web-switch-clears-call-panes`. From QA on
@@ -719,6 +523,92 @@ from here" yet**: the maintainer reviews the list first.*
 
   **Out of scope.** Any other rewording of these files. Raising the root's byte budget. Surfaces:
   docs, plus one web UI string. **Size:** S.
+
+*The follow-ups below were left open by the batch closed on 2026-10-22 (`item:guard-mcp-probe-cleanup`,
+`item:guard-probe-finds-nothing-fails`, `item:host-port-everywhere`,
+`item:web-stats-route-breaks-whole`), from their hand-overs and QA reports, and recorded in
+`docs/STATUS.md` → Not verified. Each is true at the base of the item that found it, or outside
+its criteria. Placed by the product owner on 2026-10-22 and checked against the code at `5b21593`.
+Two are items here, one is a doc entry here, and two are guards under §3 → Guards. **None is in
+"Order from here" yet**: the maintainer orders them.*
+
+| Follow-up | Goes to | Why there |
+|---|---|---|
+| A silent MCP child hangs the probe | **new item**, `item:mcp-probe-deadline-holds` | `item:guard-mcp-probe-cleanup` put the timeout out of scope; its test file has the stub this needs |
+| One IPv6 server reached by OkHttp and Ktor is two route rows | **new item**, `item:route-key-one-ipv6-host` | the route key, not the Stats page's drawing; neither IPv6 item owned the key |
+| `web-ui.md` does not name the cases #133 fixed; its "29 breaks" depends on fonts | **new item**, `item:docs-housekeeping-2026-10-22` | `item:docs-housekeeping-2026-10-21` is open with only a web line left, and reopening its docs part would mix lanes |
+| `expanded unfolded` opens Home, which has no failure | §3 → Guards, `item:guard-expanded-unfolded-has-failures` | a guard that passes without judging its rule |
+| `measure-cdp.js` hangs when Chrome dies mid-case | §3 → Guards, `item:guard-measure-chrome-exit-fails` | a check that cannot fail when its browser goes away |
+
+- **A silent MCP child hangs the probe, and is left running.** *Ticket label:*
+  `item:mcp-probe-deadline-holds`. From the hand-over of `item:guard-mcp-probe-cleanup`, which hit it
+  while proving red: a test hung for ten minutes.
+
+  **For whom.** A web UI user on a Mac who presses the MCP probe in settings while an
+  `inspector mcp` is wedged. `ProcessMcpControl.probe` checks `timeoutMs` only between lines, so a
+  child that keeps stdout open and writes nothing leaves `readLine` blocked for good:
+  `POST /api/mcp/probe` never answers and the button never reports. The `finally` that stops the
+  child runs only after the read returns, so the child also outlives the probe and shows in the peer
+  list as an `mcp` process. That is the leak `item:guard-mcp-probe-cleanup` closed on the success,
+  timeout and failed-write paths, still open on this one.
+
+  **Acceptance criteria.**
+  - With a stub child that keeps stdout open and never writes, `probe` returns within its timeout
+    plus a margin the test states, with an error that says the child did not answer in time.
+  - The child is not alive once `probe` returns, read as `McpProbeCleanupTest` reads it.
+  - A `silent` mode beside the stub's `answer`, `chatter` and `close-stdin`, proven red with the fix
+    removed. The red run fails on the test's own bound and does not hang the suite.
+  - The existing three cleanup tests and "the real control either answers or explains why it
+    cannot" stay green.
+
+  **Out of scope.** The 15 s default, what the probe reports on success, and the route. Surfaces:
+  daemon only. `ProcessMcpControl` is in `:inspector-daemon`, which is not published, so there is
+  no noop twin or golden file. **Size:** S.
+
+- **One IPv6 server reached by both clients is two route rows.** *Ticket label:*
+  `item:route-key-one-ipv6-host`. From QA on `item:host-port-everywhere`, seen again by QA on
+  `item:web-stats-route-breaks-whole`.
+
+  **For whom.** A web UI user on a Mac reading the Stats page, a consuming team reading the
+  Markdown export, and an agent reading the MCP route stats, for an app that calls one IPv6 server
+  through both an OkHttp client and Ktor. OkHttp stores the host as `::1` and Ktor as `[::1]`
+  (`docs/decisions/capture.md`), and `RouteTemplates.keyOf` keys on the stored host. So the same
+  route on the same server is two identical rows reading `http://[::1]:8080`, each with half the
+  calls and its own percentiles, while the session summary's `byHost` already counts it once.
+
+  **Why now.** The route key is reused by `item:session-diff` and `item:findings-payment-safety`,
+  which are not built. Fixed after them, it changes three surfaces' answers instead of one.
+
+  **Acceptance criteria.**
+  - A session with three OkHttp calls to `::1` port 8080 and three Ktor calls to `[::1]` port 8080 on
+    one path draws one route row on the Stats page with six calls, at every width. The Markdown
+    routes table and the MCP route stats agree.
+  - That row's filter term opens all six calls. The `host:` term is a substring match, so the bare
+    literal finds both stored forms; the grammar is unchanged.
+  - Two ports, or a host that is not an IPv6 literal, key exactly as today.
+  - A daemon test with both stored forms, proven red with the key's host left as stored.
+
+  **Out of scope.** Changing what capture stores: `capture.md` decided brackets on read, so archives
+  recorded before read the same. Making the `host:` filter term bracket-aware. Zone ids
+  (`fe80::1%en0`). This does not overturn a recorded decision: `capture.md` notes that `host:`
+  matches the stored host, and this item keeps that. Surfaces: daemon (Stats page, Markdown export,
+  MCP read what it computes). No public API. **Size:** S.
+
+- **Housekeeping after the 2026-10-22 batch.** *Ticket label:* `item:docs-housekeeping-2026-10-22`.
+  Two lines in one decision file, neither worth an item of its own.
+
+  **For whom.** The agents and engineers who read `docs/decisions/web-ui.md` before changing a probe.
+
+  **Acceptance criteria.**
+  - "A scan that finds nothing to check fails, and says so" names the Chrome readings PR #133 put
+    under the rule: `shell <w> rail`, `room 400 rows`, `toolbar fits` and `one row`,
+    `tab never enters closed`, `traffic reaches` and the top bar's count wording. Each is
+    marked shown red or resting on review, as KIN-87's notes record.
+  - The Stats route-break paragraph no longer gives main's break count as a fact ("29 breaks"; QA
+    saw 30 on another machine). It names the break that reproduces, `http://127.0.0.1:808|0`, and
+    says the count depends on fonts.
+
+  **Out of scope.** Any other rewording of `web-ui.md`. Surfaces: docs only. **Size:** XS.
 
 ### Open questions
 
@@ -864,15 +754,9 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 14 | A check that finds nothing to check passes | §3 → Guards | `item:guard-probe-finds-nothing-fails` | not sized | W, alone |
-| 15 | QA's live-traffic Chrome driver, committed | §3 → Guards | `item:guard-live-traffic-driver` | not sized | S; its case in its own `scripts/lib/` file |
 | 16 | Housekeeping after the 2026-10-20/21 run (waits: maintainer approval of the `architect.md` edit, for that edit only) | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-21` | S | S for the docs, then W for the Sessions page line; the `AGENTS.md` edit merges before any status-row close |
-| 17 | The core and stream twin pairs get the ui pair's guards | §3 → Guards | `item:guard-twin-pairs-alike` | S | L |
-| 18 | "A probe leaves no process behind", tested | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized | D, can run beside the advisory |
-| 19 | A server is its host and a non-default port, everywhere | §3 → Bugs found, not fixed | `item:host-port-everywhere` | S, or M | W; one PR, its `urlOf` mirror case runs in Kotlin and the web checks |
 | 20 | A session switch clears the timeline's calls and the endpoint chips *(approved 2026-10-21 by the maintainer: overturns the `web-ui.md` sentence; replacement text comes with the item)* | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
 | 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
-| 22 | At 400px the Stats page keeps a route's host whole | §3 → Bugs found, not fixed | `item:web-stats-route-breaks-whole` | S | beside W, only after `item:host-port-everywhere` merges |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
 | 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |

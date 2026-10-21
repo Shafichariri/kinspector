@@ -1,11 +1,11 @@
 ---
 id: KIN-87
 title: 'Guard: a check that finds nothing to check fails'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 18:15'
-updated_date: '2026-10-21 22:05'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:guard-probe-finds-nothing-fails'
 dependencies: []
@@ -20,14 +20,14 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:guard-probe-finds-nothing-fails in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:guard-probe-finds-nothing-fails in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -120,3 +120,9 @@ Green: measure-web-ui.js --only shell,topbar,room,traffic --base <origin/main wo
 Not run: render-web-ui.js (no shared probe changed); the traffic socket half was not run red (the case needs the live socket open to start).
 Not done here, by instruction: expanded unfolded's weak exercise on the fixture (follow-up in the hand-over).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug) round 1 on b1bbcac (PR #128): FAILED criterion 2. 'shell <w> rail' (scripts/lib/shell-cases.js) passed over zero rail items: with every class="rail-item" renamed in the served index.html, 'node scripts/measure-web-ui.js --only shell' read 'ok shell 1440 rail: inside (168px)' (and at 1000, 600, 400), and the inventory listed none of shell-cases.js, topbar-cases.js, list-room-cases.js, live-traffic-cases.js. No ticket filed for it (recorded here, by instruction). Fix round PR #133 (5b21593), QA round 2: PASSED. Rail with 0 rail items: 'FAIL shell <w> rail: NO - found no rail item, so this checked nothing (..., 0 rail items)' at all four widths, exit 1; green fixture '5 rail items'; with only #133's hunk reversed it reads 'ok ... inside' over none again. Inventory addendum covers the four files (shell x9, topbar x2, room x8, traffic x5). QA's own spot-check: 'room 400 rows' repeat-mark scan, red with the dup-badge class renamed: 'NO - found no repeat mark (3 rows held are repeats)'. Criteria 1,3,4,5 verified in round 1: 'failures unfolded : yes (1 summarised line, 6 lines in all)'; KIN-55 leak at base 'yes (0 summarised lines in this session)' 251 passed, at head 'NO - found no summarised line (1 already open: Checkout), so this checked nothing' 250 passed 1 failed exit 1, leak removed 251 passed exit 0; UI_EXPECT_CHECKS/ARCHIVE_EXPECT_CHECKS unmoved. Also: check-web-static.js 110/0, :repo-checks:test --rerun green, measure --only shell,room 61 readings 0 failed. DoD 2 ticked on QA's close verdict: the checks read from the code and not run red (rail is navigation, route pages, exportMenu, sort flip restores, map matches log, start times shown, duplicate badges, unanchored chips, hop-by-hop stripped, onTop n/a branch, socket half of traffic reaches) are listed as not proven both ways. Open, unplaced: 'expanded unfolded' opens Home with 0 failures on the fixture; web-ui.md does not yet name the Chrome cases fixed in #133.
+<!-- SECTION:FINAL_SUMMARY:END -->

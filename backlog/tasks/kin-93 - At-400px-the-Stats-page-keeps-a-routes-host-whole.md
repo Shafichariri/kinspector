@@ -1,11 +1,11 @@
 ---
 id: KIN-93
 title: At 400px the Stats page keeps a route's host whole
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 21:14'
-updated_date: '2026-10-21 21:40'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:web-stats-route-breaks-whole'
 dependencies:
@@ -21,14 +21,14 @@ Order row 22 (§3 → Bugs found). Acceptance criteria are the roadmap item's ow
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:web-stats-route-breaks-whole holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:web-stats-route-breaks-whole holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -62,3 +62,9 @@ Deviation: overflow-wrap: anywhere added back ON ITS OWN stays green. The pieces
 
 measure --base origin/main 6f55741, --only shell: moved = stats 400 route breaks served/export mid-word -> at . : /; head 42 readings 0 failed, base 2 failed.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #132 merge 7b37d7a, one round, no blocking findings. 'measure-web-ui.js --only shell' head: 42 readings, 0 failed; 'stats 400 route breaks served' and '... export' read 'at . : /' (17 route cells, 23 line breaks); 'stats 400 routes whole' whole, document 400 of 400; 'stats 1440 routes one line' one line; 'shell <w> page stats fits' green. Red: base 85-stats.css alone -> mid-word, 33 breaks, 3 failed; base CSS+JS -> 'http://127.0.0.1:808|0', 2 failed; nowrap hold removed -> 2 failed; overflow-wrap: anywhere alone stays green (the item's recorded deviation, confirmed). check-web-static.js 109 -> 110; 'stats route pieces' red with bracket depth ignored: 'NO - http://|[::|1]:|8080 ...'. Cell textContent unchanged. Not run by QA: render-web-ui.js, archive probe (CI's web job), other Chrome sections. Note: web-ui.md says main gave 29 breaks, QA saw 30 (font-dependent).
+<!-- SECTION:FINAL_SUMMARY:END -->
