@@ -7,7 +7,7 @@
  * (`shell <width> …` in `measure-web-ui.js`). Zero dependencies, like the rest of
  * `check-web-static.js`.
  */
-const { HarnessError } = require('./web-audits');
+const { HarnessError, cssBlocks, selectorList } = require('./web-audits');
 
 const uncomment = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -70,4 +70,46 @@ function auditNarrowTabs(styles) {
   return missing.length ? `NO - ${missing.join('; ')}` : 'yes (below 700px: the active tab and views ▾; above, no menu)';
 }
 
-module.exports = { auditNarrowTopBar, auditNarrowTabs };
+/**
+ * Nothing sticky in the list pane stops above the scope bar (`web-ui.md`). Every selector declared
+ * `position: sticky`, other than `.scope-bar` itself, must take any `top` it declares — in any file,
+ * plain or inside `@media` — from `--sticky-top`, bare or inside `calc()`. Read from the text because
+ * jsdom has no layout, so a computed check would pass whatever the sheet says.
+ *
+ * A heuristic over selector text, not the cascade: among what it misses are a `top` set for the same
+ * element through another selector, and an `inset` shorthand. It fails when it found no sticky rule,
+ * because then it checked nothing.
+ */
+function auditStickyTop(styles) {
+  if (!styles.length) return 'NO - no stylesheets to read';
+  const rules = [];
+  const walk = (file, text, query) => {
+    for (const { prelude, body } of cssBlocks(text)) {
+      if (/^@media\b/i.test(prelude)) { walk(file, body, prelude); continue; }
+      if (prelude.startsWith('@')) continue;
+      const decls = uncomment(body).split(';').map((d) => d.match(/^\s*([a-zA-Z-]+)\s*:\s*([\s\S]*?)\s*$/)).filter(Boolean)
+        .map(([, name, value]) => [name.toLowerCase(), value]);
+      for (const selector of selectorList(prelude)) rules.push({ file, query, selector, decls });
+    }
+  };
+  for (const { file, text } of styles) walk(file, text, null);
+  const sticky = new Set(rules.filter((r) => r.decls.some(([n, v]) => n === 'position' && /^sticky\b/.test(v)))
+    .map((r) => r.selector).filter((s) => s !== '.scope-bar'));
+  if (!sticky.size) return 'NO - found no sticky rule, so this checked nothing';
+  const fromStickyTop = /^(var\(--sticky-top\b[^)]*\)|calc\([\s\S]*var\(--sticky-top\b[\s\S]*\))$/;
+  let tops = 0;
+  const offenders = [];
+  for (const r of rules) {
+    if (!sticky.has(r.selector)) continue;
+    for (const [name, value] of r.decls) {
+      if (name !== 'top') continue;
+      tops++;
+      if (!fromStickyTop.test(value)) offenders.push(`${r.selector} { top: ${value} }${r.query ? ` in ${r.query}` : ''} (${r.file})`);
+    }
+  }
+  return offenders.length
+    ? `NO - sticky, and stops above the scope bar: ${offenders.join('; ')}`
+    : `yes (${sticky.size} sticky selector(s), ${tops} top(s), each from --sticky-top)`;
+}
+
+module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop };

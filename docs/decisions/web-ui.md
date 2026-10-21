@@ -380,7 +380,12 @@ group heads, the new-visit pill. Each stuck at `top: 0`, so whichever came later
 drew over the bar — the timeline's note under any filter, the path's map at 400 wide. They stop at
 `--sticky-top` now, which is the bar's height while it is drawn and 0 otherwise, set by
 `#scope-bar:not([hidden]) ~ *`; the bar's height is fixed so the offset is a number, not a
-measurement. The timeline is no longer its own full-height scroller: beside the bar it made the pane
+measurement. `check-web-static.js`'s `sticky top` holds it from the stylesheet text, because jsdom
+has no layout and a computed check would pass whatever the CSS says: every selector declared sticky,
+other than `.scope-bar`, must take any `top` it declares, in any file and any `@media` block, from
+`--sticky-top`. It was proven red by putting `top: 0` back on `#timeline > .filter-note`, and it
+landed before the overview line, the first band added under it. A heuristic over selector text;
+among what it misses is a `top` set for the same element through another selector. The timeline is no longer its own full-height scroller: beside the bar it made the pane
 overflow by the bar's height, live follow scrolled the pane that far, and the bar sat on the first
 row while the timeline's own foot was never followed. It flows in the pane as the list does. That
 made its follow move the whole pane on every redraw, so expanding a run in the middle of a 3016-call

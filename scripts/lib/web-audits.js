@@ -583,4 +583,6 @@ module.exports = {
   NETWORK_EXPECTED,
   mirrorBlockNames,
   liftBlock,
+  cssBlocks,
+  selectorList,
 };

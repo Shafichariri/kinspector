@@ -31,7 +31,8 @@
  *     followed only from the end it follows, and opening the view follows once; and the live socket's
  *     calls and markers leave the timeline, the path and the waterfall where the reader put them;
  *   - the shell: the address parser, the Sessions and Processes presets, the control header written in
- *     one place, and the narrow top bar and tab bar rules.
+ *     one place, and the narrow top bar and tab bar rules;
+ *   - the list pane's room: nothing sticky in it taking its `top` from anything but `--sticky-top`.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -57,7 +58,7 @@ const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
-const { auditNarrowTopBar, auditNarrowTabs } = require('./lib/layout-audits');
+const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop } = require('./lib/layout-audits');
 
 const results = [];
 const report = (label, value) => {
@@ -135,6 +136,7 @@ async function main() {
   for (const [label, value] of checkShell(scripts)) report(label, value);
   report('narrow top bar css', auditNarrowTopBar(styles));
   report('narrow tabs css', auditNarrowTabs(styles));
+  report('sticky top', auditStickyTop(styles));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);
