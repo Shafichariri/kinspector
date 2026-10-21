@@ -299,6 +299,24 @@ re-read run while paused, with the counts left to the next load, and with spaces
 `check-web-static.js`'s `reread …` and `older reread …` lines hold the ordering and the
 burst, each proven red with its rule removed.
 
+**A live call reaches every pane that counts calls, and the two that redraw from the whole session
+do it on a timer.** Since KIN-54 a live call moved the header and the traffic tab; the timeline, the
+glance and the picker still described the last load. The socket's call branch never called
+`renderTimeline`, so with no filter a call reached the timeline only when something else redrew it;
+the glance read `calls 27` under a header of 29; and the picker's `txnCount` was the daemon's from the
+last `loadSessions`, `6 calls` under 31. The timeline and the glance redraw from every row the session
+holds, so a call arms one redraw of both (`drawLive`) and the calls arriving meanwhile ride on it:
+`LIVE_DRAW_MS` is 250, and a burst of 100 calls over T ms costs at most ⌈T/250⌉+1 of each, five over
+a second, against one per call before. The timeline keeps its follow rule, because the redraw is
+`renderTimeline` itself. The selected option counts from the header's own `sessionTotal`
+(`followLiveCount`) and repaints the face through `paintPickerFace`, its one writer, at no request;
+re-reading `/api/sessions` would have cost one per call or a throttle of its own, for a number the
+page already holds. Other options keep their loaded counts. Paused, or for another session, the
+branch is never reached, so none of the three moves. `check-web-static.js`'s `socket call drawn`,
+`socket run stays open` and `live draw burst of 100`, and the live probe's `live picker count`,
+`live glance plain`, `live timeline plain`, `live glance filter`, `live paused still` and `live other
+still` hold it, each proven red with its rule removed.
+
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
 enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls

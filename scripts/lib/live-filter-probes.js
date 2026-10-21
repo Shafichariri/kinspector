@@ -20,6 +20,14 @@
  *   matching call and both calls the session gained.
  * - `live paused no read`: a row that arrived just before pausing is not read in while paused, and
  *   resuming reads it.
+ * - `live picker count`, `live glance plain`: after two live calls with no filter, the selected
+ *   session's picker option and its face, and the glance's `calls` row, state the header's count, and
+ *   the glance's hosts and slowest calls count the live calls. Both read only what the last load had.
+ * - `live timeline plain`: with no filter and the timeline shown, a live call is drawn on it with no
+ *   other action; the socket's call branch never redrew the timeline.
+ * - `live glance filter`: under the filter, the glance still counts every call the session gained.
+ * - `live paused still`, `live other still`: a call while paused, or for another session, moves
+ *   none of the picker, the glance or the timeline.
  *
  * Rows "arrive" as `filter-probes.js`'s do: the page's `fetch` is wrapped to answer as the daemon
  * would once it had stored them, which the daemon does before it broadcasts. Which rows the filter
@@ -40,7 +48,8 @@ const { LONG_SESSION_ID, choose, waitFor } = require('./long-session-probes');
 const LIVE_LABELS = [
   'blank filter header', 'blank filter free', 'live free no filter', 'live header plain',
   'live rows list', 'live rows timeline', 'live rows path', 'live rows whole', 'live header filter',
-  'live paused no read',
+  'live paused no read', 'live picker count', 'live glance plain', 'live timeline plain', 'live glance filter',
+  'live paused still', 'live other still',
 ];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Longer than the page waits before a re-read, so a re-read that was going to happen has. */
@@ -60,6 +69,19 @@ async function blankHeader(ctx) {
     return `n/a (the daemon reads "   " as a filter: ${blank.matched} of ${blank.total}, against ${none.matched})`;
   }
   const counts = () => doc.getElementById('counts').textContent;
+  // What the picker and the glance state: the selected option, the face's rest, the glance's rows.
+  const pickerText = () => doc.querySelector('#session-picker option:checked')?.textContent || '';
+  const faceText = () => doc.querySelector('.picker-face .picker-rest')?.textContent || '';
+  const glanceRows = () => [...doc.querySelectorAll('#detail-empty.glance .glance-row')].map((row) => [
+    row.querySelector('.glance-label')?.textContent, row.querySelector('.glance-value')?.textContent,
+  ]);
+  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls')?.[1];
+  const showGlance = () => {
+    doc.getElementById('detail').hidden = true;
+    doc.getElementById('detail-empty').hidden = false;
+    window.renderSessionGlance();
+  };
+  const liveDrawArmed = () => ctx.pageState().liveDraw.timer !== null;
   choose(ctx, LONG_SESSION_ID);
   await waitFor(() => counts().endsWith(`${none.total} shown`) || counts().endsWith(`${none.total} calls`));
   await typeFilter(ctx, '');
@@ -161,6 +183,19 @@ async function liveRows(ctx, verdicts) {
     socket.onmessage({ data: JSON.stringify({ type: kind, sessionId, [kind]: row }) });
   };
   const counts = () => doc.getElementById('counts').textContent;
+  // What the picker and the glance state: the selected option, the face's rest, the glance's rows.
+  const pickerText = () => doc.querySelector('#session-picker option:checked')?.textContent || '';
+  const faceText = () => doc.querySelector('.picker-face .picker-rest')?.textContent || '';
+  const glanceRows = () => [...doc.querySelectorAll('#detail-empty.glance .glance-row')].map((row) => [
+    row.querySelector('.glance-label')?.textContent, row.querySelector('.glance-value')?.textContent,
+  ]);
+  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls')?.[1];
+  const showGlance = () => {
+    doc.getElementById('detail').hidden = true;
+    doc.getElementById('detail-empty').hidden = false;
+    window.renderSessionGlance();
+  };
+  const liveDrawArmed = () => ctx.pageState().liveDraw.timer !== null;
   const tabCount = (view) => doc.querySelector(`#tabs .tab[data-view="${view}"] .tab-count`)?.textContent;
   const inList = (row) => Boolean(doc.querySelector(`#list .row[data-id="${row.id}"]`));
   const forget = async () => {
@@ -185,11 +220,35 @@ async function liveRows(ctx, verdicts) {
     // Nothing typed: no read, and the header and the traffic tab count both calls.
     await ctx.settle();
     const total = calls.length;
+    showGlance();
     asked.length = 0;
-    send('txn', callLike(passing));
+    // The slowest call the session has ever made, so the glance's slowest list must lead with it.
+    const slow = { ...callLike(passing), ms: 987654, path: `${passing.path}/live-slow` };
+    send('txn', slow);
     send('signal', signalLike(leftSignal));
     send('txn', callLike(failing));
     await pause(QUIET_MS);
+    const plainCount = `${total + 2} calls`;
+    verdicts.set('live picker count', pickerText().endsWith(plainCount) && faceText().endsWith(plainCount)
+      ? `yes (option "${pickerText()}", face "${faceText()}", after two live calls)`
+      : `NO - option "${pickerText()}", face "${faceText()}", where both were due to end "${plainCount}"`);
+    {
+      const rows = glanceRows();
+      const hostsDue = new Map();
+      for (const t of [...calls, slow, failing]) hostsDue.set(t.host, (hostsDue.get(t.host) || 0) + 1);
+      const hostRows = rows.filter(([label]) => label === 'host');
+      const wrongHosts = hostRows.filter(([, value]) => {
+        const [host, n] = String(value).split(' · ');
+        return Number(n) !== hostsDue.get(host);
+      });
+      // The first row after the `Slowest` title.
+      const title = [...doc.querySelectorAll('#detail-empty .glance-title')].find((t) => t.textContent === 'Slowest');
+      const slowFirst = title?.nextElementSibling?.querySelector('.glance-value')?.textContent;
+      const slowDue = `${slow.method} ${slow.path}`;
+      verdicts.set('live glance plain', glanceCalls() === String(total + 2) && hostRows.length && !wrongHosts.length && slowFirst === slowDue
+        ? `yes (calls ${glanceCalls()}, hosts ${hostRows.map(([, v]) => v).join(', ')}, slowest "${slowFirst}", after two live calls)`
+        : `NO - calls ${glanceCalls()} (${total + 2} due), hosts ${hostRows.map(([, v]) => v).join(', ') || 'none'}${wrongHosts.length ? ' miscounted' : ''}, slowest "${slowFirst}" ("${slowDue}" due)`);
+    }
     verdicts.set('live free no filter', listReads().length === 0
       ? 'yes (two live calls and a signal with no filter read no list route)'
       : `NO - ${listReads().length} list reads (${listReads().join(', ')}) with no filter set`);
@@ -198,6 +257,23 @@ async function liveRows(ctx, verdicts) {
       ? `yes ("${due}", traffic ${total + 2}, after two live calls)`
       : `NO - "${counts()}", traffic ${tabCount('network')}, where "${due}" and ${total + 2} were due after two live calls`);
     await forget();
+
+    // The timeline shown and nothing typed: a live call is drawn with no other action.
+    await press(ctx, doc.querySelector('#tabs .tab[data-view="all"]'));
+    await ctx.settle();
+    {
+      const drawnCall = callLike(passing);
+      const onTimeline = () => Boolean(doc.querySelector(`#timeline [data-id="${drawnCall.id}"]`));
+      const sent = Date.now();
+      send('txn', drawnCall);
+      const drew = await waitFor(onTimeline, 3000);
+      verdicts.set('live timeline plain', drew
+        ? `yes (${drawnCall.id} on the timeline ${Date.now() - sent} ms after it arrived, with no other action)`
+        : `NO - ${drawnCall.id} not on the timeline 3 s after it arrived with no filter set`);
+    }
+    await press(ctx, doc.querySelector('#tabs .tab[data-view="network"]'));
+    await forget();
+    showGlance();
 
     // Under the filter, per view: one call and one signal it matches, one of each it does not, sent
     // with the view open. Each is judged at arrival, before any re-read can land, so a row pushed
@@ -249,6 +325,11 @@ async function liveRows(ctx, verdicts) {
       verdicts.set('live header filter', counts() === dueFiltered && tabCount('network') === String(page.matched + 1)
         ? `yes ("${dueFiltered}", traffic ${page.matched + 1}, once the daemon answered)`
         : `NO - "${counts()}", traffic ${tabCount('network')}, where "${dueFiltered}" and ${page.matched + 1} were due`);
+      // The glance ignores the filter, so it counts both calls, the refused one too.
+      await waitFor(() => !liveDrawArmed(), 2000);
+      verdicts.set('live glance filter', glanceCalls() === String(total + 2)
+        ? `yes (calls ${glanceCalls()} under "${filter}", as the header's session count)`
+        : `NO - the glance reads calls ${glanceCalls()} under "${filter}", where the session holds ${total + 2}`);
       const after = { chip: chipOf(segmentOf(passing)), left: Number(tabCount(left)), kept: Number(tabCount(kept)) };
       // The matching call may share the refused one's endpoint, and then the chip counts both.
       const chipDue = before.chip + [out.call, inn.call].filter((t) => segmentOf(t) === segmentOf(passing)).length;
@@ -274,10 +355,39 @@ async function liveRows(ctx, verdicts) {
     verdicts.set('live paused no read', pausedReads === 0 && !pausedDrawn && resumed
       ? 'yes (no read while paused, and the call drawn once resumed)'
       : `NO - ${pausedReads} reads while paused, drawn while paused: ${pausedDrawn}, drawn after resuming: ${resumed}`);
+
+    // Paused, and then for another session: a call moves none of the picker, the glance or the timeline.
+    await forget();
+    showGlance();
+    const still = async (label, deliver, why) => {
+      await waitFor(() => !liveDrawArmed(), 2000);
+      const before = { picker: pickerText(), face: faceText(), glance: glanceCalls() };
+      deliver();
+      const armed = liveDrawArmed();
+      await pause(600);
+      const after = { picker: pickerText(), face: faceText(), glance: glanceCalls() };
+      verdicts.set(label, !armed && before.picker === after.picker && before.face === after.face && before.glance === after.glance
+        ? `yes (${why}: option, face and glance calls ${after.glance} unchanged, no timeline redraw armed)`
+        : `NO - ${why}: option "${before.picker}" -> "${after.picker}", face "${before.face}" -> "${after.face}", glance ${before.glance} -> ${after.glance}, timeline redraw armed: ${armed}`);
+    };
+    await press(ctx, live);
+    await still('live paused still', () => send('txn', callLike(passing)), 'a call while paused');
+    await press(ctx, live);
+    await forget();
+    showGlance();
+    const other = [...doc.getElementById('session-picker').options].map((o) => o.value).find((v) => v && v !== sessionId);
+    if (other) {
+      await still('live other still', () => socket.onmessage({ data: JSON.stringify({ type: 'txn', sessionId: other, txn: callLike(passing) }) }),
+        `a call for ${other}`);
+    } else {
+      verdicts.set('live other still', 'n/a (one session; no other to send a call for)');
+    }
   } finally {
     window.fetch = realFetch;
     if (!doc.getElementById('live-btn').classList.contains('on')) await press(ctx, doc.getElementById('live-btn'));
     await forget();
+    // The live calls counted into the picker's label are not in the archive; read the labels again.
+    await window.loadSessions();
     await ctx.settle();
   }
   return [...verdicts];

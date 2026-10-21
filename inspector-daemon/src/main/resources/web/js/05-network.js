@@ -184,6 +184,33 @@ function setConn(kind) {
  */
 const RESTART_GRACE_MS = 20000;
 
+/**
+ * How long live calls wait before the timeline and the glance are redrawn for them.
+ *
+ * Each redraws from every row the session holds, so one per call made a burst cost as many full
+ * redraws as it had calls. The first call arms one redraw and the calls arriving meanwhile ride on
+ * it, as the filtered re-read's rows do (`LIVE_REREAD_MS`): a burst of 100 calls over one second
+ * costs at most `⌈1000 / 250⌉ + 1`, five, of each, and a lone call is drawn within a quarter second.
+ */
+const LIVE_DRAW_MS = 250;
+
+/**
+ * Arms the one pending redraw of the timeline and the glance, unless one is already armed.
+ *
+ * It draws whatever the page holds when it fires, so a switch or a pause meanwhile draws that and
+ * nothing stale. The timeline keeps its own follow rule (`renderTimeline`): at its end it follows,
+ * scrolled back it stays, and an open run stays open. The glance is drawn only while no call is
+ * open, as everywhere else.
+ */
+function drawLive() {
+  if (state.liveDraw.timer !== null) return;
+  state.liveDraw.timer = setTimeout(() => {
+    state.liveDraw.timer = null;
+    renderTimeline();
+    if ($('detail').hidden) renderSessionGlance();
+  }, LIVE_DRAW_MS);
+}
+
 function connectLive() {
   const ws = new WebSocket(`ws://${location.host}/api/live`);
   ws.onmessage = (event) => {
@@ -217,6 +244,11 @@ function connectLive() {
       renderList();
       renderWaterfall();
       renderPath();
+      // The picker's label counts what the header counts, and the timeline and the glance follow
+      // within LIVE_DRAW_MS: both said what the session held at the last load, `calls 27` under a
+      // header of 29, and the timeline left out every call that arrived with no filter set.
+      followLiveCount();
+      drawLive();
     } else if (message.type === 'marker') {
       state.markers.push(message.marker);
       renderMarkers();
