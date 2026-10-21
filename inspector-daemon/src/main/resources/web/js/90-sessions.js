@@ -100,6 +100,23 @@ function paintPickerFace() {
 }
 
 /**
+ * The selected session's option counts a live call as the header does, from `sessionTotal`.
+ *
+ * `txnCount` is the daemon's, as of the last `loadSessions`, and nothing re-read it while the
+ * session recorded: the picker said `6 calls` under a header saying 31. Counting here costs no
+ * request, where re-reading `/api/sessions` per call would. Other sessions' options are left as
+ * loaded; the Sessions page is where every session's count belongs, if anywhere.
+ */
+function followLiveCount() {
+  const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
+  if (!meta) return;
+  meta.txnCount = state.sessionTotal ?? (meta.txnCount ?? 0) + 1;
+  const option = [...$('session-picker').options].find((o) => o.value === meta.sessionId);
+  if (option) option.textContent = sessionLabel(meta);
+  paintPickerFace();
+}
+
+/**
  * Which app the page is showing, in the window title — the picker already names it in the bar.
  * Also runs on switch, or it would name the old one.
  */

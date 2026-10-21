@@ -127,6 +127,7 @@ function socketPage(sources, view, newestFirst) {
     reread: { transactions: false, signals: false, timer: null, busy: false },
     readSent: { transactions: 0, signals: 0 }, readWritten: { transactions: 0, signals: 0 },
     currentSessionId: 'S', currentRead: { sent: 0, written: 0 }, signalSessionId: 'S',
+    liveDraw: { timer: null },
   };
   state.allSignals.push(state.screens[0]);
   const sockets = [];
@@ -146,6 +147,7 @@ function socketPage(sources, view, newestFirst) {
       prefs: { get: () => null, set() {} }, ageOf: () => 0, fmtAge: () => '', setConn() {},
       showServerBanner() {}, setControlsEnabled() {}, loadServerInfo() {}, loadSessions: async () => {},
       renderBrowser() {}, loadPayload: async () => {}, methodClass: () => 'm-get', statusClass: () => '2',
+      followLiveCount() {},
     },
   });
   for (const name of ['connectLive', 'setSortOrder', 'setTimeRange', 'loadTransactions', 'applyView']) {
@@ -160,7 +162,16 @@ function socketPage(sources, view, newestFirst) {
   const ws = sockets[0];
   if (!ws || typeof ws.onmessage !== 'function') throw new HarnessError('connectLive opened no socket with an onmessage handler');
   const send = (message) => ws.onmessage({ data: JSON.stringify({ sessionId: 'S', ...message }) });
+  // A call's timeline row, findable by id; the list's own row shape is not checked here.
+  page.rowFor = (txn) => Object.assign(page.el('div', 'row'), { dataset: { id: txn.id } });
   return { state, page, pane, send };
+}
+
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Waits until the redraw a live call armed has run (`drawLive`); a check reads the pane after it. */
+async function drawn(state) {
+  for (let i = 0; i < 200 && state.liveDraw.timer !== null; i++) await pause(10);
+  if (state.liveDraw.timer !== null) throw new HarnessError('the live redraw never ran');
 }
 
 const VIEW_NAMES = { all: 'timeline', path: 'path', waterfall: 'waterfall' };
@@ -177,9 +188,10 @@ async function checkSocketFollow(sources) {
     const moved = [];
     for (const newestFirst of [false, true]) {
       for (const kind of ['txn', 'marker']) {
-        const { pane, send } = socketPage(sources, view, newestFirst);
+        const { state, pane, send } = socketPage(sources, view, newestFirst);
         pane.scrollTop = MIDDLE;
         send(message[kind](1));
+        await drawn(state);
         if (pane.scrollTop !== MIDDLE) moved.push(`${kind} ${newestFirst ? 'newest' : 'oldest'} ${MIDDLE} -> ${pane.scrollTop}`);
       }
     }
@@ -191,11 +203,12 @@ async function checkSocketFollow(sources) {
   const ends = [];
   let followed = true;
   for (const newestFirst of [false, true]) {
-    for (const kind of ['marker', 'signal']) {
+    for (const kind of ['marker', 'signal', 'txn']) {
       const { state, pane, send } = socketPage(sources, 'all', newestFirst);
       const near = newestFirst ? 5 : endOf(state) - 5;
       pane.scrollTop = near;
       send(message[kind](2));
+      await drawn(state);
       ends.push(`${kind} ${newestFirst ? 'newest' : 'oldest'} ${near} -> ${pane.scrollTop}`);
       if (pane.scrollTop !== followedTo(state)) followed = false;
     }
@@ -226,6 +239,66 @@ async function checkSocketFollow(sources) {
     if (pane.scrollTop !== followedTo(state)) all = false;
   }
   lines.push(['timeline asked follows', all ? `yes (${asked.join(', ')})` : `NO - ${asked.join(', ')}; each was due to follow`]);
+  lines.push(...await checkLiveCallDrawn(sources, message.txn));
+  return lines;
+}
+
+/**
+ * A live call with no filter reaches the timeline and the glance, with no other action, within one
+ * redraw: the `txn` branch never called `renderTimeline`, so the timeline left out every call until
+ * something else redrew it. An open run stays open, and a burst costs a bounded number of redraws.
+ */
+async function checkLiveCallDrawn(sources, txn) {
+  const lines = [];
+  const has = (page, id) => page.$('timeline').children.some((n) => n.dataset && n.dataset.id === id);
+  {
+    const { state, page, send } = socketPage(sources, 'all', false);
+    let glances = 0;
+    page.renderSessionGlance = () => { glances++; };
+    page.$('detail').hidden = true;
+    page.renderTimeline();
+    const before = has(page, 'live7');
+    send(txn(7));
+    await drawn(state);
+    lines.push(['socket call drawn', !before && has(page, 'live7') && glances > 0
+      ? `yes (live7 drawn on the timeline and the glance redrawn ${glances}x, no other action)`
+      : `NO - live7 on the timeline: ${has(page, 'live7')}, glance redraws ${glances}; a live call is drawn without another action`]);
+  }
+  {
+    const { state, page, pane, send } = socketPage(sources, 'all', false);
+    page.renderTimeline();
+    const run = () => page.$('timeline').children.find((n) => /\btl-run\b/.test(n.className));
+    pane.scrollTop = MIDDLE;
+    run().listeners.click[0]();
+    const opened = /\btl-run-open\b/.test(run().className);
+    send(txn(8));
+    await drawn(state);
+    lines.push(['socket run stays open', opened && /\btl-run-open\b/.test(run().className) && pane.scrollTop === MIDDLE
+      ? `yes (an open run stayed open and the pane stayed at ${MIDDLE} after a live call)`
+      : `NO - run open before ${opened}, after ${/\btl-run-open\b/.test(run().className)}, pane ${MIDDLE} -> ${pane.scrollTop}`]);
+  }
+  {
+    // 100 calls over a second, one every 10 ms, as `reread burst of 100` sends its rows.
+    const { state, page, send } = socketPage(sources, 'all', false);
+    page.$('detail').hidden = true;
+    const real = page.renderTimeline;
+    let timelines = 0;
+    let glances = 0;
+    page.renderTimeline = (...args) => { timelines++; return real(...args); };
+    page.renderSessionGlance = () => { glances++; };
+    const started = Date.now();
+    for (let n = 0; n < 100; n++) {
+      send(txn(100 + n));
+      await pause(10);
+    }
+    await drawn(state);
+    const took = Date.now() - started;
+    const bound = Math.ceil(took / 250) + 1;
+    const all = Array.from({ length: 100 }, (_, n) => `live${100 + n}`).every((id) => has(page, id));
+    lines.push(['live draw burst of 100', timelines <= bound && glances <= bound && all
+      ? `yes (100 calls in ${took} ms: ${timelines} timeline and ${glances} glance redraws, bound ${bound}; every call drawn)`
+      : `NO - 100 calls in ${took} ms: ${timelines} timeline and ${glances} glance redraws, bound ${bound}; every call drawn: ${all}`]);
+  }
   return lines;
 }
 
