@@ -8,7 +8,19 @@
  * - `now failed read empty`: a read for the new session fails before the switch's own load has
  *   written `state.current`, which still holds the old session's values. The strip must be empty.
  *
- * Both call the page's `refreshCurrent` directly, which is what a live signal does, so the probe
+ *
+ * Four more lines, from KIN-57, on what the strip and the signal panes show around a switch and of
+ * two reads for one session. The fixture's second session holds current values of its own, so
+ * "the strip lists the new session's values" can fail apart from "the strip is empty":
+ *
+ * - `now switch shows none`: the new session's `/signals` read is held, so its load has not landed.
+ *   The strip, the timeline's signal rows and the glance must show none of the old session's values.
+ * - `now newest read decides`: two live reads for one session, released newest first. The strip
+ *   must list the newer reply, which the older one landing last overwrote.
+ * - `now load read overtaken`: the same, with the older read started by `loadSignals`.
+ * - `now failed read kept`: a failed read on the session already shown keeps its values, each dated.
+ *
+ * All call the page's `refreshCurrent` directly, which is what a live signal does, so the probe
  * holds the very read it releases instead of racing one the socket might start. Each stubs the page's
  * `fetch` for the one route it holds and puts the real one back before it returns, and the page is
  * left on the session it started on. Returns `[label, verdict]` pairs, one per line the caller prints.
@@ -16,7 +28,10 @@
 
 const { choose, waitFor } = require('./long-session-probes');
 
-const CURRENT_LABELS = ['now late reply dropped', 'now failed read empty'];
+const CURRENT_LABELS = [
+  'now late reply dropped', 'now failed read empty',
+  'now switch shows none', 'now newest read decides', 'now load read overtaken', 'now failed read kept',
+];
 const every = (why) => CURRENT_LABELS.map((label) => [label, why]);
 
 /** What the strip lists, as `tag name` in drawn order. */
@@ -27,6 +42,15 @@ const stripOf = (doc) =>
 /** The same, for rows a route answered with. */
 const keysOf = (rows) => rows.map((s) => `${s.tag} ${s.name}`);
 const same = (a, b) => a.join('|') === b.join('|');
+/** The timeline's signal entries: single rows and collapsed runs, each drawn from signals alone. */
+const timelineSignals = (doc) => doc.querySelectorAll('#timeline .tl-signal, #timeline .tl-run').length;
+/** What the glance draws: `glance` with its rows, or a line naming nothing. */
+const glanceOf = (doc) => {
+  const pane = doc.getElementById('detail-empty');
+  return { drawn: pane.classList.contains('glance'), text: pane.textContent.replace(/\s+/g, ' ').trim() };
+};
+/** A reply the page's `api` reads as a 200 holding [rows]: it asks only `ok` and `text()`. */
+const replyOf = (rows) => ({ ok: true, status: 200, text: async () => JSON.stringify(rows) });
 
 async function probeCurrentAfterSwitch(ctx) {
   const { window, doc, ORIGIN, settle } = ctx;
@@ -103,9 +127,134 @@ async function probeCurrentAfterSwitch(ctx) {
     for (const r of held) r();
     await waitFor(shows(toKeys));
     await settle();
+
+    await back();
+    verdicts.push(...await probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, shows }));
+    verdicts.push(...await probeReadOrder(ctx, { from, fromKeys, routeOf, realFetch }));
   } finally {
     await back();
   }
+  return verdicts;
+}
+
+/**
+ * `now switch shows none`: on the timeline tab with the glance shown, the switch to `to` is held at
+ * its `/signals` read. Until it lands, nothing on the signal side may be `from`'s.
+ */
+async function probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, shows }) {
+  const { window, doc, settle } = ctx;
+  const label = CURRENT_LABELS[2];
+  const viewBefore = ctx.pageState().view;
+  // The glance is drawn only while no row is open, as Escape leaves the page.
+  const showGlance = () => {
+    doc.getElementById('detail').hidden = true;
+    doc.getElementById('detail-empty').hidden = false;
+    window.renderSessionGlance();
+  };
+  await window.selectView('all');
+  showGlance();
+  await settle();
+  const before = { strip: stripOf(doc), rows: timelineSignals(doc), glance: glanceOf(doc) };
+  if (!same(before.strip, fromKeys) || !before.rows || !before.glance.drawn) {
+    await window.selectView(viewBefore);
+    return [[label, `NO - ${from} itself drew ${before.strip.length} strip rows, ${before.rows} timeline signals and ${before.glance.drawn ? 'a' : 'no'} glance, so nothing could leak`]];
+  }
+  const signalsOf = `/api/sessions/${encodeURIComponent(to)}/signals`;
+  const held = [];
+  window.fetch = (url, init) => {
+    if (!String(url).includes(signalsOf)) return realFetch(url, init);
+    return new Promise((r) => held.push(r)).then(() => realFetch(url, init));
+  };
+  let verdict;
+  try {
+    choose(ctx, to);
+    const asked = await waitFor(() => held.length > 0);
+    const during = { strip: stripOf(doc), rows: timelineSignals(doc), glance: glanceOf(doc) };
+    const leaks = [];
+    if (during.strip.length) leaks.push(`the strip lists ${during.strip.join(', ')}`);
+    if (during.rows) leaks.push(`the timeline draws ${during.rows} signal entries`);
+    if (during.glance.drawn) leaks.push(`the glance reads "${during.glance.text.slice(0, 60)}"`);
+    verdict = !asked
+      ? `NO - the switch to ${to} never asked for ${signalsOf}`
+      : leaks.length
+        ? `NO - while ${to}'s signals were held, ${leaks.join('; ')}`
+        : `yes (with ${to}'s signals held: no strip rows, no timeline signals, the glance reads "${during.glance.text}"; ${from} had ${before.strip.length}, ${before.rows} and a glance)`;
+  } finally {
+    window.fetch = realFetch;
+    for (const r of held) r();
+  }
+  await waitFor(shows(toKeys));
+  await settle();
+  choose(ctx, from);
+  await waitFor(shows(fromKeys));
+  await settle();
+  await window.selectView(viewBefore);
+  await settle();
+  return [[label, verdict]];
+}
+
+/**
+ * The three lines on one session's reads: two in flight released newest first, the older one
+ * started by a live signal and then by a load, and a read that fails. The older read answers with
+ * all but the first of `from`'s values, so the strip says which reply it drew.
+ */
+async function probeReadOrder(ctx, { from, fromKeys, routeOf, realFetch }) {
+  const { window, doc, ORIGIN, settle } = ctx;
+  const rows = await fetch(`${ORIGIN}${routeOf(from)}`).then((r) => r.json());
+  const older = rows.slice(1);
+  const verdicts = [];
+
+  // Holds every `/current` read for `from`; the first one answers with `older`.
+  const holdReads = () => {
+    const reads = [];
+    window.fetch = (url, init) => {
+      if (!String(url).endsWith(routeOf(from))) return realFetch(url, init);
+      const answer = reads.length === 0 ? older : rows;
+      return new Promise((r) => reads.push(r)).then(() => replyOf(answer));
+    };
+    return reads;
+  };
+  const pair = async (label, startOlder) => {
+    const reads = holdReads();
+    try {
+      const first = startOlder();
+      const startedFirst = await waitFor(() => reads.length === 1);
+      const second = window.refreshCurrent();
+      const startedBoth = await waitFor(() => reads.length === 2);
+      if (!startedFirst || !startedBoth) return [label, `NO - ${reads.length} of 2 reads of ${routeOf(from)} were asked`];
+      reads[1]();
+      await second;
+      reads[0]();
+      await first;
+      const strip = stripOf(doc);
+      return [label, same(strip, fromKeys)
+        ? `yes (the newer read landed first and the older last; the strip lists the newer ${fromKeys.length})`
+        : `NO - the older read landed last and the strip lists ${strip.join(', ') || 'nothing'}, where the newer ${fromKeys.length} were due`];
+    } finally {
+      window.fetch = realFetch;
+      for (const r of reads) r();
+      await settle();
+    }
+  };
+
+  verdicts.push(await pair(CURRENT_LABELS[3], () => window.refreshCurrent()));
+  verdicts.push(await pair(CURRENT_LABELS[4], () => window.loadSignals()));
+
+  // Failed: on the session already shown, the strip keeps what it held.
+  window.fetch = (url, init) => (String(url).endsWith(routeOf(from))
+    ? Promise.reject(new TypeError('probe: the read failed'))
+    : realFetch(url, init));
+  try {
+    await window.refreshCurrent();
+    const strip = stripOf(doc);
+    verdicts.push([CURRENT_LABELS[5], same(strip, fromKeys)
+      ? `yes (a failed read on ${from} kept its ${fromKeys.length} values)`
+      : `NO - after a failed read on ${from} the strip lists ${strip.join(', ') || 'nothing'}, where its ${fromKeys.length} were held`]);
+  } finally {
+    window.fetch = realFetch;
+  }
+  await window.refreshCurrent();
+  await settle();
   return verdicts;
 }
 

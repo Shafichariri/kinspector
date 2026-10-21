@@ -365,16 +365,13 @@ async function selectSignal(id) {
 /**
  * Re-reads the current-state panel. Cheap, and the derivation lives on the daemon.
  *
- * A live signal starts one, so with traffic a read is often in flight when the session changes. An
- * answer for a session no longer selected is dropped, or the old session's values are drawn as what
- * the new one holds now. A failed read empties the strip rather than keeping what it had: just after
- * a switch that is the other session's, and `state.current` does not say whose it is.
+ * A live signal starts one, so with traffic a read is often in flight when the session changes, and
+ * two can be in flight for one session. `readCurrent` decides which answer the strip shows: the
+ * later-started read for the session still selected, and on a failure the values the strip held
+ * when they were this session's.
  */
 async function refreshCurrent() {
   if (!state.sessionId) return;
-  const sessionId = state.sessionId;
-  const current = await api(`/api/sessions/${encodeURIComponent(sessionId)}/current`).catch(() => []);
-  if (sessionId !== state.sessionId) return;
-  state.current = current;
+  await readCurrent(state.sessionId);
   renderCurrent();
 }

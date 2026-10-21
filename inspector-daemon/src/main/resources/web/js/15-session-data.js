@@ -116,6 +116,7 @@ async function loadTransactions() {
   // With no session there is nothing to load, and the empty list is the only thing that can
   // say what the page is waiting for.
   if (!state.sessionId) { renderListEmpty(); return; }
+  followSession();
   const load = ++state.callLoad;
   const isLatest = () => load === state.callLoad;
   const filter = state.filter;
@@ -177,14 +178,14 @@ async function loadTransactions() {
  * an older signal load that lands after a newer one is dropped, as an older list load is.
  *
  * Failures are swallowed to an empty list on purpose: a daemon older than this page has no
- * signal routes, and the traffic view must keep working against one rather than going blank.
+ * signal routes, and the traffic view must keep working against one rather than going blank. The
+ * one exception is `/current` on the session already shown, which keeps its values (`readCurrent`).
  */
 async function loadSignals(filter = state.filter) {
   if (!state.sessionId) return;
   const load = ++state.signalLoad;
   const isLatest = () => load === state.signalLoad;
   const sessionId = state.sessionId;
-  const id = encodeURIComponent(sessionId);
   const ticket = ++state.readSent.signals;
   const signals = await signalPages(api, sessionId, filter).catch(() => []);
   if (!isLatest()) return;
@@ -196,9 +197,9 @@ async function loadSignals(filter = state.filter) {
   if (!isLatest()) return;
   // Taken from the whole session, so the skeleton ignores the filter without a request of its own.
   state.screens = state.allSignals.filter((s) => tagOf(s) === 'screen');
-  const current = await api(`/api/sessions/${id}/current`).catch(() => []);
+  await readCurrent(sessionId, isLatest);
   if (!isLatest()) return;
-  state.current = current;
+  state.signalSessionId = sessionId;
 
   // A tab whose tag this session never recorded is a dead end, so the set is rebuilt per
   // session and the current view falls back rather than pointing at nothing.
@@ -210,6 +211,65 @@ async function loadSignals(filter = state.filter) {
   renderCurrent();
   applyView();
   if ($('detail').hidden) renderSessionGlance();
+}
+
+/**
+ * Clears the signal side the moment the selected session is no longer the one it was loaded for.
+ *
+ * A switch reads a page of calls, the markers and the whole-session calls before `loadSignals`, and
+ * until that lands the now strip, the timeline's signal rows and the glance described the session
+ * just left under the new one's name — for as long as a whole-session read takes, 25 s on a large
+ * one. Called by the picker (through `loadTransactions`) and by `afterSessionChange` before it waits
+ * for the session list, so a delete or a clear does not show the deleted session meanwhile. It
+ * overtakes the signal load and every `/current` read in flight, which belong to the session left.
+ * The calls are not cleared: the switch's first page replaces them.
+ */
+function followSession() {
+  if (state.signalSessionId === state.sessionId) return;
+  state.signalSessionId = null;
+  state.signalLoad++;
+  state.currentRead.written = state.currentRead.sent;
+  state.signals = [];
+  state.allSignals = [];
+  state.allSignalsSessionId = null;
+  state.screens = [];
+  state.current = [];
+  state.currentSessionId = null;
+  renderCurrent();
+  renderTimeline();
+  if ($('detail').hidden) renderSessionGlance();
+}
+
+/**
+ * Reads `/current` for [sessionId] and writes it, the one reader `loadSignals` and a live signal's
+ * `refreshCurrent` share.
+ *
+ * Of two reads, the later-started decides whatever order they land in: each takes a ticket, and one
+ * older than the newest written is dropped, as `readSent`/`readWritten` do for the filtered rows. A
+ * read for a session no longer selected, or for a load overtaken (`isLatest`), is dropped too.
+ *
+ * A failed read keeps what the strip holds when it is this session's (`currentSessionId`): each row
+ * carries its own age, so it is a dated fact, where an empty strip reads as "this app holds nothing
+ * now". After a switch the values held are another session's, so it empties instead. A daemon with
+ * no signal routes fails every read and so leaves the strip empty, as before.
+ */
+async function readCurrent(sessionId, isLatest = () => true) {
+  const ticket = ++state.currentRead.sent;
+  let current = null;
+  try {
+    current = await api(`/api/sessions/${encodeURIComponent(sessionId)}/current`);
+  } catch {
+    // Decided below, by whose values the strip holds.
+  }
+  if (sessionId !== state.sessionId || !isLatest() || ticket <= state.currentRead.written) return;
+  if (current) {
+    state.currentRead.written = ticket;
+    state.current = current;
+    state.currentSessionId = sessionId;
+  } else if (state.currentSessionId !== sessionId) {
+    state.current = [];
+    state.currentSessionId = null;
+  }
 }
 
 /**

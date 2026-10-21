@@ -85,6 +85,7 @@ const sessionState = (filter) => ({
   arriving: { transactions: null, signals: null },
   reread: { transactions: false, signals: false, timer: null, busy: false },
   readSent: { transactions: 0, signals: 0 }, readWritten: { transactions: 0, signals: 0 },
+  currentSessionId: 'S', currentRead: { sent: 0, written: 0 }, signalSessionId: 'S',
 });
 
 /**
@@ -277,6 +278,7 @@ async function checkAfterSessionChange(sources) {
     state, api: async (path) => (path === '/api/recording' ? [] : []), document: {},
     $: (id) => (id === 'session-rows' ? null : element),
     renderList() {}, renderMarkers() {}, renderCurrent() {}, renderTabs() {}, applyView() {},
+    renderTimeline() {}, renderSessionGlance() {},
   });
   await page.afterSessionChange();
   const ok = state.allSessionId === null && state.allSignalsSessionId === null && state.callLoad > 4 && state.signalLoad > 7;
