@@ -245,6 +245,28 @@ so a row broadcast earlier is already in the read; and the merge is by id becaus
 page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mid-read calls once`,
 `mid-read signals once`).
 
+**The signal side follows the session the moment it changes, and says whose values it holds.** A
+switch reads a page of calls, the markers and the whole-session calls before `loadSignals`, so until
+that landed the now strip, the timeline's signal rows and the glance described the session just
+left under the new one's name, for as long as a whole-session read takes. `followSession` clears
+the signals, `allSignals`, `screens` and `current` at once, overtakes the signal load and every
+`/current` read in flight, and redraws; the picker reaches it through `loadTransactions`, and
+`afterSessionChange` calls it before it waits for the session list, so a deleted session is not
+shown meanwhile. The glance says `loading this session…` until `loadSignals` has drawn the selected
+session (`signalSessionId`), because every number it draws, calls included, would be the old
+one's. The calls themselves are left to the switch's first page. `loadSignals` and `refreshCurrent`
+read `/current` through one function, `readCurrent`: of two reads the later-started decides whatever
+order they land in (`currentRead`, as `readSent`/`readWritten` for the filtered rows), and a failed
+read keeps the strip only when its values are the selected session's (`currentSessionId`). Kept,
+each row is a dated fact under its own age (`signals.md`); emptied, the strip reads as "this app
+holds nothing now". After a switch the values are another session's, so a failure there still
+leaves it empty. The live probe's `now switch shows none` holds the new session's `/signals` and
+reads all three; `now newest read decides` and `now load read overtaken` release two reads newest
+first; `now failed read kept` fails one on the session shown, beside KIN-51's `now late reply
+dropped` and `now failed read empty`. The fixture's long session has current values of its own,
+so a late reply written as empty fails `now late reply dropped` rather than matching it. Each was
+proven red with its rule removed.
+
 **Under a filter a live row waits for the daemon to say whether it matches.** The socket handler
 pushed every live call and signal into the filtered lists, so under `status>=500` every 200 that
 arrived was drawn, and counted, until the filter was edited. The page cannot decide the match
