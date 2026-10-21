@@ -1,11 +1,11 @@
 ---
 id: KIN-88
 title: 'Guard: QA''s live-traffic Chrome driver, committed'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 18:15'
-updated_date: '2026-10-21 18:52'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:guard-live-traffic-driver'
 dependencies: []
@@ -20,14 +20,14 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:guard-live-traffic-driver in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:guard-live-traffic-driver in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -55,3 +55,9 @@ Built (bob). node scripts/measure-web-ui.js --only traffic: 9 readings, 0 failed
 - ingest-client refuses http://localhost:8099 and https://example.invalid:443 as origins, and host api.example.com on call(); run against a scratch daemon.
 Restored: 9 readings, 0 failed. check-web-static.js 107 checks 0 failed; :repo-checks:test pass.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #127 merge 9fb0470, one round, no blocking findings. 'node scripts/measure-web-ui.js --only traffic': 9 readings, 0 failed, exit 0 (run twice). Red re-run by QA, each only its own reading: re-read per live row -> 'FAIL traffic burst reads: over bound (149 list reads, at most 6 (2 re-reads) for 100 rows over 844 ms)'; stands() without the filter clause -> 'FAIL traffic filter edit race, old lands first: old landed'; stands() without the session clause -> 'FAIL traffic session switch race, old lands first: old landed'. 'traffic reaches: 127.0.0.1 only', 'traffic hosts: .invalid only (api.qa.invalid)'; the client refused five origins and three hosts when called directly. git grep finds one Chrome launcher (measure-cdp.js). roadmap-cycle SKILL.md and scripts/AGENTS.md name both files. Not ported (allowed): pause/resume, reconnect, 400px, spaces-only. Not CI: measure-web-ui.js. The builder's fourth proof (write check made true) not repeated by QA.
+<!-- SECTION:FINAL_SUMMARY:END -->

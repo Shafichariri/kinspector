@@ -1,11 +1,11 @@
 ---
 id: KIN-91
 title: 'Guard: a probe leaves no process behind'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 18:15'
-updated_date: '2026-10-21 18:33'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:guard-mcp-probe-cleanup'
 dependencies: []
@@ -20,14 +20,14 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:guard-mcp-probe-cleanup in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:guard-mcp-probe-cleanup in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -47,3 +47,9 @@ Stub: a test-only main class run in a child JVM (java.home + java.class.path), m
 
 Files: service/McpControl.kt, the new test, and the one sentence in docs/decisions/daemon-and-mcp.md that says the property is not pinned by a test.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #126 merge 74f5ca0, one round, no blocking findings. McpProbeCleanupTest 3 of 3 pass (success, timeout, failed write; the failed-write test asserts IOException). With process.destroyForcibly() replaced by Unit: 3 of 3 FAIL, 'the probe returned and left its child running: pid 97836 is still alive' (and 97844, 97853); restored 3 of 3 pass. EOF proof: stub answering at EOF with destroyForcibly deleted -> success test passes, so the stub must ignore EOF. PeerRegistryTest.kt unchanged; InspectorDaemon.kt unchanged. :inspector-daemon:test --rerun 357 -> 360, 0 failed; pgrep -f McpProbeStubChild 0 before, after, after the red run. Not run locally: full build (no Android SDK). Found, not fixed: a probe whose child goes silent never returns (timeout checked only between lines).
+<!-- SECTION:FINAL_SUMMARY:END -->

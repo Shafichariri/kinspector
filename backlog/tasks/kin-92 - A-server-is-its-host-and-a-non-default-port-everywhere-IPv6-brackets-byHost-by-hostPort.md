@@ -3,11 +3,11 @@ id: KIN-92
 title: >-
   A server is its host and a non-default port, everywhere (IPv6 brackets, byHost
   by hostPort)
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 19:58'
-updated_date: '2026-10-21 20:18'
+updated_date: '2026-10-21 22:28'
 labels:
   - 'item:host-port-everywhere'
 dependencies: []
@@ -22,14 +22,14 @@ Order row 19 (§3 → Bugs found). Acceptance criteria are the roadmap item's ow
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:host-port-everywhere holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:host-port-everywhere holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -103,3 +103,9 @@ Red proofs (each restored, sha checked): R1 bracketing removed in Kotlin -> mode
 
 Green: model 162, core 75 (IPv6 ran, 0 skipped), daemon 362, repo-checks 35, ui 136; render-web-ui 251 passed (pinned 251), archive 48 (pinned 48); goldens unchanged (api/, daemon test resources, structure/). Not run here: iosSimulatorArm64Test (xcrun), testAndroidHostTest and full ./gradlew build (no Android SDK).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #129 merge 66c1bad, one round, no blocking findings. Live archive on base and head daemons: MCP url 'http://[::1]:8080/v6' from both '::1' and '[::1]' (not doubled), base 'http://::1:8080/v6'; byHost head {'[::1]:8080': 2, 'api.qa.invalid': 2, '[::1]': 1, '[fe80::1]:8443': 1, '127.0.0.1:8080': 1, '127.0.0.1:9090': 1, 'odd.qa.invalid:443': 1}, base {'::1': 2, '127.0.0.1': 2, ...}; non-IPv6 url byte-identical. Red: web hostPortOf unbracketed -> 'urlOf: NO - 3 of 6 cases failed' + 'stats origin: NO - http://::1:8080 for http://[::1]:8080'; Kotlin hostPort unbracketed -> MirrorCasesTest.urlOf_cases, PortTest, Ipv6CaptureTest (OkHttp) fail. Skip path: bind forced to 2001:db8::1 -> both IPv6 tests SKIPPED with 'no IPv6 loopback on this machine'. Counts model 160->162, core 74->76 (0 skipped), daemon 360->362, static 107->109. git diff --exit-code 623c571 66c1bad -- api/ inspector-daemon/src/test/resources/ exits 0. UNRELEASED line + INTEGRATION.md v63 present. Not run locally: full build, -Pinspector=off, Android, iOS links (CI). Note: a mixed-client IPv6 server still draws as two Stats rows (outside this item).
+<!-- SECTION:FINAL_SUMMARY:END -->

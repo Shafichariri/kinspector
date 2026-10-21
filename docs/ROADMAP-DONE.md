@@ -463,6 +463,368 @@ Android only looked right because 120px clears a status bar at that density.
 
   **Decided 2026-10-18: the three become `internal`.** The guard is now §5 → Phase I.
 
+- ~~**A check that finds nothing to check passes.**~~ **Done, 2026-10-22.** KIN-87 is Done on QA's second
+  round. PR #128 merged as `b1bbcac` and its fix round, PR #133, as `5b21593`; `build`, `release-swap`,
+  `repo` and `web` passed on both PRs, and the push runs on `main` for `b1bbcac` and `5b21593` were in
+  progress when QA looked and were not seen finishing.
+
+  The rule now exists once, in `scripts/lib/scan-verdicts.js`: a scan that finds something passes and prints
+  how many it checked; a scan that finds nothing where something belongs fails with `NO - found no <shape>,
+  so this checked nothing`; a shape that is legitimately absent reads `n/a (why)`, and only when the reason
+  comes from something the empty scan cannot have caused (the daemon's rows, `/current`, the page's own
+  whole-session state). `failures unfolded` and `expanded unfolded` print their counts on the CI fixture (`1
+  summarised line, 6 lines in all`; `1 expanded line, 0 failures drawn`). The rule was applied to the
+  shape-scanning probes in `render-web-ui.js`, `render-web-ui-archive.js` and `scripts/lib/`, and recorded
+  as one decision in `docs/decisions/web-ui.md`. No fixture check went from `yes` to `n/a`: the live probe
+  stayed at 251 passed with 1 n/a, the archive probe at 48, and `ci.yml` is unchanged. `render-web-ui.js`'s
+  line budget was tightened from 2395 to 2354.
+
+  QA put KIN-55's leak back (the two lines in `lib/live-filter-probes.js` that restore the open visits). At
+  the base, `failures unfolded : yes (0 summarised lines in this session)` with 251 passed. At the head,
+  `failures unfolded : NO - found no summarised line (1 already open: Checkout), so this checked nothing`,
+  250 passed and 1 failed, exit 1. With the leak removed, 251 passed.
+
+  **What was learned.** QA's first round failed criterion 2. The builder inventoried `render-web-ui.js` and
+  the `lib/*-probes.js` files and not the Chrome cases in `scripts/lib/`, though the criterion named
+  `scripts/lib/`. QA renamed every `class="rail-item"` in the served page and `shell <w> rail` still read
+  `ok … inside` at all four widths, over no rail item at all. The inventory listed none of `shell-cases.js`,
+  `topbar-cases.js`, `list-room-cases.js` or `live-traffic-cases.js` (the last landed after the inventory
+  was taken). The fix round converted what was vacuous (`shell <w> rail`; `room 1000 tab never enters
+  closed`; the repeat-mark part of `room 400 rows`; `room <w> toolbar fits` and `one row`; `traffic
+  reaches`), put the empty `topbar` count into words, and recorded a verdict for every check in the four
+  files. In round 2 QA found one more by hand: the repeat-mark scan in `room 400 rows` took its count from
+  `state.duplicates`, not from the marks drawn, so with the mark class renamed it read `ok … 0 repeat
+  marks`; it fails now (`NO - found no repeat mark (3 rows held are repeats)`). QA also confirmed the rail
+  fix is what turns the old reading red, by reversing only #133's hunk in `shell-cases.js`. The lesson is
+  the one the item was filed for, one level up: an inventory of scans is itself a scan, and it needs the
+  same count.
+
+  **Left open, not placed (the product-owner's).** On the CI fixture `expanded unfolded` opens Home, which
+  draws no failure, so the expanded half of the rule is exercised weakly; making it open the visit that
+  holds a failure changes what the check judges, which this item ruled out. `docs/decisions/web-ui.md` names
+  the render-probe checks that follow the rule and not yet the Chrome cases fixed in #133. Read from the
+  code and not run red: `rail is navigation`, `route pages`, `exportMenu`, `sort flip restores`, `map
+  matches log`, `start times shown`, `duplicate badges`, `unanchored chips`, `hop-by-hop stripped`,
+  `onTop`'s `n/a` branch, and the socket half of `traffic reaches` (the case starts only once the socket is
+  open).
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 2 rounds
+
+  *Ticket label:* `item:guard-probe-finds-nothing-fails`.
+  Found in the retrospective of `item:web-live-rows-filtered` (PR #98, 2026-10-19), from KIN-55. The
+  roadmap-cycle skill now tells an engineer who adds a probe to the shared page to break one
+  neighbouring guard and watch it fail. This item is the mechanical version of that rule, so the
+  rule still holds on a day when nobody remembers it.
+
+  **For whom.** Whoever changes the web UI and trusts a green `render-web-ui.js`, and the maintainer
+  reading CI. Behind them, the web UI user on a Mac: a guard that checked nothing is how a 500 hidden
+  behind "+N more" comes back.
+
+  **Why it is unguarded.** The probes share one page. The new live probe in
+  `scripts/lib/live-filter-probes.js` left a path visit open, so the path probe that runs after it
+  found no collapsed visit. `failures unfolded` then printed `yes (0 summarised lines in this
+  session)`, and `expanded unfolded` passed with nothing to check as well. Nothing counted either as
+  wrong. `INSPECTOR_UI_EXPECT_CHECKS` pins how many checks pass, and a check that passes over nothing
+  still counts as a pass. KIN-55 fixed the leak, not the guard: the live probe now puts the page state
+  back, and the comment at the top of that file says why. The next probe that leaks state will
+  reproduce it. QA found this one only by breaking a neighbouring guard by hand.
+
+  **What it would take.** Acceptance criteria:
+
+  - On the CI fixture, `failures unfolded` fails when it sees 0 summarised lines, and
+    `expanded unfolded` fails when it sees no expanded line. When either passes, it prints how many it
+    checked.
+  - The same rule, generalised. A probe in `scripts/render-web-ui.js` or `scripts/lib/` that scans for
+    a shape (rows, lines, bars, elements matching a selector) and passes when none breaks the rule
+    also asserts that it found at least one, and prints the count. Among them, as a heuristic and not
+    a complete list: `currentHasAge` (`#current .current-item`), `barsVisible` (`.wf-bar`), the lane
+    list behind `unknownTagRendered`, and `noRepeatedHost` and `uncoveredNameTheirHost` in
+    `render-web-ui.js`, plus `onTop` in `lib/measure-cases.js`. The tree already does this in places:
+    `everyHeaderHasOne` and `labelled` require `length > 0`, and the CSS brace audit in
+    `lib/web-audits.js` says "found no rule blocks, so this checked nothing". The architect finds the
+    rest.
+  - When a probe's shape is legitimately absent from a fixture, the probe says so in an `n/a (…)` or
+    a `note()`, never in a `yes`.
+  - Proven both ways. Reintroduce a leak like KIN-55's by leaving a path visit open before the path
+    probe runs: the run goes red, and the failure names the empty scan. Remove the leak and the run
+    is green again.
+
+  **Out of scope.** Repairing whatever a leaking probe leaves behind (KIN-55 already did that for the
+  live probe). Giving each probe its own page. Changing what any check judges beyond the empty case.
+  If a check on the fixture turns from `yes` to `n/a`, the pinned `INSPECTOR_UI_EXPECT_CHECKS` count
+  moves, and the change says which check and why. Surfaces: none a user sees. This touches only the
+  web UI's check scripts, so there is no public API, no noop twin and no golden file.
+
+- ~~**QA's live-traffic Chrome driver is still in a scratch directory.**~~ **Done, 2026-10-22.** PR #127
+  merged as `9fb0470`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on
+  `main` was in progress when QA looked and was not seen finishing. KIN-88 is Done on QA's pass over a
+  detached copy, one round, no blocking findings.
+
+  `scripts/lib/ingest-client.js` is an app-side `/ingest` client, and `scripts/lib/live-traffic-cases.js` is
+  the case. `node scripts/measure-web-ui.js --only traffic` ran 9 readings, 0 failed. It judges the burst
+  bound (3 list reads against at most 6, for 100 rows over 850 ms), the burst's counts against the daemon's
+  (7 of 56 calls and 26 signals), the filter-edit race and the session-switch race, each in both landing
+  orders, and that the page reached only 127.0.0.1 and every streamed host ended in `.invalid`.
+  `measure-cdp.js` gained only `page.onNewDocument`, so there is still one Chrome launcher. The client
+  refuses any origin but `http://127.0.0.1:<port>` and any host not ending in `.invalid`; QA called it
+  directly with five bad origins and three bad hosts and each was refused. `scripts/AGENTS.md` and the
+  roadmap-cycle skill name both files among the harnesses a brief tells a reviewer to reuse.
+
+  QA re-ran three red proofs, each turning exactly the reading it guards red and nothing else: a re-read per
+  live row (`over bound (149 list reads, at most 6 …)`), `stands()` without its filter clause (`old landed`
+  on the filter-edit race), and `stands()` without its session clause (the same on the session-switch race).
+  The builder's fourth, the write check made `true`, turns all four race readings red; QA did not repeat it.
+
+  **What was learned.** Two first drafts were green when they should not have been, and both were caught by
+  breaking the rule on purpose. A race judged in one landing order only stayed green with `stands()`'s
+  filter clause removed, because the ticket (`readSent`/`readWritten`) also drops an old re-read that lands
+  after the edit's own load; so each race runs in both orders, and `web-ui.md` says why. `traffic reaches`
+  first read its origins from `__asked`, which the races clear, so it missed the load-time request; it now
+  reads `__origins`, which nothing clears.
+
+  **Not done, and said so.** The scratch driver's pause and resume, reconnect, 400px and spaces-only
+  scenarios were not ported (the item allowed it), so no committed check guards them; QA verified pause and
+  resume and reconnect by hand on KIN-58. `measure-web-ui.js` is not in CI. One full-case attempt hung once
+  when Chrome exited mid-run, because `measure-cdp.js` does not notice a closed DevTools socket; a rerun was
+  clean, and it is not new to this item. The burst-bound formula for a burst longer than a second was never
+  exercised; every burst lasted about 850 ms.
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-live-traffic-driver`. From the same retrospective. The roadmap-cycle rule "Promote a
+  harness the first time it earns it" says this driver should have moved into `scripts/lib/` within
+  `item:web-live-rows-filtered`. It did not.
+
+  **For whom.** The web UI user on a Mac who watches a session live, under a filter. Also whoever next
+  changes the live socket or the re-read, as `item:web-live-calls-reach-every-pane` did (done 2026-10-21).
+
+  **Why it is unguarded.** `docs/STATUS.md` lists the following as verified in headless Chrome: the
+  live re-read burst bound, a filter edit, a session switch and a dropped socket during a re-read.
+  They were verified by a driver QA wrote in a temporary scratch directory. It streams real rows into
+  a real daemon's `/ingest` and drives the served web UI over CDP. QA also used it to prove pause and
+  resume. No committed check does any of this. The committed checks each cover a piece:
+
+  - `lib/live-reread-checks.js` runs the races and `reread burst of 100` against stubbed routes,
+    with no browser and no daemon.
+  - `lib/measure-cases.js`'s `liveArrival` hands messages to the page's own `onmessage`, so nothing
+    goes through `/ingest`.
+  - `lib/live-filter-probes.js` fakes a row's arrival by wrapping `fetch`.
+
+  Nothing runs the whole path (ingest, broadcast, page, re-read) in a browser, and nothing exercises
+  pause and resume or reconnect there.
+
+  **Where the driver is.** Copies are kept outside the repository, in the maintainer's notes. They
+  are also posted as a comment on the pull request that placed this item, which
+  `git log -S'item:guard-live-traffic-driver' -- docs/ROADMAP.md` finds. If both copies are gone,
+  this is enough to rewrite them:
+
+  - `ingest.js` (about 30 lines) is a minimal app-side stream client. It opens a WebSocket to
+    `<origin>/ingest` and sends `{type:'hello', client:{v:1, appId, appVersion, platform:'desktop',
+    device, osVersion, buildType:'debug'}}`, then waits for `{type:'helloAck', sessionId}`. After
+    that it exposes two calls. `call(path, status, tag)` sends `{type:'txn', txn:{v:1, id, ts, mono,
+    method:'GET', scheme, host:'api.qa.invalid', path, query, status, ms, callId, resContentType},
+    resBody}`. `signal(tag, name, text)` sends `{type:'signal', signal:{v:1, id, ts, mono, tag, name},
+    data}`.
+  - `live-ui.js` (about 215 lines) launches Chrome with `launchChrome` and `sleep` from
+    `lib/measure-cdp.js` and opens a CDP page target. Through `Page.addScriptToEvaluateOnNewDocument`
+    it installs two wrappers. A fetch wrapper records every request in `window.__asked` (path,
+    filter, offset, time) and can hold a URL through `window.__delay`. A WebSocket wrapper exposes
+    `window.__sockets`, so the driver can drop the page's socket. A snapshot reads the counts, the tab
+    counts, the view, the filter and the list rows. It also reads the lengths of
+    `state.transactions`, `allTransactions`, `signals` and `allSignals`, which panes (list,
+    timeline, path, waterfall) hold given ids, and how many times the list was read. The scenarios:
+    - Setup: two sessions, an older B and the newest A.
+    - Live rows under a filter on the list, timeline and path, both on arrival and once settled, also
+      at 400 px wide.
+    - A burst of 50 calls and 50 signals in one second, counting list re-reads against the daemon's
+      own matched and total.
+    - No filter, and a filter of spaces only: a live row costs no list read.
+    - A filter edit mid re-read, with the call read held for 2 s.
+    - A session switch mid re-read.
+    - Pause with a re-read in flight, then resume.
+    - Reconnect after dropping the socket with a re-read armed.
+
+    It records page exceptions throughout.
+  - `live-ui-2.js` (about 70 lines) adds three cases that reuse `live-ui.js`'s page:
+    - Spaces versus nothing on the timeline: the header, the notes and the chips.
+    - A live screen signal on the path tab, under a filter that refuses it: the path skeleton still
+      gains the visit.
+    - A burst that straddles the re-read timer, 100 rows over 1.4 s against a daemon delayed 1.5 s,
+      counting reads.
+
+  **What it would take.** Acceptance criteria:
+
+  - The `/ingest` client and the CDP page helpers live in `scripts/lib/`. Chrome is launched through
+    `lib/measure-cdp.js`, which already wraps `WebSocket` as `window.__sockets` and collects page
+    exceptions. The fetch recorder and the delay hook join it or sit beside it, and nothing adds a
+    second Chrome launcher.
+  - It is wired into `scripts/measure-web-ui.js` as a case `--only` can select. Three readings are
+    judged and exit 1 when they fail: the burst bound (list reads for a burst, against the daemon's
+    own matched and total), the filter-edit race and the session-switch race. They are asserted, not
+    logged.
+  - Each judged reading is proven red by breaking the rule it guards, for example by re-reading on
+    every live row, or by letting a re-read land that answers for an old filter or session. Each goes
+    green again when the rule is restored.
+  - It reaches nothing beyond 127.0.0.1, and every host in a streamed row ends in `.invalid`.
+  - Future QA briefs name it among the existing `scripts/lib/` harnesses, so the next reviewer reuses
+    it rather than writing another.
+
+  **Out of scope.** Running `measure-web-ui.js` in CI. Today it runs once per web fix round and needs
+  Chrome, JDK 21 and a built daemon, so putting it in CI is a separate decision. Porting every
+  scratch scenario: pause and resume, reconnect, 400 px and the spaces-only cases are welcome but not
+  required. Changing any live behaviour. Surfaces: the web UI's check scripts, plus the daemon's
+  `/ingest` used as a client. There is no public API, no noop twin and no golden file.
+
+- ~~**Phase I gave the ui pair three guards that the core and stream pairs lack.**~~ **Done, 2026-10-22.**
+  PR #125 merged as `623c571`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run
+  on `main` was in progress when QA looked and was not seen finishing. KIN-90 is Done on QA's pass over a
+  detached copy, one round, no blocking findings.
+
+  Measured first, as the item's stop rule required: `publicHolders` equals the contract list in all four
+  modules, so no public declaration sits outside either contract, nothing was made `internal` and no golden
+  file changed (`git diff b1bbcac 623c571 -- api/` is empty). The completeness test
+  (`every_public_declaration_is_in_the_contract`) now runs in `:inspector-core`, `:inspector-noop`,
+  `:inspector-stream` and `:inspector-noop-stream` beside the golden test, through one shared helper in
+  `api-parity/shared`, with the ui pair moved onto it. Each of those four modules declares its golden file
+  as a `jvmTest` input. `structure/twins.txt` names each pair's golden file, and
+  `NoopTwinTest.every_pair_names_a_golden_file_that_exists` fails a pair with none or a misspelt one.
+
+  QA re-ran, each red and then green: a stray `class StrayProbe` in `:inspector-core` (completeness fails
+  with `+ dev.inspector.StrayProbe [class]` while the golden test passes); a stray top-level function in
+  `:inspector-noop-stream`; a line appended to each of the two golden files, run with `--build-cache` and no
+  `--rerun`, which failed all four `jvmTest` tasks that had just come back `UP-TO-DATE` or `FROM-CACHE`; the
+  stream pair's file misspelt and the core line stripped of its file in `twins.txt`. Locally the
+  release-clean script's self-test found the canary and the plain run found nothing, on the JVM jars only.
+
+  **What was learned.** The completeness check is class-level, as the ui pair's is, so the stream
+  criterion's Ktor filter holds through the golden test and the check has no Ktor rule of its own. A new
+  class or file in the real stream module that holds only Ktor-typed API fails the completeness test and
+  cannot be listed in the contract either, because the noop's dump would then fail; such an API has to go on
+  `StreamSinkKt`, as `defaultStreamClient` does. `twins-and-api.md` says so. The builder removed
+  `inputs.files` from two modules to confirm the guard is what does the work: with it gone the same
+  golden-only edit left those two `jvmTest` tasks `UP-TO-DATE` and green. The previous `twins.txt` fails all
+  three pairs under the new test. The hand-over's report that the root `AGENTS.md` still said the ui pair
+  has no golden file was false at `623c571`; PR #106 had corrected both lines.
+
+  **Still open.** The guard reads JVM output only. A declaration that exists only in `iosMain` or
+  `androidMain` of one module of a pair still passes; that is `item:guard-twin-native-surface`, not started.
+  This machine has no Android SDK and no working `xcrun`, so the Android targets, the iOS test links and the
+  klib half of the release scan rest on CI.
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-twin-pairs-alike`. From the phase I hand-over (`item:structure-phase-i`), placed by the
+  product owner on 2026-10-21 with the run's other follow-ups (§3 → Bugs found, not fixed).
+
+  **For whom.** A consuming team building with `-Pinspector=off`. A public declaration in
+  `:inspector-core` or `:inspector-stream` that the noop lacks compiles in debug and fails in
+  release, the `lastError` and theme-type failure again. Behind them, whoever trusts a green
+  `jvmTest` after editing a golden file.
+
+  **Why it is unguarded.** Phase I gave the ui pair three guards. The other two pairs have none of
+  them:
+  - The completeness check (`publicHolders`) in `UiApiParityTest`. Without it, a public class or
+    facade outside `ApiSurface`'s named classes passes, which is how the theme types went unseen.
+  - Golden files declared as test inputs. Only the ui pair's builds declare theirs, so an edit to
+    `api/inspector-public-api.txt` or `api/inspector-stream-public-api.txt` alone can be a build-cache
+    hit and stay green.
+  - Golden files named in `structure/twins.txt`. It lists pairs but not their golden files, so
+    nothing fails a pair that has none, as the ui pair had none for eleven releases.
+
+  **Acceptance criteria.**
+  - The core and stream pairs fail on a public declaration outside their contract, the way the ui
+    pair does. For stream, the contract is the one with Ktor-typed members filtered out.
+  - Each module of the core and stream pairs declares its golden file as a `jvmTest` input, with
+    `inputs.files`. An edit to the golden file alone re-runs the test and fails it, with the build
+    cache on.
+  - `structure/twins.txt` names each pair's golden file, and `:repo-checks` fails a pair whose file is
+    missing or unnamed.
+  - Each guard is proven red: a stray public class in each module, a golden-only edit, a pair line
+    without its file.
+
+  **Out of scope.** Declarations that exist only in `iosMain` or `androidMain`, which are
+  `item:guard-twin-native-surface`. Rebuilding the class-set diff between twins, which §5 → "Deliberately not doing" rules out.
+  The completeness check is not that diff, as `twins-and-api.md` explains. **If the check finds a
+  public declaration outside the contract in core or stream today, that is a public API question for
+  the maintainer**, as the theme types were, and the item stops there. Surfaces: library API guards
+  only, `api-parity/`, the published modules' build files and `:repo-checks`. No golden file
+  changes. **Size:** S.
+
+- ~~**"A probe leaves no process behind" is a claim nothing tests.**~~ **Done, 2026-10-22.** PR #126 merged
+  as `74f5ca0`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on `main` was
+  queued when QA looked and was not seen finishing. KIN-91 is Done on QA's pass over detached copies, one
+  round, no blocking findings.
+
+  `McpProbeCleanupTest` has three tests, one each for the success path, the timeout path and a write to the
+  child that throws; the child is dead (exited within 5 s) when `probe` returns. The stub child,
+  `McpProbeStubChild`, ends every mode in `Thread.sleep(Long.MAX_VALUE)`, so it ignores EOF. QA replaced
+  `process.destroyForcibly()` with `Unit` and all 3 failed, each naming a surviving pid (`the probe returned
+  and left its child running: pid 97836 is still alive`); restored, 3 of 3 pass. `PeerRegistryTest.kt` is
+  unchanged, and `the real control either answers or explains why it cannot` stays. `:inspector-daemon:test
+  --rerun` went from 357 to 360 tests, 0 failed, and `pgrep -f McpProbeStubChild` found nothing before the
+  run, after it and after the red run.
+
+  **What was learned.** The seam is a launch function and not a command: `ProcessMcpControl` has an
+  `internal` primary constructor `(config, launch)` and the public one-argument constructor passes `launch =
+  null`, so `InspectorDaemon`'s constructor, and phase C's parameter-count tripwire, are untouched. A bare
+  command would not do, because the failed-write path needs the child to have closed its stdin before the
+  probe writes; otherwise the write lands in the pipe buffer and nothing throws. The test's launch waits for
+  the child to say so. QA confirmed why the stub must ignore EOF: with `answer` returning at EOF and
+  `destroyForcibly()` still deleted, the success test passes. The failed-write test asserts an `IOException`
+  in the error, which proves it took the catch path and not the timeout's.
+
+  **Found, not fixed (the product-owner's to place).** `ProcessMcpControl.probe` checks `timeoutMs` only
+  between lines, so a child that keeps stdout open and writes nothing blocks `readLine` for good, and `POST
+  /api/mcp/probe` and the web UI's probe button hang with it. The builder met it when a launch that did not
+  wait for the stub hung a test for ten minutes. QA read the code and agrees, and did not reproduce it. The
+  fix belongs to the timeout, which this item ruled out of scope. Not verified: Linux, except through CI;
+  the failed-write test depends on a broken pipe, and it was not checked which operating system each CI job
+  used.
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-mcp-probe-cleanup`. Found during §5 → Phase D, and left alone because phase D allowed
+  no behaviour change. `docs/decisions/daemon-and-mcp.md` ("There is no 'start the MCP server'
+  endpoint") points here for it.
+
+  **For whom.** A web UI user on a Mac who presses the MCP probe in settings. Every press spawns a
+  real `inspector mcp`. If one outlived its probe, it would show up in the peer list as an `mcp`
+  process, which is exactly the kind of process that list warns people not to kill, because it
+  might be the editor's. A probe that leaks makes the daemon's own control panel lie about what is
+  connected.
+
+  **Why it is unguarded.** The whole property rests on one line in `ProcessMcpControl.probe`,
+  `finally { process.destroyForcibly() }`. `McpControlTest` (in `PeerRegistryTest.kt`) does test the
+  real control, but it runs in a Gradle worker. That worker's argv carries no `MainKt`, so
+  `commandLine()` returns null, the probe reports "this process cannot report its own command line",
+  and **nothing is ever spawned**. The test's own comment says either outcome is a pass. So the test
+  passes with the `finally` deleted, and it would pass with it deleted on every machine the suite
+  runs on.
+
+  **What adding it would take.** A production seam in `ProcessMcpControl`, so a test can hand the
+  probe a command to run in place of the one it derives from its own argv. The architect chooses
+  its shape. It has to stay off `InspectorDaemon`'s constructor, or phase C's parameter-count
+  tripwire goes red for a reason unrelated to side effects. That seam is a change to production code,
+  and it is why this could not ride along with phase D. Acceptance criteria:
+
+  - The child the probe started is not alive once `probe` returns, on the success path, on the
+    timeout path (the child never answers `tools/list`), and when writing to the child throws.
+  - **The stub child must ignore EOF.** The real MCP server stops when its stdin closes, and the
+    probe closes stdin before it reads anything. A test driving the real server would pass with the
+    `finally` deleted. Only a child that keeps running after EOF can tell a probe that kills it from
+    one that is lucky.
+  - Proven to fail when broken: delete the `destroyForcibly()` and the test goes red, naming the
+    surviving pid.
+  - The existing "either answers or explains why it cannot" test stays. It covers the case where the
+    command line cannot be built, which this one does not.
+
+  **Out of scope.** Changing what the probe reports, its timeout, or the `POST /api/mcp/probe`
+  route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
+  published, so there is no noop twin or golden file to carry.
+
 ### Bugs found, not fixed
 
 - ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
@@ -1137,6 +1499,138 @@ Android only looked right because 120px clears a status bar at that density.
   what that rule assumes.
 
 
+- ~~**A server is its host and a non-default port, but not yet everywhere.**~~ **Done, 2026-10-22.** PR #129
+  merged as `66c1bad`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on
+  `main` was queued when QA looked and was not seen finishing. KIN-92 is Done on QA's pass over detached
+  copies of base and head and a live archive, one round, no blocking findings.
+
+  `NetworkTransaction.hostPort` brackets a host that holds a `:` unless it already starts with `[`, and
+  `url` is built on it, so a call to `::1` on `:8080` has the url `http://[::1]:8080/v6` and the label `GET
+  [::1]:8080/v6`. The brackets are added when `url` is read, so archives recorded earlier read the same way.
+  `mirror-cases/urlOf.json` (6 cases) is run by `MirrorCasesTest` and by `check-web-static.js`; the web
+  `urlOf` gained `hostPortOf` and `statsOrigin` uses it. `byHost` in the session summary keys on `hostPort`:
+  QA's archive gave `{'[::1]:8080': 2, 'api.qa.invalid': 2, '[::1]': 1, '[fe80::1]:8443': 1,
+  '127.0.0.1:8080': 1, '127.0.0.1:9090': 1, 'odd.qa.invalid:443': 1}`, where base gave `{'::1': 2,
+  '127.0.0.1': 2, …}`. Every non-IPv6 `url` is byte-identical to base. No signature or golden file changed.
+  Counts, base to head: `:inspector-model` 160 to 162, `:inspector-core` 74 to 76 with 0 skipped (the
+  hand-over says 73 to 75), `:inspector-daemon` 360 to 362, static checks 107 to 109; live probe 251 and
+  archive probe 48 unchanged. `INTEGRATION.md` is at v63 and the `UNRELEASED.md` line came in with the PR.
+
+  Red by QA, each restored: the web `hostPortOf` without brackets (`urlOf: NO - 3 of 6 cases failed` and
+  `stats origin: NO - http://::1:8080 for http://[::1]:8080`); the Kotlin `hostPort` without brackets
+  (`MirrorCasesTest.urlOf_cases`, `PortTest` and the OkHttp capture test fail, the Ktor one passes). With
+  the bind forced to an address this machine lacks, both IPv6 capture tests report `skipped` with the reason
+  in the JUnit XML and `SKIPPED` in the Gradle console.
+
+  **What was learned.** Ktor 3.5.0 already stores `[::1]` and OkHttp stores `::1`, which the builder
+  measured by writing the test first; so "not bracketed twice" is what keeps the Ktor capture right, and the
+  bug was OkHttp's alone. A third copy of the rule, which neither the item nor the architect named, sat in
+  `ExportMarkdown.kt`'s routes table (`"${row.host}:$it"`); it now reads the model's `hostPort`. Gradle does
+  not print an assumption's message, so the root `build.gradle.kts` now logs `SKIPPED` test events, which is
+  how a skip becomes visible in CI. The `host:` filter term is unchanged and matches the stored host, so it
+  still sees `::1` or `[::1]` by capture path (the grammar is frozen).
+
+  **Left open, not placed (the product-owner's).** One IPv6 server reached by both clients (`::1` from
+  OkHttp, `[::1]` from Ktor) draws as two identical-looking route rows on the Stats page and in the Markdown
+  routes table, because the route key and its `host:` term use the stored host; `byHost` merges them. It
+  needs one app using both clients against one IPv6 server. QA reproduced it again on
+  `item:web-stats-route-breaks-whole`. Zone ids (`fe80::1%en0`) are out of scope. Not run locally: the full
+  build, `-Pinspector=off`, Android and the iOS links (no Android SDK, no working `xcrun`); CI ran them.
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:host-port-everywhere`. From QA and the hand-over on `item:row-label-port`, and
+  `docs/STATUS.md` → Not verified.
+
+  **For whom.** Anyone who copies a URL for an IPv6 call: a cURL or a replay from the web UI, the
+  overlay's Copy URL, an agent reading an export. Also an agent or a CLI user reading the session
+  summary. `NetworkTransaction.url` writes `http://::1:8080/v6`, which is not a URL, and the label
+  `GET ::1:8080/v6` cannot say where the address ends. OkHttp's `HttpUrl.host` gives an IPv6 literal
+  with no brackets, and the OkHttp interceptor stores it as it comes. Whether Ktor's does too is
+  unchecked. Separately, `SessionRepository.summarize` groups `byHost` by bare `host`, so two
+  servers on one machine are one entry in `GET …/summary`, MCP `session_summary`,
+  `inspector summary` and the exports' summary.
+
+  **Acceptance criteria.**
+  - `hostPort` brackets a host that holds a `:`, so the `url` of a call to `::1` on `:8080` is
+    `http://[::1]:8080/v6` and its label reads `GET [::1]:8080/v6`. A host already in brackets is
+    not bracketed twice.
+  - It is decided in `:inspector-model` and in the web UI's `urlOf` mirror, with a mirror case run by
+    both sides, so an archive recorded before the fix reads the same way.
+  - A real call to the IPv6 loopback, captured through Ktor and through OkHttp, gives that `url`. If
+    a CI runner has no IPv6 loopback, the test says it was skipped and why, not that it passed.
+  - `byHost` keys on `hostPort`: `127.0.0.1:8080` and `127.0.0.1:9090` are two entries, and a default
+    port adds nothing to its key.
+  - Proven red with each rule removed.
+
+  **Out of scope.** The filter grammar, which is frozen and has no port term, so two ports of one
+  host still share a `host:` term (a documented superset). The route key, which already keeps ports
+  apart. Zone ids (`%en0`). Surfaces: `:inspector-model` (overlay, web UI, daemon, MCP and exports
+  through it), the web UI mirror and the daemon summary. **Public API:** no signature changes, but
+  `url` is public in the published `:inspector-model` and its value changes for IPv6 hosts, and
+  `byHost`'s keys change for agents. Both need an `UNRELEASED.md` line. Whether INTEGRATION.md
+  needs a version is the release-steward's call. No noop twin applies (the model is exempt), and no
+  golden file changes. **Size:** S, or M if the capture tests need a fallback for CI.
+
+- ~~**At 400px the Stats page breaks a route's host mid-word.**~~ **Done, 2026-10-22.** PR #132 merged as
+  `7b37d7a`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on `main` was in
+  progress when QA looked and was not seen finishing. KIN-93 is Done on QA's pass over detached copies, one
+  round, no blocking findings.
+
+  At 400px, served and exported, a route cell now ends a line only at a `.`, a `:` or a `/`:
+  `statsBreakable` in `web/js/95-stats.js` puts a `<wbr>` after each of those in the server and after each
+  `/` of the path, never inside `[::1]`, inside `://` or after a path's leading `/`, and
+  `web/css/85-stats.css` holds each piece `nowrap` below 700px. QA's own Chrome session at 400px (3 line
+  breaks, `bad=[]`, `cut=[]`, document 400 of 400) kept `api.qa-long-name.invalid` whole and
+  `127.0.0.1:8080` and `[::1]:8080` unbroken. At 1000 and 1440 a route is one line. A route too long to
+  break that way widens its column inside the table's own scroll and the page never scrolls sideways (`shell
+  <w> page stats fits` green at all four widths). The cell's text is unchanged. New: `stats 400 route breaks
+  served` and `… export` (17 route cells, 23 line breaks), `stats 400 routes whole`, `stats 1440 routes one
+  line served` in `measure-web-ui.js --only shell` (42 readings, 0 failed), a `routes` measure session, and
+  the static check `stats route pieces` (109 to 110 checks; not pinned in `ci.yml`). The live probe (251)
+  and archive probe (48) did not move.
+
+  Red by QA: with the base's `85-stats.css` alone, both break readings read `mid-word` (33 breaks, including
+  `averyveryverylong-|unbroken-hostlabel`); with the base's stylesheet and script together, 30 breaks
+  including `http://127.0.0.1:808|0` and `https://api.qa.exam|ple.invalid:8443`; with the `nowrap` hold
+  removed, both `mid-word`; with the static check's bracket rule ignored, `stats route pieces: NO -
+  http://|[::|1]:|8080 …`.
+
+  **What was learned.** The criterion's literal red proof cannot be made: `overflow-wrap: anywhere` put back
+  on its own leaves the reading green, because the pieces are `nowrap` and the property cannot break inside
+  them. The reading is red with the base's whole stylesheet put back, or with the hold removed, and
+  `web-ui.md` says so (QA confirmed it). `<wbr>` alone was not enough, since Chrome also breaks after a `-`
+  inside a host label; and Chrome breaks at a `<wbr>` even under `nowrap`, so above 700px the `<wbr>`s are
+  `display: none`, which the builder found from the 1440 screenshot. The count of base breaks depends on
+  fonts (the builder saw 29, QA 30); the named break `127.0.0.1:808|0` reproduces.
+
+  **Left open.** The trade-off is accepted and stated: one over-long route widens the whole route column
+  (228px in the test session), so fewer number columns fit beside it at 400px, and they are reached by
+  scrolling the table. The mixed-client IPv6 double row (see `item:host-port-everywhere`) is still there.
+  Headless Chrome only; `measure-web-ui.js` is not in CI.
+
+  cost: not recorded — built in the 2026-10-21/22 coordinated run, batch 1, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:web-stats-route-breaks-whole`. From QA on `item:endpoint-latency-stats`, and
+  `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a narrow window reading the Stats page. `.stats-host` is
+  `overflow-wrap: anywhere`, so the cell reads `api.qa.invali` / `d`, and `http://127.0.0.1:808` /
+  `0`, which a reader takes for port 808.
+
+  **Acceptance criteria.**
+  - At 400px, served and exported, no line of a route cell ends inside a host label, a port or a path
+    segment. A host breaks only at a `.`, a `:` or a `/`.
+  - A route too long to break that way is still on screen in full within the table's own sideways
+    scroll, and the page itself never scrolls sideways (`shell <w> page stats fits` stays green).
+  - A Chrome reading in `measure-web-ui.js` at 400px is proven red with `overflow-wrap: anywhere`
+    put back.
+
+  **Out of scope.** The table's columns and order, and the term a row links with. Offering
+  `sort=errors` on the page. Surfaces: web UI only. **Size:** S.
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -1205,6 +1699,12 @@ tag cut before any of this existed.
 | ~~1b — Web UI foundation: room for the list~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119, merge `4fe71dc`; one round of QA) *(was row 11; the later rows keep their numbers)* | §6 | `item:web-foundation-list-room` | M |
 | ~~2 — Endpoint latency stats~~ **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115 and #121, merges `0a5a1c9` and `d256174`; one round of QA for each PR) *(was row 12)* | §6 | `item:endpoint-latency-stats` | M |
 | ~~A live call reaches the list but not the timeline, the glance or the picker~~ **Done, 2026-10-21** (KIN-58; PRs #113 and #117, merges `952b6c6` and `433f30d`; two rounds of QA, round 1 failed the picker after a resume) *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b; was row 10, the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S |
+| ~~A check that finds nothing to check passes~~ **Done, 2026-10-22** (KIN-87; PRs #128 and #133, merges `b1bbcac` and `5b21593`; two rounds of QA, round 1 failed criterion 2: `shell <w> rail` passed over no rail item and the inventory missed four Chrome case files, fixed in #133) *(was row 14; the later rows keep their numbers)* | §3 → Guards | `item:guard-probe-finds-nothing-fails` | not sized |
+| ~~QA's live-traffic Chrome driver, committed~~ **Done, 2026-10-22** (KIN-88, PR #127, merge `9fb0470`; one round of QA) *(was row 15; the later rows keep their numbers)* | §3 → Guards | `item:guard-live-traffic-driver` | not sized |
+| ~~The core and stream twin pairs get the ui pair's guards~~ **Done, 2026-10-22** (KIN-90, PR #125, merge `623c571`; one round of QA) *(was row 17; the later rows keep their numbers)* | §3 → Guards | `item:guard-twin-pairs-alike` | S |
+| ~~"A probe leaves no process behind", tested~~ **Done, 2026-10-22** (KIN-91, PR #126, merge `74f5ca0`; one round of QA) *(was row 18; the later rows keep their numbers)* | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized |
+| ~~A server is its host and a non-default port, everywhere~~ **Done, 2026-10-22** (KIN-92, PR #129, merge `66c1bad`; one round of QA) *(was row 19; the later rows keep their numbers)* | §3 → Bugs found | `item:host-port-everywhere` | S, or M |
+| ~~At 400px the Stats page keeps a route's host whole~~ **Done, 2026-10-22** (KIN-93, PR #132, merge `7b37d7a`; one round of QA) *(was row 22; the later rows keep their numbers)* | §3 → Bugs found | `item:web-stats-route-breaks-whole` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 

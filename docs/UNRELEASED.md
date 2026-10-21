@@ -67,8 +67,8 @@ about the older ones; the line does not claim it.
 *"Daemon and MCP: call labels in `timeline`, `export.json` and the HTML and Markdown exports now
 include the port when it is not the scheme's default (`GET 127.0.0.1:9090/json`, where it was
 `GET 127.0.0.1/json`), so two local servers no longer read as one. Model: new
-`NetworkTransaction.hostPort`."* `url` is unchanged. The session summary's `byHost` still groups by
-bare host, so the line does not say hosts are split by port everywhere.
+`NetworkTransaction.hostPort`."* `url` is unchanged. The session summary's `byHost` grouped by bare host
+when this line was written, so it does not say hosts are split by port; the sixteenth line below does.
 `item:structure-phase-i` (done 2026-10-21) owes an eleventh, and it is not daemon-only: *"Overlay
 (`inspector-ui`): `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` are no longer
 public. An app that named them replaces those uses with its own code; `INTEGRATION.md` v59 says
@@ -99,7 +99,7 @@ so under a filter it reads `calls 16` beside a header of `4 of 16 calls`; the li
 release build is touched.
 `item:web-foundation-list-room` (1b, done 2026-10-21) owes a fourteenth, in the same daemon-only entry, and it is consumer-visible: *"Web UI: more room for rows. The toolbar is one row, endpoint shortcuts are behind `endpoints ▾`, exports and keyboard shortcuts are in a `⋮` menu, and the time axis and the now strip share one line. The list and detail can be resized by dragging the divider (double-click resets), the detail can be hidden, and a call opens on its own page at `#/txn/<id>`. A compact row density is in `⋮` and Settings. The traffic tab now counts the whole session, like the signal tabs, and every count says what it counts. Fixed: a closed detail drawer could be reached with Tab and widened the page below 1200px; at 400px rows lost their path and byte count; each traffic view now reopens where you left it while live is paused."* `docs/INTEGRATION.md` v61 (2026-10-21) covers it: §6e (the tab names, the now strip on the axis line, the one-row toolbar with `endpoints ▾` and `⋮`, the divider, hiding the detail, `#/txn/<id>`, and exports from `⋮`), a forward pointer in v56's export bullet, and a changelog entry, *"Nothing to do. The web UI's exports moved from `export ▾` beside the session picker to the `⋮` menu at the end of the traffic toolbar; nothing else about exporting changed."* The release's own entry points back to v61 as it does to v59 and v60, and names the version v61 calls "the next daemon release after 1.3.0".
 `item:endpoint-latency-stats` (done 2026-10-21, PRs #115 and #121) owes a fifteenth, in the same daemon-only entry, and it is consumer-visible: *"Daemon and web UI: a Stats page, `GET /api/sessions/{id}/stats`, the MCP tool `route_stats` and `inspector stats` show per-route calls, attempts, retries, 4xx, 5xx and transport-failure rates and p50/p90/p95/p99/max latency, with p95 and p99 reading `n<20` below 20 samples; paths group into routes by template, and `routeTemplates` in `config.json` corrects the grouping; a route's row opens the traffic list on a filter that may include paths the route keeps apart, and says so; the HTML and Markdown exports carry the table (a `## Routes` section in the Markdown, a `routeStats` key in the JSON export, whose `formatVersion` stays 1)."* "Retries" is load-bearing: a redirect is not counted as one, and latency is per attempt with transport failures counted and never averaged in. The HAR export is unchanged. `docs/INTEGRATION.md` v62 (2026-10-21) covers it: §6c (Stats on the rail), §6e (the Stats page, `routeTemplates` in `config.json`, and the route table in the HTML, Markdown and JSON exports), §10 (`route_stats(filter, sort, limit)`), and a changelog entry, *"Nothing to do. Optionally, if the Stats page groups two of your paths wrongly, list templates under `routeTemplates` in `~/.inspector/config.json` on your Mac (§6e) and restart the daemon."* The release's own entry points back to v62 as it does to v59 to v61, and names the version v62 calls "the next daemon release after 1.3.0". `docs/DAEMON.md` already documents the route, the config key and the CLI line (§6, §7).
-`item:host-port-everywhere` (KIN-92) owes a sixteenth, and it is not daemon-only, because `url` is public in the published
+`item:host-port-everywhere` (KIN-92, done 2026-10-22, PR #129; the line came in with the PR) owes a sixteenth, and it is not daemon-only, because `url` is public in the published
 `:inspector-model`: *"A call to an IPv6 address now has a URL that is one. `NetworkTransaction.url` and `hostPort` bracket
 an IPv6 host (`http://[::1]:8080/v6`, where an OkHttp capture read `http://::1:8080/v6`), so the overlay's Copy URL and
 cURL, the web UI's URL, cURL and replay, the Stats page, HAR and the exports' labels and routes table are valid for it; archives recorded earlier read the
@@ -111,3 +111,12 @@ the line does not say filters see brackets. `docs/INTEGRATION.md` v63 (2026-10-2
 library, the release's notes point at it as a library change, not inside the daemon-only entry: *"Nothing to do, unless your
 code parses `NetworkTransaction.url` or `hostPort` for calls to an IPv6 address, or a script or agent of yours reads the
 session summary's `byHost` keys as bare host names."*
+`item:web-stats-route-breaks-whole` (KIN-93, done 2026-10-22, PR #132) owes a seventeenth, in the same daemon-only entry, and it is
+consumer-visible: *"Web UI: on a narrow window (400px) the Stats page breaks a route only between the parts of its address, at a
+`.`, a `:` or a `/`, so `127.0.0.1:8080` no longer reads as port 808 over a line that ends in `0`. A route too long to fit
+widens its column inside the table's own sideways scroll; the page itself does not scroll sideways. Wider windows are
+unchanged: a route is one line there."* The same holds in an exported file. "Only between the parts" is load-bearing: a long
+hostname label such as `api.qa-long-name` is held whole, so one very long route makes the route column wider than before and
+leaves fewer number columns beside it until the table is scrolled. No `INTEGRATION.md` bump of its own: the change is in the web
+files the daemon serves, v62's description of the Stats page does not mention wrapping, and no consumer code, coordinates or
+release build is touched. The `release-steward` may overrule that.
