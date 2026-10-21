@@ -1203,6 +1203,7 @@ tag cut before any of this existed.
 | ~~Phase I — `noop-ui` golden file~~ **Done, 2026-10-21** (KIN-62, PR #106, merge `1479c30`) | §5 | `item:structure-phase-i` | M |
 | ~~1a — Web UI foundation: the shell~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114, merges `e9f7131`, `a7e3946`, `cc9dbce`; two rounds of QA) *(was row 9; the later rows keep their numbers)* | §6 | `item:web-foundation-shell` | L |
 | ~~1b — Web UI foundation: room for the list~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119, merge `4fe71dc`; one round of QA) *(was row 11; the later rows keep their numbers)* | §6 | `item:web-foundation-list-room` | M |
+| ~~2 — Endpoint latency stats~~ **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115 and #121, merges `0a5a1c9` and `d256174`; one round of QA for each PR) *(was row 12)* | §6 | `item:endpoint-latency-stats` | M |
 | ~~A live call reaches the list but not the timeline, the glance or the picker~~ **Done, 2026-10-21** (KIN-58; PRs #113 and #117, merges `952b6c6` and `433f30d`; two rounds of QA, round 1 failed the picker after a resume) *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b; was row 10, the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
@@ -2221,3 +2222,125 @@ Counts, base `1e9d720` to head: static checks 99 to 102, live probe 225 to 236, 
   with the line named in the tickets.
 
 cost: not recorded — built in the 2026-10-20/21 coordinated run, one developer session with engineer subagents, no design review, no QA before merge; QA after merge, 1 round
+
+### Endpoint latency stats
+
+**Done, 2026-10-21.** Two PRs: #115 (the daemon, KIN-74 to KIN-76), merge `0a5a1c9`, and #121 (the Stats page,
+KIN-77), merge `d256174`. `build`, `release-swap`, `repo` and `web` were green on each head and each was merged
+with `--admin` once they read pass by name; the main push run on `d256174` was a success. KIN-74 to KIN-77 are
+Done on QA's evidence, one round per PR, run after each merge. The section's text is moved verbatim below; what
+was built and learned follows it.
+
+*Ticket label:* `item:endpoint-latency-stats`.
+
+*Ticket label:* `item:endpoint-latency-stats`.
+
+- **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
+  hex and long base64-ish segments become `{id}`, so `/users/123` and `/users/456` are one row.
+  Overrides go in config for the paths the heuristic gets wrong.
+- Per method + template: calls, attempts, 4xx / 5xx / transport-failure rates, p50/p90/p95/p99,
+  max, mean bytes. **Below 20 samples p95 and p99 read `n<20`**, not a number — a percentile of
+  six values is a confident-looking guess. Latency is per attempt, retried endpoints are marked,
+  transport failures are counted and never averaged in.
+- `GET /api/sessions/{id}/stats?filter=` with the shared grammar; MCP `route_stats`; a Stats page
+  whose rows open Traffic with the filter term the daemon returned for that row — a superset of the
+  row, and the opened view says so; live, throttled to once a second; precomputed into the exports
+  so the offline file has them.
+- **Naming:** a template is a **route** everywhere it appears — Stats column, API field, MCP tool,
+  docs. "Endpoint" stays with the traffic page's chips, which already carry that label
+  (`endpoints ▾`). The item keeps its title so the table and history still read.
+- Must read the whole session: a test at 1001+ rows, for the reason `HarTest` exists.
+
+**Decided 2026-10-17: keep both, named differently, and the superset link is acceptable.** No
+`:inspector-model` change. Chips stay last-segment "endpoints"; daemon-side templates are "routes"
+(see the naming bullet above). Each Stats row carries its route and the filter term it links with,
+and the Traffic view opened from it says it may include paths the route keeps apart. This
+unblocks the item, and through it the diff and the findings.
+
+*Was an open decision — two notions of "endpoint".* *(Review, 2026-10-17. Blocked this item from
+starting, and through it the diff and the findings, which reuse templates.)* The traffic page
+already has one: endpoint chips come from `endpointShortcuts` in `:inspector-model`, keyed on the
+**last path segment** and applied as `endpointFilterTerm` — `path:*/profile`, an anchored glob. The
+overlay and `app.js` both use it. This item adds a second, daemon-side: `{id}` templates over the
+whole path. So a chip `profile` (which counts `/users/123/profile` and `/orgs/9/profile` together)
+and a Stats row `GET /users/{id}/profile` (which counts only the first) give different numbers for
+what a reader will take to be the same endpoint.
+
+There is a second problem the plan does not mention: **a Stats row cannot open Traffic filtered to
+exactly that row.** The grammar is frozen and has no template term, and its `*` crosses `/` —
+`globMatches` matches `/users/*/profile` against `/users/1/x/profile` and against
+`/users/me/profile`, which the template would have kept apart. So "rows open Traffic filtered to
+that endpoint" can only ever open a superset.
+
+Options:
+
+- **Converge the chips onto templates.** One notion everywhere, but it is a `:inspector-model`
+  change, which the opening of this section rules out, plus an `app.js` mirror and an overlay
+  change — and a template label does not fit a chip on a 360dp strip.
+- **Converge the templates onto last segments.** Cheap, and wrong: last-segment grouping is a
+  navigation shortcut, and latency per `profile` across unrelated resources is not a statistic
+  anybody can act on.
+- **Keep both and say why they differ.** Chips answer "take me there in one tap" and must be
+  expressible as a filter; templates answer "how does this route behave" and need not be. The daemon
+  owns the template rule and returns, on each Stats row, the template *and* the filter term it
+  links with (`method:GET path:/users/*/profile`), so the page never derives either; the Traffic
+  view opened from a Stats row says it may include paths the template keeps apart.
+
+Recommended: the third. It keeps the section's no-model-change premise and puts the one honest
+caveat where the superset is shown. What has to be decided before code is the naming — calling
+both "endpoint" is what makes the disagreement read as a bug — and whether the superset link is
+acceptable at all.
+
+**What was built.** Four tickets, in two PRs, each by a fresh engineer subagent from the architect's note.
+- **KIN-74, routes (PR A).** `archive/RouteTemplates.kt`: numeric, UUID and long hex segments become `{id}`, a
+  `routeTemplates` list in `config.json` overrides the heuristic (read at start; `PUT /api/config` refuses bad
+  entries whole, with a 400 naming them), and each route carries the filter term it links with.
+- **KIN-75, stats (PR A).** `service/RouteStats.kt` and `RouteStatsService.kt`: an accumulator folded from the
+  index's byte offset, an LRU of four, `GET /api/sessions/{id}/stats`, MCP `route_stats` and `inspector stats`.
+  Nearest-rank percentiles; p95 and p99 withheld below 20 samples; transport failures counted and never a latency.
+- **KIN-76, exports (PR A).** `routeStats` in `export.json` (`formatVersion` still 1), a `## Routes` table before
+  `## Timeline` in the Markdown, the report embedded in the HTML. HAR byte-identical to base.
+- **KIN-77, the Stats page (PR B).** `web/js/95-stats.js` and `web/css/85-stats.css`; a rail entry, one row per
+  route, sort headers that send `sort=`, a row that opens Traffic on the daemon's term with a caveat, refresh at
+  most once a second, and in an export the embedded report with rows inert.
+Counts: daemon tests 299 to 357 (QA, PR A); web static checks 102 to 107, live probe 236 to 251 (1 n/a, as on
+base), archive probe 43 to 48 (QA, PR B). `measure-web-ui.js --base`: 270 readings on each side, 2 failing at
+head (`first rows huge`, `connected huge`, KIN-42's, on both sides), 6 at base.
+
+**What was learned.**
+- **The 160,016-row `huge` session, measured by QA at head.** Cold `GET …/stats` 0.331 s (budget 3 s), warm
+  2.4 to 3.8 ms, 2.4 to 2.8 ms after 100 appended rows (budget 50 ms), `inspector stats` 0.36 s with the JVM
+  start. The builder measured 0.238 s cold and 2.5 to 3.4 ms warm. Heap is about 17.4 MB per cache entry, about
+  111 B per attempt against the note's 100: 11% over by QA, 14% by the builder. One contributor is the key memo
+  the builder added, up to 50k entries per accumulator. Inside an order of magnitude, not blocking.
+- **The page's first draw on that session was 26.6 s until the init order was fixed**, and is 413 ms now. This
+  is why a first load straight to `#/stats` asks for the table before the whole-session read.
+- **A route is a superset link, and some are very wide.** A route holding a character the grammar cannot write
+  (`/p|q`) links with `path:/*`, and `*` crosses `/`, so it matches every path on the host. The two ports of one
+  host (`127.0.0.1:8080` and `:9090`) share one term because the grammar has no port term. Both are the
+  documented superset; the page's caveat is true for them, and QA checked that it reads so.
+- **Reads go through the fold, not through `queryTransactions`.** That path clamps at 1000 rows, and the red proof
+  was `expected <1203> but was <1000>` on REST and MCP, and `<2001>` against `<1000>` in the export, which is why
+  the whole-session test exists.
+- **Choices the note left open.** `sort=errors` orders by `errorRate` and no column offers it; the CLI's `--limit`
+  defaults to 1000 as REST does; a bad entry in the file at start is named and skipped, and a `PUT` refuses a
+  list holding any bad entry as a whole. The cache also rebuilds when the file's first 256 bytes change.
+- **Row keys include the placeholder mask**, so a literal `{id}` path segment never shares a term with a templated
+  one.
+- **The HTML export's offline page moved to PR B**, because it needs `web/` and `scripts/`. PR A's `exports.md`
+  describes only what PR A shipped, and PR B added the sentence.
+- **A mutation QA could not make count.** Removing the export's `/stats` branch from QA's own copy only tripped
+  `every file inlined: NO`, because the export embeds the daemon's own web files. The builder's proof, made in
+  the daemon's tree, stands and was not repeated.
+- **Not in the diff, proposed.** At 400px the route cell breaks a hostname mid-word (`api.qa.invali` / `d`, and
+  `http://127.0.0.1:808` / `0`, which can read as port 808). The text is true; breaking at `.`, `:` or `/` would
+  read better. A UX call.
+- **Not verified.** The full `./gradlew build` and `-Pinspector=off` (no Android SDK; CI ran both). Safari,
+  Firefox and a phone. A real session larger than the `huge` fixture. QA's hidden-tab case for refresh rests on
+  the static check, not on a hidden Chrome tab.
+- **How it was built.** An M item from the architect's note, without a design review, by a developer session with
+  engineer subagents, in two PRs. QA ran after each merge. QA's own red proofs: floor rank for nearest rank,
+  `TAIL_MIN_SAMPLES = 19`, a transport failure entering latency, the withheld cell drawn as a dash, and `oweStats`
+  refreshing per row.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, architect note then a developer session with engineer subagents in two PRs, no QA before merge; QA after merge, 1 round each

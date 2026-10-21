@@ -601,7 +601,6 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
 §6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
@@ -779,8 +778,8 @@ screen, and building those into the current single page would mean building them
 |---|---|---|---|---|
 | ~~1a~~ | ~~Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114) | L *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
 | ~~1b~~ | ~~Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}`~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119) | M *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
-| 2 | Endpoint latency stats | M | 1.5 | yes |
-| — | The private security advisory's fix | not sized | not set | yes, after 2 |
+| ~~2~~ | ~~Endpoint latency stats~~ **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115, #121) | M | 1.5 | ~~yes~~ done |
+| — | The private security advisory's fix | not sized | not set | yes, after 2 (done) |
 | 3 | Session diff | L | 1.5 | no |
 | 4 | Findings framework, and the payment-safety rules | L | 1.6 | no |
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 | no |
@@ -789,7 +788,7 @@ screen, and building those into the current single page would mean building them
 
 *Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
 §6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
-a §6 item; it sits here because it now comes after 2.
+a §6 item; it sat here because it came after 2, which is done, so it is the only row left in "Order from here".
 
 Both halves of the foundation stay in 1.4: the shell is what every later page is built into, and
 room for the list is the half a user notices on the screen they already use, so shipping the shell
@@ -900,63 +899,7 @@ data or hidden under `body.archive`.
 
 ### Endpoint latency stats
 
-*Ticket label:* `item:endpoint-latency-stats`.
-
-- **Endpoint templates**, built here and reused by the diff and the findings: numeric, UUID, long
-  hex and long base64-ish segments become `{id}`, so `/users/123` and `/users/456` are one row.
-  Overrides go in config for the paths the heuristic gets wrong.
-- Per method + template: calls, attempts, 4xx / 5xx / transport-failure rates, p50/p90/p95/p99,
-  max, mean bytes. **Below 20 samples p95 and p99 read `n<20`**, not a number — a percentile of
-  six values is a confident-looking guess. Latency is per attempt, retried endpoints are marked,
-  transport failures are counted and never averaged in.
-- `GET /api/sessions/{id}/stats?filter=` with the shared grammar; MCP `route_stats`; a Stats page
-  whose rows open Traffic with the filter term the daemon returned for that row — a superset of the
-  row, and the opened view says so; live, throttled to once a second; precomputed into the exports
-  so the offline file has them.
-- **Naming:** a template is a **route** everywhere it appears — Stats column, API field, MCP tool,
-  docs. "Endpoint" stays with the traffic page's chips, which already carry that label
-  (`endpoints ▾`). The item keeps its title so the table and history still read.
-- Must read the whole session: a test at 1001+ rows, for the reason `HarTest` exists.
-
-**Decided 2026-10-17: keep both, named differently, and the superset link is acceptable.** No
-`:inspector-model` change. Chips stay last-segment "endpoints"; daemon-side templates are "routes"
-(see the naming bullet above). Each Stats row carries its route and the filter term it links with,
-and the Traffic view opened from it says it may include paths the route keeps apart. This
-unblocks the item, and through it the diff and the findings.
-
-*Was an open decision — two notions of "endpoint".* *(Review, 2026-10-17. Blocked this item from
-starting, and through it the diff and the findings, which reuse templates.)* The traffic page
-already has one: endpoint chips come from `endpointShortcuts` in `:inspector-model`, keyed on the
-**last path segment** and applied as `endpointFilterTerm` — `path:*/profile`, an anchored glob. The
-overlay and `app.js` both use it. This item adds a second, daemon-side: `{id}` templates over the
-whole path. So a chip `profile` (which counts `/users/123/profile` and `/orgs/9/profile` together)
-and a Stats row `GET /users/{id}/profile` (which counts only the first) give different numbers for
-what a reader will take to be the same endpoint.
-
-There is a second problem the plan does not mention: **a Stats row cannot open Traffic filtered to
-exactly that row.** The grammar is frozen and has no template term, and its `*` crosses `/` —
-`globMatches` matches `/users/*/profile` against `/users/1/x/profile` and against
-`/users/me/profile`, which the template would have kept apart. So "rows open Traffic filtered to
-that endpoint" can only ever open a superset.
-
-Options:
-
-- **Converge the chips onto templates.** One notion everywhere, but it is a `:inspector-model`
-  change, which the opening of this section rules out, plus an `app.js` mirror and an overlay
-  change — and a template label does not fit a chip on a 360dp strip.
-- **Converge the templates onto last segments.** Cheap, and wrong: last-segment grouping is a
-  navigation shortcut, and latency per `profile` across unrelated resources is not a statistic
-  anybody can act on.
-- **Keep both and say why they differ.** Chips answer "take me there in one tap" and must be
-  expressible as a filter; templates answer "how does this route behave" and need not be. The daemon
-  owns the template rule and returns, on each Stats row, the template *and* the filter term it
-  links with (`method:GET path:/users/*/profile`), so the page never derives either; the Traffic
-  view opened from a Stats row says it may include paths the template keeps apart.
-
-Recommended: the third. It keeps the section's no-model-change premise and puts the one honest
-caveat where the superset is shown. What has to be decided before code is the naming — calling
-both "endpoint" is what makes the disagreement read as a bug — and whether the superset link is
-acceptable at all.
+**Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115 and #121, merges `0a5a1c9` and `d256174`). The text, the decision on the two notions of "endpoint" and what was built are in `ROADMAP-DONE.md` → §6 → "Endpoint latency stats".
 
 ### Session diff
 
@@ -973,6 +916,8 @@ same app; an optional `since:marker("…")` per side to compare one stretch of t
 
 Endpoint identity here is the **route** — the template decided under Endpoint latency stats — so
 "endpoints added and removed" means routes, and the diff says so in its labels.
+
+The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
 
 **Open decision — "unknown" must cover truncated bodies, not only omitted ones.** *(Review,
 2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
@@ -1020,6 +965,8 @@ Payment rules apply to mutations (POST/PUT/PATCH/DELETE):
 Configurable: idempotency header names (default `Idempotency-Key`, `X-Idempotency-Key`), payment
 path patterns in the existing `path:` syntax, the window. A request body that was not captured
 makes the evidence read "body unknown"; a duplicate is never claimed without both bodies.
+
+"Template" in the table is the route from `archive/RouteTemplates.kt` (method, host and path template), built in `item:endpoint-latency-stats`.
 
 **The filter grammar stays frozen**, so there is no `has:finding` term — "flagged rows only" is a
 view toggle. Changing the grammar is a separate decision.
@@ -1130,6 +1077,8 @@ config already covers.
 The notes from use, applied once the new screens exist; the first human design pass the web UI
 has had (still listed under open questions); `g s` / `g f`-style keys for the new pages; and empty
 states that say why they are empty, as the traffic list already does.
+
+An editor for `routeTemplates` on the Settings page. 1a's editor covers retention and signal caps, and `item:endpoint-latency-stats` left templates to `config.json` and `PUT /api/config`, which validates them.
 
 ### Deferred: mocking, fault injection, breakpoints
 

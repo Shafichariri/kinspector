@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v61 — 2026-10-21.**
+**Document version: v62 — 2026-10-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -485,8 +485,8 @@ Then, whichever launcher you have, whenever you want to watch traffic:
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
 past 100 sessions or 300 MB.
 
-A rail down the left of the page holds four pages: **Traffic**, where every session opens (§6e),
-**Sessions**, **Processes** and **Settings**. Each page has its own address (`#/sessions`, and so
+A rail down the left of the page holds five pages: **Traffic**, where every session opens (§6e),
+**Stats** (§6e), **Sessions**, **Processes** and **Settings**. Each page has its own address (`#/sessions`, and so
 on), so the browser's back button and a bookmark both work.
 
 The **Processes** page has **restart** and **stop**. `restart` relaunches the daemon in place —
@@ -583,6 +583,23 @@ back and a `new visit ↓` pill appears instead.
 
 The columns are filled from your payload — see §12d for the field names the tag browser reads.
 
+**Stats** is the selected session's latency and failure rates per **route**: the method, the host
+and the path with its id-like segments read as `{id}` (numeric, UUID, long hex, long base64-like).
+One row per route: calls, attempts (a redirect hop or a retry is one), retries, the 4xx, 5xx and
+transport-failure rates, and p50, p90, p95, p99 and max latency over the attempts that got a
+response. A transport failure is counted and never averaged into latency, and below 20 samples p95
+and p99 read `n<20` rather than a number too thin to mean anything. The page has its own filter
+box, in the same grammar, and a column header sorts by it. Clicking a row opens Traffic on that
+route's calls. The filter it opens can also match paths the route keeps apart, because the
+grammar's `*` crosses `/`, and a line above the list says so.
+
+If paths are grouped wrongly — a year read as `{id}`, or slugs kept apart that are one route —
+list templates under `routeTemplates` in `~/.inspector/config.json` on your Mac. It is daemon-side,
+like the signal caps in §12h, so it does not need a rebuild of your app. It applies when the daemon
+next starts, and then to every recorded session, because routes are computed when they are read.
+The Settings page does not edit it; edit the file by hand. `docs/DAEMON.md` §6 → `routeTemplates`
+has the template rules, and → "Route stats" the REST route and `inspector stats`.
+
 **Sessions** can be deleted from the UI, on the **Sessions** page: it lists every session with a
 checkbox and a per-row `✕`, presets that select for you (`keep last N`, `older than N` days),
 **delete selected**, and a **clear all**. Each arms on the first click and fires on the second, and
@@ -593,7 +610,10 @@ traffic on screen.
 **A session can be exported** from the **⋮** menu at the end of the traffic toolbar, as one file:
 **HTML** is this web UI working from disk with the session inside it — send it to someone with no
 Inspector and they can open it — **Markdown** is a readable record for a ticket or a chat, **JSON**
-is everything for tools, and **HAR** is the calls alone for DevTools. Each holds the whole session,
+is everything for tools, and **HAR** is the calls alone for DevTools. The first three carry the
+Stats table for the whole session: the HTML on its Stats page (sorting and opening a route's calls
+need a daemon), the Markdown as a **Routes** section, and the JSON as `routeStats`. The HAR does
+not. Each holds the whole session,
 with no filter or page limit. They hold whatever capture recorded, credentials included unless you
 enabled redaction, so read one before you send it anywhere. `docs/DAEMON.md` → "Exporting a whole
 session" has the REST routes.
@@ -827,6 +847,13 @@ the app integration above**.
 Tools for traffic: `list_sessions`, `session_summary`, `list_transactions(filter, limit, offset)`,
 `get_transaction`, `get_body(id, side, maxBytes)`, `add_marker`, and `export_session`, which
 writes a whole session to `~/.inspector/exports/` as HTML, Markdown or JSON.
+
+`route_stats(filter, sort, limit)` is the Stats page's table (§6e) for an agent: per route, calls,
+attempts, retries, failure rates and p50 to max latency, with p95 and p99 withheld as `n<20` below
+20 samples. `sort` is `attempts` (the default), `p50`, `p90`, `p95`, `p99`, `max` or `errors`;
+`limit` defaults to 25, at most 200. Each row's `filterTerm`, passed to `list_transactions`,
+returns that route's calls, and possibly calls on paths the route keeps apart. `inspector mcp`
+reads `routeTemplates` when your editor starts it, so after editing them, restart the MCP server.
 
 `explain(id)` is the one to reach for when the question is **why** rather than **what**. It joins,
 in one call, what the others make you assemble by hand: the screen the app was on when the call
@@ -1316,7 +1343,26 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v61 — 2026-10-21 (this document)
+### v62 — 2026-10-21 (this document)
+
+**Nothing to do. Optionally, if the Stats page groups two of your paths wrongly, list templates
+under `routeTemplates` in `~/.inspector/config.json` on your Mac (§6e) and restart the daemon.**
+
+Like v60 and v61, this describes the next daemon release after 1.3.0. Your code, your coordinates
+and your release build are untouched; the change reaches you when you download that daemon.
+
+- **A Stats page** on the rail (§6c, §6e): per-route calls, attempts, retries, 4xx, 5xx and
+  transport-failure rates, and p50/p90/p95/p99/max latency, with p95 and p99 reading `n<20` below
+  20 samples. A row opens Traffic on that route's calls.
+- **`routeTemplates`**, a new key in the daemon's `config.json` (§6e), corrects how paths group
+  into routes. It is not on the Settings page; edit the file.
+- **The MCP tool `route_stats(filter, sort, limit)`** (§10) gives an agent the same table.
+- **The exports carry the table** (§6e): the HTML on its Stats page, the Markdown as a Routes
+  section, the JSON as `routeStats`. The JSON's `formatVersion` stays 1; the HAR is unchanged.
+- `GET /api/sessions/{id}/stats` and `inspector stats` serve it too; `docs/DAEMON.md` → "Route
+  stats" has both.
+
+### v61 — 2026-10-21
 
 **Nothing to do. The web UI's exports moved from `export ▾` beside the session picker to the `⋮`
 menu at the end of the traffic toolbar; nothing else about exporting changed.**
