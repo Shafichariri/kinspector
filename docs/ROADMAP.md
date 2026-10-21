@@ -395,8 +395,8 @@ involved:*
 |---|---|---|
 | A live row arriving during the whole-session read is lost from the copy | `item:web-transactions-paged` | that item owns the whole-session read; KIN-34's paging widened the window |
 | `refreshCurrent` has no session guard | **its own item**, below | no open item touches `/current` |
-| KIN-33's sticky list-pane layout has no committed guard | 1b, `item:web-foundation-list-room` | 1b rebuilds the bands above the list, so the guard must exist before 1b moves them |
-| List, timeline, waterfall and path share one scroll position | 1b, `item:web-foundation-list-room` | 1b rebuilds the list pane, and 1a's hash routes give each view an address to remember a position by |
+| ~~KIN-33's sticky list-pane layout has no committed guard~~ **Done 2026-10-21** (KIN-78; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list") | 1b, `item:web-foundation-list-room` | 1b rebuilds the bands above the list, so the guard must exist before 1b moves them |
+| ~~List, timeline, waterfall and path share one scroll position~~ **Done 2026-10-21** (KIN-86; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list") | 1b, `item:web-foundation-list-room` | 1b rebuilds the list pane, and 1a's hash routes give each view an address to remember a position by |
 | The export's transactions route ignores `offset`/`limit` | `item:web-transactions-paged` | that item's export criterion cannot be checked without it |
 | ~~The "Lost the daemon" banner shows only on the first close after an unplanned drop~~ **Done 2026-10-21** (KIN-71; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
 
@@ -415,9 +415,9 @@ involved. One is not worth doing. The maintainer placed the new item on 2026-10-
 | 2. The header and the tab count go stale under live tail | `item:web-live-rows-filtered` | that item rewrites what a live row does to the lists; the count is the same decision |
 | 3. A brushed stretch below the newest 1000 says "no calls in the selected stretch" | **new item**, with 1 | same cause: the list holds part of what it counts and says nothing |
 | 4. A whitespace-only filter is a filter on the page and not on the daemon | `item:web-live-rows-filtered` | that item adds a page-side "is there a filter" test, which must agree with the daemon |
-| 5. The repeat mark is cut to `twic…` at 400px | 1b, `item:web-foundation-list-room`, under (b) | (b) already owns what a row keeps at 400px |
+| ~~5. The repeat mark is cut to `twic…` at 400px~~ **Done 2026-10-21** (KIN-80; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list") | 1b, `item:web-foundation-list-room`, under (b) | (b) already owns what a row keeps at 400px |
 | ~~6. The count is off-screen below about 600px~~ **Done 2026-10-21** (KIN-70; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell`, under (e) | (e) covered the controls, not the count; now it covers the count too |
-| 7. Four numbers for one session on one screen | 1b, under (f3) | (f3) already owns counts that read as disagreeing; the boundary-row idea goes to the new item |
+| ~~7. Four numbers for one session on one screen~~ **Done 2026-10-21** (KIN-85; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list") | 1b, under (f3) | (f3) already owns counts that read as disagreeing; the boundary-row idea goes to the new item |
 | 8. The export answers `limit=0` with 0 rows | not worth doing, below | nothing asks it |
 
 - ~~**The traffic list does not say when it holds only part of what it counts.**~~ Done 2026-10-21, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-list-says-what-it-holds`.
@@ -601,7 +601,6 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
 | 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
 
@@ -693,7 +692,9 @@ item. Where each went:
 | (f2) `16 of 16 calls` wraps at 1000px | 1b | the count sits in the toolbar 1b makes one row |
 | (f3) Two counts that read as disagreeing | 1b | same toolbar and overview line |
 
-One condition on (a). It is the only one of the six that traps a keyboard user, and §6 lets 1b slip
+*Rows marked 1b are done 2026-10-21 (PR #119); their criteria are in `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list".*
+
+One condition on (a), moot now that 1b has shipped. It was the only one of the six that traps a keyboard user, and §6 lets 1b slip
 to 1.5. **If 1b slips, (a) comes out of 1b as its own item and goes ahead of 2.** It is small, and
 a keyboard trap should not wait a release for a redesign.
 
@@ -777,7 +778,7 @@ screen, and building those into the current single page would mean building them
 | Order | Item | Size | Ships in | Scheduled in "Order from here" |
 |---|---|---|---|---|
 | ~~1a~~ | ~~Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114) | L *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
-| 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | yes |
+| ~~1b~~ | ~~Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}`~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119) | M *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
 | 2 | Endpoint latency stats | M | 1.5 | yes |
 | — | The private security advisory's fix | not sized | not set | yes, after 2 |
 | 3 | Session diff | L | 1.5 | no |
@@ -823,7 +824,9 @@ writable `config.json` — the last because Settings and the findings rules need
 shell page. **Room for the list** is the divider, the overview line, the one-row toolbar, the `⋮`
 export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 
-**1a done 2026-10-21** (PR #108, merge `e9f7131`; PR #112, merge `a7e3946`; fix PR #114, merge `cc9dbce`). Stats, Findings and Diff get their rail entry in the item that builds each page. The Sessions page's "pick two → compare" is the Diff item's: 1a has no Diff page to send it to. The 1a text that was only 1a's moved to `ROADMAP-DONE.md` → §6; what is left in this section is shared with 1b, which stays open.
+**1a done 2026-10-21** (PR #108, merge `e9f7131`; PR #112, merge `a7e3946`; fix PR #114, merge `cc9dbce`). Stats, Findings and Diff get their rail entry in the item that builds each page. The Sessions page's "pick two → compare" is the Diff item's: 1a has no Diff page to send it to. The 1a text that was only 1a's moved to `ROADMAP-DONE.md` → §6; 1b is done too, below.
+
+**1b done 2026-10-21** (PR #119, merge `4fe71dc`; KIN-78 to KIN-86). Measured: the list pane's top moved from 208px to 145px at 1440 on the list view and 234 → 145px on the timeline; the "about 120px" estimate needs the tab bar folded into the toolbar, which nobody has asked for. The text that was only 1b's moved to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list"; what is left in this section is shared with the pages still ahead.
 
 - **A left rail**, collapsible to icons, over hash-routed pages: Traffic, Stats, Findings, Diff,
   Sessions, Processes, Settings. Hash routes keep the no-build-step, one-`index.html` shape and make
@@ -840,11 +843,7 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
   each pid's identity at kill time and refuses the daemon's own; `POST /api/sessions/delete {ids}`
   refuses the active session. Both need `X-Inspector-Control`, both answer per item, because a
   batch that reports one status for five kills hides the one that failed.
-- **Room for the list:** a draggable divider between list and detail (double-click resets, width
-  remembered, collapse and full-width buttons); the now strip and the axis fold into one
-  `overview` line; the toolbar becomes one row with endpoint chips behind `endpoints ▾` past about
-  six; export goes into a `⋮` menu; a density preference; and `#/txn/{id}` opens one call full
-  screen. Measure the band heights before and after — the bar is about 120px more for rows.
+- **Room for the list:** *done 2026-10-21*; the bullet moved verbatim to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list".
 - **The daemon's `config.json` becomes writable**, behind `GET/PUT /api/config`. It exists today
   (`DaemonConfig` reads it, flags over file over defaults) but nothing writes or validates it;
   this adds validation and an atomic write, and keeps flags winning. Findings
@@ -863,67 +862,7 @@ check that can be automated goes into the probes and is proven to fail when brok
 
 In **1a, the shell**: *done 2026-10-21.* Its criteria moved verbatim to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell".
 
-In **1b, room for the list**:
-
-- **(a) A closed drawer is not focusable and does not widen the page.** At base, below 1200px, the
-  closed `#detail-pane` made the document 1646px wide at a 1000px window; Tab reached 13 controls
-  inside it, and the first one (`✕`) scrolled the window 646px sideways, half-opening the drawer
-  with no scrim. A trackpad swipe did the same. After 1b, at 1000px with the drawer closed, the
-  document's scrollWidth equals the window width, and a probe tabbing through the whole page never
-  lands focus inside the closed pane. That probe is new, and is proven to fail with the fix
-  removed. UX suggested clipping `#panes`'s overflow in the narrow block and `inert` or delayed
-  `visibility` on the closed pane; the architect chooses.
-- **(b) The endpoint survives at 400px.** At base, paths were cut to about four characters while
-  the clock, duration and byte columns kept full width, and the row
-  `POST auth.example.invalid /oauth/token` lost its whole path and its byte count. After 1b, at
-  400px, every row in the base session shows its path's last segment in full and its byte count.
-  The host and the clock give way before the path does. UX suggested dropping or shortening the clock column below about
-  520px.
-  *(Added 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* **The repeat
-  mark survives too.** At 400px it was cut to `twic…`, leaving only the tint, and a tint alone does
-  not say how many times. After 1b, at 400px, every repeat mark in a repeat-bearing session reads in
-  full, in its usual words or a shorter form such as `2×`, which the overlay already uses.
-- **(c) The drawer's `✕` covers nothing.** At base, at 1000px, it sat over the header's last action
-  (`replay ▾` served, `copy for agent` in an export), so a click on that corner closed the drawer.
-  After 1b, the `✕` and every header action have disjoint boxes at 1000px, served and in an export.
-- **(d) A closed drawer casts no shadow.** At base a dark strip showed at the right edge, mostly in
-  light mode. After 1b the drawer's `box-shadow` applies only while it is open.
-- **(f2) The call count does not wrap at 1000px.** At base `16 of 16 calls` broke over two lines.
-- **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
-  top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
-  `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
-  *(Widened 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* On a
-  1203-call session one screen showed four numbers for one session: the tab `traffic 1000`, the
-  header `newest 1000 of 1203 shown`, the scope bar `1203 of 1203` and the axis `1203 calls`. The
-  scope bar's sits directly over the rows and reads as "rows below", but it counts the session.
-  After 1b, every count on the traffic page says in its own words what it counts: drawn rows, the
-  session, or a prefix. Two that count the same thing show the same number. A probe on a capped
-  session reads all of them and fails if any two disagree without different labels.
-- **The sticky layout KIN-33 fixed is held by a committed check, and the check lands before 1b
-  moves anything.** *(Added 2026-10-19, from the signals verify panels.)* KIN-33 made every sticky
-  band in the list pane stop under the scope bar, through `--sticky-top`
-  (`web/css/35-list.css`). It was verified only by headless-Chrome scripts in a scratch directory,
-  so nothing in the repository fails if a new band goes back to `top: 0` and slides under the bar.
-  1b is about to add such a band, the overview line. The criterion: a CI check fails when a sticky
-  rule in the list pane, other than `.scope-bar` itself, takes its `top` from anything but
-  `--sticky-top`. It is proven red by putting `top: 0` back on `#timeline > .filter-note`. The panel
-  proposed a static audit in `check-web-static.js`, the shape of the 11px and `[hidden]` audits.
-  jsdom has no layout engine, so a computed-position check there would pass whatever the CSS says.
-  The architect chooses the shape. It is 1b's first commit, so that 1b's own changes are made under
-  it.
-- **Each traffic view opens where it was left, not where another view left off.** *(Added
-  2026-10-19, from the signals verify panels.)* Since KIN-33 the list, the timeline, the waterfall
-  and the path scroll one pane. With live off, a list scrolled to 5000 opens the timeline at 5000
-  of 29,800, a place nobody chose. After 1b, with live off, going list → timeline → list returns the
-  list to its own position. The timeline opens where it was last left, or at its start the first
-  time. With live on, each view still follows new rows as it does now, and expanding a run still
-  does not move the pane (KIN-38's rule). jsdom does not lay out, so this is a probe if jsdom can hold
-  the positions, or a documented browser check if it cannot. The architect says which. Out of scope:
-  remembering a position across a reload. *Why 1b:* 1b rebuilds the list pane, and 1a's hash routes
-  give each view an address to keep a position under.
-
-If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
-because it is a keyboard trap. See §5 → "Order from here".
+In **1b, room for the list**: *done 2026-10-21.* Its criteria moved verbatim to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1b, room for the list".
 
 **The delete and clear loops** moved into `service/SessionDeleter.kt` with the bulk delete *(done 2026-10-21)*; the paragraph is in `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell".
 

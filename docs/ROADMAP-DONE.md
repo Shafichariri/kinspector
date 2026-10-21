@@ -1202,6 +1202,7 @@ tag cut before any of this existed.
 | ~~Phase H — split the two large overlay files~~ **Done, 2026-10-21** (KIN-61, PR #103, merge `4dc21d2`) | §5 | `item:structure-phase-h` | S |
 | ~~Phase I — `noop-ui` golden file~~ **Done, 2026-10-21** (KIN-62, PR #106, merge `1479c30`) | §5 | `item:structure-phase-i` | M |
 | ~~1a — Web UI foundation: the shell~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114, merges `e9f7131`, `a7e3946`, `cc9dbce`; two rounds of QA) *(was row 9; the later rows keep their numbers)* | §6 | `item:web-foundation-shell` | L |
+| ~~1b — Web UI foundation: room for the list~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119, merge `4fe71dc`; one round of QA) *(was row 11; the later rows keep their numbers)* | §6 | `item:web-foundation-list-room` | M |
 | ~~A live call reaches the list but not the timeline, the glance or the picker~~ **Done, 2026-10-21** (KIN-58; PRs #113 and #117, merges `952b6c6` and `433f30d`; two rounds of QA, round 1 failed the picker after a resume) *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b; was row 10, the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
@@ -2084,3 +2085,139 @@ unplanned close. Counts, base to head: static checks 90 to 99, live probe 204 to
   131 at 1440, 1000, 600 and 400 px, live and in an export.
 
 cost: not recorded — built in the 2026-10-20/21 coordinated run, developer session with engineer subagents, no design council, no QA before merge; QA after merge, 2 rounds
+
+### Web UI foundation — 1b, room for the list
+
+**Done, 2026-10-21.** PR #119, merge `4fe71dc`. `build`, `release-swap`, `repo` and `web` were green on
+its head `2814977` and the item was merged with `--admin` once each read pass by name. KIN-78 to KIN-86
+are Done on QA's evidence, one round, run after the merge. The shared text of this section stays in
+`ROADMAP.md`; what follows is the text that was only 1b's, moved verbatim, then what was built and
+learned.
+
+*Ticket label:* `item:web-foundation-list-room`.
+
+- **Room for the list:** a draggable divider between list and detail (double-click resets, width
+  remembered, collapse and full-width buttons); the now strip and the axis fold into one
+  `overview` line; the toolbar becomes one row with endpoint chips behind `endpoints ▾` past about
+  six; export goes into a `⋮` menu; a density preference; and `#/txn/{id}` opens one call full
+  screen. Measure the band heights before and after — the bar is about 120px more for rows.
+
+In **1b, room for the list**:
+
+- **(a) A closed drawer is not focusable and does not widen the page.** At base, below 1200px, the
+  closed `#detail-pane` made the document 1646px wide at a 1000px window; Tab reached 13 controls
+  inside it, and the first one (`✕`) scrolled the window 646px sideways, half-opening the drawer
+  with no scrim. A trackpad swipe did the same. After 1b, at 1000px with the drawer closed, the
+  document's scrollWidth equals the window width, and a probe tabbing through the whole page never
+  lands focus inside the closed pane. That probe is new, and is proven to fail with the fix
+  removed. UX suggested clipping `#panes`'s overflow in the narrow block and `inert` or delayed
+  `visibility` on the closed pane; the architect chooses.
+- **(b) The endpoint survives at 400px.** At base, paths were cut to about four characters while
+  the clock, duration and byte columns kept full width, and the row
+  `POST auth.example.invalid /oauth/token` lost its whole path and its byte count. After 1b, at
+  400px, every row in the base session shows its path's last segment in full and its byte count.
+  The host and the clock give way before the path does. UX suggested dropping or shortening the clock column below about
+  520px.
+  *(Added 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* **The repeat
+  mark survives too.** At 400px it was cut to `twic…`, leaving only the tint, and a tint alone does
+  not say how many times. After 1b, at 400px, every repeat mark in a repeat-bearing session reads in
+  full, in its usual words or a shorter form such as `2×`, which the overlay already uses.
+- **(c) The drawer's `✕` covers nothing.** At base, at 1000px, it sat over the header's last action
+  (`replay ▾` served, `copy for agent` in an export), so a click on that corner closed the drawer.
+  After 1b, the `✕` and every header action have disjoint boxes at 1000px, served and in an export.
+- **(d) A closed drawer casts no shadow.** At base a dark strip showed at the right edge, mostly in
+  light mode. After 1b the drawer's `box-shadow` applies only while it is open.
+- **(f2) The call count does not wrap at 1000px.** At base `16 of 16 calls` broke over two lines.
+- **(f3) Two counts never read as disagreeing.** At base the scope bar's `15 of 16` sat beside the
+  top bar's `16 of 16`. They count different things, and the labels must say so. UX suggested
+  `15 of 16 under this prefix`. The overlay's scope bar is out of scope here.
+  *(Widened 2026-10-19, from the first verify panel on `item:web-transactions-paged`.)* On a
+  1203-call session one screen showed four numbers for one session: the tab `traffic 1000`, the
+  header `newest 1000 of 1203 shown`, the scope bar `1203 of 1203` and the axis `1203 calls`. The
+  scope bar's sits directly over the rows and reads as "rows below", but it counts the session.
+  After 1b, every count on the traffic page says in its own words what it counts: drawn rows, the
+  session, or a prefix. Two that count the same thing show the same number. A probe on a capped
+  session reads all of them and fails if any two disagree without different labels.
+- **The sticky layout KIN-33 fixed is held by a committed check, and the check lands before 1b
+  moves anything.** *(Added 2026-10-19, from the signals verify panels.)* KIN-33 made every sticky
+  band in the list pane stop under the scope bar, through `--sticky-top`
+  (`web/css/35-list.css`). It was verified only by headless-Chrome scripts in a scratch directory,
+  so nothing in the repository fails if a new band goes back to `top: 0` and slides under the bar.
+  1b is about to add such a band, the overview line. The criterion: a CI check fails when a sticky
+  rule in the list pane, other than `.scope-bar` itself, takes its `top` from anything but
+  `--sticky-top`. It is proven red by putting `top: 0` back on `#timeline > .filter-note`. The panel
+  proposed a static audit in `check-web-static.js`, the shape of the 11px and `[hidden]` audits.
+  jsdom has no layout engine, so a computed-position check there would pass whatever the CSS says.
+  The architect chooses the shape. It is 1b's first commit, so that 1b's own changes are made under
+  it.
+- **Each traffic view opens where it was left, not where another view left off.** *(Added
+  2026-10-19, from the signals verify panels.)* Since KIN-33 the list, the timeline, the waterfall
+  and the path scroll one pane. With live off, a list scrolled to 5000 opens the timeline at 5000
+  of 29,800, a place nobody chose. After 1b, with live off, going list → timeline → list returns the
+  list to its own position. The timeline opens where it was last left, or at its start the first
+  time. With live on, each view still follows new rows as it does now, and expanding a run still
+  does not move the pane (KIN-38's rule). jsdom does not lay out, so this is a probe if jsdom can hold
+  the positions, or a documented browser check if it cannot. The architect says which. Out of scope:
+  remembering a position across a reload. *Why 1b:* 1b rebuilds the list pane, and 1a's hash routes
+  give each view an address to keep a position under.
+
+If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
+because it is a keyboard trap. See §5 → "Order from here".
+
+**What was built.** Nine tickets, in two passes by two engineer subagents (KIN-78 to KIN-82, then KIN-83
+to KIN-86), each diff reviewed in Chrome renders by the developer session.
+- **KIN-78, the sticky guard first.** A static audit, `sticky top`, in `scripts/lib/layout-audits.js`:
+  every sticky rule in the list pane other than `.scope-bar` takes its `top` from `--sticky-top`.
+  `.pv-metro` was moved onto it, and no path station reading moved against base.
+- **KIN-79, the closed drawer.** `visibility: hidden` with a delayed transition, `#panes` clipped in the
+  narrow block, the shadow drawn only under `.drawer-open`, and a `#detail-tools` row holding the close
+  button in flow above the header, which is what made it disjoint from the header actions.
+- **KIN-80, rows at 400px.** Paths drawn as `.path-head` and `.path-tail`, the repeat mark its own
+  `.dup-badge` with a long and a short form (`2×` below 520px).
+- **KIN-81, one overview line.** The axis, the hint and the now strip in one row; the now list is a popover.
+- **KIN-82, one-row toolbar.** `endpoints ▾ N` holds the chips; `⋮` holds the four exports, keyboard
+  shortcuts and `compact rows`. `#keys-button` and `#export-host` are gone.
+- **KIN-83, divider and hidden detail.** `#pane-divider` (pref `inspector.listShare`, 25% to 75%, arrow
+  keys, Home and double-click reset); `#detail-hide` and `#detail-restore`, never remembered.
+- **KIN-84, `#/txn/{id}?session=…`.** Looked up in the whole-session copy, then the list's rows, then the
+  single-call route; in an export an unknown id reads "not in this export".
+- **KIN-85, counts say what they count.** The traffic tab counts the session; the scope bar reads
+  `N of M calls under this prefix`; the overview reads `N calls in this session`; the glance reads
+  `calls in session`.
+- **KIN-86, views keep place.** A view's scroll position is saved on the way out and restored on the
+  way back, only while live is paused, keyed by session, filter, order and stretch.
+Counts, base `1e9d720` to head: static checks 99 to 102, live probe 225 to 236, archive probe 40 to 43,
+`render-web-ui.js` budget 2561 to 2398 (new probe bodies in `scripts/lib/list-room-probes.js` and
+`list-room-cases.js`). `measure-web-ui.js --base`: 265 readings on each side, 18 failing at base, 2 at head
+(`first rows huge` and `connected huge`, KIN-42's, on both sides).
+
+**What was learned.**
+- **Measured, the bar is 145px, not 120.** The list pane's top moved from 208px to 145px at 1440 on the list
+  view and from 234px to 145px on the timeline, inside the 160px the criterion allows. The roadmap's "about
+  120px" would need the tab bar folded into the toolbar, which nobody has asked for.
+- **Pass 1 broke four readings by succeeding.** The freed height made the `big` path at 400px fit its pane,
+  so the four `live big 400 … path … scrolled back` readings turned "too short", which is unjudged, not
+  failed. `measure-cases.js` now unfolds the visits when the path pane does not scroll and those readings
+  judge `stays` again.
+- **A review finding in the counts.** The overview hint was cut at 1440. The axis now has a zero flex basis,
+  so it gives way to the hint (`room <w> hint whole`).
+- **A probe that read the wrong element.** QA's first read of the unknown-id case reported the previous
+  call's text; it came from the hidden `#detail`, not from what was on screen. The check has to read what is on screen.
+- **Two base probes were replaced, not deleted.** `rowLabels` asserted the row captions, which the design
+  removes, and `toolbar one row` now asserts there are none; `shortcuts` asserted `#keys-button`, which moved
+  into `⋮`, and `shortcuts in menu` checks it there.
+- **An earlier item's `live header filter` probe was rewritten** to the session count, with a comment saying why: the tab
+  now counts the session, which is what the criterion asked for.
+- **Not in the diff, proposed.** `#/txn` has no visible way back (only browser Back and Esc, as the design
+  says); a `← traffic` control is a UX call. The tools row's `⤢` and `⇥` glyphs are 13px; legible, and not
+  judged by anyone. A live signal or marker still redraws the timeline once per message, carried from KIN-58.
+- **Not verified.** The full `./gradlew build` (no Android SDK; CI ran it). The drawer's slide-in and its
+  reduced-motion behaviour, which readings of state do not cover. `#/txn` exported at 400px. The divider
+  dragged by keyboard in real Chrome (jsdom covers it). QA rendered in Chrome only.
+- **How it was built.** An M item built from the architect's design note without a design review and
+  without a UX pass, by the maintainer's choice, by a developer session with two engineer subagents. QA ran
+  after the merge. QA's own red proofs: `top: 0` on `#timeline > .filter-note`, `visibility: hidden` removed
+  from the closed drawer, an unlabelled scope count, and `openViewPlace` restoring nothing; each went red
+  with the line named in the tickets.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, one developer session with engineer subagents, no design review, no QA before merge; QA after merge, 1 round
