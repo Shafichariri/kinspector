@@ -2,7 +2,10 @@ package dev.inspector
 
 import java.io.File
 import java.lang.reflect.Modifier
+import java.util.jar.JarFile
+import kotlin.jvm.internal.Reflection
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.declaredMemberFunctions
@@ -15,9 +18,9 @@ import kotlin.test.fail
 /**
  * Reflects a module's public API into stable, sorted signature strings.
  *
- * This source directory is compiled into the `jvmTest` source set of four modules — the
- * `:inspector-core`/`:inspector-noop` pair and the `:inspector-stream`/`:inspector-noop-stream`
- * pair. Each module asserts its own surface against the golden file its pair shares, which is
+ * This source directory is compiled into the `jvmTest` source set of six modules — the
+ * `:inspector-core`/`:inspector-noop`, `:inspector-stream`/`:inspector-noop-stream` and
+ * `:inspector-ui`/`:inspector-noop-ui` pairs. Each module asserts its own surface against the golden file its pair shares, which is
  * what keeps twins from drifting: they cannot be compared to each other directly, because they
  * declare the same fully-qualified names and so can never sit on one classpath together.
  */
@@ -59,6 +62,20 @@ object ApiSurface {
     )
 
     /**
+     * Classes forming the `:inspector-ui` contract. Keep in sync with its golden file.
+     *
+     * One file facade and nothing else: `InspectorOverlay` is the module's whole public API, and
+     * the palette and theme it draws with are `internal` (decided 2026-10-18; see
+     * `docs/decisions/twins-and-api.md`). `InspectorOverlayKt` is named for the file in *both*
+     * modules, and neither can pin it — `@file:JvmName` does not resolve in a common source set
+     * shared with Native — so the file name is the ABI, and naming the facade here is what checks
+     * it. `UiApiParityTest` also fails if any other class in the module holds public API.
+     */
+    val UI_CONTRACT_CLASSES: List<String> = listOf(
+        "dev.inspector.ui.InspectorOverlayKt",
+    )
+
+    /**
      * @param classes types that must be present; a missing one fails loudly rather than shrinking
      *   the surface being compared. File facades belong in this list like anything else — dumping
      *   them under a shared label instead is what hid the `Platform_jvmKt`/`StreamSinkKt` split
@@ -74,9 +91,11 @@ object ApiSurface {
                 "Contract class $name is not on this module's classpath, so its members would " +
                     "not be compared at all.\nIf it is a file facade (a name ending Kt), the " +
                     "file declaring those top-level functions was renamed or moved: the facade " +
-                    "name is part of the ABI, so pin it with @file:JvmName rather than updating " +
-                    "this list — a twin pair must compile top-level declarations into the same " +
-                    "JVM class or a release swap breaks at runtime."
+                    "name is part of the ABI, so rename the file back, or pin it with " +
+                    "@file:JvmName where the source set allows it (a common source set shared " +
+                    "with Native does not) — never update this list to follow it. A twin pair " +
+                    "must compile top-level declarations into the same JVM class or a release " +
+                    "swap breaks at runtime."
             )
         }
         signaturesOf(klass, skipKtorTyped).map { "$name: $it" }
@@ -89,18 +108,7 @@ object ApiSurface {
         val functions = (klass.declaredMemberFunctions + klass.staticFunctions)
             .filter { it.visibility == KVisibility.PUBLIC }
             .filterNot { klass.java.isEnum && it.name in ENUM_SYNTHETICS }
-            .map { fn ->
-                val params = fn.parameters
-                    // Only a real receiver. A static function has none, and dropping its first
-                    // parameter regardless rendered `valueOf()` as taking nothing — a signature
-                    // that would go on matching after the parameter it hides had changed.
-                    .filterNot { it.kind == KParameter.Kind.INSTANCE || it.kind == KParameter.Kind.EXTENSION_RECEIVER }
-                    .joinToString(", ") { p ->
-                        val optional = if (p.isOptional) " = ..." else ""
-                        "${p.name}: ${p.type}$optional"
-                    }
-                "fun ${fn.name}($params): ${fn.returnType}"
-            }
+            .map(::renderDeclared)
 
         val properties = klass.declaredMemberProperties
             .filter { it.visibility == KVisibility.PUBLIC }
@@ -131,6 +139,19 @@ object ApiSurface {
             .sorted()
     }
 
+    private fun renderDeclared(fn: KFunction<*>): String {
+        val params = fn.parameters
+            // Only a real receiver. A static function has none, and dropping its first
+            // parameter regardless rendered `valueOf()` as taking nothing — a signature
+            // that would go on matching after the parameter it hides had changed.
+            .filterNot { it.kind == KParameter.Kind.INSTANCE || it.kind == KParameter.Kind.EXTENSION_RECEIVER }
+            .joinToString(", ") { p ->
+                val optional = if (p.isOptional) " = ..." else ""
+                "${p.name}: ${p.type}$optional"
+            }
+        return "fun ${fn.name}($params): ${fn.returnType}"
+    }
+
     /**
      * Public static methods, read through Java reflection.
      *
@@ -151,14 +172,26 @@ object ApiSurface {
             // it is, and fall back to keeping it when Kotlin reflection cannot say, which is the
             // case for extension functions on a file facade such as `okHttpInterceptor`.
             .filterNot { it.name.contains('$') }
-            .filterNot { method ->
-                val asKotlin = runCatching { method.kotlinFunction }.getOrNull()
-                asKotlin != null && asKotlin.visibility != KVisibility.PUBLIC
-            }
             .filterNot { klass.java.isEnum && it.name in ENUM_SYNTHETICS }
-            .map { method ->
-                val params = method.parameterTypes.joinToString(", ") { it.name }
-                "fun ${method.name}($params): ${method.returnType.name}"
+            .mapNotNull { method ->
+                val asKotlin = runCatching { method.kotlinFunction }.getOrNull()
+                when {
+                    asKotlin != null && asKotlin.visibility != KVisibility.PUBLIC -> null
+                    // The JVM method has parameters its Kotlin declaration does not: the compiler
+                    // added them. For a @Composable that is Compose's $composer, $changed and
+                    // $default; for a suspend function, its Continuation. Render the declaration —
+                    // names and defaults included, which a named-argument call site depends on and
+                    // the Java form cannot show. The `jvm` line from [jvmDescriptors] keeps every
+                    // parameter, because that is what a compiled call binds to. One rule, no names:
+                    // methods whose lists agree keep the Java form, so the core and stream golden
+                    // files did not change by a byte.
+                    asKotlin != null && method.parameterCount > asKotlin.parameters.size ->
+                        renderDeclared(asKotlin)
+                    else -> {
+                        val params = method.parameterTypes.joinToString(", ") { it.name }
+                        "fun ${method.name}($params): ${method.returnType.name}"
+                    }
+                }
             }
 
     /**
@@ -216,6 +249,81 @@ object ApiSurface {
 
         return ctors + methods
     }
+
+    /**
+     * Every class in the module that declares [anchor] holding a declaration *Kotlin* calls public,
+     * mapped to what it holds — the completeness half of a parity check.
+     *
+     * [dump] compares only the classes it is named, so public API anywhere else is invisible to the
+     * golden file: the ui theme types could go public again, or a public composable land in a new
+     * file, and the golden test would stay green. This finds them. It is not the class-set diff
+     * rejected in `docs/decisions/twins-and-api.md`: that asked the JVM, where `internal` is public,
+     * and compared twin against twin; this asks Kotlin metadata and compares one module with its
+     * own list. A class counts when it and every class enclosing it are public or protected — the
+     * generated `Res.string` is public inside an internal `Res` and must not count. A file facade
+     * counts when one of its package members is public, read through `getOrCreateKotlinPackage`.
+     * `Method.kotlinFunction` cannot do this: one internal composable with a value-class parameter
+     * (`inspectorScreen`) makes it throw for every method of its facade.
+     *
+     * Reads only the directory or jar [anchor] was loaded from, so dependencies on the test
+     * classpath are not reported. It cannot pass by scanning nothing: the caller compares the
+     * result for equality with a non-empty contract.
+     */
+    fun publicHolders(anchor: String): Map<String, List<String>> {
+        val anchorClass = runCatching { Class.forName(anchor) }.getOrElse {
+            fail("Contract class $anchor is not on this module's classpath; the golden-file test's failure says why.")
+        }
+        val root = File(anchorClass.protectionDomain.codeSource.location.toURI())
+        val holders = sortedMapOf<String, List<String>>()
+        for (name in classNamesIn(root)) {
+            val klass = Class.forName(name, false, anchorClass.classLoader)
+            val metadata = klass.getAnnotation(Metadata::class.java) ?: continue
+            when (metadata.kind) {
+                KIND_CLASS -> if (effectivelyPublic(klass)) holders[name] = listOf("class")
+                KIND_FILE_FACADE -> {
+                    val members = runCatching { Reflection.getOrCreateKotlinPackage(klass).members }.getOrElse {
+                        fail("Cannot list the declarations of file facade $name, so cannot tell whether it holds public API: $it")
+                    }
+                    val public = members.filter { it.visibility == KVisibility.PUBLIC }.map { it.name }.sorted()
+                    if (public.isNotEmpty()) holders[name] = public
+                }
+                KIND_MULTIFILE_FACADE, KIND_MULTIFILE_PART -> fail(
+                    "$name is a @JvmMultifileClass facade, which publicHolders does not read. Extend it before a twin module uses one."
+                )
+                // Kind 3 is a synthetic class — a lambda, WhenMappings, ComposableSingletons. Never API.
+            }
+        }
+        return holders
+    }
+
+    private fun effectivelyPublic(klass: Class<*>): Boolean =
+        generateSequence(klass) { it.enclosingClass }.all { c ->
+            // Null for a local or anonymous class: not API. A throw is a class Kotlin cannot
+            // describe, and a guard that cannot tell must say so rather than skip it.
+            val visibility = runCatching { c.kotlin.visibility }.getOrElse {
+                fail("Cannot ask Kotlin whether ${c.name} is public: $it")
+            }
+            visibility == KVisibility.PUBLIC || visibility == KVisibility.PROTECTED
+        }
+
+    private fun classNamesIn(root: File): List<String> =
+        if (root.isDirectory) {
+            root.walkTopDown().filter { it.isFile && it.name.endsWith(".class") }
+                .map { it.relativeTo(root).invariantSeparatorsPath.removeSuffix(".class").replace('/', '.') }
+                .toList()
+        } else {
+            JarFile(root).use { jar ->
+                jar.entries().toList().map { it.name }
+                    .filter { it.endsWith(".class") && !it.startsWith("META-INF/") }
+                    .map { it.removeSuffix(".class").replace('/', '.') }
+            }
+        }
+
+    // kotlin.Metadata.kind values.
+    private const val KIND_CLASS = 1
+    private const val KIND_FILE_FACADE = 2
+    private const val KIND_MULTIFILE_FACADE = 4
+    private const val KIND_MULTIFILE_PART = 5
 
     private fun descriptorOf(params: Array<Class<*>>, ret: String): String =
         params.joinToString("", prefix = "(", postfix = ")$ret") { jvmType(it) }

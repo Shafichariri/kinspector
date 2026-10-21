@@ -1,0 +1,7 @@
+# Generated. Public API shared by :inspector-ui and :inspector-noop-ui.
+# A @Composable function has two lines: `fun` is its Kotlin declaration, and `jvm` is
+# the ABI, with the parameters the Compose compiler adds. See UiApiParityTest.
+# Regenerate: ./gradlew :inspector-ui:jvmTest -Dinspector.api.regenerate=true
+
+dev.inspector.ui.InspectorOverlayKt: fun InspectorOverlay(enabled: Boolean = ..., content: () -> Unit): Unit
+dev.inspector.ui.InspectorOverlayKt: jvm InspectorOverlay(ZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V
