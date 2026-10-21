@@ -208,7 +208,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - ~~**The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**~~
   Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:signals-query-one-rule`.
-  **Open, deferred by the maintainer on 2026-10-19: KIN-42.** On a session of about 160,000 calls, the
+  **Open: KIN-42. Deferred by the maintainer on 2026-10-19; undeferred on 2026-10-21 (order row 21).** On a session of about 160,000 calls, the
   web UI shows a false empty state ("waiting for an app" / "nothing recorded") for about 25 seconds
   before the first rows appear, and the live socket connects only after. KIN-34 introduced it, when the
   filter-note counts began reading the whole session. The fix is to draw the first page at once and
@@ -870,8 +870,8 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | 17 | The core and stream twin pairs get the ui pair's guards | §3 → Guards | `item:guard-twin-pairs-alike` | S | L |
 | 18 | "A probe leaves no process behind", tested | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized | D, can run beside the advisory |
 | 19 | A server is its host and a non-default port, everywhere | §3 → Bugs found, not fixed | `item:host-port-everywhere` | S, or M | W; one PR, its `urlOf` mirror case runs in Kotlin and the web checks |
-| 20 | A session switch clears the timeline's calls and the endpoint chips (waits: the maintainer on overturning the `web-ui.md` sentence) | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
-| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background (waits: undefer, and a fresh note) | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 20 | A session switch clears the timeline's calls and the endpoint chips *(approved 2026-10-21 by the maintainer: overturns the `web-ui.md` sentence; replacement text comes with the item)* | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
+| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
 | 22 | At 400px the Stats page keeps a route's host whole | §3 → Bugs found, not fixed | `item:web-stats-route-breaks-whole` | S | beside W, only after `item:host-port-everywhere` merges |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
 | 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
