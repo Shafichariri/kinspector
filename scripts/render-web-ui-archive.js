@@ -23,6 +23,7 @@ const fs = require('fs');
 const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits');
 const { LONG_LABELS, LONG_SESSION_ID, readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
+const { probeStatsOffline } = require('./lib/stats-probes');
 
 let JSDOM, VirtualConsole;
 try {
@@ -232,7 +233,8 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   check('export items hidden', Boolean(more) && moreItems.length === 6 && exportsShown.length === 0 && othersShown.length === 2,
     more ? `${exportsShown.length} exports shown; offered: ${othersShown.join(', ') || 'nothing'}` : 'no ⋮');
   click(more);
-  // The rail offers Traffic alone: every other page sends something or reads the machine.
+  // The rail offers Traffic and Stats (`stats rail in export`, below): every other page sends
+  // something or reads the machine.
   const rail = (page) => doc.querySelector(`#rail .rail-item[data-page="${page}"]`);
   const railShown = ['sessions', 'processes', 'settings'].filter((page) => !hiddenByCss(rail(page)));
   check('pages hidden in export', railShown.length === 0 && !hiddenByCss(rail('traffic')),
@@ -261,6 +263,11 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   const left = await waitFor(() => !panes.classList.contains('txn-full'), 3000);
   check('txn route in export', opened && missing && left && attempts.length === 0,
     `${embedded.method} ${embedded.path} drawn ${opened}; an unknown id: "${said}" ${missing}; left ${left}; ${attempts.length} requests`);
+
+  // The Stats page from the route table the export embeds; see lib/stats-probes.js. Back on Traffic after.
+  for (const [label, value] of await probeStatsOffline(window, doc, archive, attempts)) {
+    check(label, value.startsWith('yes'), value.replace(/^(yes|NO)\s*(- )?/, ''));
+  }
 
   // A marker item would ask for since:marker(...). It must leave the list alone and say why.
   const markerItem = [...doc.querySelectorAll('#markers li')].find((li) => !li.classList.contains('muted'))

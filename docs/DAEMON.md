@@ -466,11 +466,11 @@ build.
 
 #### `routeTemplates` — how paths group into routes
 
-`GET …/stats`, `inspector stats` and the MCP tool `route_stats` group calls by **route**: the
-method, the host and the path with its id-like segments read as `{id}` — numeric (`123`), UUID,
-hex of 8 or more characters with a digit, and base64-like runs of 20 or more with a digit and both
-cases. That is a heuristic. Where it groups wrongly, list templates; the first that matches a path
-wins, and anything no template matches falls back to the heuristic:
+The Stats page, `GET …/stats`, `inspector stats` and the MCP tool `route_stats` group calls by
+**route**: the method, the host and the path with its id-like segments read as `{id}` — numeric
+(`123`), UUID, hex of 8 or more characters with a digit, and base64-like runs of 20 or more with a
+digit and both cases. That is a heuristic. Where it groups wrongly, list templates; the first
+that matches a path wins, and anything no template matches falls back to the heuristic:
 
 ```json
 { "routeTemplates": ["/reports/2024", "/articles/{slug}", "/v2/users/{userId}/avatar"] }
@@ -639,7 +639,7 @@ can call the MCP tool `export_session`, which writes the files to `~/.inspector/
 
 | File | What it is |
 |---|---|
-| `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane and JSON tree all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), replay, adding markers, pulls, and process control. The time axis still narrows the view. |
+| `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane, JSON tree and the Stats page's route table all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), sorting the route table or opening a route's calls from it, replay, adding markers, pulls, and process control. The time axis still narrows the view. |
 | `.md` | **A readable record.** The session's details, then a Routes table (calls, attempts and retries, failures and latency per route), then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
 | `.json` | **The complete document**: session metadata and summary, the route table as `routeStats`, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
 
@@ -710,8 +710,9 @@ reply. `sort` is `attempts` (default), `p50`, `p90`, `p95`, `p99`, `max` or `err
 `errorRate`), nulls last; `limit` defaults to 1000, at most 5000, and `routeCount` says how many
 there were.
 
-Each row's `filterTerm` finds the matching calls in the traffic list's filter, or in
-`list_transactions`. It is a **superset**: the filter grammar's `*` crosses `/`, so
+Each row's `filterTerm` opens the matching calls in the traffic list, or in `list_transactions`;
+a row on the web UI's Stats page opens Traffic on it, and says so above the list. It is a
+**superset**: the filter grammar's `*` crosses `/`, so
 `path:/users/*/profile` also matches `/users/1/x/profile`, which the route keeps apart. When
 `filter` has no `|`, the term includes it; with one, it cannot, and the reply says
 `"filterCarried": false`.

@@ -90,6 +90,19 @@ function archiveSource(archive) {
       }
       if (/^\/api\/sessions\/[^/]+\/current$/.test(p)) return reply(200, archive.current || []);
       if (/^\/api\/sessions\/[^/]+\/markers$/.test(p)) return reply(200, archive.markers || []);
+      // The route table the daemon computed when it exported, whole session, no filter, `attempts`
+      // order. An export from before it carried one falls through to the 404 below, which the page shows.
+      if (/^\/api\/sessions\/[^/]+\/stats$/.test(p) && archive.routeStats) {
+        if (url.searchParams.get('filter')) {
+          return refuse(400, 'filters are evaluated by the daemon, and an exported session has none');
+        }
+        const sort = url.searchParams.get('sort');
+        if (sort && sort !== 'attempts') return refuse(400, 'sorting needs the daemon, and an exported session has none');
+        // Cut as the daemon cuts: a whole number or 1000, then 1 to 5000; `routeCount` stays the session's.
+        const asked = url.searchParams.get('limit');
+        const limit = Math.min(5000, Math.max(1, /^-?\d+$/.test(asked || '') ? Number(asked) : 1000));
+        return reply(200, { ...archive.routeStats, routes: archive.routeStats.routes.slice(0, limit) });
+      }
       return refuse(404, `not in this export: ${p}`);
     },
   };
@@ -249,12 +262,16 @@ function connectLive() {
       // header of 29, and the timeline left out every call that arrived with no filter set.
       followLiveCount();
       drawLive();
+      // The Stats page asks again at most once a second, and only while it is shown.
+      oweStats();
     } else if (message.type === 'marker') {
       state.markers.push(message.marker);
       renderMarkers();
       renderList();
       renderTimeline();
       renderPath();
+      // A marker can move a `since:marker(…)` cut in the Stats filter.
+      oweStats();
     } else if (message.type === 'signal') {
       // Carries `dataRef` already: the daemon broadcasts the row it stored, not the one it
       // received. A viewer handed the received row would see every payload as missing.
@@ -314,7 +331,7 @@ function connectLive() {
     if (wasAway) {
       forgetWholeSession();
       loadServerInfo();
-      loadSessions().then(loadTransactions);
+      loadSessions().then(loadTransactions).then(statsSessionChanged);
     }
   };
 }

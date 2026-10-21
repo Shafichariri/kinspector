@@ -33,7 +33,7 @@ const { launchChrome, sleep } = require('./lib/measure-cdp');
 const { writeSessions } = require('./lib/measure-fixtures');
 const cases = require('./lib/measure-cases');
 const { topBar } = require('./lib/topbar-cases');
-const { shell } = require('./lib/shell-cases');
+const { shell, statsFirstDraw } = require('./lib/shell-cases');
 const { room } = require('./lib/list-room-cases');
 
 const REPO = path.resolve(__dirname, '..');
@@ -169,6 +169,7 @@ async function main() {
       for (const session of ['huge', 'big']) {
         for (const side of sides) {
           results[side.name].push(...await onPage(chrome, (p) => cases.firstRows(p, side.urls[session], session, opts.firstRowsMs)));
+          if (session === 'huge') results[side.name].push(...await onPage(chrome, (p) => statsFirstDraw(p, side.urls.huge, session)));
         }
       }
     }

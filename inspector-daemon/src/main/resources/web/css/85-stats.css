@@ -1,0 +1,89 @@
+/* stats: the Stats page's route table, and the caveat Traffic draws while a route's term is the filter */
+
+.stats-filter {
+  flex: 1 1 260px;
+  max-width: 420px;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.stats-filter:focus { outline: none; border-color: var(--accent); }
+.stats-filter:disabled { opacity: 0.6; }
+#page-stats .filter-error { border: 1px solid var(--divider); border-radius: 5px; margin: 0 0 8px; }
+
+/* Fifteen columns do not fit 400px, and the page must never scroll sideways: the table scrolls in
+   its own box, with the route held at the left so a row still says what it counts. */
+.stats-scroll { overflow-x: auto; margin: 0 0 8px; }
+/* As wide as its columns, not the window: stretched, the route column was mostly empty at 1440. */
+.stats-table { width: auto; }
+.stats-table th, .stats-table td { white-space: nowrap; }
+.stats-table .stats-route {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+  text-align: left;
+  font-weight: 400;
+}
+.stats-table thead .stats-route { font-weight: 600; }
+.stats-label { display: inline-flex; align-items: center; gap: 6px; max-width: 420px; }
+.stats-open {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stats-open:hover .stats-path, .stats-open:focus-visible .stats-path { color: var(--accent); text-decoration: underline; }
+.stats-open:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.stats-route .method { font-size: 11px; flex: none; }
+.stats-host { font-size: 11px; flex: none; }
+.stats-path { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.stats-row { cursor: pointer; }
+.stats-row:hover td, .stats-row:hover .stats-route { background: var(--bg-hover); }
+body.archive .stats-row { cursor: default; }
+body.archive .stats-row:hover td { background: none; }
+body.archive .stats-row:hover .stats-route { background: var(--bg-elevated); }
+.stats-retried { margin-left: 6px; font-size: 11px; color: var(--warn); }
+.stats-withheld { font-size: 11px; color: var(--fg-muted); cursor: help; }
+
+/* The sort is the daemon's, so a header is a button that asks for it; `aria-sort` marks the one in force. */
+.stats-sort {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.stats-sort:hover, .stats-sort:focus-visible { color: var(--fg); text-decoration: underline; }
+.stats-table th[aria-sort] .stats-sort { color: var(--accent); }
+.stats-table th[aria-sort] .stats-sort::after { content: " ↓"; }
+
+/* On Traffic, under the filter error and outside the toolbar's one row. No `display` rule, so its
+   `hidden` needs no override. */
+.filter-caveat {
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg-elevated);
+}
+.filter-caveat .btn { margin-left: 8px; }
+.txn-page > #filter-caveat { display: none !important; }
+
+/* Narrow: the held route column wraps inside a capped width. Kept on one line it was nearly the
+   window's width at 400px, and every number scrolled out from under it. */
+@media (max-width: 699px) {
+  .stats-table .stats-route { white-space: normal; min-width: 120px; max-width: 150px; }
+  .stats-label { flex-wrap: wrap; gap: 2px 6px; max-width: none; }
+  .stats-host, .stats-path { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+}

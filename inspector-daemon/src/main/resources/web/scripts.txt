@@ -22,4 +22,5 @@ js/75-replay.js
 js/80-settings.js
 js/85-processes.js
 js/90-sessions.js
+js/95-stats.js
 js/99-init.js

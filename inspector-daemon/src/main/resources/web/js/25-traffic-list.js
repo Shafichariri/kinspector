@@ -550,6 +550,7 @@ function applyFilter() {
     // where nothing typed draws `newest 1000 of 1203 shown`, and made every live row a re-read.
     const typed = $('filter').value;
     state.filter = typed.trim() ? typed : '';
+    statsFilterChanged();
     for (const chip of document.querySelectorAll('#chips .chip, #endpoint-chips .chip')) {
       chip.classList.toggle('active', chip.dataset.filter === state.filter);
     }
@@ -585,5 +586,6 @@ function setLiveTail(on) {
     loadTransactions().then(() => {
       if (state.sessionId === id && state.sessionTotal !== null) followLiveCount();
     });
+    statsReload();
   }
 }

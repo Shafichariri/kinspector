@@ -34,7 +34,9 @@
  *     one place, and the narrow top bar and tab bar rules;
  *   - the list pane's room: nothing sticky in it taking its `top` from anything but `--sticky-top`,
  *     a closed drawer hidden from the keyboard and the page's width, with no shadow, and a narrow
- *     row keeping its path's last segment and its repeat mark.
+ *     row keeping its path's last segment and its repeat mark;
+ *   - the Stats page's live refresh: a burst of rows costing at most two requests, one out at a time,
+ *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -60,6 +62,7 @@ const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
+const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
 const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow } = require('./lib/layout-audits');
 
 const results = [];
@@ -141,6 +144,9 @@ async function main() {
   report('sticky top', auditStickyTop(styles));
   report('closed drawer css', auditClosedDrawer(styles));
   report('narrow row css', auditNarrowRow(styles));
+
+  console.error('--- stats ---');
+  for (const [label, value] of await checkStatsRefresh(scripts)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

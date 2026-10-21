@@ -48,6 +48,7 @@ const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
 const { probeLiveRows } = require('./lib/live-filter-probes');
 const shell = require('./lib/shell-probes');
 const room = require('./lib/list-room-probes');
+const stats = require('./lib/stats-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -470,7 +471,6 @@ function runScripts() {
     };
   }
 
-
   /**
    * The list's rows and its empty states.
    *
@@ -543,7 +543,6 @@ function runScripts() {
       ? 'yes' : 'NO - a chip still claims a filter that is gone';
     return result;
   }
-
 
   /*
    * An archive with no sessions: run what still means something, and say n/a for the rest.
@@ -624,8 +623,8 @@ function runScripts() {
   const sessionOnScreen = () => doc.querySelector('#session-picker')?.value || '';
   const markerFormProbe = await probeMarkerForm();
 
+  const statsLines = await stats.probeStatsPage(shellCtx); // lib/stats-probes.js; leaves Traffic as it found it
   const chipProbe = await probeEndpointChip();
-
 
   // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the
   // real .row order matters — asserting on the state flag would only prove the flag changed, not
@@ -670,7 +669,6 @@ function runScripts() {
   const flippedLabel = `${litChips} chip lit`;
   await click(startedNewest ? orderNewest : orderOldest);
   const restored = rowIds().every((id, i) => id === beforeFlip[i]);
-
 
   /**
    * The timeline view: lanes, spans, provenance, and the payload viewer.
@@ -1585,7 +1583,6 @@ function runScripts() {
     return result;
   }
 
-
   /**
    * The path tab: a map of stations on top, and a log with one line per visit beneath it.
    *
@@ -1828,7 +1825,6 @@ function runScripts() {
     };
   }
 
-
   /**
    * The detail header: what is in it, in what order, and whether the replay menu behaves as one.
    *
@@ -1877,7 +1873,6 @@ function runScripts() {
   const detailHeaderProbe = await probeDetailHeader();
   const replayButtonProbe = await probeReplayButton();
   const replayEditorProbe = await probeReplayEditor();
-
 
   /**
    * The JSON tree, on a real captured body.
@@ -2229,6 +2224,8 @@ function runScripts() {
   report(processLines);
   console.error('--- routes ---');
   report(routeLines);
+  console.error('--- stats ---');
+  report(statsLines);
   console.error('--- tabs ---');
   note('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);

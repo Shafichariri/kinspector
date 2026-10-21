@@ -68,12 +68,16 @@ exactly that. It reads `filterTransactions` now, and `HarTest` pins it at 1001 r
 **The JSON, HTML and Markdown exports carry the route stats the daemon computed; the HAR does
 not.** `routeStats` is the whole session's report, no filter and no limit, folded from the rows
 the export already holds through the same accumulator the route uses, and it has no default, so
-a session with no calls exports `"routes": []`. The HTML export embeds it with the rest of the
-document, so the page can draw the table offline without computing anything. HAR 1.2 has no
-aggregate object, and a route table in `log.comment` would be a second rendering no importer
-shows. `SessionExport.build` takes the route templates as a required parameter, so no caller
+a session with no calls exports `"routes": []`. The HTML page answers `/stats` from it in
+`archiveSource`, so the Stats page draws the table offline without computing anything, and, like
+the filter, refuses what needs the daemon: a filter, and a sort other than the one embedded. An
+export from before `routeStats` gets the router's `not in this export` 404, which the page shows.
+HAR 1.2 has no aggregate object, and a route table in `log.comment` would be a second rendering no
+importer shows. `SessionExport.build` takes the route templates as a required parameter, so no caller
 exports heuristic routes while the page shows the config's. `ExportTest` pins it; it was shown
-red with an empty-list default on `routes` and with the table built from `queryTransactions`.
+red with an empty-list default on `routes` and with the table built from `queryTransactions`. The
+archive probe's `stats offline` lines pin the page: red with the `/stats` branch taken out of
+`archiveSource`, when the 404 is drawn instead of the table.
 
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
