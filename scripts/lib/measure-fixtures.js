@@ -1,6 +1,6 @@
 'use strict';
 /*
- * The three sessions scripts/measure-web-ui.js measures, built from the probe fixture
+ * The sessions scripts/measure-web-ui.js measures, built from the probe fixture
  * (`./gradlew :inspector-daemon:writeProbeFixture`) rather than committed, since one is 33 MB:
  *
  *   probe — the fixture as written: 16 calls, 19 signals, two markers, and the 1203-call session
@@ -10,8 +10,10 @@
  *   huge  — plus 160,000 calls to /v3/shop/bulk. Past the ~110k-element limit where spreading a
  *           row array into Math.min/max throws (KIN-37), and slow enough to read in full that a
  *           first draw waiting for the whole session shows (KIN-42).
+ *   routes — plus one call to each server in ROUTE_SERVERS: a port, the IPv6 loopback, a hyphenated
+ *           host label and a path segment too long for the Stats page's 150px route cap at 400px (KIN-93).
  *
- * These are the sessions the signals item's verify panels used, rebuilt the same way.
+ * The first three are the sessions the signals item's verify panels used, rebuilt the same way.
  */
 const fs = require('fs');
 const path = require('path');
@@ -61,6 +63,24 @@ function hugeRow(i, startedAt) {
   };
 }
 
+// [scheme, host, port, path]. No call is made to any of them: the Stats page only draws their routes.
+const ROUTE_SERVERS = [
+  ['http', '127.0.0.1', 8080, '/v1/status'],
+  ['http', '::1', 8080, '/v6/ping'],
+  ['https', 'api.qa.example.invalid', 8443, '/v3/accounts/statements/2026/download/archive'],
+  ['https', 'averyveryverylong-unbroken-hostlabel.example.invalid', null, '/v3/exports/quarterly-reconciliation-summary'],
+];
+
+function routesRow(i, startedAt) {
+  const [scheme, host, port, rowPath] = ROUTE_SERVERS[i];
+  const mono = 3010 + i;
+  return {
+    v: 1, id: `rx${String(i).padStart(5, '0')}`, ts: tsAt(startedAt, mono), mono,
+    method: 'GET', scheme, host, ...(port === null ? {} : { port }), path: rowPath, status: 200, ms: 30,
+    callId: `rc${String(i).padStart(5, '0')}`, resBytes: 2,
+  };
+}
+
 function writeVariant(probeDir, outDir, extraRows) {
   fs.cpSync(probeDir, outDir, { recursive: true, verbatimSymlinks: true });
   if (!extraRows) return outDir;
@@ -77,7 +97,7 @@ function writeVariant(probeDir, outDir, extraRows) {
   return outDir;
 }
 
-// Writes probe/, big/ and huge/ data directories under outDir and returns their paths.
+// Writes probe/, big/, huge/ and routes/ data directories under outDir and returns their paths.
 function writeSessions(probeDir, outDir) {
   sessionDir(probeDir); // fails early, with a reason, on a directory that is not the fixture
   const range = (n, make) => (startedAt) => Array.from({ length: n }, (_, i) => make(i, startedAt));
@@ -85,6 +105,7 @@ function writeSessions(probeDir, outDir) {
     probe: writeVariant(probeDir, path.join(outDir, 'probe'), null),
     big: writeVariant(probeDir, path.join(outDir, 'big'), range(3000, bigRow)),
     huge: writeVariant(probeDir, path.join(outDir, 'huge'), range(160000, hugeRow)),
+    routes: writeVariant(probeDir, path.join(outDir, 'routes'), range(ROUTE_SERVERS.length, routesRow)),
   };
 }
 

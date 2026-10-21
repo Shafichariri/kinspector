@@ -640,3 +640,23 @@ hold the refresh rule, each shown red with its check removed; the live probe's `
 the page and the caveat, `stats n<20` and `stats long session whole` red against a daemon with the
 threshold at 0 and its fold cut at 1000 rows, and `stats restored` leaves the page as it found it,
 proven by breaking the next probe's guard (`chip marks active`).
+
+**Under 700px a route cell breaks only between whole pieces: a server after a `.`, `:` or `/`, a
+path after a `/`.** The held column wraps inside a 150px cap, and `overflow-wrap: anywhere` broke
+it anywhere: `api.qa.invali` / `d`, and `http://127.0.0.1:808` / `0`, which reads as port 808.
+`statsBreakable` cuts each span into pieces with a `<wbr>` between them, never inside `[::1]` or a
+run such as `://`, and never after a path's leading `/`. The narrow stylesheet holds each piece
+`nowrap`, because a `<wbr>` alone still left Chrome breaking after a `-` inside a host label. So
+`overflow-wrap: anywhere` put back on its own changes nothing now. Main's whole stylesheet put
+back, or the `nowrap` hold removed, is what turns the reading red. The cap is on the label, where
+`min-width: min-content` outranks it, so a piece wider than 150px widens the column inside
+`.stats-scroll`. On the cell, Chrome held the column at 150px and the piece painted over the
+numbers. Above 700px the `<wbr>`s are `display: none`, because Chrome breaks at one even under
+`nowrap`, and the wide route went to three lines. `measure-web-ui.js` reads where Chrome put each
+line, per character, on the `routes` session (a port, `[::1]`, a hyphenated label, a long segment):
+`stats 400 route breaks served` and `… export`, `stats 400 routes whole …` (nothing cut, document
+no wider than the window) and `stats 1440 routes one line served`. Each found-nothing branch fails
+and was shown failing with the servers drawn under another class. The breaks were red on main
+(29 breaks, `http://127.0.0.1:808|0`), with main's stylesheet and with the hold removed; `whole`
+was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
+route pieces` holds the cut itself, red with brackets ignored and with the leading `/` cut.

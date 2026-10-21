@@ -218,10 +218,37 @@ function statsRouteCell(row, origins) {
     label.title = `Open these calls in Traffic: ${row.filterTerm}`;
   }
   label.appendChild(el('span', `method ${methodClass(row.method)}`, row.method));
-  if (origins > 1) label.appendChild(el('span', 'stats-host muted', statsOrigin(row)));
-  label.appendChild(el('span', 'stats-path', row.route));
+  if (origins > 1) label.appendChild(statsBreakable('stats-host muted', statsOrigin(row), '.:/'));
+  label.appendChild(statsBreakable('stats-path', row.route, '/'));
   th.appendChild(label);
   return th;
+}
+
+/**
+ * A span holding [text] cut after each run of [at]'s characters, outside brackets, into pieces the
+ * stylesheet keeps whole, with a `<wbr>` between them. So the narrow route cell breaks a server only
+ * at a `.`, `:` or `/` and a route only at a `/`: `overflow-wrap: anywhere` read
+ * `http://127.0.0.1:808` / `0`, which a reader takes for port 808. A `<wbr>` alone is not enough,
+ * because the browser also breaks after a `-` inside a host label. `[::1]` stays one piece, `://` is
+ * one run, so `https:` is never a line of its own, and nor is a path's leading `/`. The span's text
+ * is the route's, unchanged.
+ */
+function statsBreakable(cls, text, at) {
+  const span = el('span', cls);
+  let piece = '';
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '[') depth++;
+    else if (c === ']') depth = Math.max(0, depth - 1);
+    piece += c;
+    if (depth === 0 && i > 0 && at.includes(c) && i + 1 < text.length && !at.includes(text[i + 1])) {
+      span.append(el('span', null, piece), el('wbr'));
+      piece = '';
+    }
+  }
+  if (piece) span.appendChild(el('span', null, piece));
+  return span;
 }
 
 /** Draws whatever `statsState` holds: the count, the filter's refusal, the table or why it is empty. */
