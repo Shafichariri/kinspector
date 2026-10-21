@@ -36,7 +36,8 @@
  *     a closed drawer hidden from the keyboard and the page's width, with no shadow, and a narrow
  *     row keeping its path's last segment and its repeat mark;
  *   - the Stats page's live refresh: a burst of rows costing at most two requests, one out at a time,
- *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed.
+ *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed;
+ *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`

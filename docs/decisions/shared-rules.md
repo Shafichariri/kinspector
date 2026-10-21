@@ -1,8 +1,9 @@
 # Decisions — shared rules
 Owned by `:inspector-model`: rules both surfaces draw, their mirrors in the web UI, the filter grammar and the palette. Imported by the `inspector-model`, `inspector-ui` and web guides.
 
-**Mirror cases live once, at the repository root, and both sides run every one.** Seven rules in
-the web UI copy a Kotlin authority, and for five of them "keep them in step" was the only thing
+**Mirror cases live once, at the repository root, and both sides run every one.** Eight rules in
+the web UI copy a Kotlin authority (the eighth, `urlOf`, was a helper with no cases of its own until
+IPv6 bracketing), and for five of the first seven "keep them in step" was the only thing
 holding them. When the cases were first written, four drifts and a minor fifth had already opened:
 three inside mirrored functions (the repeat count, a run's id, the chip list's final tie), a
 `?` dropped from an empty query by the `urlOf` the duplicate key is built from, and one call site —

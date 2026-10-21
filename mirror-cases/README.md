@@ -12,6 +12,7 @@ case**:
 | `endpointShortcuts.json` | `endpointShortcuts()` | `MirrorCasesTest` | `endpointShortcuts` |
 | `timelineRuns.json` | `timelineRuns()`, `TimelineRun.id` | `MirrorCasesTest` | `timelineRuns` |
 | `duplicates.json` | `duplicateGroups()` | `MirrorCasesTest` | `duplicates` (+ `urlOf`) |
+| `urlOf.json` | `NetworkTransaction.url`, `.hostPort` | `MirrorCasesTest` | `urlOf` (`urlOf`, `hostPortOf`) |
 | `hopByHop.json` | `HOP_BY_HOP_HEADERS`, `replayableHeaders()` in `Replay.kt` | `HopByHopMirrorTest` (daemon) | `hopByHop` |
 
 The JavaScript runner is `scripts/check-web-static.js`, which lifts each block out of the real web
@@ -60,6 +61,7 @@ rules — anything that decides something belongs in the code under test.
   present only for signal runs.
 - **`duplicates`:** `[{ ids, spanMs, callCount }]`, ordered by each group's first member. Every case
   gives `windowMs` — 3000 is the model's default — so neither runner carries a copy of it.
+- **`urlOf`:** one `{ url, hostPort }` per input row, in input order.
 - **`hopByHop`:** with no `headers`, `{ "names": [the set, sorted] }`; with `headers`, the editor's
   seeded lines as `{ "lines": ["Name: v1, v2"…] }`.
 

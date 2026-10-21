@@ -1,6 +1,6 @@
 /* The JavaScript half of the shared mirror cases in `mirror-cases/`.
  *
- * The web UI mirrors rules whose authority is Kotlin — six in `:inspector-model`, one in the
+ * The web UI mirrors rules whose authority is Kotlin — seven in `:inspector-model`, one in the
  * daemon's `Replay.kt`. Each case file is read by `MirrorCasesTest` (or `HopByHopMirrorTest`) on the
  * Kotlin side and by this file against the functions lifted out of the real web UI by their
  * `@mirror-begin <name>` anchors, so a case is one fact asserted of both surfaces. See
@@ -20,8 +20,9 @@ const CASE_KEYS = ['name', 'from', 'input', 'expect'];
 
 /**
  * Each rule: the `@mirror-begin` blocks it needs, what it returns from them, the input keys a case
- * may use, and how a case's input becomes an answer. `urlOf` and `tagOf` are helpers some rules lean
- * on; they are blocks so the lift is exact, and they have no case file of their own.
+ * may use, and how a case's input becomes an answer. `tagOf` is a helper some rules lean on; it is a
+ * block so the lift is exact, and it has no case file of its own. `urlOf` is a helper of
+ * `duplicates` as well as a rule with its own cases.
  */
 const RULES = {
   timeline: {
@@ -97,6 +98,12 @@ const RULES = {
       const monoOf = (id) => rows.find((t) => t.id === id).mono;
       return [...groups.values()].sort((a, b) => monoOf(a.ids[0]) - monoOf(b.ids[0]));
     },
+  },
+  urlOf: {
+    blocks: ['urlOf'],
+    exports: 'urlOf, hostPortOf',
+    inputs: ['transactions'],
+    run: ({ urlOf, hostPortOf }, input, d) => txns(input, d).map((t) => ({ url: urlOf(t), hostPort: hostPortOf(t) })),
   },
   hopByHop: {
     blocks: ['hopByHop'],

@@ -202,6 +202,37 @@ class StorageTest {
         assertTrue(encoded.length < 2000, "summary should stay ~1 KB, was ${encoded.length}")
     }
 
+    /**
+     * `byHost` names a server as a call label does, by `hostPort`. Grouped by bare host, two local
+     * servers on `:8080` and `:9090` were one entry in the summary, MCP `session_summary`,
+     * `inspector summary` and the exports, and OkHttp's `::1` and Ktor's `[::1]` were two.
+     */
+    @Test
+    fun summary_hosts_are_servers_split_by_port_and_an_ipv6_one_is_bracketed() {
+        fun at(id: String, scheme: String, host: String, port: Int?) =
+            txn(id, host = host).copy(scheme = scheme, port = port)
+        val dir = writeSession(
+            config, "s9b", "2026-08-16T10:14:02.000Z",
+            transactions = listOf(
+                at("aaaa0001", "http", "127.0.0.1", 8080),
+                at("aaaa0002", "http", "127.0.0.1", 8080),
+                at("aaaa0003", "http", "127.0.0.1", 9090),
+                // A default port adds nothing to the key, and neither does a row recorded before
+                // `port` existed.
+                at("aaaa0004", "https", "api.example.invalid", 443),
+                at("aaaa0005", "https", "api.example.invalid", null),
+                at("aaaa0006", "https", "api.example.invalid", null),
+                // OkHttp's bare literal and Ktor's bracketed one are the same server.
+                at("aaaa0007", "http", "::1", 8080),
+                at("aaaa0008", "http", "[::1]", 8080),
+            ),
+        )
+        assertEquals(
+            mapOf("127.0.0.1:8080" to 2, "127.0.0.1:9090" to 1, "api.example.invalid" to 3, "[::1]:8080" to 2),
+            repo.summarize(dir)!!.byHost,
+        )
+    }
+
     // --- retention ---------------------------------------------------------------------------
 
     @Test

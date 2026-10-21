@@ -280,15 +280,19 @@ const prettyJson = (text) => {
 };
 
 // @mirror-begin urlOf
-// Mirrors NetworkTransaction.url on the Kotlin side. Built here rather than taken from the row
-// because `url` is a computed property and does not travel on the wire. An empty query keeps its
-// `?`, as Kotlin's `query?.let` does: `/a?` and `/a` are different URLs, and the duplicate key is
-// built from this.
-const urlOf = (txn) => {
+// Mirrors NetworkTransaction.hostPort and .url on the Kotlin side, held to them by
+// mirror-cases/urlOf.json. Built here rather than taken from the row because both are computed
+// properties and do not travel on the wire. An IPv6 literal is bracketed unless it already is:
+// OkHttp stores `::1` and Ktor `[::1]`, and `http://::1:8080/v6` is not a URL. The Stats page names
+// a route's server through hostPortOf too, so the rule has one copy here.
+const hostPortOf = (txn) => {
   const dflt = { http: 80, ws: 80, https: 443, wss: 443 }[String(txn.scheme).toLowerCase()];
-  const port = txn.port != null && txn.port !== dflt ? `:${txn.port}` : '';
-  return `${txn.scheme}://${txn.host}${port}${txn.path}${txn.query != null ? '?' + txn.query : ''}`;
+  const host = txn.host.includes(':') && !txn.host.startsWith('[') ? `[${txn.host}]` : txn.host;
+  return txn.port != null && txn.port !== dflt ? `${host}:${txn.port}` : host;
 };
+// An empty query keeps its `?`, as Kotlin's `query?.let` does: `/a?` and `/a` are different URLs,
+// and the duplicate key is built from this.
+const urlOf = (txn) => `${txn.scheme}://${hostPortOf(txn)}${txn.path}${txn.query != null ? '?' + txn.query : ''}`;
 // @mirror-end urlOf
 
 const curlFor = (txn, reqBody) => {
