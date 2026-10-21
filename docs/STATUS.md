@@ -7,9 +7,9 @@ Latest per-target counts from QA, each at the commit named and none a full-repos
 `:inspector-model:jvmTest` 160/0 at `1da0d75`; `:inspector-ui:jvmTest`
 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-core:jvmTest` 73/0, `:inspector-noop:jvmTest` 3/0,
 `:inspector-stream:jvmTest` 3/0, `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at
-`1479c30`; `:inspector-daemon:test` 299/0 at `e9f7131` (QA, PR #108; 271 on its base); web static checks 102/0,
-live probe 236 passed 0 failed 1 n/a and archive probe 43 passed at `4fe71dc` (QA, `item:web-foundation-list-room`, round 1). The daemon figure is older than the web ones, and #115 and
-later commits add daemon tests that nobody has counted. At `4fe71dc` QA also ran `:repo-checks:test --rerun`, green.
+`1479c30`; `:inspector-daemon:test` 357/0 at `0a5a1c9` (QA, PR #115, `item:endpoint-latency-stats`; 299 on its base `cc9dbce`); web static checks 107/0,
+live probe 251 passed 0 failed 1 n/a and archive probe 48 passed at `d256174` (QA, `item:endpoint-latency-stats`, PR #121; 102, 236 and 43 on its base `31790f8`). PR #121 changes no Kotlin, so the daemon figure holds at `d256174`;
+it was not recounted there. At `0a5a1c9` and at `d256174` QA also ran `:repo-checks:test --rerun`, green; `:inspector-daemon:test --rerun` was green at both.
 Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
 has no Android SDK and no working `xcrun`; CI runs them.
 
@@ -159,6 +159,29 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **Route stats, daemon side (`item:endpoint-latency-stats`, PR A), against real daemons and a seeded session, JVM daemon only.** At `0a5a1c9` (QA, round 1):
+  `GET /api/sessions/{id}/stats`, MCP `route_stats` and `inspector stats` return one row per method, host and route over the whole session
+  (`total 1203, matched 1203` on the 1203-call fixture, not the 1000 clamp); `/users/{id}` with samples 1 to 20 ms reads p50 10, p90 18, p95 19,
+  p99 20, max 20 by hand-computed nearest rank; a route with 19 samples reads `n<20` for p95 and p99 on REST, in the Markdown and in the page;
+  a transport failure is counted (`attempts 21`, `latencySamples 20`) and never a latency; a 503, 503, 200 chain is one call with `retries 2` and a 302
+  is a redirect, not a retry, also under `status:200`. Each row's `filterTerm` parses and matches its own rows over a fixed corpus and 5,000 seeded random
+  paths, and is carried only for filters that stay a superset (`status:500 | has:error` carries the route alone). `routeTemplates` is read at start;
+  `PUT /api/config` is control-gated (403 without the header), refuses a bad entry with a 400 naming it, and after a restart `/x/deadbeefcafe` reports
+  as `/x/{name}`, `routeSource: config`. `export.json` carries `routeStats` (`formatVersion` 1), `export.md` a `## Routes` table before `## Timeline`,
+  and the HAR is byte-identical to the base daemon's (64,818 bytes). Daemon tests 299 to 357, 0 failed. On the 160,016-row `huge` session: cold
+  0.331 s, warm 2.4 to 3.8 ms, 2.4 to 2.8 ms after 100 appended rows, `inspector stats` 0.36 s, heap about 17.4 MB per entry (about 111 B per
+  attempt). Red by QA: floor rank (`expected <[10, 18, 19, 20, 20]> but was <[10, 18, 19, 19, 20]>`), `TAIL_MIN_SAMPLES = 19`, and a transport
+  failure entering latency. The engineers' other red proofs are in the tickets, not repeated.
+- **The Stats page (`item:endpoint-latency-stats`, PR B), in headless Chrome at 1440, 1000, 600 and 400 px, live and in an export.** At `d256174` (QA, round 1):
+  `Stats` sits between Traffic and Sessions in the rail; every row and cell equals `GET …/stats` and `inspector stats` at 1440, 1000 and 400, under no
+  filter (10 routes, 50 calls) and under `status>=500` (`2 of 50 calls`); rows under 20 samples print `n<20` for p95 and p99; `/pay` is tagged `2 retries`
+  and `/new`, reached by a 302, is not; clicking `p50` sends one request with `sort=p50` and the order equals REST's; a row opens Traffic on the daemon's
+  term with the caveat, editing the filter clears it and `back to Stats` returns; 30 calls in about a second cost one `/stats` read and a paused page none;
+  `/v3/long/bulk` reads 1201 attempts, past the 1000 clamp; the exported file draws all 10 rows offline with the filter disabled and no open or sort
+  buttons; the document is as wide as the window at all four widths and the table scrolls inside `#stats-scroll` at 400. Counts: static 102 to 107,
+  live probe 236 to 251, archive probe 43 to 48, `measure-web-ui.js --base` 270 readings with 2 failing on both sides (KIN-42's). Red by QA: the withheld
+  cell drawn as a dash (`stats n<20`) and a refresh per owed row (`stats refresh burst`, `stats refresh one flight`). The engineers' other red proofs are not
+  repeated.
 - **With live on, a call reaches the timeline, the glance and the selected picker option, without a reload, in headless Chrome 131
   at 1440, 1000 and 400 px, against a real daemon fed over `/ingest`.** At `433f30d` (QA, round 2): a live call is drawn by +500 ms
   with no other action; scrolled back, `scrollTop` is unchanged (1421 to 1421, 1456 at 400) and at the end the pane follows; 100
@@ -338,6 +361,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **`item:endpoint-latency-stats` was built without a design review and without a UX pass, and QA rendered the Stats page in headless Chrome only.** Nobody has
+  judged how the table, its tags or the caveat *look* in Safari, Firefox or on a phone. At 400 px the route cell breaks a hostname mid-word
+  (`api.qa.invali` / `d`, `http://127.0.0.1:808` / `0`, which can read as port 808); the text is true and the break is a UX call. The page does not offer
+  `sort=errors`, which the daemon supports.
+- **Route stats timings beyond the `huge` fixture.** Cold and warm times and heap per attempt were taken on the 160,016-row fixture only, not on a real
+  recorded session of that size.
+- **The refresh's hidden-tab case** rests on the static check `stats refresh hidden`; QA did not drive a hidden Chrome tab. QA's mutation of the export's
+  `/stats` branch was not a valid proof (the export embeds the daemon's own files); the builder's proof in the daemon's tree stands and was not repeated.
+- **For `item:endpoint-latency-stats`, the full `./gradlew build` and `-Pinspector=off`** were not run on the QA or builder machine (no Android SDK); CI
+  ran both on each PR and the main push run on `d256174` succeeded. The main push run on `0a5a1c9` was still in progress when QA wrote.
+- **A route holding a character the grammar cannot write links with a very wide term** (`/p|q` gives `path:/*`, and `*` crosses `/`, so it matches every path
+  on the host), and two ports of one host share a term. Both are the documented superset and the page's caveat says so; no fix is planned.
 - **The bulk routes and `PUT /api/config` sit behind the control gate only.** The private advisory's fix is not built
   (`item:control-boundary-advisory`, last in the order). The new routes leave room for it, and the gaps are not described here.
 - **1a's shell in Safari, Firefox and on a phone.** Only headless Chrome 131 was driven. Nobody has judged how the new rail and
