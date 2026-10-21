@@ -110,4 +110,34 @@ class WrongMethodStatusTest {
         }
         if (wrong.isNotEmpty()) fail("expected 405 for a method the path does not serve:\n  " + wrong.joinToString("\n  "))
     }
+
+    /**
+     * The three routes `item:web-foundation-shell` added, each beside a route on the same or a
+     * neighbouring path. `PUT /api/config` is gated and `GET /api/config` is open on one path, which
+     * is the shape the first gate got wrong; `POST /api/sessions/delete` sits beside
+     * `DELETE /api/sessions/{id}`, so a GET on it must answer what a GET on its sibling
+     * `/api/sessions/clear` always has.
+     */
+    @Test
+    fun `the bulk and config routes answer a wrong method as their neighbours do`() = runBlocking {
+        val wrong = mutableListOf<String>()
+        fun expect(expected: Int?, method: HttpMethod, path: String, status: Int?) {
+            if (status != expected) wrong += "${method.value} $path → ${status ?: "no response"}, expected $expected"
+        }
+        suspend fun status(method: HttpMethod, path: String) =
+            runCatching { http.request(url(path)) { this.method = method }.status.value }.getOrNull()
+
+        for (method in listOf(HttpMethod.Post, HttpMethod.Delete, HttpMethod.Patch)) {
+            expect(405, method, "/api/config", status(method, "/api/config"))
+        }
+        for (method in listOf(HttpMethod.Get, HttpMethod.Put, HttpMethod.Delete)) {
+            expect(405, method, "/api/peers/kill", status(method, "/api/peers/kill"))
+        }
+        val clear = status(HttpMethod.Get, "/api/sessions/clear")
+        expect(clear, HttpMethod.Get, "/api/sessions/delete", status(HttpMethod.Get, "/api/sessions/delete"))
+        // The control route itself is reached, and refused by the gate rather than by routing.
+        expect(403, HttpMethod.Put, "/api/config", status(HttpMethod.Put, "/api/config"))
+
+        if (wrong.isNotEmpty()) fail("wrong status beside the new routes:\n  " + wrong.joinToString("\n  "))
+    }
 }

@@ -30,6 +30,12 @@ data class DaemonConfig(
      * [mergeSignalCaps] for what an override may say.
      */
     val signalCaps: Map<String, Int> = DEFAULT_SIGNAL_CAPS,
+    /**
+     * The `config.json` keys a command-line flag overrode, by their file names (`--max-mb` is
+     * `maxTotalMb`). Kept so `GET /api/config` can say why a value saved to the file will not take
+     * effect: a flag wins, and without this the page could only show the value, not the reason.
+     */
+    val flags: Set<String> = emptySet(),
 ) {
     val sessionsDir: Path get() = dataDir.resolve("sessions")
     val latestLink: Path get() = dataDir.resolve("latest")
@@ -91,6 +97,12 @@ data class DaemonConfig(
                 maxSessions = maxSessions ?: onDisk?.maxSessions ?: DEFAULT_MAX_SESSIONS,
                 maxTotalBytes = (maxMb ?: onDisk?.maxTotalMb ?: DEFAULT_MAX_MB) * 1024L * 1024L,
                 signalCaps = mergeSignalCaps(signalCaps ?: onDisk?.signalCaps),
+                flags = buildSet {
+                    if (port != null) add("port")
+                    if (maxSessions != null) add("maxSessions")
+                    if (maxMb != null) add("maxTotalMb")
+                    if (signalCaps != null) add("signalCaps")
+                },
             )
         }
 

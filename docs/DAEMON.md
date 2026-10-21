@@ -289,6 +289,24 @@ killing, a process can exit and the OS can reuse its pid for something unrelated
 own is not evidence of what it now identifies. This is also what stops the endpoint from being a
 general-purpose "kill any pid" facility on an unauthenticated loopback port.
 
+Several at once:
+
+```bash
+curl -s -X POST -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
+  -d '{"pids":[41540,41622],"force":false}' http://127.0.0.1:8099/api/peers/kill
+```
+
+```json
+{ "results": [ { "pid": 41540, "outcome": "signalled" },
+               { "pid": 41622, "outcome": "refused", "error": "pid 41622 is not an inspector process — it may have exited and had its pid reused" } ] }
+```
+
+Each pid goes through the same check as the single route, at the moment it is signalled, and is
+answered on its own line in the order you sent them: `signalled`, `noSuchProcess` or `refused`,
+with the reason. The reply is `200` whenever the body is well formed, whatever each pid's outcome,
+so read `results` rather than the status. 1 to 100 pids, repeats answered once; `force` is
+optional. A body that is not that shape is `400`, and one not sent as `application/json` is `415`.
+
 Processes launched some other way — `./gradlew run`, an IDE run configuration — do not carry that
 argv shape and so are not listed. Kill those where you started them.
 
@@ -369,6 +387,37 @@ the file, and the file wins over defaults:
 A malformed `config.json` is reported on stderr and ignored rather than blocking startup — a
 debugging tool that will not start because of its own settings file is worse than one on defaults.
 
+The daemon can also write the file. `GET /api/config` shows the file, the values this daemon is
+running on, and which keys a flag is overriding; `PUT /api/config` saves:
+
+```bash
+curl -s http://127.0.0.1:8099/api/config
+curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
+  -d '{"maxSessions":50,"signalCaps":{"cache":2000}}' http://127.0.0.1:8099/api/config
+```
+
+```json
+{ "path": "/Users/you/.inspector/config.json",
+  "file": { "maxSessions": 50, "signalCaps": { "cache": 2000 } },
+  "effective": { "port": 8099, "maxSessions": 100, "maxTotalMb": 300, "signalCaps": { "cache": 500, "state": 500 } },
+  "flags": [] }
+```
+
+- **Nothing applies until the daemon restarts.** `effective` is what this daemon runs on and stays
+  so; `file` is what the next start reads. A port cannot move under a listening socket, and one
+  rule for every key is simpler than a list of which ones apply live.
+- **Flags still win.** A key in `flags` was set on the command line and overrides the file, so
+  saving it changes nothing until the daemon starts without that flag.
+- **A save is a merge.** The keys you send replace those keys; every other key in the file is kept
+  as it was, including ones this version does not know. `null` removes a key, so its default applies
+  again (inside `signalCaps`, `null` still means uncapped).
+- **An unknown key is refused by name** with `400`, as is a value out of range (`port` 1–65535,
+  `maxSessions` and `maxTotalMb` at least 1, a `signalCaps` cap `null` or at least 0).
+- **A malformed file is refused with `409` and left untouched**: a save will not overwrite settings
+  it could not read. Fix or remove it by hand; `GET` reports it as `fileError`.
+- **The write is atomic.** The new file is written beside the old one and renamed over it, so a
+  crash leaves one whole file or the other. A `config.json` that is a symlink stays one.
+
 #### `signalCaps` — how many signal rows a session keeps, per tag
 
 The archive ceilings above count sessions and bytes. Inside one session, signals are trimmed per
@@ -427,12 +476,25 @@ curl -X DELETE -H 'X-Inspector-Control: 1' \
 curl -X POST -H 'X-Inspector-Control: 1' http://127.0.0.1:8099/api/sessions/clear
 ```
 
-Both report what went, what stayed and how many bytes came back. Two rules the daemon enforces
-rather than trusting the caller with:
+Several named sessions in one request:
+
+```bash
+curl -X POST -H 'X-Inspector-Control: 1' -H 'Content-Type: application/json' \
+  -d '{"ids":["2026-08-16T21-03-11_myapp_Pixel-8_debug","2026-08-14T08-22-40_myapp_Pixel-8_debug"]}' \
+  http://127.0.0.1:8099/api/sessions/delete
+```
+
+That one answers per session, in the order you sent them, with `deleted`, `refused`, `notFound` or
+`failed` and the reason, plus the ids that went, how many remain and the bytes freed. It is `200`
+whenever the body is well formed, so read `results`; 1 to 1000 ids, repeats answered once. A body
+that is not that shape is `400`, and one not sent as `application/json` is `415`.
+
+All three report what went, what stayed and how many bytes came back. Two rules the daemon enforces
+rather than trusting the caller with, on all three:
 
 - **A session still being written is never deleted.** Removing the folder underneath an open
   writer corrupts the append stream and throws away the traffic you are looking at. `clear` skips
-  it and names it in `kept`; a single delete returns `409`.
+  it and names it in `kept`; a single delete returns `409`; a bulk delete answers it `refused`.
 - **`latest` is refused as a delete target, not resolved.** It names a different folder depending
   on when you call it, which is fine for a read and is not fine for a delete — the session it
   points at is the one you are most likely to still want. Name the session explicitly.
@@ -660,8 +722,8 @@ printf '%s\n' \
 
 ## Why control needs a header
 
-`POST /api/server/stop`, `/api/server/restart` and `/api/peers/{pid}/kill` require
-`X-Inspector-Control: 1`.
+`POST /api/server/stop`, `/api/server/restart`, `/api/peers/{pid}/kill`, `/api/peers/kill` and
+`/api/sessions/delete`, and `PUT /api/config`, require `X-Inspector-Control: 1`.
 
 The daemon listens on loopback with no authentication, which is fine for reading your own traffic
 but means *any* page open in your browser can POST to `127.0.0.1:8099`. Without a guard, a plain

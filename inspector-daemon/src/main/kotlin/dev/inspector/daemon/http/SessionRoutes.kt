@@ -1,10 +1,11 @@
 package dev.inspector.daemon.http
 
-import dev.inspector.daemon.archive.DaemonConfig
-import dev.inspector.daemon.archive.DeletionCause
+import dev.inspector.daemon.archive.InspectorDaemonJson
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionSummary
 import dev.inspector.daemon.archive.TransactionPage
+import dev.inspector.daemon.service.SessionDeleteOutcome
+import dev.inspector.daemon.service.SessionDeleter
 import dev.inspector.daemon.service.SessionManager
 import dev.inspector.model.FilterParseException
 import dev.inspector.model.InspectorJson
@@ -19,6 +20,9 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * What a delete or a clear actually did.
@@ -35,7 +39,47 @@ data class SessionDeletion(
     val freedBytes: Long,
 )
 
-internal fun Route.sessionRoutes(config: DaemonConfig, repository: SessionRepository, manager: SessionManager) {
+/** One id's answer in a bulk delete. [error] and [freedBytes] appear only where they mean something. */
+@Serializable
+data class BulkSessionResult(
+    val id: String,
+    /** `deleted`, `refused`, `notFound` or `failed`. */
+    val outcome: String,
+    val error: String? = null,
+    val freedBytes: Long? = null,
+)
+
+@Serializable
+data class BulkSessionDeletion(
+    val results: List<BulkSessionResult>,
+    val deleted: List<String>,
+    val remaining: Int,
+    val freedBytes: Long,
+)
+
+/** Enough for any archive a person would prune by hand, and a bound on one request's work. */
+private const val MAX_BULK_DELETE = 1000
+
+/** The ids from `{"ids":[…]}`, or null when the body is anything else. */
+private fun parseBulkIds(body: JsonObject): List<String>? {
+    if (body.keys != setOf("ids")) return null
+    val ids = body["ids"] as? JsonArray ?: return null
+    if (ids.isEmpty() || ids.size > MAX_BULK_DELETE) return null
+    return ids.map { element ->
+        val primitive = element as? JsonPrimitive
+        if (primitive == null || !primitive.isString) return null
+        primitive.content
+    }
+}
+
+private fun SessionDeleteOutcome.toBulkResult(): BulkSessionResult = when (this) {
+    is SessionDeleteOutcome.Deleted -> BulkSessionResult(id, "deleted", freedBytes = freedBytes)
+    is SessionDeleteOutcome.Refused -> BulkSessionResult(id, "refused", error = message)
+    is SessionDeleteOutcome.NotFound -> BulkSessionResult(id, "notFound", error = message)
+    is SessionDeleteOutcome.Failed -> BulkSessionResult(id, "failed", error = message)
+}
+
+internal fun Route.sessionRoutes(repository: SessionRepository, manager: SessionManager, deleter: SessionDeleter) {
     /**
      * The sessions an app is connected to right now.
      *
@@ -66,91 +110,72 @@ internal fun Route.sessionRoutes(config: DaemonConfig, repository: SessionReposi
 
     controlGated {
         /**
-         * Deletes one session and everything in it. Permanent — there is no trash.
-         *
-         * The `latest` alias is refused rather than resolved. It names a different folder
-         * depending on when you call it, which is tolerable for a read and is not tolerable for
-         * a delete: the archive it points at is the one you are most likely to still want.
+         * Deletes one session and everything in it. Permanent — there is no trash. The rules, and
+         * the `latest` alias refused rather than resolved, are [SessionDeleter]'s.
          */
         delete("/api/sessions/{id}") {
-            val id = call.parameters["id"].orEmpty()
-            if (id == "latest") {
-                return@delete call.respondError(
-                    HttpStatusCode.BadRequest,
-                    "refusing to delete through the 'latest' alias — name the session explicitly",
+            when (val outcome = deleter.deleteOne(call.parameters["id"].orEmpty())) {
+                is SessionDeleteOutcome.Deleted -> call.respondJson(
+                    InspectorJson.encodeToString(
+                        SessionDeletion.serializer(),
+                        SessionDeletion(
+                            deleted = listOf(outcome.id),
+                            remaining = deleter.remaining(),
+                            freedBytes = outcome.freedBytes,
+                        ),
+                    )
                 )
-            }
-            val dir = call.resolveSession(repository) ?: return@delete
-            val sessionId = dir.fileName.toString()
-            if (sessionId in manager.activeSessionIds()) {
-                return@delete call.respondError(
-                    HttpStatusCode.Conflict,
-                    "session $sessionId is still being written; disconnect the app first",
+                is SessionDeleteOutcome.Refused -> call.respondError(
+                    when (outcome.reason) {
+                        SessionDeleteOutcome.Refused.Reason.LATEST_ALIAS -> HttpStatusCode.BadRequest
+                        SessionDeleteOutcome.Refused.Reason.ACTIVE -> HttpStatusCode.Conflict
+                    },
+                    outcome.message,
                 )
+                is SessionDeleteOutcome.NotFound -> call.respondError(HttpStatusCode.NotFound, outcome.message)
+                is SessionDeleteOutcome.Failed -> call.respondError(HttpStatusCode.InternalServerError, outcome.message)
             }
+        }
 
-            val bytes = repository.sessionBytes(dir)
-            if (!repository.deleteSession(dir, DeletionCause.REQUESTED)) {
-                return@delete call.respondError(
-                    HttpStatusCode.InternalServerError,
-                    "could not delete $sessionId; check permissions on ${config.sessionsDir}",
-                )
-            }
+        /** Deletes every session except the ones still being written; see [SessionDeleter.clear]. */
+        post("/api/sessions/clear") {
+            val cleared = deleter.clear()
             call.respondJson(
                 InspectorJson.encodeToString(
                     SessionDeletion.serializer(),
                     SessionDeletion(
-                        deleted = listOf(sessionId),
-                        remaining = repository.sessionDirs().size,
-                        freedBytes = bytes,
+                        deleted = cleared.deleted,
+                        kept = cleared.kept,
+                        remaining = deleter.remaining(),
+                        freedBytes = cleared.freedBytes,
                     ),
                 )
             )
         }
 
         /**
-         * Deletes every session except the ones still being written.
+         * Deletes the sessions named in `{"ids":[…]}`, answering for each in request order.
          *
-         * Skipping the live session is not a convenience. Removing the folder underneath an open
-         * writer corrupts the append stream and throws away the traffic on screen — the same rule
-         * [Retention] enforces, for the same reason.
+         * 200 whenever the body is well formed, whatever each id's outcome: one status for five
+         * deletions would hide the one that was refused. Each id goes through the rule the single
+         * route uses, so a refusal carries the same words.
          */
-        post("/api/sessions/clear") {
-            val active = manager.activeSessionIds()
-            val deleted = mutableListOf<String>()
-            val kept = mutableListOf<String>()
-            var freed = 0L
-
-            for (dir in repository.sessionDirs()) {
-                val sessionId = dir.fileName.toString()
-                if (sessionId in active) {
-                    kept += sessionId
-                    continue
-                }
-                val bytes = repository.sessionBytes(dir)
-                if (repository.deleteSession(dir, DeletionCause.CLEARED)) {
-                    deleted += sessionId
-                    freed += bytes
-                } else {
-                    kept += sessionId
-                }
-            }
-
-            // A total beside the per-session lines. This is the call that removes many at once,
-            // so it is the one whose shape you want to recognise in a scrollback without counting.
-            println(
-                "inspector: cleared ${deleted.size} session(s), kept ${kept.size}, " +
-                    "freed ${freed / 1024} KB"
-            )
-
+        post("/api/sessions/delete") {
+            val body = call.receiveJsonObject() ?: return@post
+            val ids = parseBulkIds(body)
+                ?: return@post call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "send {\"ids\":[\"<session id>\", …]} with 1 to $MAX_BULK_DELETE session ids as strings",
+                )
+            val results = deleter.deleteMany(ids).map { it.toBulkResult() }
             call.respondJson(
-                InspectorJson.encodeToString(
-                    SessionDeletion.serializer(),
-                    SessionDeletion(
-                        deleted = deleted.sorted(),
-                        kept = kept.sorted(),
-                        remaining = repository.sessionDirs().size,
-                        freedBytes = freed,
+                InspectorDaemonJson.encodeToString(
+                    BulkSessionDeletion.serializer(),
+                    BulkSessionDeletion(
+                        results = results,
+                        deleted = results.filter { it.outcome == "deleted" }.map { it.id },
+                        remaining = deleter.remaining(),
+                        freedBytes = results.sumOf { it.freedBytes ?: 0L },
                     ),
                 )
             )
