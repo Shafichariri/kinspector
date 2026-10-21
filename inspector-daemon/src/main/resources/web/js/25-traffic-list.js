@@ -310,12 +310,18 @@ function renderListEmpty() {
 }
 
 /**
- * What a brushed stretch holds below the oldest call the list loaded, while the list is short of
- * what it counts — the session with no filter, the route's `matched` under one — or null. The list
- * draws the newest 1000, so a stretch older than that drew nothing and said "no calls in the
- * selected stretch" while the glance's THIS STRETCH counted them. The calls are counted from the
- * whole-session copy, and only from the oldest mono at which it is whole, saying "at least" when
- * the stretch reaches below that, as `hiddenByFilter` does for a stretch.
+ * What a brushed stretch the list draws nothing of holds below the oldest call the list loaded,
+ * while the list is short of what it counts — the session with no filter, the route's `matched`
+ * under one — or null. The list draws the newest 1000, so a stretch older than that said "no calls
+ * in the selected stretch" while the glance's THIS STRETCH counted them.
+ *
+ * With no filter the calls are counted from the whole-session copy, and only from the oldest mono
+ * at which it is whole, saying "at least" when the stretch reaches below that, as `hiddenByFilter`
+ * does for a stretch. Under a filter nothing on the page can count them: the copy is unfiltered and
+ * no filter is evaluated here, and counting the copy said "500 calls … narrow the filter to reach
+ * them" of a stretch where none matched. So it says only what is known — none of the matches
+ * loaded is in the stretch, and how many older ones are not loaded — and only while the copy shows
+ * calls there at all; with none, "no calls in the selected stretch" is true whatever the filter.
  */
 function olderThanLoaded() {
   const held = state.transactions;
@@ -329,12 +335,15 @@ function olderThanLoaded() {
   const calls = whole.filter((r) => r.mono < loadedFrom && r.mono >= wholeFrom && inRange(r.mono)).length;
   const atLeast = state.timeRange.from < wholeFrom;
   if (!calls && !atLeast) return null;
+  if (state.filter) {
+    const older = counted - held.length;
+    return `none of the newest ${held.length} of ${counted} matches the list loaded is in this stretch, ` +
+      `and the ${older} older ${older === 1 ? 'one is' : 'ones are'} not loaded — narrow the filter to reach any here`;
+  }
   const what = calls
     ? `${atLeast ? 'at least ' : ''}${calls} ${calls === 1 ? 'call' : 'calls'} in this stretch ${calls === 1 && !atLeast ? 'is' : 'are'}`
     : 'the calls in this stretch are';
-  const loaded = state.filter ? `${held.length} of ${counted} matches` : `${held.length}`;
-  const how = state.filter ? 'narrow the filter to reach them' : 'filter to reach them';
-  return `${what} older than the newest ${loaded} the list loaded — ${how}`;
+  return `${what} older than the newest ${held.length} the list loaded — filter to reach them`;
 }
 
 /**

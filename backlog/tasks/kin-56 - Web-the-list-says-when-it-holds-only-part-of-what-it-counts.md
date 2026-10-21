@@ -4,7 +4,7 @@ title: 'Web: the list says when it holds only part of what it counts'
 status: In Progress
 assignee: []
 created_date: '2026-10-20 20:25'
-updated_date: '2026-10-20 20:50'
+updated_date: '2026-10-21 07:12'
 labels:
   - 'item:web-list-says-what-it-holds'
 dependencies: []
@@ -44,4 +44,9 @@ Criteria, copied from docs/ROADMAP.md (item:web-list-says-what-it-holds), with t
 5. Export offline: `long list note absent` in render-web-ui-archive.js; existing `long stretch oldest` stays green. Red: export edited to show the note.
 6. List still draws at most 1000, daemon clamp unchanged: no change to LIST_CEILING or any Kotlin.
 Pace rule: neighbouring `long count no filter` re-proven red in the same run.
+
+Fix round (QA report qa/web-list-says-what-it-holds-report.md, two failures):
+1. Criterion 3, a regression: under a filter, olderThanLoaded counted the unfiltered whole copy. A stretch where nothing matched read "500 calls … narrow the filter to reach them". It now claims no count under a filter: "none of the newest N of M matches the list loaded is in this stretch, and the K older ones are not loaded — narrow the filter to reach any here". A stretch the copy shows no calls in reads "no calls in the selected stretch". Check: stretch older than loaded (static: 5 stretches, including a non-matching one and an empty one) and long stretch older (live, filtered case added). Both are red against fb8e54e's code.
+2. Criterion 1: the filtered header now holds under a stretch: "400 of the newest 1000 of 1200 matches shown". Check: filtered count (static: no stretch, whole stretch, partial) and long filtered count (live, whole-session stretch). Both are red against fb8e54e's code ("1000 of 3016 calls").
+Pace rule: long list note was re-proven red in the same live run.
 <!-- SECTION:NOTES:END -->

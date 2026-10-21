@@ -43,12 +43,26 @@ async function checkListHolds(sources) {
     return [['filtered count', missing], ['list note past the clamp', missing], ['stretch older than loaded', missing]];
   }
 
+  // The header with no stretch, over the whole session, and over the newest 1016 calls, which hold
+  // 200 of the loaded matches (even monos from 2000 to 2398). A stretch is no exception: the plain
+  // count read `1000 of 3016 calls` over the whole session and `200 of 3016 calls` over the part.
   state.filter = 'path:/v3/shop/bulk';
   await page.loadTransactions();
-  const count = text('counts');
-  lines.push(['filtered count', count === 'newest 1000 of 1200 matches shown'
-    ? `yes ("${count}", 1200 matched of 3016, ${state.transactions.length} held)`
-    : `NO - "${count}", where "newest 1000 of 1200 matches shown" was due (1200 matched, from the route)`]);
+  const counts = [];
+  for (const [range, due] of [
+    [null, 'newest 1000 of 1200 matches shown'],
+    [{ from: 0, to: 3015 }, '1000 of the newest 1000 of 1200 matches shown'],
+    [{ from: 2000, to: 3015 }, '200 of the newest 1000 of 1200 matches shown'],
+  ]) {
+    state.timeRange = range;
+    page.renderCounts();
+    counts.push([text('counts'), due]);
+  }
+  state.timeRange = null;
+  const wrongCount = counts.filter(([got, due]) => got !== due);
+  lines.push(['filtered count', wrongCount.length === 0
+    ? `yes ("${counts[0][0]}", "${counts[2][0]}"; 1200 matched of 3016, ${state.transactions.length} held)`
+    : `NO - ${wrongCount.map(([got, due]) => `"${got}" where "${due}" was due`).join('; ')} (1200 matched, from the route)`]);
 
   page.renderListNote();
   const note = text('list-note');
@@ -57,8 +71,11 @@ async function checkListHolds(sources) {
     ? `yes ("${note.slice(0, noteDue.length)}…")`
     : `NO - "${note}"${nodes['list-note']?.hidden ? ' (hidden)' : ''}, where "${noteDue}" was due`]);
 
-  // The stretch: the oldest 151 calls, all below the newest 1000, with no filter and under one; and
-  // with the whole copy short of the session, where only "at least" is true.
+  // The stretch: the oldest 151 calls, all below the newest 1000, with no filter, where the copy
+  // counts them; under a filter, where only 76 of them match and nothing on the page can say so,
+  // so no number is claimed — over those 151, and over one call that does not match; a stretch with
+  // no calls at all, under the filter; and the whole copy short of the session, where only "at
+  // least" is true.
   const stretch = [];
   ({ state, page, text } = listPage(sources));
   await page.loadTransactions();
@@ -70,7 +87,14 @@ async function checkListHolds(sources) {
   await page.loadTransactions();
   state.timeRange = { from: 0, to: 150 };
   page.renderListEmpty();
-  stretch.push([text('list-empty'), '151 calls in this stretch are older than the newest 1000 of 1200 matches the list loaded — narrow the filter to reach them']);
+  const filteredDue = 'none of the newest 1000 of 1200 matches the list loaded is in this stretch, and the 200 older ones are not loaded — narrow the filter to reach any here';
+  stretch.push([text('list-empty'), filteredDue]);
+  state.timeRange = { from: 1, to: 1 };
+  page.renderListEmpty();
+  stretch.push([text('list-empty'), filteredDue]);
+  state.timeRange = { from: -100, to: -1 };
+  page.renderListEmpty();
+  stretch.push([text('list-empty'), 'no calls in the selected stretch']);
   state.filter = '';
   state.timeRange = null;
   await page.loadTransactions();
@@ -80,7 +104,7 @@ async function checkListHolds(sources) {
   stretch.push([text('list-empty'), 'at least 485 calls in this stretch are older than the newest 1000 the list loaded — filter to reach them']);
   const wrong = stretch.filter(([got, due]) => got !== due);
   lines.push(['stretch older than loaded', wrong.length === 0
-    ? `yes (${stretch.length} stretches, "${stretch[0][0].slice(0, 48)}…", "at least" past the whole copy)`
+    ? `yes (${stretch.length} stretches, "${stretch[0][0].slice(0, 48)}…", no count claimed under the filter, "at least" past the whole copy)`
     : `NO - ${wrong.map(([got, due]) => `"${got}" where "${due}" was due`).join('; ')}`]);
   return lines;
 }

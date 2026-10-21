@@ -199,17 +199,26 @@ no filter to reach past a ceiling, and at 1000 its oldest calls could not be ope
 brushed stretch over them said they did not exist (`long count no filter`, `long stretch oldest` and
 `long offset 1000 sliced` in the archive probe). Under a filter that matched more calls than the list holds, the header
 numbers the matches, `newest 1000 of 1200 matches shown`, from the route's `matched` and never from
-the rows held: `1000 of 3016 calls` read as "1000 calls match" where 1200 did. The list then draws
+the rows held: `1000 of 3016 calls` read as "1000 calls match" where 1200 did. A brushed stretch is
+no exception, and there the drawn rows are the ones in it: `400 of the newest 1000 of 1200 matches
+shown`, where the plain count had read `400 of 3016 calls`. The list then draws
 the same `filterNote` the other panes draw, in `#list-note`, sticky at `--sticky-top` and outside the
 listbox; within the ceiling it draws none, because the header's `N of M calls` already counts what is
 drawn. A brushed stretch the list draws nothing of, while the stretch holds calls below the oldest one
-the list loaded, never reads "no calls in the selected stretch": it says how many calls there are
-older than what the list loaded and that a filter, or a narrower one, reaches them, counted from the
+the list loaded, never reads "no calls in the selected stretch". With no filter it says how many
+calls there are older than what the list loaded and that a filter reaches them, counted from the
 whole-session copy and "at least" below the mono at which that copy is whole (`olderThanLoaded`). The
-glance's THIS STRETCH counted those calls while the list said there were none. `filtered count`,
+glance's THIS STRETCH counted those calls while the list said there were none. **Under a filter it
+claims no count**, because nothing on the page can make one: the copy is unfiltered and the page
+evaluates no filter. The first build counted the copy there and told a stretch where nothing matched
+that its 500 calls could be reached by narrowing the filter. It now says that none of the matches
+loaded is in the stretch and how many older ones are not loaded (`matched` less the rows held), with
+"narrow the filter to reach any here". A stretch the copy shows no calls in still reads "no calls in
+the selected stretch", which is true whatever the filter. `filtered count`,
 `list note past the clamp` and `stretch older than loaded` in `check-web-static.js` hold it over
 the 3016-call stub, and `long filtered count`, `long list note` and `long stretch older` in the live
-probe over the 1203-call session; each was proven red with the old wording or no note put back. An
+probe over the 1203-call session; each was proven red with the old wording or no note put back, and
+the filtered header and stretch cases against the first build's code. An
 export draws every call it embeds, so it never shows the note (`long list note absent`).
 
 The two cached copies have gone stale in the ways below, and all are closed; this is
