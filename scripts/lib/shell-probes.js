@@ -338,7 +338,7 @@ async function probeProcessesPage(ctx) {
     ];
     const listing = stubFetch(ctx, (p, init) => p.endsWith('/api/peers') && (init.method || 'GET') === 'GET', () => [200, peers]);
     const kills = stubFetch(ctx, killsPeers, () => [200, {
-      results: [{ pid: 9002, outcome: 'signalled' }, { pid: 9003, outcome: 'signalled' }],
+      results: [{ pid: 9002, outcome: 'signalled' }, { pid: 9003, outcome: 'noSuchProcess', error: 'no live process with pid 9003' }],
     }]);
     let verdict;
     try {
@@ -350,8 +350,12 @@ async function probeProcessesPage(ctx) {
       const label = button.textContent;
       await press(ctx, button);
       const armedOnly = kills.sent.length === 0 && button.classList.contains('armed');
-      await press(ctx, button, 400);
+      // Past the reload the kill schedules 300 ms on: the per-pid results must still be there,
+      // or a refused kill leaves its row listed with no reason.
+      await press(ctx, button, 700);
       const sent = kills.sent[0];
+      const status = doc.getElementById('peers-status').textContent;
+      const kept = status.includes('signalled 1 of 2') && status.includes('pid 9003 — noSuchProcess');
       const mcp = [...doc.querySelectorAll('#peers .peer')].find((r) => r.dataset.pid === '9004');
       await press(ctx, mcp.querySelector('input[type=checkbox]'), 40);
       const warned = !doc.getElementById('peers-mcp-warning').hidden;
@@ -361,8 +365,9 @@ async function probeProcessesPage(ctx) {
             : kills.sent.length !== 1 || sent.body !== JSON.stringify({ pids: [9002, 9003], force: false })
               ? `NO - ${kills.sent.length} kill requests, the first ${sent?.body}`
               : !hasHeader(sent) ? 'NO - sent without the control header'
-                : !warned ? 'NO - an MCP server ticked by hand drew no warning'
-                  : 'yes (all servers ticked 9002 and 9003, not this daemon or MCP; one POST {"pids":[…]} on the second click; MCP ticked by hand warns)';
+                : !kept ? `NO - after the reload the status read "${status}", where "signalled 1 of 2" and pid 9003's refusal were due`
+                  : !warned ? 'NO - an MCP server ticked by hand drew no warning'
+                    : 'yes (all servers ticked 9002 and 9003, not this daemon or MCP; one POST {"pids":[…]} on the second click; the per-pid results outlive the reload; MCP ticked by hand warns)';
     } finally {
       listing.restore();
       kills.restore();

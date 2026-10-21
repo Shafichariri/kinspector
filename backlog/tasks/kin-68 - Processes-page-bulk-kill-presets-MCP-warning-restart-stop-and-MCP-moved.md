@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-21 04:39'
-updated_date: '2026-10-21 12:03'
+updated_date: '2026-10-21 12:38'
 labels:
   - 'item:web-foundation-shell'
 dependencies:
@@ -38,4 +38,6 @@ Design: the architect's note for item:web-foundation-shell (1a, order row 10, ru
 <!-- SECTION:NOTES:BEGIN -->
 PR B, in the working tree (not committed). Processes page (#page-processes, js/85-processes.js): This daemon (pid/port/up/data line, restart, stop; ids kept), the process table with checkboxes, peerPresets (pure: servers, others, stale; never self, never mcp), kill selected (n) and the row kill both through confirmThen and one POST /api/peers/kill via controlFetch (confirm() is gone), per-item results, the MCP warning when an mcp row is ticked by hand, and the MCP section moved from the dialog.
 Lines: peer presets (static), processes bulk, self has kill btn, stopArms, stopped, noRestartOffered, lastCapture, recovers (all on the Processes page now). The stubs catch both kill routes.
+
+Fix round (QA, qa/web-foundation-shell-report.md): the per-pid kill results were wiped about 300 ms after they were drawn, because the post-kill reload (loadPeers) cleared #peers-status. loadPeers now takes { keepStatus }, and the post-kill reload passes true; Refresh and opening the page still clear the status. Check: processes bulk now answers pid 9003 as noSuchProcess and reads the status after the reload. It is red against a7e3946's 85-processes.js ('after the reload the status read ""'). The Pace rule's neighbour, self has kill btn, was re-proven red in the same run.
 <!-- SECTION:NOTES:END -->

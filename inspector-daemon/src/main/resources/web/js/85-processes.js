@@ -178,8 +178,13 @@ let peerList = [];
 /** The pids ticked, from the list as last drawn. */
 const selectedPeers = new Set();
 
-async function loadPeers() {
-  setPeersStatus('');
+/**
+ * Reads the list again. `keepStatus` is for the reload after a kill, which confirms by the rows
+ * that went: clearing the status there wiped the per-pid results 300 ms after they were drawn, so
+ * a refused kill left its row listed with no reason given. Any other reload clears it.
+ */
+async function loadPeers({ keepStatus = false } = {}) {
+  if (!keepStatus) setPeersStatus('');
   try {
     renderPeers(await api('/api/peers'));
   } catch (e) {
@@ -340,11 +345,11 @@ async function killPeers(pids) {
   }
   node.appendChild(list);
   for (const r of results) selectedPeers.delete(r.pid);
-  setTimeout(loadPeers, 300);
+  setTimeout(() => loadPeers({ keepStatus: true }), 300);
 }
 
 function wireProcessesPage() {
-  $('peers-refresh').addEventListener('click', loadPeers);
+  $('peers-refresh').addEventListener('click', () => loadPeers());
   $('peers-all').addEventListener('change', (e) => {
     selectPeers(e.target.checked ? peerList.filter((p) => !p.self).map((p) => p.pid) : []);
   });
