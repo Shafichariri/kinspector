@@ -315,13 +315,9 @@ async function pullProviders() {
   const failures = [];
   for (const name of names) {
     try {
-      const res = await source.fetch(
+      const res = await controlFetch(
         `/api/sessions/${encodeURIComponent(state.sessionId || 'latest')}/signals/request`,
-        {
-          method: 'POST',
-          headers: { 'X-Inspector-Control': '1', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tag, name }),
-        },
+        { json: { tag, name } },
       );
       if (!res.ok) {
         // The app's own message names what it does have registered; surfacing it verbatim is

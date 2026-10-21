@@ -1,9 +1,11 @@
 ---
 id: KIN-71
 title: The lost-daemon banner on every unplanned close
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-21 04:39'
+updated_date: '2026-10-21 12:03'
 labels:
   - 'item:web-foundation-shell'
 dependencies:
@@ -29,3 +31,9 @@ Design: the architect's note for item:web-foundation-shell (1a, order row 10, ru
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR B, in the working tree (not committed). js/05-network.js: every close that is not a stop sets away and paints the lost banner, except a restart younger than RESTART_GRACE_MS (20 s, state.restartAt set in requestRestart, cleared in onopen). Lines banner every drop, banner after failure, banner restart lost replay the page's own handlers on the Processes page beside the stop probe; recovers re-proven red (Pace).
+<!-- SECTION:NOTES:END -->

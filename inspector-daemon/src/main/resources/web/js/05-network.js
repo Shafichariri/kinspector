@@ -107,6 +107,25 @@ const api = async (path) => {
 };
 
 /**
+ * Every request to a control route, and the one place the page writes the control header.
+ *
+ * The header is how the daemon tells its own page from any other page in the browser, so whatever
+ * the daemon later asks of a control request is added here, once, as it is added in one gate on the
+ * server (`item:control-boundary-advisory`). Six call sites wrote it by hand. The marker post is
+ * not one of them: its route is open by decision and it sends no header. `json`, when given, is the
+ * body, sent as `application/json`. Answers what `source.fetch` answers, unread.
+ */
+function controlFetch(path, { method = 'POST', json } = {}) {
+  const headers = { 'X-Inspector-Control': '1' };
+  const init = { method, headers };
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(json);
+  }
+  return source.fetch(path, init);
+}
+
+/**
  * This page is an exported file, and it says so in the one place a stopped daemon would.
  *
  * Muted rather than the stopped banner's red: a stopped daemon is a problem, an export is the
@@ -148,12 +167,22 @@ function enterArchiveMode(archive) {
     'read-only: filters, replay, markers and pulls need a running daemon'));
 }
 
-/** The page's own connection to the daemon, which is what the dot beside its controls means. */
+/**
+ * The page's own connection to the daemon, which is what the dot in the daemon group means. Its
+ * label is drawn only where the bar has room, so the same word is the dot's accessible name.
+ */
 function setConn(kind) {
   const node = $('conn');
   node.dataset.state = kind;
   node.querySelector('.conn-label').textContent = kind;
+  node.setAttribute('aria-label', `connection: ${kind}`);
 }
+
+/**
+ * How long a relaunched daemon has to open the socket again before the page calls it lost. A
+ * restart that never came back read `Restarting…` for as long as the page stayed open.
+ */
+const RESTART_GRACE_MS = 20000;
 
 function connectLive() {
   const ws = new WebSocket(`ws://${location.host}/api/live`);
@@ -226,11 +255,15 @@ function connectLive() {
       return;
     }
     setConn('reconnecting');
-    // A drop nobody asked for marks the daemon away, as a stop or a restart does. Left at
-    // `running`, the next open took the page for one that had never been gone, and rows that
-    // arrived while nothing listened stayed out of the whole-session copies until the filter
-    // was cleared.
-    if (state.serverState === 'running') {
+    // Every close that is not a stop marks the daemon away and says so, except a restart still
+    // inside its grace. Left at `running`, the next open took the page for one that had never been
+    // gone, and rows that arrived while nothing listened stayed out of the whole-session copies.
+    // It used to act only on the way out of `running`, so a restart that never came back read
+    // `Restarting…` forever, and a stop or restart that failed while the daemon was gone left its
+    // own message up through every later close.
+    const restarting = state.serverState === 'restarting' && state.restartAt !== null
+      && Date.now() - state.restartAt < RESTART_GRACE_MS;
+    if (!restarting) {
       state.serverState = 'away';
       showServerBanner('Lost the daemon — reconnecting…', true);
     }
@@ -240,6 +273,7 @@ function connectLive() {
     setConn('connected');
     const wasAway = state.serverState !== 'running';
     state.serverState = 'running';
+    state.restartAt = null;
     showServerBanner(null, false);
     setControlsEnabled(true);
     // A restart means a new process with a fresh session list; a reconnect after a drop or a

@@ -1,9 +1,11 @@
 ---
 id: KIN-68
 title: 'Processes page: bulk kill, presets, MCP warning, restart/stop and MCP moved'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-21 04:39'
+updated_date: '2026-10-21 12:03'
 labels:
   - 'item:web-foundation-shell'
 dependencies:
@@ -30,3 +32,10 @@ Design: the architect's note for item:web-foundation-shell (1a, order row 10, ru
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR B, in the working tree (not committed). Processes page (#page-processes, js/85-processes.js): This daemon (pid/port/up/data line, restart, stop; ids kept), the process table with checkboxes, peerPresets (pure: servers, others, stale; never self, never mcp), kill selected (n) and the row kill both through confirmThen and one POST /api/peers/kill via controlFetch (confirm() is gone), per-item results, the MCP warning when an mcp row is ticked by hand, and the MCP section moved from the dialog.
+Lines: peer presets (static), processes bulk, self has kill btn, stopArms, stopped, noRestartOffered, lastCapture, recovers (all on the Processes page now). The stubs catch both kill routes.
+<!-- SECTION:NOTES:END -->

@@ -202,17 +202,15 @@ async function runReplay(txn, pane, button, edits = null) {
   panel.textContent = '';
 
   try {
-    const res = await source.fetch('/api/replay', {
-      method: 'POST',
-      headers: { 'X-Inspector-Control': '1', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const res = await controlFetch('/api/replay', {
+      json: {
         txnId: txn.id,
         session: state.sessionId || 'latest',
         resign: true,
         // Spread last so an editor's `resign: false` wins. With no edits this is exactly the
         // request the plain replay button has always sent.
         ...(edits || {}),
-      }),
+      },
     });
     const result = await res.json();
     renderReplayResult(panel, result, edits !== null);

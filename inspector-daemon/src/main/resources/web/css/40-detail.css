@@ -45,8 +45,9 @@ a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
 
 /*
  * An exported session, opened from disk. There is no daemon, so nothing that would send something
- * to one is drawn: process control, the live toggle, deletion, the filter chips (the grammar is
- * evaluated by the daemon), adding a marker, pulls, replay and export itself.
+ * to one is drawn: process control, the live toggle, the filter chips (the grammar is evaluated by
+ * the daemon), adding a marker, pulls, replay and export itself — and the rail's pages but Traffic,
+ * since each of them sends something or reads the machine (deletion lives on Sessions).
  *
  * `!important` because two of these are toggled by script on every render — `renderBrowser`
  * un-hides the pull button, and the replay menu is rebuilt with each detail pane — and an author
@@ -54,7 +55,7 @@ a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
  */
 body.archive #live-btn,
 body.archive .daemon-group,
-body.archive #session-delete,
+body.archive .rail-item[data-live],
 body.archive #export-host,
 body.archive #chips-label,
 body.archive #chips,

@@ -46,6 +46,7 @@ const { probeWholeSessionRefresh, probeFilterPanes, probeWaterfallText } = requi
 const { probeLongSession } = require('./lib/long-session-probes');
 const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
 const { probeLiveRows } = require('./lib/live-filter-probes');
+const shell = require('./lib/shell-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -286,6 +287,13 @@ function runScripts() {
       previous = current;
     }
     console.error(`settle() timed out after ${timeoutMs}ms — counts below may be mid-render.`);
+  };
+  // The shell's probes, in lib/shell-probes.js; `route default` is read now, before any probe moves the page.
+  const shellCtx = { window, doc, ORIGIN, settle, lastSocket: () => lastSocket, pageState: () => vm.runInContext('state', vmContext) };
+  const routeDefault = shell.routeAtLoad(shellCtx);
+  /** Prints the `[label, value]` pairs a lib probe returned; a third element `note` marks information. */
+  const report = (lines) => {
+    for (const [label, value, kind] of lines) (kind === 'note' ? note : console.error)(`${label.padEnd(19)}:`, value);
   };
 
   /**
@@ -543,12 +551,12 @@ function runScripts() {
    */
   if (!doc.querySelector('#session-picker option')) {
     const listProbe = await probeList();
-    const topBarProbe = await probeTopBar();
+    const topBarLines = [...await shell.probeTopBar(shellCtx), ...await shell.probeProcessesPage(shellCtx)];
     verdict.reporting = true;
     console.error('--- empty archive ---');
     note('sessions           : 0');
     console.error('emptySession       :', listProbe.emptySession ?? 'NO - the empty-state check did not run');
-    for (const [name, value] of Object.entries(topBarProbe)) console.error(`${name.padEnd(19)}:`, value);
+    report(topBarLines);
     console.error('min text size      :', auditMinTextSize(css));
     console.error('long tokens wrap   :', auditLongTokenWrap(css));
     console.error('hidden panes hide  :', auditHiddenPanes(css));
@@ -613,33 +621,6 @@ function runScripts() {
 
   const chipProbe = await probeEndpointChip();
 
-  /**
-   * The configurable cap, driven through the settings input rather than the state object.
-   *
-   * Going through the real `change` event is the point: it covers the listener, the localStorage
-   * write and the re-render together. Asserting on `state.endpointLimit` would only prove a number
-   * was stored somewhere.
-   */
-  async function probeEndpointLimit() {
-    const input = doc.getElementById('endpoint-limit');
-    const chipCount = () => doc.querySelectorAll('#endpoint-chips .chip').length;
-    const setLimit = async (n) => {
-      input.value = String(n);
-      input.dispatchEvent(new window.Event('change', { bubbles: true }));
-      await settle();
-    };
-
-    const original = input.value;
-    await setLimit(3);
-    const capped = chipCount();
-    const summary = doc.getElementById('endpoint-summary').textContent;
-    await setLimit(0);
-    const off = chipCount() === 0 && doc.getElementById('endpoint-chips').hidden;
-    await setLimit(original);
-    return { capped, off, restored: chipCount(), summary };
-  }
-
-  const limitProbe = await probeEndpointLimit();
 
   // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the
   // real .row order matters — asserting on the state flag would only prove the flag changed, not
@@ -1207,38 +1188,6 @@ function runScripts() {
   }
 
   /**
-   * Sessions can be deleted from the UI, and the one being recorded cannot.
-   *
-   * Nothing is actually deleted here — the probe runs against the user's real archive. It checks
-   * that the controls exist, that a live session's delete is disabled, and that the destructive
-   * buttons arm before they fire rather than deleting on the first click.
-   */
-  async function probeSessions() {
-    const rows = [...doc.querySelectorAll('#session-rows .session-row')];
-    const clearAll = doc.getElementById('sessions-clear');
-    const result = {
-      rows: rows.length,
-      disabledDeletes: rows.filter((r) => r.querySelector('button').disabled).length,
-      clearArms: 'n/a',
-      headerDelete: Boolean(doc.getElementById('session-delete')),
-    };
-    if (clearAll) {
-      const idle = clearAll.textContent;
-      clearAll.dispatchEvent(new window.Event('click', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 80));
-      const armed = clearAll.textContent !== idle && clearAll.classList.contains('armed');
-      // Disarm without firing: a second click here would wipe the archive this probe is reading.
-      clearAll.dataset.armed = '0';
-      clearAll.textContent = idle;
-      clearAll.classList.remove('armed');
-      result.clearArms = armed
-        ? `yes (one click armed it, it did not delete)`
-        : 'NO - the first click was not a confirmation step';
-    }
-    return result;
-  }
-
-  /**
    * Controls belong to the view they act on.
    *
    * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
@@ -1246,7 +1195,7 @@ function runScripts() {
    * fifth of the window, on five tabs out of seven.
    */
   async function probeToolbar() {
-    const result = { onTraffic: 'n/a', onBrowser: 'n/a', railGone: !doc.getElementById('rail') };
+    const result = { onTraffic: 'n/a', onBrowser: 'n/a' };
     const tabOf = (view) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === view);
 
     const network = tabOf('network');
@@ -2241,147 +2190,17 @@ function runScripts() {
     [...doc.querySelectorAll('#list .row .method')].map((n) => n.className.replace('method ', '')),
   )].sort();
 
-  // Settings dialog: jsdom has no real <dialog>, so showModal is stubbed before opening it.
-  // The point is not the dialog chrome but that the peer list fetches and renders, and that a
-  // `self` peer offers no kill button — the guard that keeps the UI from shooting this daemon.
-  const settings = doc.getElementById('settings');
-  if (settings && typeof settings.showModal !== 'function') settings.showModal = () => {};
-  await click(doc.getElementById('open-settings'));
-  await new Promise((r) => setTimeout(r, 600));
-  const peerRows = [...doc.querySelectorAll('.peer')];
-  const selfRows = peerRows.filter((n) => n.querySelector('.peer-self'));
-  const peerRoles = [...new Set(peerRows.map((n) => {
-    const role = n.querySelector('.peer-role');
-    return role ? role.textContent : '?';
-  }))].sort();
-  const selfKillButtons = selfRows
-    .filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill'))
-    .length;
-  // Only reachable once the dialog is open, which is also the only place the session list lives.
-
-  /**
-   * The top bar's controls, pressed.
-   *
-   * `stop` is the dangerous one, and per the rule in docs/decisions/web-ui.md this probe stubs the
-   * request itself rather than trusting the confirm step it is testing — the run where that step is
-   * broken is the run that would otherwise stop the daemon this script is reading. The stub also
-   * counts calls, so "one click did not stop it" is observed rather than assumed.
-   */
-  async function probeTopBar() {
-    const result = {};
-    const option = doc.querySelector('#session-picker option');
-    const hasSession = Boolean(option);
-    result.sessionOption = !hasSession ? 'n/a (no sessions)' : option && option.title && option.textContent !== option.title
-      && / · \d+ calls?$/.test(option.textContent)
-      ? `yes ("${option.textContent}", id in the tooltip)`
-      : `NO - "${option?.textContent}"`;
-    result.countsNoun = !hasSession ? 'n/a (no sessions)' : / of \d+ calls?$/.test(doc.getElementById('counts').textContent)
-      ? `yes ("${doc.getElementById('counts').textContent}")`
-      : `NO - "${doc.getElementById('counts').textContent}"`;
-    result.conn = doc.getElementById('conn').dataset.state === 'connected' ? 'yes (connected)' : `NO - ${doc.getElementById('conn').dataset.state}`;
-
-    // The export menu: offered only when there is a session, and each link names a route this
-    // daemon actually answers — pressed, not read, because the hrefs are filled in as it opens.
-    const exportHost = doc.getElementById('export-host');
-    const exportButton = exportHost.querySelector('button');
-    if (!hasSession) {
-      result.exportMenu = exportHost.hidden ? 'yes (hidden: nothing to export)' : 'NO - offered with no session';
-    } else if (exportHost.hidden || !exportButton) {
-      result.exportMenu = 'NO - not offered';
-    } else {
-      exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-      const id = encodeURIComponent(doc.getElementById('session-picker').value);
-      const expected = ['export.html', 'export.md', 'export.json', 'har'].map((p) => `/api/sessions/${id}/${p}`);
-      const hrefs = [...exportHost.querySelectorAll('a.menu-item')].map((a) => a.getAttribute('href'));
-      const opened = !exportHost.querySelector('.menu').hidden;
-      const statuses = await Promise.all(hrefs.map((h) => fetch(ORIGIN + h).then((r) => r.status).catch(() => 0)));
-      exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-      result.exportMenu = opened && JSON.stringify(hrefs) === JSON.stringify(expected) && statuses.every((c) => c === 200)
-        ? `yes (${hrefs.length} links, all 200)`
-        : `NO - opened ${opened}, hrefs ${hrefs.join(' ')}, statuses ${statuses.join(' ')}`;
-    }
-
-    // Live: the button names its state, and resuming re-reads the session.
-    const live = doc.getElementById('live-btn');
-    const press = async (node) => {
-      node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 80));
-    };
-    await press(live);
-    const paused = live.textContent.trim() === 'paused' && live.getAttribute('aria-pressed') === 'false';
-    let reread = false;
-    const realFetch = window.fetch;
-    window.fetch = (path, init) => {
-      if (String(path).includes('/transactions')) reread = true;
-      return realFetch(path, init);
-    };
-    await press(live);
-    await settle();
-    window.fetch = realFetch;
-    // Resuming re-reads the session on screen; with none there is nothing to re-read.
-    result.liveToggle = paused && live.textContent.trim() === 'live' && (reread || !hasSession)
-      ? `yes (live -> paused -> live${hasSession ? ', and resuming re-read the session' : '; no session to re-read'})`
-      : `NO - paused ${paused}, back to "${live.textContent.trim()}", re-read ${reread}`;
-
-    // The header delete arms and names what it deletes; it must not send anything on one click.
-    const del = doc.getElementById('session-delete');
-    let deletes = 0;
-    window.fetch = (path, init) => {
-      if ((init?.method || 'GET') === 'DELETE') { deletes++; return Promise.resolve(new Response('{}')); }
-      return realFetch(path, init);
-    };
-    await press(del);
-    const delArmed = del.textContent === 'delete session?' && del.classList.contains('armed') && deletes === 0;
-    window.fetch = realFetch;
-    del.dataset.armed = '0';
-    del.textContent = '✕';
-    del.classList.remove('armed');
-    result.deleteArms = !hasSession
-      ? (deletes === 0 ? 'n/a (no sessions; and nothing was sent)' : `NO - ${deletes} sent with no session`)
-      : delArmed ? 'yes ("delete session?", nothing sent)' : `NO - "${del.textContent}", ${deletes} sent`;
-
-    // Stop: one click arms, the second stops, and the page says so in a way it cannot miss.
-    const stop = doc.getElementById('server-stop');
-    let stops = 0;
-    window.fetch = (path, init) => {
-      if (String(path).includes('/api/server/stop')) { stops++; return Promise.resolve(new Response('{}')); }
-      return realFetch(path, init);
-    };
-    await press(stop);
-    const armedOnly = stop.textContent === 'stop daemon?' && stop.classList.contains('armed') && stops === 0;
-    await press(stop);
-    await new Promise((r) => setTimeout(r, 80));
-    window.fetch = realFetch;
-    const banner = doc.getElementById('server-banner');
-    result.stopArms = armedOnly ? 'yes (one click armed it, nothing sent)' : `NO - "${stop.textContent}", ${stops} sent`;
-    result.stopped = stops === 1 && !banner.hidden && banner.classList.contains('big')
-      && banner.querySelector('.banner-title')?.textContent === 'daemon stopped'
-      && doc.body.classList.contains('stopped')
-      && doc.getElementById('conn').dataset.state === 'stopped'
-      ? 'yes (banner, page dimmed, connection reads stopped)'
-      : `NO - ${stops} stop requests, banner "${banner.textContent.slice(0, 40)}"`;
-    // The banner must not offer a restart: the process that would receive it has exited.
-    result.noRestartOffered = [...banner.querySelectorAll('button')].length === 0
-      && /inspector serve/.test(banner.textContent)
-      ? 'yes (says to run `inspector serve`, no button)'
-      : 'NO - the banner offers a control nothing can answer';
-    result.lastCapture = banner.querySelector('.banner-age')
-      ? `yes ("${banner.querySelector('.banner-text').textContent}")`
-      : 'n/a (no row to date it by)';
-
-    // The daemon comes back: the page's own onopen must clear all of it.
-    if (lastSocket && lastSocket.onopen) lastSocket.onopen();
-    await new Promise((r) => setTimeout(r, 150));
-    await settle();
-    result.recovers = banner.hidden && !doc.body.classList.contains('stopped')
-      && doc.getElementById('conn').dataset.state === 'connected' && !stop.disabled
-      ? 'yes (banner gone, page undimmed, controls back)'
-      : 'NO - the page stayed stopped after the daemon came back';
-    return result;
-  }
-
-  const sessionProbe = await probeSessions();
-  const topBarProbe = await probeTopBar();
+  // The shell: the top bar, the three pages the rail leads to, the rail's addresses, `views ▾`
+  // and the picker's face (lib/shell-probes.js). Each leaves the page on Traffic and its session.
+  const sessionLines = await shell.probeSessionsPage(shellCtx);
+  const topBarLines = await shell.probeTopBar(shellCtx);
+  const processLines = await shell.probeProcessesPage(shellCtx);
+  const settingsLines = await shell.probeSettingsPage(shellCtx);
+  const routeLines = await shell.probeRoutes(shellCtx, routeDefault);
+  const tabsMenu = await shell.probeTabsMenu(shellCtx);
+  const pickerFace = await shell.probePickerFace(shellCtx);
+  // Switching sessions drops the open row; the report reads the detail pane, so open one again.
+  if (doc.getElementById('detail').hidden && doc.querySelector('#list .row')) await click(doc.querySelector('#list .row'));
 
   verdict.reporting = true;
   console.error('--- render report ---');
@@ -2505,11 +2324,7 @@ function runScripts() {
   console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
   console.error('chips survive click:', chipProbe.survived, `(${endpointChips.length} -> ${chipProbe.chipsAfter})`);
   console.error('chip marks active  :', chipProbe.active, '(the clicked chip, and only it)');
-  console.error('limit 3 caps to    :', limitProbe.capped === 3 ? 'yes (3)' : `NO - ${limitProbe.capped}`, '(must be 3)');
-  console.error('limit 0 hides      :', limitProbe.off);
-  console.error('limit restored to  :', limitProbe.restored === endpointChips.length
-    ? `yes (${limitProbe.restored})` : `NO - ${limitProbe.restored}, was ${endpointChips.length}`);
-  note('limit summary      :', limitProbe.summary);
+  report(settingsLines); // the endpoint limit, set on the Settings page, and its config editor
   console.error('--- signals ---');
   console.error('all tab present    :', signalProbe.switchShown);
   console.error('opened on view     :', signalProbe.defaultView === 'network'
@@ -2551,27 +2366,15 @@ function runScripts() {
   note('runs collapsed     :', signalProbe.runsCollapsed, `(biggest x${signalProbe.biggestRun}; checked by the next two lines)`);
   console.error('run expands whole  :', signalProbe.runExpandsLossless, '(collapsing must lose nothing)');
   console.error('run collapses back :', signalProbe.runCollapsesBack);
-  console.error('--- peers ---');
-  // Whatever inspector processes this machine is running; not a property of the page.
-  note('peers listed       :', peerRows.length);
-  note('peer roles         :', peerRoles.join(', ') || 'none');
-  console.error('self has kill btn  :', selfKillButtons === 0 ? 'yes (0)' : `NO - ${selfKillButtons}`, '(must be 0)');
   console.error('--- sessions ---');
-  note('session rows       :', sessionProbe.rows);
-  // The daemon refuses to delete a session with no `endedAt`, so that is what must be disabled —
-  // read from the daemon's own list, not from the page.
-  const unended = (await fetch(`${ORIGIN}/api/sessions`).then((r) => r.json()).catch(() => []))
-    .filter((meta) => !meta.endedAt).length;
-  console.error('deletes disabled   :', sessionProbe.disabledDeletes === unended
-    ? `yes (${sessionProbe.disabledDeletes}, one per session with no endedAt)`
-    : `NO - ${sessionProbe.disabledDeletes} disabled, ${unended} sessions with no endedAt`);
-  console.error('clear all arms     :', sessionProbe.clearArms);
-  console.error('header delete      :', sessionProbe.headerDelete);
+  report(sessionLines);
   console.error('--- top bar ---');
-  for (const [name, value] of Object.entries(topBarProbe)) {
-    console.error(`${name.padEnd(19)}:`, value);
-  }
-
+  report(topBarLines);
+  console.error('picker face        :', pickerFace);
+  console.error('--- processes ---');
+  report(processLines);
+  console.error('--- routes ---');
+  report(routeLines);
   console.error('--- tabs ---');
   note('tabs               :', tabProbe.count, `(${tabProbe.ids.join(', ')})`);
   console.error('exactly one active :', tabProbe.activeCount === 1, `(${tabProbe.activeCount})`);
@@ -2586,7 +2389,6 @@ function runScripts() {
   console.error('signal tabs count  :', tabProbe.signalTabTotal === everySignal.length
     ? `yes (${everySignal.length}, every signal in the session)`
     : `NO - the tabs count ${tabProbe.signalTabTotal}, the session holds ${everySignal.length}`);
-  console.error('rail gone          :', toolbarProbe.railGone, '(controls belong to the view)');
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
   console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
   console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
@@ -2651,6 +2453,7 @@ function runScripts() {
   console.error('drawer on tab swap :', drawerProbe.tabSwitch);
   note('tab labels         :', tabProbe.labels);
   console.error('tab bar shown      :', tabProbe.alwaysShown);
+  console.error('tabs menu          :', tabsMenu);
   console.error('signal separator   :', tabProbe.signalSeparator);
   console.error('--- toolbar labels ---');
   for (const [name, value] of Object.entries(toolbarLabelProbe)) {

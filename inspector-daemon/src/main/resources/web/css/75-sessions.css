@@ -1,19 +1,8 @@
-/* sessions: the session picker, quiet buttons and armed buttons */
+/* sessions: the Sessions page's rows, quiet buttons and armed buttons */
 /* --- sessions ------------------------------------------------------------ */
 
-.session-rows { max-height: 240px; overflow-y: auto; margin: 8px 0; }
-.session-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 7px;
-  border-radius: 4px;
-}
-.session-row:hover { background: var(--bg-hover); }
-.session-row.sel { outline: 1px solid var(--divider); }
+.session-row-label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-row-id { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-row-meta { font-size: 11px; white-space: nowrap; }
 
 .btn-quiet {
   background: none;

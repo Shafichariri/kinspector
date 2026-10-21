@@ -9,10 +9,17 @@
 <body>
   <header id="topbar">
     <span class="brand">inspector</span>
-    <!-- Each option names the app, device, start and size; the session id is its tooltip. -->
-    <select id="session-picker" title="Session"></select>
-    <button id="session-delete" class="btn btn-sm btn-quiet"
-            title="Delete this session from ~/.inspector. Permanent — click twice.">✕</button>
+    <!--
+      The native <select> is the control: focus, keyboard, the option list and its `change` event.
+      It lies transparent over a drawn face, because a closed <select> cannot ellipsize and clips its
+      label from the end, mid-word, which is where the start time was. The face leads with the time,
+      whole, and ellipsizes the rest; each option names the app, device, start and size, and keeps
+      the session id as its tooltip.
+    -->
+    <span class="picker">
+      <span class="picker-face" aria-hidden="true"><span class="picker-time"></span><span class="picker-rest"></span></span>
+      <select id="session-picker" aria-label="Session" title="Session"></select>
+    </span>
     <!--
       The whole session as one file: HTML that is this page working offline, Markdown to read,
       JSON to process, HAR for DevTools. Filled in by the page's script, which builds the menu.
@@ -29,23 +36,50 @@
             title="Following new traffic as it arrives. Click to pause.">
       <span class="dot"></span><span class="live-label">live</span>
     </button>
-    <!-- Everything about the daemon process, and only that: its connection and its controls. -->
+    <!-- The page's connection to the daemon. Restart and stop live on the Processes page. -->
     <div class="daemon-group">
-      <span id="conn" class="conn" title="The page's live connection to the daemon">
+      <span id="conn" class="conn" title="The page's live connection to the daemon" tabindex="0">
         <span class="dot"></span><span class="conn-label">connecting…</span>
       </span>
-      <button id="open-settings" class="btn btn-sm"
-              title="Settings: other inspector processes on this machine">settings</button>
-      <button id="server-restart" class="btn btn-sm"
-              title="Relaunch the daemon. The page reconnects on its own.">restart</button>
-      <button id="server-stop" class="btn btn-sm btn-danger"
-              title="Stop the daemon. Nothing is recorded until you start it again. Click twice.">stop</button>
     </div>
   </header>
 
   <!-- A stopped daemon otherwise looks exactly like an idle one. -->
   <div id="server-banner" class="server-banner" hidden></div>
 
+  <div id="shell">
+  <!--
+    Navigation and nothing else. The page had a left rail once, holding the filter and a Now panel,
+    and lost it for spending a fifth of the window on controls that did nothing on most views. This
+    one holds the pages, which apply everywhere; `rail is navigation` in render-web-ui.js fails if
+    anything but its links and its collapse button is put back in it. Hrefs, labels and which page
+    is current are set from `PAGES` in js/08-routes.js.
+  -->
+  <nav id="rail" aria-label="Pages">
+    <a class="rail-item" data-page="traffic">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7 16V4M4 7l3-3 3 3M13 4v12M10 13l3 3 3-3"/></svg>
+      <span class="rail-text">Traffic</span>
+    </a>
+    <a class="rail-item" data-page="sessions">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="3.5" width="14" height="5" rx="1"/><rect x="3" y="11.5" width="14" height="5" rx="1"/></svg>
+      <span class="rail-text">Sessions</span>
+    </a>
+    <a class="rail-item" data-page="processes">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M6.5 8l2.5 2-2.5 2M10.5 13h3"/></svg>
+      <span class="rail-text">Processes</span>
+    </a>
+    <a class="rail-item" data-page="settings">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 6h14M3 14h14"/><circle cx="8" cy="6" r="2"/><circle cx="12" cy="14" r="2"/></svg>
+      <span class="rail-text">Settings</span>
+    </a>
+    <span class="rail-foot"></span>
+    <button id="rail-toggle" class="rail-toggle" type="button" aria-label="Show page names" title="Show page names">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8 5l5 5-5 5"/></svg>
+    </button>
+  </nav>
+
+  <div id="pages">
+  <section id="page-traffic" class="page" aria-label="Traffic">
   <!--
     One tab per kind of thing the session recorded, because each kind reads differently: traffic
     is a list of calls, a cache is a set of keys with histories, a screen trail is a sequence.
@@ -255,49 +289,137 @@
     -->
     <div id="drawer-scrim" class="drawer-scrim" hidden></div>
   </main>
+  </section>
 
-  <dialog id="settings" class="settings">
-    <form method="dialog" class="settings-head">
-      <strong>Settings</strong>
+  <!--
+    Archive management: every session, with what decides whether it can go. Deleting is permanent —
+    there is no trash — and a session the app is still writing to is never removed, so its row can
+    be neither ticked nor deleted. The `✕` beside the session picker lived in the top bar until the
+    bar had to fit 400px; deleting is managing the archive, and this is where the archive is.
+  -->
+  <section id="page-sessions" class="page page-doc" aria-labelledby="sessions-title" hidden>
+    <h1 id="sessions-title" class="page-title" tabindex="-1">Sessions</h1>
+    <p class="settings-note muted">
+      Every run of the app is a folder under <code>~/.inspector/sessions</code>. Deleting one is
+      permanent — there is no trash — and a session the app is still writing to is never removed,
+      because pulling the folder out from under an open writer loses the traffic on screen.
+    </p>
+    <div class="page-actions">
+      <span class="muted">select</span>
+      <span class="preset">
+        <button id="preset-keep" class="btn btn-sm" type="button"
+                title="Every session that is not recording, beyond the newest N">keep last</button>
+        <input id="preset-keep-n" type="number" min="0" step="1" value="10" aria-label="Sessions to keep">
+      </span>
+      <span class="preset">
+        <button id="preset-older" class="btn btn-sm" type="button"
+                title="Every session that is not recording and started more than this many days ago">older than</button>
+        <input id="preset-older-days" type="number" min="0" step="1" value="7" aria-label="Days">
+        <span class="muted">days</span>
+      </span>
       <span class="spacer"></span>
-      <button class="btn btn-sm" value="close">close</button>
-    </form>
+      <button id="sessions-delete-selected" class="btn btn-sm btn-danger" type="button" disabled>delete selected (0)</button>
+      <button id="sessions-clear" class="btn btn-sm btn-danger" type="button">clear all</button>
+      <button id="sessions-refresh" class="btn btn-sm" type="button">refresh</button>
+    </div>
+    <div id="sessions-status" class="page-status muted" role="status"></div>
+    <table class="page-table">
+      <thead>
+        <tr>
+          <th class="col-check"><input id="sessions-all" type="checkbox" aria-label="Select every session that can be deleted"></th>
+          <th>session</th>
+          <th class="col-secondary">device</th>
+          <th class="num">calls</th>
+          <th class="col-secondary num">errors</th>
+          <th>state</th>
+          <th class="col-actions"><span class="visually-hidden">actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="session-rows"></tbody>
+    </table>
+  </section>
+
+  <!-- Everything about inspector processes: this daemon, its siblings, and the editor's MCP server. -->
+  <section id="page-processes" class="page page-doc" aria-labelledby="processes-title" hidden>
+    <h1 id="processes-title" class="page-title" tabindex="-1">Processes</h1>
 
     <section class="settings-section">
-      <div class="settings-title">Inspector processes on this machine</div>
+      <h2 class="settings-title">This daemon</h2>
+      <p id="server-info" class="settings-note muted"></p>
+      <div class="settings-actions">
+        <button id="server-restart" class="btn btn-sm" type="button"
+                title="Relaunch the daemon. The page reconnects on its own.">restart</button>
+        <button id="server-stop" class="btn btn-sm btn-danger" type="button"
+                title="Stop the daemon. Nothing is recorded until you start it again. Click twice.">stop</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2 class="settings-title">Inspector processes on this machine</h2>
       <p class="settings-note muted">
         Matched by launch arguments, not by name. A <code>pkill -f inspector</code> also kills your
         editor's MCP connection, and <code>pkill -f "inspector.*serve"</code> does too — the
         classpath contains <code>ktor-server-cio</code>. This list cannot make either mistake.
       </p>
-      <div id="peers" class="peers"></div>
-      <div class="settings-actions">
-        <button id="peers-refresh" class="btn btn-sm">refresh</button>
-        <span id="peers-status" class="muted"></span>
+      <div class="page-actions">
+        <span class="muted">select</span>
+        <button class="btn btn-sm" type="button" data-preset="servers"
+                title="Every other inspector serve process">all servers</button>
+        <button class="btn btn-sm" type="button" data-preset="others"
+                title="Every other inspector process except MCP servers, which are your editor's">all except this one</button>
+        <button class="btn btn-sm" type="button" data-preset="stale"
+                title="Every other process except MCP servers that started before this daemon did">stale</button>
+        <span class="spacer"></span>
+        <button id="peers-kill-selected" class="btn btn-sm btn-danger" type="button" disabled>kill selected (0)</button>
+        <button id="peers-refresh" class="btn btn-sm" type="button">refresh</button>
       </div>
+      <div id="peers-mcp-warning" class="page-warning" hidden>
+        An MCP server is your editor's connection to Inspector. Killing it disconnects the editor
+        until the editor starts a new one.
+      </div>
+      <div id="peers-status" class="page-status muted" role="status"></div>
+      <table class="page-table">
+        <thead>
+          <tr>
+            <th class="col-check"><input id="peers-all" type="checkbox" aria-label="Select every process that can be killed"></th>
+            <th>role</th>
+            <th>pid</th>
+            <th class="col-secondary">port</th>
+            <th class="col-secondary">up</th>
+            <th class="col-secondary">data</th>
+            <th class="col-actions"><span class="visually-hidden">actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="peers"></tbody>
+      </table>
     </section>
 
     <section class="settings-section">
-      <div class="settings-title">Sessions</div>
+      <h2 class="settings-title">MCP server</h2>
       <p class="settings-note muted">
-        Every run of the app is a folder under <code>~/.inspector/sessions</code>. Deleting one is
-        permanent — there is no trash — and a session the app is still writing to is never removed,
-        because pulling the folder out from under an open writer loses the traffic on screen.
+        Speaks over stdio, so your editor starts it — there is nothing here to start, and a process
+        this daemon spawned would have no client on its pipes. <strong>Test</strong> proves the
+        binary answers. Kill a wedged one in the list above and your editor spawns a fresh one.
       </p>
-      <div id="session-rows" class="session-rows"></div>
       <div class="settings-actions">
-        <button id="sessions-clear" class="btn btn-sm btn-danger">clear all</button>
-        <button id="sessions-refresh" class="btn btn-sm">refresh</button>
-        <span id="sessions-status" class="muted"></span>
+        <button id="mcp-probe" class="btn btn-sm" type="button">test</button>
+        <button id="mcp-copy" class="btn btn-sm" type="button">copy command</button>
+        <span id="mcp-status" class="muted"></span>
       </div>
+      <pre id="mcp-command" class="mcp-command"></pre>
     </section>
+  </section>
+
+  <section id="page-settings" class="page page-doc" aria-labelledby="settings-title" hidden>
+    <h1 id="settings-title" class="page-title" tabindex="-1">Settings</h1>
 
     <section class="settings-section">
-      <div class="settings-title">Repeated requests</div>
+      <h2 class="settings-title">Repeated requests</h2>
       <p class="settings-note muted">
         Highlights requests sent more than once, close together, by <em>separate</em> calls — same
         method, URL, status and byte counts. Retries and redirect hops share one call id and are
         never flagged; they already show as an attempt chain. Set to <code>0</code> to turn it off.
+        Kept in this browser.
       </p>
       <div class="settings-actions">
         <label class="settings-field">
@@ -310,14 +432,14 @@
     </section>
 
     <section class="settings-section">
-      <div class="settings-title">Endpoint shortcuts</div>
+      <h2 class="settings-title">Endpoint shortcuts</h2>
       <p class="settings-note muted">
         One chip per distinct last path segment, most-used first —
         <code>/v3/accounts/profile/status</code> becomes <code>status</code>. Clicking one
         filters to <code>path:*/status</code>, a glob anchored at the end of the path, so
         <code>profile</code> does not also match <code>profile/status</code>. Built from the whole
         session rather than the filtered view, so the chips stay put once you click one. Set to
-        <code>0</code> to hide them.
+        <code>0</code> to hide them. Kept in this browser.
       </p>
       <div class="settings-actions">
         <label class="settings-field">
@@ -328,22 +450,29 @@
       </div>
     </section>
 
+    <!--
+      The daemon's config.json. Nothing here changes the running daemon: a port cannot move under a
+      listening socket and retention holds the config it started with, so every key applies at the
+      next start — one rule, said once, rather than a list of which keys apply live.
+    -->
     <section class="settings-section">
-      <div class="settings-title">MCP server</div>
+      <h2 class="settings-title">The daemon's config.json</h2>
       <p class="settings-note muted">
-        Speaks over stdio, so your editor starts it — there is nothing here to start, and a process
-        this daemon spawned would have no client on its pipes. <strong>Test</strong> proves the
-        binary answers. Kill a wedged one in the list above and your editor spawns a fresh one.
+        Saved to <code id="config-path">config.json</code>. A saved value applies when the daemon next
+        starts — <a href="#/processes">restart it from Processes</a>. A command-line flag wins over the
+        file, and a key a flag sets cannot be edited here.
       </p>
-      <div class="settings-actions">
-        <button id="mcp-probe" class="btn btn-sm">test</button>
-        <button id="mcp-copy" class="btn btn-sm">copy command</button>
-        <span id="mcp-status" class="muted"></span>
-      </div>
-      <pre id="mcp-command" class="mcp-command"></pre>
+      <form id="config-form" class="config-form">
+        <div id="config-fields" class="config-fields"></div>
+        <div class="settings-actions">
+          <button id="config-save" class="btn btn-sm" type="submit">save</button>
+          <span id="config-status" class="muted" role="status"></span>
+        </div>
+      </form>
     </section>
-  </dialog>
-
+  </section>
+  </div>
+  </div>
   <!-- inspector:scripts -->
 </body>
 </html>

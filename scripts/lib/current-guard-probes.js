@@ -20,6 +20,10 @@
  * - `now load read overtaken`: the same, with the older read started by `loadSignals`.
  * - `now failed read kept`: a failed read on the session already shown keeps its values, each dated.
  *
+ * `now switch shows none` runs a second time, as the shell's `route switch window`, with the switch
+ * made through an address (`#/traffic?session=…`) instead of the picker: both reach `switchSession`,
+ * and the clear must run for either (`probeSwitchWindowByRoute`).
+ *
  * All call the page's `refreshCurrent` directly, which is what a live signal does, so the probe
  * holds the very read it releases instead of racing one the socket might start. Each stubs the page's
  * `fetch` for the one route it holds and puts the real one back before it returns, and the page is
@@ -52,21 +56,32 @@ const glanceOf = (doc) => {
 /** A reply the page's `api` reads as a 200 holding [rows]: it asks only `ok` and `text()`. */
 const replyOf = (rows) => ({ ok: true, status: 200, text: async () => JSON.stringify(rows) });
 
-async function probeCurrentAfterSwitch(ctx) {
-  const { window, doc, ORIGIN, settle } = ctx;
+/**
+ * The two sessions a switch goes between and what each one's strip holds, or the reason none can
+ * be told apart (`skip`). Shared by the picker's lines and the shell's address run.
+ */
+async function switchPair(ctx) {
+  const { window, doc, ORIGIN } = ctx;
   const picker = doc.getElementById('session-picker');
   const from = picker.value;
   const to = [...picker.options].map((o) => o.value).find((v) => v && v !== from);
-  if (!to) return every('n/a (one session; nothing to switch to)');
-  if (typeof window.refreshCurrent !== 'function') return every('NO - refreshCurrent is not a page function');
+  if (!to) return { skip: 'n/a (one session; nothing to switch to)' };
+  if (typeof window.refreshCurrent !== 'function') return { skip: 'NO - refreshCurrent is not a page function' };
   const currentOf = (id) => fetch(`${ORIGIN}/api/sessions/${encodeURIComponent(id)}/current`).then((r) => r.json());
   const fromKeys = keysOf(await currentOf(from));
   const toKeys = keysOf(await currentOf(to));
-  if (!fromKeys.length) return every(`n/a (${from} holds no current values to leak)`);
-  if (same(fromKeys, toKeys)) return every('n/a (both sessions hold the same current values)');
-  const routeOf = (id) => `/api/sessions/${encodeURIComponent(id)}/current`;
-  const realFetch = window.fetch;
+  if (!fromKeys.length) return { skip: `n/a (${from} holds no current values to leak)` };
+  if (same(fromKeys, toKeys)) return { skip: 'n/a (both sessions hold the same current values)' };
   const shows = (keys) => () => same(stripOf(doc), keys);
+  return { picker, from, to, fromKeys, toKeys, shows, realFetch: window.fetch };
+}
+
+async function probeCurrentAfterSwitch(ctx) {
+  const { window, doc, settle } = ctx;
+  const pair = await switchPair(ctx);
+  if (pair.skip) return every(pair.skip);
+  const { picker, from, to, fromKeys, toKeys, shows, realFetch } = pair;
+  const routeOf = (id) => `/api/sessions/${encodeURIComponent(id)}/current`;
   const back = async () => {
     window.fetch = realFetch;
     if (picker.value !== from) choose(ctx, from);
@@ -137,11 +152,25 @@ async function probeCurrentAfterSwitch(ctx) {
   return verdicts;
 }
 
+/** `route switch window`: `now switch shows none` with the switch made through the address. */
+async function probeSwitchWindowByRoute(ctx) {
+  const pair = await switchPair(ctx);
+  if (pair.skip) return pair.skip;
+  return (await probeSwitchWindow(ctx, pair, 'route'))[0][1];
+}
+
+/** Switches the page to [id] through the picker, or through the address when [via] is `route`. */
+function switchVia(ctx, id, via) {
+  if (via === 'route') ctx.window.location.hash = `#/traffic?session=${encodeURIComponent(id)}`;
+  else choose(ctx, id);
+}
+
 /**
  * `now switch shows none`: on the timeline tab with the glance shown, the switch to `to` is held at
- * its `/signals` read. Until it lands, nothing on the signal side may be `from`'s.
+ * its `/signals` read. Until it lands, nothing on the signal side may be `from`'s. [via] is how the
+ * switch is made, the picker or an address; the page is put back through the picker either way.
  */
-async function probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, shows }) {
+async function probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, shows }, via = 'picker') {
   const { window, doc, settle } = ctx;
   const label = CURRENT_LABELS[2];
   const viewBefore = ctx.pageState().view;
@@ -167,7 +196,7 @@ async function probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, s
   };
   let verdict;
   try {
-    choose(ctx, to);
+    switchVia(ctx, to, via);
     const asked = await waitFor(() => held.length > 0);
     const during = { strip: stripOf(doc), rows: timelineSignals(doc), glance: glanceOf(doc) };
     const leaks = [];
@@ -258,4 +287,4 @@ async function probeReadOrder(ctx, { from, fromKeys, routeOf, realFetch }) {
   return verdicts;
 }
 
-module.exports = { CURRENT_LABELS, probeCurrentAfterSwitch };
+module.exports = { CURRENT_LABELS, probeCurrentAfterSwitch, probeSwitchWindowByRoute };

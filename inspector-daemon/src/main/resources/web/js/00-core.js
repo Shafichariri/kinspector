@@ -33,6 +33,9 @@ const prefs = {
 const state = {
   sessionId: null,
   sessions: [],
+  // Whether the session list has been read once. Until it has, an address naming a session only
+  // chooses which one the first load reads; after, it is a switch (`applyRoute`).
+  sessionsLoaded: false,
   transactions: [],
   markers: [],
   selectedId: null,
@@ -43,6 +46,9 @@ const state = {
   // to reconnect from or the outcome the user asked for. `away` is a drop nobody asked for; every
   // state but `running` makes the next open re-read the session.
   serverState: 'running',
+  // When a restart was asked for, in `Date.now()` ms, until the socket opens again. A restart that
+  // has not reconnected within `RESTART_GRACE_MS` is a lost daemon, not a slow one.
+  restartAt: null,
   // The newest capture this page has seen arrive, from any session: what the stopped banner
   // means by "last capture". Null until the live socket delivers a row.
   lastCaptureTs: null,

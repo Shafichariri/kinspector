@@ -412,9 +412,9 @@ proposed a `restart daemon` button on the banner; the process that would receive
 just exited, so it could only ever fail. The banner says to run `inspector serve` instead, and that
 is enough because `ws.onclose` still redials every 3 s while stopped — it used to return early,
 which left a page that had stopped a daemon unable to notice it coming back without a reload.
-`render-web-ui.js` stubs the stop request (never the real daemon), checks one click only arms,
-and replays the page's own `onopen` to prove the banner, the dimming and the disabled controls all
-clear. "Last capture" names a row this page watched arrive from any session; failing that it says
+`render-web-ui.js` stubs the stop request (never the real daemon; the probe is in
+`lib/shell-probes.js`), checks one click only arms, and replays the page's own `onopen` to prove the
+banner, the dimming and the disabled controls all clear. "Last capture" names a row this page watched arrive from any session; failing that it says
 "newest row in this session", because the newest row of an old session is not the daemon's last
 capture and must not be presented as one.
 
@@ -423,6 +423,55 @@ new rows; the dot in the daemon group is whether the *page is connected*. They w
 and one dot, which read as "the daemon is up" whichever it was describing. Pausing drops live rows
 rather than queueing them, so resuming re-reads the session — without that, a list resumed after a
 burst is missing the burst with nothing on screen to say so. The probe watches for the re-read.
+
+**The page is a rail over hash-routed pages, and the rail holds navigation and nothing else.**
+`#/traffic[/<view>]`, `#/sessions`, `#/processes` and `#/settings`, each optionally ending
+`?session=<id>`, are read by `parseRoute` and written by `routeHash` in `js/08-routes.js`, and
+nothing else reads `location.hash`. Hash routes keep the one `index.html` and no build step, make
+Back walk the pages, and give a view and a session an address. A page or a tab pushes a history
+entry; a session switch replaces it, because Back walks places, not data, and a pushed switch would
+make Back re-run a whole-session read. The page had a left rail once, holding the filter and a Now
+panel, and it was taken out because it spent a fifth of the window on controls that did nothing on
+most views — the Now panel alone ran 1341px. This rail is navigation, which applies on every page,
+so `render-web-ui.js`'s `rail is navigation` fails if `#rail` holds anything but its links and its
+collapse button. A view control put back there is a red run, not a precedent. In an export the rail
+offers Traffic alone and every other route lands there, because the other pages send something or
+read the machine (`pages hidden in export`, `routes fall back in export`); `route parse` in
+`check-web-static.js` holds the parser. An export is a file opened from disk, where some engines,
+jsdom among them, refuse the history API, so there the address is written through `location`
+instead (`writeHash`).
+
+**Every request to a control route goes through `controlFetch`, the one place the page writes
+`X-Inspector-Control`.** Six call sites wrote it by hand. The marker post is not one: its route is
+open by decision (`daemon-and-mcp.md`) and it sends no header. The header is how the daemon tells its own
+page from any other, and whatever the daemon later asks of a control request has to be added in one
+place on the page, as it is added in one gate on the server. `control header once` in
+`check-web-static.js` counts the literal across every file `web/scripts.txt` lists and fails on any
+count but one.
+
+**Every close that is not a stop paints the lost-daemon banner, and a restart that has not
+reconnected in 20 s is a lost daemon.** `ws.onclose` painted the banner only on the way out of
+`running`. A plain drop still showed it, and that was the case everyone tried; the defect was in the
+others: a restart that never came back read `Restarting…` forever, and a stop or restart request that
+failed while the daemon was gone replaced the banner with its own message, which no later close
+repainted. `RESTART_GRACE_MS` is the time a relaunched daemon gets before the page says it is gone.
+The stop probe's `banner every drop`, `banner after failure` and `banner restart lost` replay the
+page's own handlers; the last two were proven red with the `running` check put back. A stopped
+daemon's banner still offers no restart (above).
+
+**The closed session picker leads with the start time, and the native `<select>` sits invisible over
+a drawn face.** Since KIN-49 the picker gives way first when the bar runs short, and a closed
+`<select>` clips its label from the end, mid-word, which is where the label kept the start time — the
+one part that tells two sessions of one app apart. A `<select>` cannot ellipsize. So the select keeps
+the focus, the keyboard, the native list and every probe's `change` event, and `.picker-face`
+beneath it shows the time first and whole, the rest ellipsized, the full label as its tooltip
+(`picker face`; `shell <width> picker time` in `measure-web-ui.js`).
+
+**Below 700px the tab bar draws the active tab and a `views ▾` menu of every view.** "The tab bar is
+always drawn" still holds: the band never comes and goes. Which tabs it draws inline is a width
+decision, and the menu lists every view with its count, so none is out of reach at 400px. A CSS
+rule rather than a measured overflow, because jsdom cannot measure and a rule can be read
+(`narrow tabs css`, `tabs menu`, and `shell <width> tabs reachable` in Chrome).
 
 **`endedAt` and "is anything connected" are different questions, and `GET /api/recording` is the
 second one.** A session whose daemon was killed, or whose app vanished without a clean close, has

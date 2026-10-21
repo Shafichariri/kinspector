@@ -1,0 +1,145 @@
+/* shell: the rail, the pages beside it, and the tables the Sessions and Processes pages draw */
+
+/* Below the top bar and the banner, the rail and the page side by side. A basis of 0, not `auto`:
+   from its content, a 1000-row list, the shell outweighed the bar above it in the body's shrink and
+   squeezed the 44px bar to 25. `min-height: 0` all the way down, or the traffic page's panes, which
+   scroll inside themselves, push the window instead. */
+#shell { display: flex; flex: 1 1 0; min-height: 0; }
+#pages { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+
+/* --- the rail ------------------------------------------------------------ */
+
+/* Icons only (44px) below 1200px and labelled (168px) from it, unless the person chose one with the
+   toggle: `.rail-open` or `.rail-icons`, kept in this browser. */
+#rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+  width: 44px;
+  padding: 8px 4px;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--divider);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.rail-item, .rail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: 5px;
+  color: var(--fg-muted);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.rail-item:hover, .rail-toggle:hover { color: var(--fg); background: var(--bg-hover); }
+.rail-item:focus-visible, .rail-toggle:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.rail-item[aria-current="page"] { color: var(--fg); background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
+.rail-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rail-text { display: none; }
+.rail-foot { flex: 1; }
+.rail-toggle { background: none; border: none; font: inherit; cursor: pointer; }
+#rail.rail-open { width: 168px; }
+#rail.rail-open .rail-text { display: inline; }
+#rail.rail-open .rail-toggle .rail-icon { transform: scaleX(-1); }
+
+/* --- pages --------------------------------------------------------------- */
+
+/* `hidden` alone loses to the `display` below; every element shown and hidden with it says so. */
+.page { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.page[hidden] { display: none !important; }
+
+/* The pages that read as a document scroll as one, and never sideways: a table that cannot fit
+   drops its secondary columns below 700px rather than widening the window. */
+.page-doc { overflow-y: auto; overflow-x: hidden; padding: 6px 20px 24px; }
+.page-title { font-size: 18px; font-weight: 600; margin: 12px 0 4px; }
+/* One left edge for the title, the notes and the tables, on every page. */
+.page-doc .settings-section { padding: 14px 0; }
+/* A data directory or a launch command is one long token; it breaks rather than widening the page. */
+.page-doc .settings-note, .page-doc code { overflow-wrap: anywhere; }
+.page-doc .mcp-command { white-space: pre-wrap; overflow-wrap: anywhere; }
+.page-doc a { color: var(--accent); }
+.page-title:focus { outline: none; }
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.page-actions input[type="number"], .config-row input {
+  width: 72px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.preset { display: inline-flex; align-items: center; gap: 4px; }
+.page-status { font-size: 12px; min-height: 16px; }
+.page-status.error, #config-status.error { color: var(--err); }
+.page-results { margin: 4px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 11px; }
+.page-results .error, .config-row .error, .config-error { color: var(--err); }
+.page-warning {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 5px;
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.page-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 12px; }
+.page-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+.page-table td { padding: 5px 8px; border-bottom: 1px solid var(--divider); vertical-align: middle; }
+.page-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.page-table .col-check { width: 28px; }
+.page-table .col-actions { text-align: right; white-space: nowrap; }
+.page-table tr.sel td { background: var(--sel-bg); }
+/* The one column allowed to give way, so a long id or data directory never widens the page. */
+.session-name, .peer-data { max-width: 0; width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-state.recording { color: var(--ok); }
+
+/* The config editor: a label, the value, what the daemon runs on now, and the flag that wins. */
+.config-fields { display: flex; flex-direction: column; gap: 6px; }
+.config-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.config-label { min-width: 110px; }
+.config-row input.config-tag { width: 110px; font-family: var(--sans); }
+.config-row input:disabled, .config-row input[readonly] { opacity: 0.6; }
+.config-now, .config-flag { font-size: 11px; }
+
+/* Labelled from 1200px unless the person chose icons. After the rules it overrides. */
+@media (min-width: 1200px) {
+  #rail:not(.rail-icons) { width: 168px; }
+  #rail:not(.rail-icons) .rail-text { display: inline; }
+  #rail:not(.rail-icons) .rail-toggle .rail-icon { transform: scaleX(-1); }
+}
+
+/* Narrow: the tables keep the tick, the name, the state and the row's action. */
+@media (max-width: 699px) {
+  .page-doc { padding: 4px 10px 20px; }
+  .page-table .col-secondary { display: none; }
+}

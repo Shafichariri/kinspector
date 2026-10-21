@@ -4,6 +4,7 @@
 # serves or fetches this file.
 css/00-tokens.css
 css/05-base.css
+css/07-shell.css
 css/10-panes.css
 css/15-waterfall.css
 css/20-path.css
