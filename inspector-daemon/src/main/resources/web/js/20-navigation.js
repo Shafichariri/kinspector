@@ -228,24 +228,35 @@ function closeDrawer() {
 }
 
 /**
- * Markers and the shortcut legend, one click away.
+ * Markers, the endpoint chips, the now list and the shortcut legend, one click away.
  *
- * Both were permanent rail sections and both sat below the fold, which is the worst of both:
- * space spent, and not readable anyway. A popover costs a click and is the first time the
- * shortcut list has been visible at all.
+ * Markers and shortcuts were permanent rail sections and both sat below the fold, which is the
+ * worst of both: space spent, and not readable anyway. A popover costs a click and is the first
+ * time the shortcut list has been visible at all. The legend opens from the `⋮` menu, not a button
+ * of its own, so it is closed with the rest and opened by `showKeys`.
  */
 function closePops() {
   for (const [button, pop] of POPS) {
     $(pop).hidden = true;
     $(button).setAttribute('aria-expanded', 'false');
   }
+  $('keys-pop').hidden = true;
+}
+
+/** The shortcut legend, under the `⋮` button it was chosen from. */
+function showKeys(event) {
+  // The menu item's click would reach the document and close the legend it just opened.
+  event.stopPropagation();
+  closePops();
+  $('keys-pop').style.top = `${$('more-button').getBoundingClientRect().bottom + 4}px`;
+  $('keys-pop').hidden = false;
 }
 
 // `[button, pop, anchored]`: an anchored pop is placed under its button by the stylesheet, inside a
 // positioned parent, so it takes no offset from script.
 const POPS = [
   ['markers-button', 'markers-pop'],
-  ['keys-button', 'keys-pop'],
+  ['endpoints-button', 'endpoint-chips', true],
   ['now-toggle', 'current', true],
 ];
 
@@ -266,7 +277,7 @@ function wirePops() {
     });
   }
   document.addEventListener('click', closePops);
-  for (const [, pop] of POPS) {
+  for (const pop of [...POPS.map(([, id]) => id), 'keys-pop']) {
     $(pop).addEventListener('click', (event) => event.stopPropagation());
   }
 }

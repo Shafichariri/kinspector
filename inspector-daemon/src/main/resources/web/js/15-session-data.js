@@ -84,8 +84,6 @@ const LIST_CEILING = 1000;
  * `callLoad` a slow unfiltered read landing last put every row back under the filter just typed.
  */
 async function loadTransactions() {
-  // An export of nothing would be a 404 with a filename; offer it only when there is a session.
-  $('export-host').hidden = !!ARCHIVE || !state.sessionId;
   // With no session there is nothing to load, and the empty list is the only thing that can
   // say what the page is waiting for.
   if (!state.sessionId) { renderListEmpty(); return; }

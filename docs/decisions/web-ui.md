@@ -439,6 +439,20 @@ counts the session's calls, as the bars do: the live probe's `overview line` rea
 that thins the rows, red with the count taken from the rows held. `room 1440 bands list` bounds the
 list pane's top at 160px.
 
+**The toolbar is one row from 1000px up, with endpoint chips behind `endpoints ▾`.** It was two rows
+because the chips are the only part whose length depends on the session, and sharing a row made
+the order control move for every app. Behind a menu they can never push it, and the quick filters,
+the order control, markers and `⋮` all fit one row at 1000. Below 1000 it wraps rather than hide a
+control. The button counts the chips its popover holds, from the whole session as the chips are, so
+the filter a chip sets does not shrink it (`endpoints menu`, red with the count taken from the
+filtered rows). `⋮` holds the four exports, which left the top bar, the shortcut legend and compact
+rows; in an export its exports are hidden by `body.archive` with every other control that would ask
+a daemon for something (`export items hidden`). Row density has one writer, `setDensity`, behind the
+`⋮` item and the Settings page's control, stored as `inspector.density`; compact takes padding off a
+row and never makes text smaller (`density`, red with the Settings control writing a key of its own).
+`room <w> toolbar one row` at 1440 and 1000 and `room <w> toolbar fits` at 600 and 400 measure it in
+Chrome.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

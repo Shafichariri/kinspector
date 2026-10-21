@@ -218,10 +218,20 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
       (!archive.meta || banner.textContent.includes(archive.meta.sessionId)),
     banner.textContent.trim().replace(/\s+/g, ' ').slice(0, 140),
   );
-  const daemonOnly = ['#live-btn', '.daemon-group', '#export-host', '#chips', '#chips-label',
+  const daemonOnly = ['#live-btn', '.daemon-group', '.export-item', '#chips', '#endpoints-button',
     '#endpoint-chips', '#marker-form', '#browser-pull'];
   const visible = daemonOnly.filter((sel) => !hiddenByCss(doc.querySelector(sel)));
   check('daemon controls hidden', visible.length === 0, visible.join(', ') || 'all hidden');
+  // `⋮` is offered, for the shortcut legend and compact rows; the exports in it would ask a daemon
+  // for this session, so opened, it draws none of them.
+  const more = doc.getElementById('more-button');
+  click(more);
+  const moreItems = more ? [...more.parentElement.querySelectorAll('.menu-item')] : [];
+  const exportsShown = moreItems.filter((i) => i.classList.contains('export-item') && !hiddenByCss(i));
+  const othersShown = moreItems.filter((i) => !i.classList.contains('export-item') && !hiddenByCss(i)).map((i) => i.textContent);
+  check('export items hidden', Boolean(more) && moreItems.length === 6 && exportsShown.length === 0 && othersShown.length === 2,
+    more ? `${exportsShown.length} exports shown; offered: ${othersShown.join(', ') || 'nothing'}` : 'no ⋮');
+  click(more);
   // The rail offers Traffic alone: every other page sends something or reads the machine.
   const rail = (page) => doc.querySelector(`#rail .rail-item[data-page="${page}"]`);
   const railShown = ['sessions', 'processes', 'settings'].filter((page) => !hiddenByCss(rail(page)));

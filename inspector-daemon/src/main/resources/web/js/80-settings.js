@@ -16,6 +16,31 @@ function applyDuplicateWindow(valueMs) {
   renderList();
 }
 
+// --- settings: row density ------------------------------------------------------------------
+
+/**
+ * The one writer of the row density, for the `⋮` item and the Settings page alike, so the two can
+ * never disagree about it or store it under two keys. Compact only takes padding off a row; no
+ * text gets smaller, so nothing goes under 11px.
+ */
+function setDensity(value) {
+  state.density = value === 'compact' ? 'compact' : 'comfortable';
+  prefs.set('inspector.density', state.density);
+  paintDensity();
+}
+
+/** The body class and both controls, from `state.density`. */
+function paintDensity() {
+  const compact = state.density === 'compact';
+  document.body.classList.toggle('density-compact', compact);
+  $('density').value = state.density;
+  const item = document.getElementById('density-item');
+  if (item) {
+    item.setAttribute('aria-checked', String(compact));
+    item.textContent = compact ? 'compact rows ✓' : 'compact rows';
+  }
+}
+
 // --- settings: endpoint shortcuts -------------------------------------------------------------
 
 function applyEndpointLimit(value) {
@@ -182,6 +207,7 @@ async function saveConfig() {
 function wireSettingsPage() {
   $('dup-window').value = state.duplicateWindowMs;
   $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
+  $('density').addEventListener('change', (e) => setDensity(e.target.value));
   $('endpoint-limit').value = state.endpointLimit;
   $('endpoint-limit').addEventListener('change', (e) => applyEndpointLimit(Number(e.target.value)));
   $('config-form').addEventListener('submit', (e) => {

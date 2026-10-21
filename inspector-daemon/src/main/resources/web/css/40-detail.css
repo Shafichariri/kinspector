@@ -38,10 +38,11 @@
   cursor: pointer;
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--bg-hover); outline: none; }
-/* The export menu opens from the top bar's left side, where right-aligning would run off screen. */
+/* A menu opening from a bar's left side, where right-aligning would run off screen. */
 .menu.menu-left { left: 0; right: auto; min-width: 210px; }
 /* Export items are links, so the browser saves the file under the name the daemon sends. */
 a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
+a.menu-item[hidden] { display: none; }
 
 /*
  * An exported session, opened from disk. There is no daemon, so nothing that would send something
@@ -56,9 +57,9 @@ a.menu-item { display: block; text-decoration: none; white-space: nowrap; }
 body.archive #live-btn,
 body.archive .daemon-group,
 body.archive .rail-item[data-live],
-body.archive #export-host,
-body.archive #chips-label,
+body.archive .export-item,
 body.archive #chips,
+body.archive #endpoints-button,
 body.archive #endpoint-chips,
 body.archive #marker-form,
 body.archive #marker-status,

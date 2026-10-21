@@ -156,6 +156,8 @@
 .row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
 .row .attempt { font-size: 11px; color: var(--warn); }
+/* Compact rows, from `⋮` or the Settings page: less padding, never smaller text. */
+body.density-compact .row { padding-top: 3px; padding-bottom: 3px; }
 
 /* At 400px the fixed columns kept their width and every path was cut to four characters. Below
    520px the columns narrow, the host gives way first and stops at 64px, and the path's last

@@ -177,4 +177,172 @@ async function probeOverview(ctx) {
   return [['overview line', verdict]];
 }
 
-module.exports = { probeDrawer, probeRowParts, probeNowStrip, probeOverview };
+/**
+ * Controls belong to the view they act on.
+ *
+ * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
+ * something else entirely, above a list it cannot filter — which is what the rail was, for a fifth
+ * of the window, on five tabs out of seven.
+ */
+async function probeToolbar(ctx) {
+  const { doc } = ctx;
+  const lines = [];
+  const network = tabOf(doc, 'network');
+  lines.push(['toolbar on traffic', !network ? 'n/a'
+    : (await press(ctx, network, 400), doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'yes (shown)')]);
+  const browser = [...doc.querySelectorAll('#tabs .tab')].find((t) => !['network', 'path', 'all', 'waterfall'].includes(t.dataset.view));
+  if (!browser) return [...lines, ['toolbar on browser', 'n/a'], ['browser own filter', 'n/a']];
+  await press(ctx, browser, 700);
+  lines.push(['toolbar on browser', `${doc.getElementById('toolbar').hidden
+    ? `yes (hidden on '${browser.dataset.view}')` : `NO - still shown on '${browser.dataset.view}'`} (it filters calls, not keys)`]);
+  lines.push(['browser own filter', doc.getElementById('browser-filter') ? 'yes' : 'NO']);
+  return lines;
+}
+
+/** `⋮` opened, its items read, and closed again. */
+async function withMore(ctx, read) {
+  const button = ctx.doc.getElementById('more-button');
+  if (!button) return null;
+  await press(ctx, button, 60);
+  try { return await read(button.parentElement.querySelector('.menu')); } finally {
+    if (button.getAttribute('aria-expanded') === 'true') await press(ctx, button, 60);
+  }
+}
+
+/**
+ * The toolbar's controls, as a reader meets them.
+ *
+ * `toolbar one row` replaces `rowLabels`, which held that each of two rows was named: there is one
+ * row now, so nothing needs a caption, and the quick filters are named for a screen reader instead.
+ * The order control is judged by `aria-pressed` agreeing with the visible `on` state, because the
+ * segmented control's whole claim is that it states which order the list is in. `shortcuts in
+ * menu` replaces `shortcuts`, the button that went: the legend now opens from `⋮`.
+ */
+async function probeToolbarControls(ctx) {
+  const { doc } = ctx;
+  const toolbar = doc.getElementById('toolbar');
+  const rows = toolbar.querySelectorAll('.toolbar-row');
+  const captions = toolbar.querySelectorAll('.row-label');
+  const controls = ['filter', 'chips', 'endpoints-button', 'order-seg', 'markers-button', 'more-button'];
+  const outside = controls.filter((id) => !rows[0] || doc.getElementById(id)?.closest('.toolbar-row') !== rows[0]);
+  const quick = doc.getElementById('chips').getAttribute('aria-label');
+  const oldest = doc.getElementById('order-oldest');
+  const newest = doc.getElementById('order-newest');
+  const pressedAgrees = [oldest, newest].every((b) => b.getAttribute('aria-pressed') === String(b.classList.contains('on')));
+  const markerLabels = new Set([...doc.querySelectorAll('#markers li')].filter((li) => !li.classList.contains('muted')).map((li) => li.textContent)).size;
+  const markersText = doc.getElementById('markers-button').textContent;
+  const shortcuts = await withMore(ctx, async () => {
+    const item = doc.getElementById('keys-item');
+    if (!item || item.textContent !== 'keyboard shortcuts') return `NO - ⋮ has no keyboard shortcuts item`;
+    await press(ctx, item, 60);
+    const opened = !doc.getElementById('keys-pop').hidden;
+    await press(ctx, doc.body, 60);
+    const closed = doc.getElementById('keys-pop').hidden;
+    return opened && closed && !doc.getElementById('keys-button')
+      ? 'yes (⋮ › keyboard shortcuts opens the legend; a click elsewhere closes it)'
+      : `NO - opened ${opened}, closed again ${closed}, old button ${Boolean(doc.getElementById('keys-button'))}`;
+  });
+  return [
+    ['toolbar one row', rows.length === 1 && !captions.length && !outside.length && quick === 'Quick filters'
+      ? `yes (one row of ${controls.length} controls, no captions, the quick filters labelled)`
+      : `NO - ${rows.length} rows, ${captions.length} captions, outside: ${outside.join(' ') || 'none'}, quick filters "${quick}"`],
+    ['orderSegmented', oldest.parentElement.classList.contains('seg2') && pressedAgrees
+      && [oldest, newest].filter((b) => b.classList.contains('on')).length === 1
+      ? `yes (${oldest.classList.contains('on') ? 'oldest' : 'newest'} first pressed)`
+      : 'NO - the order control does not state one order'],
+    ['markersCount', markerLabels ? (markersText === `markers · ${markerLabels}` ? `yes ("${markersText}")` : `NO - "${markersText}" for ${markerLabels}`)
+      : markersText === 'markers' ? 'yes ("markers", none in this session)' : `NO - "${markersText}"`],
+    ['shortcuts in menu', shortcuts ?? 'NO - there is no ⋮'],
+  ];
+}
+
+/**
+ * `endpoints ▾ N`: N is the chips its popover holds, and stays so under the filter a chip sets,
+ * because the chips and the count are built from the whole session; pressing a chip filters and the
+ * chips survive it (the `survived` rule of the chip probe).
+ */
+async function probeEndpointsMenu(ctx) {
+  const { doc, settle } = ctx;
+  const button = doc.getElementById('endpoints-button');
+  const box = doc.getElementById('endpoint-chips');
+  if (!button || button.hidden) return [['endpoints menu', 'NO - no endpoints ▾ on a session with endpoints']];
+  await press(ctx, button, 60);
+  const opened = !box.hidden;
+  const chips = box.querySelectorAll('.chip').length;
+  const rowsBefore = doc.querySelectorAll('#list .row').length;
+  const chip = box.querySelector('.chip');
+  await press(ctx, chip, 60);
+  await settle();
+  const rowsAfter = doc.querySelectorAll('#list .row').length;
+  const said = button.textContent;
+  const survived = box.querySelectorAll('.chip').length;
+  await press(ctx, box.querySelector('.chip.active') || box.querySelector('.chip'), 60);
+  await settle();
+  if (!box.hidden) await press(ctx, button, 60);
+  return [['endpoints menu', opened && said === `endpoints ▾ ${chips}` && survived === chips && rowsAfter < rowsBefore
+    ? `yes ("${said}" under the filter its first chip set, ${rowsBefore} -> ${rowsAfter} rows)`
+    : `NO - opened ${opened}, reads "${said}" for ${chips} chips, ${survived} after the press, rows ${rowsBefore} -> ${rowsAfter}`]];
+}
+
+/**
+ * `⋮` holds the four exports, the shortcut legend and compact rows; `exportMenu` presses it and
+ * requests every export link, because the hrefs are filled in as it opens. It moved here from the
+ * top bar's probe with the menu. With no session the exports are hidden: there is nothing to export.
+ */
+async function probeMoreMenu(ctx) {
+  const { doc, ORIGIN } = ctx;
+  const hasSession = Boolean(doc.querySelector('#session-picker option'));
+  const lines = await withMore(ctx, async (menu) => {
+    const items = [...menu.querySelectorAll('.menu-item')];
+    const exports = items.filter((i) => i.classList.contains('export-item'));
+    const rest = items.filter((i) => !i.classList.contains('export-item')).map((i) => i.textContent);
+    const listed = exports.length === 4 && rest.length === 2 && rest[0] === 'keyboard shortcuts' && rest[1].startsWith('compact rows');
+    if (!hasSession) {
+      return [['more menu', listed ? 'yes (4 exports, keyboard shortcuts, compact rows)' : `NO - ${exports.length} exports, then ${rest.join(', ')}`],
+        ['exportMenu', exports.every((a) => a.hidden) ? 'yes (hidden: nothing to export)' : 'NO - offered with no session']];
+    }
+    const id = encodeURIComponent(doc.getElementById('session-picker').value);
+    const expected = ['export.html', 'export.md', 'export.json', 'har'].map((p) => `/api/sessions/${id}/${p}`);
+    const hrefs = exports.map((a) => a.getAttribute('href'));
+    const statuses = await Promise.all(hrefs.map((h) => fetch(ORIGIN + h).then((r) => r.status).catch(() => 0)));
+    return [
+      ['more menu', listed ? `yes (${exports.map((a) => a.dataset.export).join(', ')}, ${rest.join(', ')})` : `NO - ${exports.length} exports, then ${rest.join(', ') || 'nothing'}`],
+      ['exportMenu', !menu.hidden && JSON.stringify(hrefs) === JSON.stringify(expected) && exports.every((a) => !a.hidden) && statuses.every((c) => c === 200)
+        ? `yes (${hrefs.length} links on ⋮, all 200)`
+        : `NO - opened ${!menu.hidden}, hrefs ${hrefs.join(' ')}, statuses ${statuses.join(' ')}`],
+    ];
+  });
+  return lines ?? [['more menu', 'NO - there is no ⋮'], ['exportMenu', 'NO - there is no ⋮']];
+}
+
+/**
+ * Density has one writer, `setDensity`, behind both of its controls: `⋮ › compact rows` sets the
+ * body class and `inspector.density`, the Settings page's control then shows `compact`, and that
+ * control set back to `comfortable` clears both and unticks the menu item. Left as it was found.
+ */
+async function probeDensity(ctx) {
+  const { window, doc } = ctx;
+  const select = doc.getElementById('density');
+  const was = select.value;
+  const stored = () => window.localStorage.getItem('inspector.density');
+  const compact = () => doc.body.classList.contains('density-compact');
+  await withMore(ctx, () => press(ctx, doc.getElementById('density-item'), 60));
+  const fromMenu = { body: compact(), pref: stored(), settings: select.value };
+  select.value = 'comfortable';
+  select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await pause(60);
+  const fromSettings = { body: compact(), pref: stored(), item: doc.getElementById('density-item').getAttribute('aria-checked') };
+  select.value = was;
+  select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await pause(60);
+  return [['density', fromMenu.body && fromMenu.pref === 'compact' && fromMenu.settings === 'compact'
+    && !fromSettings.body && fromSettings.pref === 'comfortable' && fromSettings.item === 'false'
+    ? 'yes (⋮ › compact rows sets the class, the pref and Settings; Settings back to comfortable clears all three)'
+    : `NO - from ⋮: class ${fromMenu.body}, pref ${fromMenu.pref}, Settings ${fromMenu.settings}; `
+      + `from Settings: class ${fromSettings.body}, pref ${fromSettings.pref}, item checked ${fromSettings.item}`]];
+}
+
+module.exports = {
+  probeDrawer, probeRowParts, probeNowStrip, probeOverview,
+  probeToolbar, probeToolbarControls, probeEndpointsMenu, probeMoreMenu, probeDensity,
+};

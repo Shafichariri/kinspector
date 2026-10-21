@@ -77,8 +77,8 @@ body { display: flex; flex-direction: column; }
 /* The face shows where the invisible control has the keyboard. */
 .picker:focus-within .picker-face { border-color: var(--accent); }
 
-/* Only the picker gives way. A shrinking export button broke `export ▾` over two lines at 1000px. */
-#export-host, #live-btn, .daemon-group { flex: none; }
+/* Only the picker gives way. */
+#live-btn, .daemon-group { flex: none; }
 
 /* The count must not wrap. The bar's 44px clips a wrapped count at the top and the bottom, and a
    wrapped "newest 1000 of 1203 shown" read as "1000 of 1203", the shape only a filter produces. */

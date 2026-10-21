@@ -88,7 +88,7 @@ wireSettingsPage();
 
   if (ARCHIVE) enterArchiveMode(ARCHIVE);
   else await loadServerInfo();
-  wireExportMenu();
+  wireMoreMenu();   // paints the density the page was left in
   // The page first, and a `?session=` before the list is read, so the first load is that session's.
   await applyRoute();
   await loadSessions();

@@ -55,6 +55,8 @@ const state = {
   // false = oldest first (causal reading order), true = newest first (tail-a-log order).
   // Remembered across reloads because it is a reading preference, not session state.
   newestFirst: prefs.get('inspector.newestFirst') === '1',
+  // 'comfortable' or 'compact' rows, set through `setDensity` from `⋮` or the Settings page.
+  density: prefs.get('inspector.density') === 'compact' ? 'compact' : 'comfortable',
   // Window for duplicate detection, in ms. 0 disables it.
   duplicateWindowMs: Number(prefs.get('inspector.duplicateWindowMs') ?? 3000),
   // id -> group ordinal, recomputed whenever the transaction list changes.

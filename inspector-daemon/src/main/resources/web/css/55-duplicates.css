@@ -43,7 +43,7 @@
   font-size: 13px;
 }
 
-.settings-field input {
+.settings-field input, .settings-field select {
   width: 84px;
   padding: 4px 6px;
   border: 1px solid var(--divider);

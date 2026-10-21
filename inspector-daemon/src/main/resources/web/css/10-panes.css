@@ -24,16 +24,16 @@
 .toolbar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 7px 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--divider);
   flex: 0 0 auto;
 }
 
+/* One row from 1000px up; below, it wraps rather than hide a control. */
 .toolbar-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   flex-wrap: wrap;
 }
 /* `hidden` alone loses to the `display: flex` above — the same bug the panes already shipped
@@ -50,8 +50,9 @@
 
 #filter {
   /* Wide enough for a real filter expression, and the first thing to give width back when the
-     chips need to wrap. */
-  flex: 1 1 240px;
+     chips need to wrap. A 180px basis, growing to 380, so at 600px the quick filters still share
+     its line and the toolbar wraps to two lines rather than three. */
+  flex: 1 1 180px;
   max-width: 380px;
   min-width: 150px;
   background: var(--bg-elevated);
@@ -74,6 +75,23 @@
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chips[hidden] { display: none !important; }
+/* The quick filters keep one line and wrap as a group: shrinking, they broke over two lines inside
+   the toolbar's one row while the filter box still had room to give. */
+#chips { flex: none; }
+
+/* `endpoints ▾ N` and its chips, which open under the button rather than at the window's edge. */
+.endpoints-wrap { position: relative; flex: none; }
+.endpoints-wrap .endpoints-pop {
+  left: 0;
+  right: auto;
+  top: calc(100% + 4px);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
+}
+
+/* `⋮`: exports, the shortcut legend and compact rows. */
+.more-host { flex: none; }
+.more-button { font-size: 13px; line-height: 1.2; padding: 1px 9px; }
 
 /* Popovers for the two things that were reference material taking up permanent space. */
 .pop {

@@ -10,7 +10,9 @@
  * opened from disk (`room 1000 close disjoint served` / `… export`); at 400px every row of the probe
  * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`);
  * and at 1440 the list pane starts no lower than 160px (`room 1440 bands list`), the timeline's
- * start reported beside it, with every band's height in the detail.
+ * start reported beside it, with every band's height in the detail; and the toolbar is one row at
+ * 1440 and 1000 (`room <w> toolbar one row`) and wraps without overflowing at 600 and 400 (`room <w>
+ * toolbar fits`).
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -192,11 +194,47 @@ async function bands(page, url, rows) {
   }
 }
 
+// The toolbar's drawn controls: how many lines they take and whether the row or the document
+// overflows sideways. By centre, not top: the row centres its items, so an 11px caption beside the
+// 27px filter box shares its line with a top 6px lower.
+const TOOLBAR = `(() => {
+  const row = document.querySelector('#toolbar .toolbar-row');
+  if (!row) return { missing: true };
+  const kids = [...row.children].filter((e) => e.getClientRects().length && e.getBoundingClientRect().width > 0 && !e.classList.contains('spacer'));
+  const tops = [];
+  for (const e of kids) { const r = e.getBoundingClientRect(); const c = (r.top + r.bottom) / 2; if (!tops.some((x) => Math.abs(x - c) <= 4)) tops.push(c); }
+  return { lines: tops.length, controls: kids.length, scroll: row.scrollWidth, client: row.clientWidth,
+    doc: document.documentElement.scrollWidth, width: innerWidth, height: Math.round(document.getElementById('toolbar').getBoundingClientRect().height) };
+})()`;
+
+/** One row from 1000px up; below, it wraps and nothing overflows. */
+async function toolbar(page, url, rows) {
+  await load(page, url, 1440);
+  for (const width of [1440, 1000, 600, 400]) {
+    await page.setWidth(width);
+    await sleep(400);
+    const t = await page.ev(TOOLBAR);
+    if (!t || t.evalError || t.missing) {
+      rows.push({ key: `room ${width} toolbar`, value: 'not measured', ok: false, detail: String(t && (t.evalError || 'no .toolbar-row')) });
+      continue;
+    }
+    const fits = t.scroll <= t.client + 0.5 && t.doc <= t.width;
+    const detail = `${t.controls} controls on ${t.lines} line(s), ${t.height}px tall; row ${t.scroll} of ${t.client}, document ${t.doc} of ${t.width}`;
+    if (width >= 1000) {
+      const ok = t.lines === 1 && fits;
+      rows.push({ key: `room ${width} toolbar one row`, value: ok ? 'one row' : t.lines > 1 ? `${t.lines} rows` : 'overflows', ok, detail });
+    } else {
+      rows.push({ key: `room ${width} toolbar fits`, value: fits ? 'fits' : 'overflows', ok: fits, detail });
+    }
+  }
+}
+
 async function room(page, url) {
   const rows = [];
   await drawer(page, url, rows);
   await narrowRows(page, url, rows);
   await bands(page, url, rows);
+  await toolbar(page, url, rows);
   const seen = [...new Set(page.exceptions)];
   rows.push({ key: 'room page exceptions', value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') });
   return rows;

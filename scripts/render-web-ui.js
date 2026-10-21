@@ -309,6 +309,9 @@ function runScripts() {
     const chip = doc.querySelector('#endpoint-chips .chip');
     const before = doc.querySelectorAll('#list .row').length;
     if (!chip) return { before, after: before, narrowed: 'no chips', survived: 'n/a', active: 'n/a', chipsAfter: 0 };
+    // The chips are behind `endpoints ▾`; opened as a person would, and shut again below.
+    const opener = doc.getElementById('endpoints-button');
+    opener.dispatchEvent(new window.Event('click', { bubbles: true }));
 
     const chipsBefore = doc.querySelectorAll('#endpoint-chips .chip').length;
     const label = chip.firstChild.textContent;
@@ -331,6 +334,7 @@ function runScripts() {
     // Put the page back the way it was, so the snapshot and every later count are unaffected.
     chip.dispatchEvent(new window.Event('click', { bubbles: true }));
     await settle();
+    opener.dispatchEvent(new window.Event('click', { bubbles: true }));
     return result;
   }
 
@@ -552,7 +556,7 @@ function runScripts() {
    */
   if (!doc.querySelector('#session-picker option')) {
     const listProbe = await probeList();
-    const topBarLines = [...await shell.probeTopBar(shellCtx), ...await shell.probeProcessesPage(shellCtx)];
+    const topBarLines = [...await shell.probeTopBar(shellCtx), ...await room.probeMoreMenu(shellCtx), ...await shell.probeProcessesPage(shellCtx)];
     verdict.reporting = true;
     console.error('--- empty archive ---');
     note('sessions           : 0');
@@ -968,38 +972,6 @@ function runScripts() {
   }
 
   /**
-   * The toolbar's labels and controls, as a reader meets them.
-   *
-   * The order control is judged by `aria-pressed` agreeing with the visible `on` state, because
-   * the segmented control's whole claim is that it states which order the list is in — a
-   * control whose two halves disagree about that says nothing.
-   */
-  function probeToolbarLabels() {
-    const toolbar = doc.getElementById('toolbar');
-    const labels = [...toolbar.querySelectorAll('.row-label')].map((n) => n.textContent);
-    const endpoints = doc.getElementById('endpoint-chips');
-    const oldest = doc.getElementById('order-oldest');
-    const newest = doc.getElementById('order-newest');
-    const pressedAgrees = [oldest, newest].every(
-      (b) => b.getAttribute('aria-pressed') === String(b.classList.contains('on')),
-    );
-    const markerLabels = new Set([...doc.querySelectorAll('#markers li')].filter((li) => !li.classList.contains('muted')).map((li) => li.textContent)).size;
-    const markersText = doc.getElementById('markers-button').textContent;
-    return {
-      rowLabels: labels.includes('filters') && (endpoints.hidden || labels.includes('endpoints'))
-        ? `yes (${labels.join(', ')})`
-        : `NO - ${labels.join(', ') || 'none'}`,
-      orderSegmented: oldest.parentElement.classList.contains('seg2') && pressedAgrees
-        && [oldest, newest].filter((b) => b.classList.contains('on')).length === 1
-        ? `yes (${oldest.classList.contains('on') ? 'oldest' : 'newest'} first pressed)`
-        : 'NO - the order control does not state one order',
-      markersCount: markerLabels ? (markersText === `markers · ${markerLabels}` ? `yes ("${markersText}")` : `NO - "${markersText}" for ${markerLabels}`)
-        : markersText === 'markers' ? 'yes ("markers", none in this session)' : `NO - "${markersText}"`,
-      shortcuts: doc.getElementById('keys-button').textContent === 'shortcuts' ? 'yes' : 'NO',
-    };
-  }
-
-  /**
    * The tag browser: does a key list plus one key's detail come out of app-defined payloads?
    *
    * Driven through the real tab, real input and real clicks rather than by calling render
@@ -1186,36 +1158,6 @@ function runScripts() {
       after,
       ticks: before !== after ? `yes ("${before}" -> "${after}")` : `NO - stuck at "${before}"`,
     };
-  }
-
-  /**
-   * Controls belong to the view they act on.
-   *
-   * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
-   * something else entirely, above a list it cannot filter — which is what the rail was, for a
-   * fifth of the window, on five tabs out of seven.
-   */
-  async function probeToolbar() {
-    const result = { onTraffic: 'n/a', onBrowser: 'n/a' };
-    const tabOf = (view) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === view);
-
-    const network = tabOf('network');
-    if (network) {
-      await click(network);
-      await new Promise((r) => setTimeout(r, 400));
-      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'yes (shown)';
-    }
-
-    const browser = firstTagBrowserTab();
-    if (browser) {
-      await click(browser);
-      await new Promise((r) => setTimeout(r, 700));
-      result.onBrowser = doc.getElementById('toolbar').hidden
-        ? `yes (hidden on '${browser.dataset.view}')`
-        : `NO - still shown on '${browser.dataset.view}'`;
-      result.ownFilterInstead = doc.getElementById('browser-filter') ? 'yes' : 'NO';
-    }
-    return result;
   }
 
   /**
@@ -2084,11 +2026,13 @@ function runScripts() {
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
   const drawerLines = await room.probeDrawer(shellCtx);
-  const toolbarProbe = await probeToolbar();
+  const toolbarLines = await room.probeToolbar(shellCtx);
   const nowLines = await room.probeNowStrip(shellCtx);
   const overviewLines = await room.probeOverview(shellCtx);
   const tabProbe = probeTabs();
-  const toolbarLabelProbe = probeToolbarLabels();
+  const toolbarControlLines = [ // lib/list-room-probes.js; each leaves the list unfiltered and every menu shut
+    ...await room.probeToolbarControls(shellCtx), ...await room.probeEndpointsMenu(shellCtx),
+    ...await room.probeMoreMenu(shellCtx), ...await room.probeDensity(shellCtx)];
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
   const ageProbe = await probeAges();
@@ -2299,9 +2243,7 @@ function runScripts() {
   console.error('signal tabs count  :', tabProbe.signalTabTotal === everySignal.length
     ? `yes (${everySignal.length}, every signal in the session)`
     : `NO - the tabs count ${tabProbe.signalTabTotal}, the session holds ${everySignal.length}`);
-  console.error('toolbar on traffic :', toolbarProbe.onTraffic);
-  console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
-  console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
+  report(toolbarLines);
   report([...nowLines, ...overviewLines]); // lib/list-room-probes.js
   console.error('--- handing to an agent ---');
   console.error('call bundle        :', bundleProbe.txnButton);
@@ -2353,9 +2295,7 @@ function runScripts() {
   console.error('tabs menu          :', tabsMenu);
   console.error('signal separator   :', tabProbe.signalSeparator);
   console.error('--- toolbar labels ---');
-  for (const [name, value] of Object.entries(toolbarLabelProbe)) {
-    console.error(`${name.padEnd(19)}:`, value);
-  }
+  report(toolbarControlLines);
   console.error('min text size      :', auditMinTextSize(css));
   console.error('--- scope bar ---');
   console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);

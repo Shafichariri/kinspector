@@ -4,8 +4,8 @@
  * cannot see, because every one of these is layout. The tab bar is read on the probe session
  * instead, whose nine views overflow a narrow bar where the long session's four would fit anyway.
  *
- * Judged per width: the top bar never wider than the window (`topbar fits`); the picker, export,
- * live and connection controls each inside the window, hit by `elementFromPoint` at their centre
+ * Judged per width: the top bar never wider than the window (`topbar fits`); the picker, live and
+ * connection controls each inside the window, hit by `elementFromPoint` at their centre
  * and focusable (`controls`); the picker's start time whole and inside its face (`picker time`);
  * every view a visible tab or an item of a visible `views ▾` with the tab bar not overflowing
  * (`tabs reachable`); each rail link inside the window (`rail`); and the Sessions, Processes and
@@ -17,7 +17,7 @@ const { LONG_SESSION_ID } = require('./long-session-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
 const WIDTHS = [1440, 1000, 600, 400];
-const CONTROLS = ['#session-picker', '#export-host button', '#live-btn', '#conn'];
+const CONTROLS = ['#session-picker', '#live-btn', '#conn'];
 const PAGES = ['sessions', 'processes', 'settings'];
 
 const READ = `(() => {

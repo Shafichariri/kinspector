@@ -17,7 +17,7 @@ const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
 // 975 and 800 keep their keys, so --base compares them with the bar before 1a rebuilt it.
 const WIDTHS = [975, 800, 600, 400];
-const CONTROLS = ['.brand', '#session-picker', '.picker-time', '#export-host', '#counts', '#live-btn', '#conn'];
+const CONTROLS = ['.brand', '#session-picker', '.picker-time', '#counts', '#live-btn', '#conn'];
 const FILTER = 'path:/v3/shop';
 
 const READ = `(() => {
