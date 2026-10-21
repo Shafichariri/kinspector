@@ -437,7 +437,24 @@ instead of pushing the rows down. The line is hidden when both of its parts are,
 strip closes its list, so a popover left open never comes back over another view's rows. The hint
 counts the session's calls, as the bars do: the live probe's `overview line` reads it under a filter
 that thins the rows, red with the count taken from the rows held. `room 1440 bands list` bounds the
-list pane's top at 160px.
+list pane's top at 160px. The hint's words are whole at 1440 and 1000, because the axis is the part
+that gives: its bars stretch to any width, and a count cut to `16 calls in this session · 2.1s — drag
+to …` no longer says what it counts. The axis has a zero flex basis for that; with `auto` it claimed
+the svg's own width and the two shrank in step (`room <w> hint whole`, red with `auto` put back).
+
+**Every count on the traffic page says what it counts, and every tab counts the session.** One
+1203-call session once showed four numbers: the tab's `traffic 1000`, the header's `newest 1000 of
+1203 shown`, the scope bar's `1203 of 1203` and the axis's `1203 calls`. The traffic tab counted the
+rows held while the signal tabs counted the session; now it counts the session too, as `allSignals`
+does for the signal tabs. The scope bar says `calls under this prefix` (`N/M under prefix` below
+520px), the overview `calls in this session` and in a stretch `calls in this stretch`, counted from
+the whole session as its bars are, the glance `calls in session`, and the header keeps its own
+wording for drawn rows. `counts agree`, on the capped long session live and exported, fails when a
+count matches no label or two counts of the session differ; its label table holds the header's and
+the list note's match wordings too. It was red with the scope count bare and with the tab counting
+rows. The live probe's `live header filter` asserts the tab's session count under a filter, where it
+used to assert the filtered rows. `topbar <w> count` in `measure-web-ui.js` holds each header
+wording to one line at 1000 as well as below, where the toolbar has no room for it.
 
 **The toolbar is one row from 1000px up, with endpoint chips behind `endpoints ▾`.** It was two rows
 because the chips are the only part whose length depends on the session, and sharing a row made

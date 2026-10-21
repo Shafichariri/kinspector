@@ -135,6 +135,8 @@
   min-width: 0;
 }
 .scope-count { font-size: 11px; flex: 0 0 auto; }
+/* `N of M calls under this prefix`, or below 520px `N/M under prefix` (the 519px block below). */
+.scope-short { display: none; }
 
 .row {
   display: flex;
@@ -175,6 +177,8 @@ body.density-compact .row { padding-top: 3px; padding-bottom: 3px; }
   .row .ms, .row .size { width: 46px; flex: none; }
   .row .host { max-width: 64px; flex-shrink: 3; }
   .row .path-tail { flex: none; }
+  .scope-long { display: none; }
+  .scope-short { display: inline; }
 }
 
 .s2 { color: var(--ok); } .b2 { background: var(--ok); }

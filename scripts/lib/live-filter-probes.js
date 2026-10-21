@@ -16,12 +16,12 @@
  *   live signal it matches appear without a load, and one of each it does not match appear nowhere.
  * - `live rows whole`: the refused rows still reach the whole-session copies, so a signal tab and an
  *   endpoint chip count them.
- * - `live header filter`: once the daemon has answered, the header and the traffic tab count the
- *   matching call and both calls the session gained.
+ * - `live header filter`: once the daemon has answered, the header counts the matching call and both
+ *   calls the session gained, and the traffic tab, which counts the session, both calls.
  * - `live paused no read`: a row that arrived just before pausing is not read in while paused, and
  *   resuming reads it.
  * - `live picker count`, `live glance plain`: after two live calls with no filter, the selected
- *   session's picker option and its face, and the glance's `calls` row, state the header's count, and
+ *   session's picker option and its face, and the glance's `calls in session` row, state the header's count, and
  *   the glance's hosts and slowest calls count the live calls. Both read only what the last load had.
  * - `live timeline plain`: with no filter and the timeline shown, a live call is drawn on it with no
  *   other action; the socket's call branch never redrew the timeline.
@@ -76,7 +76,7 @@ async function blankHeader(ctx) {
   const glanceRows = () => [...doc.querySelectorAll('#detail-empty.glance .glance-row')].map((row) => [
     row.querySelector('.glance-label')?.textContent, row.querySelector('.glance-value')?.textContent,
   ]);
-  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls')?.[1];
+  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls in session')?.[1];
   const showGlance = () => {
     doc.getElementById('detail').hidden = true;
     doc.getElementById('detail-empty').hidden = false;
@@ -190,7 +190,7 @@ async function liveRows(ctx, verdicts) {
   const glanceRows = () => [...doc.querySelectorAll('#detail-empty.glance .glance-row')].map((row) => [
     row.querySelector('.glance-label')?.textContent, row.querySelector('.glance-value')?.textContent,
   ]);
-  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls')?.[1];
+  const glanceCalls = () => glanceRows().find(([label]) => label === 'calls in session')?.[1];
   const showGlance = () => {
     doc.getElementById('detail').hidden = true;
     doc.getElementById('detail-empty').hidden = false;
@@ -322,10 +322,13 @@ async function liveRows(ctx, verdicts) {
         ? `yes (the matching call${view === 'network' ? '' : ' and signal'} drawn after ${callReads} filtered call read, the refused rows never, no load)`
         : `NO - ${wrong.join(', ') || 'the matching rows never drawn'}`);
       if (view !== 'network') continue;
+      // The tab counts the session, as the signal tabs do, so under the filter it is the header's
+      // second number and moves by both calls; it counted the filtered rows until 1b (decision 13),
+      // and `page.matched + 1` was due here then.
       const dueFiltered = `${page.matched + 1} of ${total + 2} calls`;
-      verdicts.set('live header filter', counts() === dueFiltered && tabCount('network') === String(page.matched + 1)
-        ? `yes ("${dueFiltered}", traffic ${page.matched + 1}, once the daemon answered)`
-        : `NO - "${counts()}", traffic ${tabCount('network')}, where "${dueFiltered}" and ${page.matched + 1} were due`);
+      verdicts.set('live header filter', counts() === dueFiltered && tabCount('network') === String(total + 2)
+        ? `yes ("${dueFiltered}", traffic ${total + 2}, once the daemon answered)`
+        : `NO - "${counts()}", traffic ${tabCount('network')}, where "${dueFiltered}" and ${total + 2} were due`);
       // The glance ignores the filter, so it counts both calls, the refused one too.
       await waitFor(() => !liveDrawArmed(), 2000);
       verdicts.set('live glance filter', glanceCalls() === String(total + 2)

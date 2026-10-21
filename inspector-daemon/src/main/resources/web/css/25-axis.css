@@ -16,12 +16,15 @@
 
 /* --- the time axis ------------------------------------------------------ */
 
-/* Start time, bars and screen band, end time. It takes what the hint and the now strip leave. */
+/* Start time, bars and screen band, end time. It takes what the hint and the now strip leave: a
+   zero basis, because with `auto` it claimed the svg's own width and shrank only in step with the
+   hint, which cut `16 calls in this session · 2.1s — drag to narrow` at 1440. The bars stretch to any
+   width, and words cut short stop saying what they count, so the axis is the part that gives. */
 .axis {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 120px;
   user-select: none;
   cursor: crosshair;

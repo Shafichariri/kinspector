@@ -34,7 +34,11 @@ function availableViews() {
   // session the merged timeline ran 126 rows of which 13 were calls, so landing there puts
   // what you came for at one row in ten. The merge is a correlation tool you reach for once
   // you know which call you care about, which makes it the second tab, not the first.
-  views.push({ id: 'network', label: 'traffic', title: 'HTTP calls', count: state.transactions.length });
+  //
+  // It counts the session's calls, as the signal tabs count the session's signals: counting the rows
+  // held put `traffic 1000` beside `newest 1000 of 1203 shown` on a session past the list's ceiling,
+  // and shrank under a filter while every signal tab stood still. The header says what is drawn.
+  views.push({ id: 'network', label: 'traffic', title: 'HTTP calls in this session', count: state.sessionTotal ?? state.transactions.length });
   // Always offered, even with no screen signals: a tab that came and went between sessions moved
   // everything after it, and a session with no screens still has a path — one honest column
   // saying so, which is also the only place that tells you how to get more.

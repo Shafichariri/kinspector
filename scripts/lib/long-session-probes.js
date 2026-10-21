@@ -46,7 +46,62 @@ function twicePair(calls) {
 }
 
 /** The report's labels, in the order the lines print. */
-const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter'];
+const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter', 'counts agree'];
+
+/**
+ * Every count the traffic page draws, by the words around it: which numbers it labels the session's,
+ * and which it labels as something else — the rows drawn, the matches, the calls under the prefix.
+ * Row 3's header and list-note wordings are here as the matches they count. A count that fits none
+ * is unlabelled, which is the defect: `traffic 1000` beside `newest 1000 of 1203 shown`, a bare
+ * `1203 of 1203` on the scope bar and `1203 calls` on the axis were four numbers for one session.
+ * `session` lists the capture groups that are the session's call count.
+ */
+const COUNT_LABELS = [
+  { where: 'header', label: 'rows of the session', re: /^newest (\d+) of (\d+) shown$/, session: [2] },
+  { where: 'header', label: 'matches drawn', re: /^newest (\d+) of (\d+) matches shown$/, session: [] },
+  { where: 'header', label: 'matches in a stretch', re: /^(\d+) of the newest (\d+) of (\d+) matches shown$/, session: [] },
+  { where: 'header', label: 'calls drawn', re: /^(\d+) of (\d+) calls?$/, session: [2] },
+  { where: 'list note', label: 'matches loaded', re: /newest (\d+) of (\d+) matches loaded/, session: [] },
+  { where: 'scope', label: 'under the prefix', re: /^(\d+) of (\d+) calls under this prefix$/, session: [2] },
+  { where: 'scope short', label: 'under the prefix', re: /^(\d+)\/(\d+) under prefix$/, session: [2] },
+  { where: 'overview', label: 'the session', re: /^(\d+) calls in this session\b/, session: [1] },
+  { where: 'overview', label: 'the stretch', re: /^(\d+) calls in this stretch\b/, session: [] },
+  { where: 'glance', label: 'the session', re: /^calls in session (\d+)$/, session: [1] },
+  { where: 'glance', label: 'the stretch', re: /^calls in stretch (\d+)$/, session: [] },
+  { where: 'tab', label: 'the session', re: /^traffic (\d+)$/, session: [1] },
+];
+
+/**
+ * `counts agree`: reads the traffic tab, the header, the scope bar's two forms, the overview line's
+ * hint, the glance and, where drawn, the list note; each must match a label its place may carry, and
+ * every number a label calls the session's must be the route's `total`.
+ */
+function countsAgree(doc, total, label) {
+  const text = (node) => (node && !node.hidden ? node.textContent.replace(/\s+/g, ' ').trim() : null);
+  const tab = doc.querySelector('#tabs .tab[data-view="network"]');
+  const glance = [...doc.querySelectorAll('#detail-empty.glance .glance-row')].find((r) => /^calls in /.test(r.querySelector('.glance-label')?.textContent || ''));
+  const read = [
+    ['tab', tab && `${tab.querySelector('.tab-label')?.textContent} ${tab.querySelector('.tab-count')?.textContent}`],
+    ['header', text(doc.getElementById('counts'))],
+    ['scope', text(doc.querySelector('#scope-bar:not([hidden]) .scope-long'))],
+    ['scope short', text(doc.querySelector('#scope-bar:not([hidden]) .scope-short'))],
+    ['overview', text(doc.querySelector('#axis-hint > span'))],
+    ['glance', glance && `${glance.querySelector('.glance-label').textContent} ${glance.querySelector('.glance-value').textContent}`],
+    ['list note', text(doc.getElementById('list-note'))],
+  ].filter(([, value]) => value);
+  const unlabelled = [];
+  const wrong = [];
+  for (const [where, value] of read) {
+    const fit = COUNT_LABELS.filter((l) => l.where === where).map((l) => [l, l.re.exec(value)]).find(([, m]) => m);
+    if (!fit) { unlabelled.push(`${where} "${value}"`); continue; }
+    for (const group of fit[0].session) if (Number(fit[1][group]) !== total) wrong.push(`${where} "${value}" says ${fit[1][group]} for the session`);
+  }
+  const places = read.map(([where]) => where);
+  const missing = ['tab', 'header', 'overview', 'glance'].filter((where) => !places.includes(where));
+  return [label, unlabelled.length || wrong.length || missing.length
+    ? `NO - ${[...unlabelled.map((u) => `unlabelled: ${u}`), ...wrong, ...missing.map((m) => `no ${m} count to read`)].join('; ')}`
+    : `yes (${read.map(([where, value]) => `${where} "${value}"`).join(', ')}; the session's ${total} wherever a label says session)`];
+}
 const every = (why) => LONG_LABELS.map((label) => [label, why]);
 
 /**
@@ -73,6 +128,7 @@ function readLongSession(doc, calls, { exported = false } = {}) {
     [LONG_LABELS[2], counts === due
       ? `yes ("${counts}", ${exported ? 'every call the export embeds' : 'which no filter reads like'})`
       : `NO - "${counts}", where "${due}" was due`],
+    countsAgree(doc, calls.length, exported ? 'counts agree in export' : LONG_LABELS[3]),
   ];
 }
 
@@ -195,6 +251,9 @@ async function probeLongSession(ctx) {
   choose(ctx, LONG_SESSION_ID);
   if (pair.length === 2) await waitFor(() => doc.querySelector(`#list .row[data-id="${pair[1].id}"]`));
   await ctx.settle();
+  // Nothing selected, so the pane draws the glance, whose count `counts agree` reads; a switch keeps
+  // the previous session's call drawn there.
+  doc.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   const verdicts = readLongSession(doc, calls);
   verdicts.push(...await probeTxnPastCeiling(ctx, calls));
   verdicts.push(...(calls.length > 1150 ? await probeCapped(ctx, calls) : CAPPED_LABELS.map((label) => [label, `n/a (${calls.length} calls)`])));

@@ -64,7 +64,9 @@ function renderSessionGlance() {
     'Copy a digest of what is on screen — narrowing on the axis narrows this too',
   ));
   pane.appendChild(title);
-  pane.appendChild(glanceRow('calls', String(txns.length)));
+  // Named for what it counts — the session's calls, or the stretch's — beside a header that counts
+  // the rows drawn.
+  pane.appendChild(glanceRow(state.timeRange ? 'calls in stretch' : 'calls in session', String(txns.length)));
   if (failed.length) {
     pane.appendChild(glanceRow(
       'failed',

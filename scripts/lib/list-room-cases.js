@@ -13,7 +13,8 @@
  * start reported beside it, with every band's height in the detail; the toolbar is one row at
  * 1440 and 1000 (`room <w> toolbar one row`) and wraps without overflowing at 600 and 400 (`room <w>
  * toolbar fits`); and the divider, dragged with a real mouse at 1440, moves the list's edge by the
- * drag and keeps it across a reload (`room 1440 divider`).
+ * drag and keeps it across a reload (`room 1440 divider`); and the overview hint's words are whole
+ * at 1440 and 1000 on the list (`room <w> hint whole`).
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -265,6 +266,29 @@ async function divider(page, url, rows) {
       + `reloaded ${Math.round(reloaded.list)}; double-click ${Math.round(reset.list)} (stored ${reset.pref}); at 1000 drawn ${narrow.drawn}` });
 }
 
+// The overview hint's words: whether the span holding them is cut, and its text.
+const HINT = `(() => { const h = document.querySelector('#axis-hint > span');
+  return h && h.getClientRects().length ? { cut: h.scrollWidth > h.clientWidth + 0.5, text: h.textContent,
+    hint: Math.round(h.getBoundingClientRect().width), axis: Math.round(document.getElementById('axis').getBoundingClientRect().width) } : null; })()`;
+
+/**
+ * The hint says what the overview counts, so its words are whole at 1440 and 1000 on the list: they
+ * were cut to `16 calls in this session · 2.1s — drag to …` while the axis took the line, which can
+ * stretch its bars to any width. Below that the line is the window's, and the words give way.
+ */
+async function hint(page, url, rows) {
+  await load(page, url, 1440);
+  await page.ev(`selectView('network')`);
+  for (const width of [1440, 1000]) {
+    await page.setWidth(width);
+    await sleep(400);
+    const h = await page.ev(HINT);
+    const ok = Boolean(h) && !h.evalError && !h.cut;
+    rows.push({ key: `room ${width} hint whole`, value: !h || h.evalError ? 'not measured' : h.cut ? 'cut' : 'whole', ok,
+      detail: !h || h.evalError ? String(h && h.evalError) : `"${h.text}" in ${h.hint}px beside an axis of ${h.axis}px` });
+  }
+}
+
 async function room(page, url) {
   const rows = [];
   await drawer(page, url, rows);
@@ -272,6 +296,7 @@ async function room(page, url) {
   await narrowRows(page, url, rows);
   await bands(page, url, rows);
   await toolbar(page, url, rows);
+  await hint(page, url, rows);
   const seen = [...new Set(page.exceptions)];
   rows.push({ key: 'room page exceptions', value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') });
   return rows;

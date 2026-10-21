@@ -183,8 +183,11 @@ function renderAxisFoot(win) {
     return;
   }
   hint.className = 'axis-hint';
-  const kept = visibleTransactions().length;
-  const label = el('span', null, `${clock(state.timeRange.from)} – ${clock(state.timeRange.to)} · ${kept} calls`);
+  // The session's calls in the stretch, as the bars draw them: the rows held would count only the
+  // newest 1000 on a session past the list's ceiling, and only the matches under a filter.
+  let inStretch = 0;
+  for (const t of state.allTransactions) if (inRange(t.mono)) inStretch++;
+  const label = el('span', null, `${inStretch} calls in this stretch · ${clock(state.timeRange.from)} – ${clock(state.timeRange.to)}`);
   const clear = el('button', 'btn btn-sm btn-quiet', 'show all');
   clear.addEventListener('click', () => setTimeRange(null));
   hint.appendChild(label);

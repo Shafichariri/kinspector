@@ -208,7 +208,13 @@ function renderScopeBar() {
   const label = el('span', 'scope-label mono', `${scope.host} · ${scope.prefix.replace(/\/$/, '')}`);
   label.title = `${scope.label} — shared by most of this session, and lifted out of the rows below`;
   bar.appendChild(label);
-  bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
+  // Says what it counts: a bare `1203 of 1203` beside the header's `newest 1000 of 1203 shown` read
+  // as a third count of the same thing. The short form is the stylesheet's, below 520px.
+  const count = el('span', 'scope-count muted mono');
+  const total = state.allTransactions.length;
+  count.appendChild(el('span', 'scope-long', `${scope.covered} of ${total} calls under this prefix`));
+  count.appendChild(el('span', 'scope-short', `${scope.covered}/${total} under prefix`));
+  bar.appendChild(count);
 }
 
 /** The list's "clear filter" control, shared by every pane a filter can empty or thin. */
