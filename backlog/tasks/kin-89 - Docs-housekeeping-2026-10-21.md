@@ -1,9 +1,11 @@
 ---
 id: KIN-89
 title: Docs housekeeping (2026-10-21)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-21 18:15'
+updated_date: '2026-10-21 18:33'
 labels:
   - 'item:docs-housekeeping-2026-10-21'
 dependencies: []
@@ -27,3 +29,9 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Part 1 (docs) in PR #124: INTEGRATION.md v49/v50 headings lose '(this document)', no version bump (not consumer-affecting); AGENTS.md structure-pass rows S-D/S-F/S-H/S-I merged into one row 'S' (phases A to I, STATUS.md for PRs and red repo pushes), 14,990 -> 14,606 bytes. Remaining: (1) .claude/agents/architect.md still says :inspector-noop-ui has no golden file; should name api/inspector-ui-public-api.txt; waits on maintainer approval. (2) Sessions page shows ~/.inspector/sessions whatever --data is; web lane, needs a probe line proven red. Also seen, out of this item's scope: root AGENTS.md Architecture and Production safety still say the ui pair has no golden file.
+<!-- SECTION:NOTES:END -->
