@@ -103,10 +103,18 @@ data class NetworkTransaction(
             else -> "${s / 100}xx"
         }
 
+    /**
+     * The server that answered: [host], plus `:port` when the port is not the scheme's default.
+     * [url] and every call label in the daemon (the MCP `timeline`, the exports) are built on this,
+     * so the default-port decision is made once. Labels built from `host` alone read calls to
+     * `127.0.0.1:8080` and `127.0.0.1:9090` as one endpoint.
+     */
+    val hostPort: String
+        get() = port?.takeIf { it != defaultPortFor(scheme) }?.let { "$host:$it" } ?: host
+
     val url: String
         get() = buildString {
-            append(scheme).append("://").append(host)
-            port?.takeIf { it != defaultPortFor(scheme) }?.let { append(':').append(it) }
+            append(scheme).append("://").append(hostPort)
             append(path)
             query?.let { append('?').append(it) }
         }
