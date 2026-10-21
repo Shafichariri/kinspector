@@ -23,7 +23,7 @@
  *   - the session data under a filter: which list "last capture" dates the session by, and which
  *     answer survives when two loads overlap, a whole-session read fails, or the page forgets the
  *     whole session while a read is in flight; and what the filter notes and the path count on a
- *     session past the route's clamp;
+ *     session past the route's clamp; what a session switch clears, and the one "being read" wording;
  *   - a session too long to spread into an argument list: no `f(...rows)` anywhere in the scripts,
  *     and the axis, the waterfall, the stretch note, the timeline and the path run over 200,000 rows;
  *     and the path, past the clamp, says which visits' calls are not loaded rather than "0 of N";
@@ -58,6 +58,7 @@ const {
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { RULES, NON_RULE_BLOCKS, loadCaseFiles, runRule, checkJsonParser, checkSignalPages } = require('./lib/mirror-runner');
 const { checkSessionState } = require('./lib/session-state-checks');
+const { checkBeingRead } = require('./lib/being-read-checks');
 const { checkListHolds } = require('./lib/list-holds-checks');
 const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
@@ -127,6 +128,7 @@ async function main() {
   console.error('--- session state ---');
   for (const [label, value] of await checkSessionState(scripts)) report(label, value);
   for (const [label, value] of await checkLiveReread(scripts)) report(label, value);
+  for (const [label, value] of checkBeingRead(scripts)) report(label, value);
 
   console.error('--- long session ---');
   report('no argument spread', auditNoArgumentSpread(scripts));

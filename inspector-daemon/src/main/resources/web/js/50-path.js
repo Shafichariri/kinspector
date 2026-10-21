@@ -73,9 +73,9 @@ function renderPath() {
 
   const list = visits(state.screens, state.transactions, state.markers, state.signals, sessionStartMono());
   root.innerHTML = '';
-  if (!list.length) {
-    root.appendChild(el('div', 'empty muted pv-empty', state.sessionId ? 'nothing recorded in this session yet' : 'no session'));
-    state.pathVisitCount = 0;
+  if (!list.length || sessionPending()) {
+    saysBeingRead(root.appendChild(el('div', 'empty muted pv-empty', state.sessionId ? 'nothing recorded in this session yet' : 'no session')));
+    state.pathVisitCount = sessionPending() ? null : 0;
     return;
   }
 

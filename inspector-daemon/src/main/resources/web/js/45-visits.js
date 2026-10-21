@@ -204,6 +204,7 @@ function renderWaterfall() {
   const groups = waterfallGroups();
   const empty = $('waterfall-empty');
   empty.hidden = groups.length > 0;
+  if (saysBeingRead(empty)) return;
   const hidden = hiddenByFilter({ signals: false, ranged: true });
   if (!groups.length) {
     // Which of three things emptied it, asked in this order: a filter that hid calls here, then a

@@ -24,7 +24,7 @@ function followState(newestFirst) {
   // Three of one key between two calls: a run, drawn collapsed.
   const signals = [signal(0), { ...signal(0), id: 's0b', mono: 6 }, { ...signal(0), id: 's0c', mono: 7 }];
   return {
-    sessionId: 'S', filter: '', view: 'all', newestFirst, liveTail: true, timeRange: null, current: [],
+    sessionId: 'S', signalSessionId: 'S', filter: '', view: 'all', newestFirst, liveTail: true, timeRange: null, current: [],
     transactions: calls, allTransactions: calls, sessionTotal: 2, matched: 2,
     signals, allSignals: signals.slice(), screens: [], markers: [], recording: [],
     expandedRuns: new Set(), timelineFresh: false,

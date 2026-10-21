@@ -108,6 +108,7 @@ function renderTimeline({ follow = true } = {}) {
   const hidden = state.filter ? hiddenByFilter({ ranged: true }) : { calls: 0, signals: 0 };
   const filtered = hidden.calls + hidden.signals > 0;
   empty.hidden = calls.length + signals.length > 0;
+  if (saysBeingRead(empty)) return;
   if (!empty.hidden) {
     if (filtered) filterNote(empty, hidden, true);
     else empty.textContent = state.timeRange ? 'nothing in the selected stretch' : 'nothing was recorded in this session';

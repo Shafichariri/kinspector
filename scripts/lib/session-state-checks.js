@@ -69,7 +69,7 @@ function signalRoute(rows, behave = () => null, { readAt = 'arrival' } = {}) {
 
 /** `15-session-data.js` in a context whose page functions do nothing, over `api`. */
 function sessionData(sources, api, state) {
-  return runFile(sources, 'js/15-session-data.js', {
+  return runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js'], {
     state,
     api,
     tagOf: (s) => String(s.tag).toLowerCase(),
@@ -141,7 +141,7 @@ async function checkSignalRace(sources) {
  */
 function loadingPage(sources, api, state) {
   const element = { hidden: false, textContent: '' };
-  return runFile(sources, 'js/15-session-data.js', {
+  return runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js'], {
     state, api, ARCHIVE: null, tagOf: (s) => String(s.tag).toLowerCase(),
     availableViews: () => [{ id: 'network' }], visibleTransactions: () => state.transactions,
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, renderListEmpty() {},
@@ -274,12 +274,12 @@ async function checkAfterSessionChange(sources) {
     ...sessionState(''), sessionId: null, allSessionId: 'S', allSignalsSessionId: 'S', callLoad: 4, signalLoad: 7,
     sessions: [], payloads: new Map(), current: [],
   };
-  const page = runFile(sources, ['js/15-session-data.js', 'js/90-sessions.js'], {
+  const page = runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js', 'js/90-sessions.js'], {
     // `querySelector` for the picker's face, which `loadSessions` paints; there is none here.
     state, api: async (path) => (path === '/api/recording' ? [] : []), document: { querySelector: () => null },
     $: (id) => (id === 'session-rows' ? null : element),
     renderList() {}, renderMarkers() {}, renderCurrent() {}, renderTabs() {}, applyView() {},
-    renderTimeline() {}, renderSessionGlance() {}, statsSessionChanged() {},
+    renderTimeline() {}, renderSessionGlance() {}, statsSessionChanged() {}, paintDetailTools() {},
   });
   await page.afterSessionChange();
   const ok = state.allSessionId === null && state.allSignalsSessionId === null && state.callLoad > 4 && state.signalLoad > 7;
@@ -314,7 +314,7 @@ function clampPage(sources) {
   const element = { hidden: false, textContent: '' };
   const el = (tag, cls, text) => ({ textContent: text || '', addEventListener() {} });
   const state = { ...sessionState(''), timeRange: null, recording: [] };
-  const page = runFile(sources, ['js/15-session-data.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js'], {
+  const page = runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js'], {
     state, api, el, ARCHIVE: null, tagOf: (x) => String(x.tag).toLowerCase(),
     availableViews: () => [{ id: 'network' }],
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, showFilterError() {},

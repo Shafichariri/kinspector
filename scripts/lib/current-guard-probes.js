@@ -31,12 +31,13 @@
  */
 
 const { choose, waitFor } = require('./long-session-probes');
+const { SWITCH_LABELS, probeCallsAfterSwitch } = require('./switch-call-probes');
 
 const CURRENT_LABELS = [
   'now late reply dropped', 'now failed read empty',
   'now switch shows none', 'now newest read decides', 'now load read overtaken', 'now failed read kept',
 ];
-const every = (why) => CURRENT_LABELS.map((label) => [label, why]);
+const every = (why) => [...CURRENT_LABELS, ...SWITCH_LABELS].map((label) => [label, why]);
 
 /** What the strip lists, as `tag name` in drawn order. */
 const stripOf = (doc) =>
@@ -146,6 +147,8 @@ async function probeCurrentAfterSwitch(ctx) {
     await back();
     verdicts.push(...await probeSwitchWindow(ctx, { from, to, fromKeys, toKeys, realFetch, shows }));
     verdicts.push(...await probeReadOrder(ctx, { from, fromKeys, routeOf, realFetch }));
+    // The call side across the same switch, one pane a line (`switch-call-probes.js`).
+    verdicts.push(...await probeCallsAfterSwitch(ctx, pair));
   } finally {
     await back();
   }

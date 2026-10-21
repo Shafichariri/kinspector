@@ -16,7 +16,7 @@ function renderMarkers() {
   // The count on the button, so a session with markers says so without opening anything.
   $('markers-button').textContent = labels.length ? `markers · ${labels.length}` : 'markers';
   if (!labels.length) {
-    list.appendChild(el('li', 'muted', 'none'));
+    list.appendChild(el('li', 'muted', sessionPending() ? beingRead() : 'none'));
     return;
   }
   for (const label of labels) {
@@ -384,7 +384,7 @@ function renderList() {
 
   const rows = orderedRows();
   $('list-empty').hidden = rows.length > 0;
-  renderListEmpty();
+  if (!saysBeingRead($('list-empty'))) renderListEmpty();
   renderListNote();
 
   // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the

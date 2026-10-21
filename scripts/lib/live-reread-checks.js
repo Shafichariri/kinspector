@@ -53,12 +53,12 @@ function routes(rows) {
 
 function page(sources, api, state) {
   const element = { hidden: false, textContent: '', title: '' };
-  const context = runFile(sources, 'js/15-session-data.js', {
+  const context = runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js'], {
     state, api, ARCHIVE: null, tagOf: (s) => String(s.tag).toLowerCase(),
     availableViews: () => [{ id: 'network' }], visibleTransactions: () => state.transactions,
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, renderListEmpty() {},
     showFilterError() {}, renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {},
-    renderWaterfall() {}, renderPath() {},
+    renderWaterfall() {}, renderPath() {}, paintDetailTools() {},
     $: () => element,
   });
   for (const name of ['oweReread', 'rereadLive', 'loadTransactions', 'loadSignals']) {
@@ -220,7 +220,7 @@ async function checkSessionChanged(sources) {
   state.reread.transactions = true;
   const reread = p.rereadLive();
   await pause(0);
-  // As the session picker does: the new session is written, the list stands until its load answers.
+  // As the session picker does: the new session is written, and its load clears the list and reads it.
   state.sessionId = 'T';
   const held = hold('calls', 'path:/b');
   const load = p.loadTransactions();

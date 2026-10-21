@@ -141,7 +141,7 @@ function stubPage(sources, state, { before = [], globals = {} } = {}) {
     if (!nodes.has(id)) { const n = stubNode(id); n.parentElement = pane; nodes.set(id, n); }
     return nodes.get(id);
   };
-  const page = runFile(sources, [...before, 'js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
+  const page = runFile(sources, [...before, 'js/16-session-load.js', 'js/20-navigation.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js', 'js/55-axis.js', 'js/70-timeline.js'], {
     state, $, document: { getElementById: $ },
     el: (tag, cls, text) => Object.assign(stubNode(null, cls || ''), { textContent: text === undefined ? '' : String(text) }),
     getComputedStyle: () => ({ top: '0' }), sessionIsLive: () => false,
@@ -167,7 +167,7 @@ function longState() {
   }));
   const screens = [{ id: 'home', tag: 'screen', name: 'Home', mono: 0 }];
   return {
-    sessionId: 'S', filter: '', view: 'all', newestFirst: false, liveTail: false, timeRange: null,
+    sessionId: 'S', signalSessionId: 'S', filter: '', view: 'all', newestFirst: false, liveTail: false, timeRange: null,
     transactions: calls, allTransactions: calls, sessionTotal: ROWS + 1000, matched: ROWS + 1000,
     signals, allSignals: signals.concat(screens), screens, markers: [], recording: [],
     expandedRuns: new Set(), expandedVisits: new Set(), pathFocus: null, pathSessionId: null,
@@ -271,7 +271,7 @@ function checkPathPastTheClamp(sources) {
     const matched = calls.filter((t) => !filter || `path:${t.path}` === filter);
     const held = matched.slice(-1000);
     const state = {
-      sessionId: 'S', filter, view: 'path', newestFirst: false, liveTail: false, timeRange: null,
+      sessionId: 'S', signalSessionId: 'S', filter, view: 'path', newestFirst: false, liveTail: false, timeRange: null,
       transactions: held, allTransactions: calls, sessionTotal: calls.length, matched: matched.length,
       signals: [], allSignals: screens, screens, markers: [], recording: [],
       expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,

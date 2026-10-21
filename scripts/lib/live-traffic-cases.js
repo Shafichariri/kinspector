@@ -21,6 +21,9 @@
  *   traffic filter edit race, … a re-read sent for the old filter, in flight across an edit, never
  *                               reaches the list, whether it lands after the edit's own read or before
  *   traffic session switch race, … the same across a session switch
+ *   traffic session switch window while the switch's first page is held, the list draws none of
+ *                               the session left's rows and says the session is being read, the
+ *                               endpoints button is hidden and no tab and no header counts anything
  *   traffic hosts               every call the daemon archived has a host ending in `.invalid`
  *   traffic reaches             every request and socket the page opened was to 127.0.0.1
  *   traffic exceptions          the page threw nothing throughout
@@ -164,8 +167,50 @@ async function switchTo(page, sessionId) {
     p.dispatchEvent(new Event('change', { bubbles: true })); })()`);
 }
 
+// What the switch window reads of the page: the list's rows and empty line, the wording the page
+// says it with, the endpoints button and chips, the tab counts and the header.
+const WINDOW_SAMPLE = `(() => { const empty = document.getElementById('list-empty');
+  return { rows: [...document.querySelectorAll('#list .row')].map((r) => r.dataset.id),
+    empty: empty.hidden ? null : empty.textContent.trim(),
+    text: typeof beingRead === 'function' ? beingRead() : null,
+    endpoints: !document.getElementById('endpoints-button').hidden,
+    chips: document.querySelectorAll('#endpoint-chips .chip').length,
+    tabCounts: document.querySelectorAll('#tabs .tab-count').length,
+    counts: document.getElementById('counts').textContent.trim() }; })()`;
+
+/**
+ * `traffic session switch window`: the switch to [other] made inside the `old lands first` race,
+ * whose own first page is held LATE_MS, read while that page is held. Read on [main] first, where
+ * the list, the chips and a tab count must be drawn, or the reading checked nothing.
+ */
+async function switchWindow(page, origin, main, other) {
+  const key = 'traffic session switch window';
+  const ids = new Set((await calls(origin, main, '')).items.map((t) => t.id));
+  const before = await page.ev(WINDOW_SAMPLE);
+  await switchTo(page, other);
+  const held = await page.waitFor(`state.sessionId === ${JSON.stringify(other)}
+    && window.__asked.some((e) => e.path === ${JSON.stringify(callRoute(other))} && e.held === ${LATE_MS})`, 1000);
+  const during = await page.ev(WINDOW_SAMPLE);
+  if (held === null) return { key, value: 'no read held', ok: false, detail: `the switch to ${other} held no first page` };
+  const missing = [!before.rows.some((id) => ids.has(id)) && 'list row', !(before.endpoints && before.chips) && 'endpoint chip',
+    !before.tabCounts && 'tab count'].filter(Boolean);
+  if (missing.length) return { key, value: `checked nothing (found no ${missing.join(', no ')} on ${main} before the switch)`, ok: false };
+  const old = during.rows.filter((id) => ids.has(id)).length;
+  if (old) return { key, value: 'old rows', ok: false, detail: `the list drew ${old} of ${main}'s rows while its answer was held` };
+  const leaks = [
+    !(during.text && /being read/.test(during.text)) && `the page words it "${during.text}"`,
+    during.empty !== during.text && `#list-empty reads ${during.empty === null ? 'nothing (hidden)' : `"${during.empty}"`}`,
+    during.endpoints && 'the endpoints button is shown', during.chips && `${during.chips} chips`,
+    during.tabCounts && `${during.tabCounts} tab counts`, during.counts && `#counts reads "${during.counts}"`,
+  ].filter(Boolean);
+  if (leaks.length) return { key, value: 'leaked', ok: false, detail: leaks.join('; ') };
+  return { key, value: 'being read', ok: true,
+    detail: `list, endpoints and ${before.tabCounts} tab counts cleared while ${other}'s first page was held ${LATE_MS} ms` };
+}
+
 async function sessionSwitchRaces(page, origin, app, other) {
   const rows = [];
+  let reading = { key: 'traffic session switch window', value: 'not taken', ok: false, detail: 'its race never switched' };
   await setFilter(page, FILTER);
   for (const [order, newHoldMs] of [['old lands last', 0], ['old lands first', LATE_MS]]) {
     await switchTo(page, app.sessionId);
@@ -173,11 +218,14 @@ async function sessionSwitchRaces(page, origin, app, other) {
       throw new Error(`the page did not come back to ${app.sessionId}`);
     }
     await sleep(800);
+    // The later order holds the switch's own first page, which is the window the reading needs.
+    const act = newHoldMs ? async () => { reading = await switchWindow(page, origin, app.sessionId, other); } : () => switchTo(page, other);
     rows.push(await race(page, origin, app, {
       key: `traffic session switch race, ${order}`, newRoute: callRoute(other), newFilter: FILTER, newHoldMs,
-      act: () => switchTo(page, other), expect: (shown) => shown.session === other,
+      act, expect: (shown) => shown.session === other,
     }));
   }
+  rows.push(reading);
   return rows;
 }
 
