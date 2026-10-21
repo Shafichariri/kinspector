@@ -397,7 +397,7 @@ involved:*
 | KIN-33's sticky list-pane layout has no committed guard | 1b, `item:web-foundation-list-room` | 1b rebuilds the bands above the list, so the guard must exist before 1b moves them |
 | List, timeline, waterfall and path share one scroll position | 1b, `item:web-foundation-list-room` | 1b rebuilds the list pane, and 1a's hash routes give each view an address to remember a position by |
 | The export's transactions route ignores `offset`/`limit` | `item:web-transactions-paged` | that item's export criterion cannot be checked without it |
-| The "Lost the daemon" banner shows only on the first close after an unplanned drop | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
+| ~~The "Lost the daemon" banner shows only on the first close after an unplanned drop~~ **Done 2026-10-21** (KIN-71; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell` | 1a rebuilds the daemon controls and the top bar the banner belongs to |
 
 - ~~**One session's "now" values can land under another.**~~ Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-current-session-guard`.
 
@@ -415,7 +415,7 @@ involved. One is not worth doing. The maintainer placed the new item on 2026-10-
 | 3. A brushed stretch below the newest 1000 says "no calls in the selected stretch" | **new item**, with 1 | same cause: the list holds part of what it counts and says nothing |
 | 4. A whitespace-only filter is a filter on the page and not on the daemon | `item:web-live-rows-filtered` | that item adds a page-side "is there a filter" test, which must agree with the daemon |
 | 5. The repeat mark is cut to `twic…` at 400px | 1b, `item:web-foundation-list-room`, under (b) | (b) already owns what a row keeps at 400px |
-| 6. The count is off-screen below about 600px | 1a, `item:web-foundation-shell`, under (e) | (e) covered the controls, not the count; now it covers the count too |
+| ~~6. The count is off-screen below about 600px~~ **Done 2026-10-21** (KIN-70; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell`, under (e) | (e) covered the controls, not the count; now it covers the count too |
 | 7. Four numbers for one session on one screen | 1b, under (f3) | (f3) already owns counts that read as disagreeing; the boundary-row idea goes to the new item |
 | 8. The export answers `limit=0` with 0 rows | not worth doing, below | nothing asks it |
 
@@ -453,7 +453,7 @@ Placed by the product owner the same day. Two make one new item; the third was a
 |---|---|---|
 | 1. The session glance (`calls 27` while the session had 29) and the picker label (`6 calls`) follow only a load, not live calls | **new item**, `item:web-live-calls-reach-every-pane` | KIN-54 made the header and the tab follow live calls and stopped there; the same handler owes the rest. Not `item:web-now-strip-follows-session`, whose scope is the switch window and which puts the counts out of scope; not 1b's (f3), which is about labels and is far off |
 | 2. A live call with no filter set does not redraw the timeline | **new item**, with 1 | the same `txn` branch of `ws.onmessage` (`web/js/05-network.js`), and the same probe. It was recorded in §3 → Guards as unplaced since KIN-41, and in `docs/STATUS.md` → Not verified; this places it |
-| 3. At 400 px the header count is clipped, `5 of 31 call` | 1a, `item:web-foundation-shell`, under (e), "The call count is on screen at 400px" | already owned: that criterion asks for the whole count text inside the window at 400px. Noted there as seen again, under a filter |
+| ~~3. At 400 px the header count is clipped, `5 of 31 call`~~ **Done 2026-10-21** (KIN-70; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell`, under (e), "The call count is on screen at 400px" | already owned: that criterion asks for the whole count text inside the window at 400px. Noted there as seen again, under a filter |
 
 - **A live call reaches the list but not the timeline, the glance or the picker.** *Ticket label:*
   `item:web-live-calls-reach-every-pane`. **Proposed 2026-10-19 by the product owner: straight after
@@ -656,7 +656,6 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 9 | 1a — Web UI foundation: the shell | §6 | `item:web-foundation-shell` | L |
 | 10 | A live call reaches the list but not the timeline, the glance or the picker *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S, to be confirmed |
 | 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
 | 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
@@ -833,7 +832,7 @@ screen, and building those into the current single page would mean building them
 
 | Order | Item | Size | Ships in | Scheduled in "Order from here" |
 |---|---|---|---|---|
-| 1a | Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config | L *(includes its share of the probe rewrite)* | 1.4 | yes |
+| ~~1a~~ | ~~Web UI foundation: the shell — rail, hash routes, Sessions and Processes pages, bulk endpoints, writable config~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114) | L *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
 | 1b | Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}` | M *(includes its share of the probe rewrite)* | 1.4 | yes |
 | 2 | Endpoint latency stats | M | 1.5 | yes |
 | — | The private security advisory's fix | not sized | not set | yes, after 2 |
@@ -880,6 +879,8 @@ writable `config.json` — the last because Settings and the findings rules need
 shell page. **Room for the list** is the divider, the overview line, the one-row toolbar, the `⋮`
 export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
 
+**1a done 2026-10-21** (PR #108, merge `e9f7131`; PR #112, merge `a7e3946`; fix PR #114, merge `cc9dbce`). Stats, Findings and Diff get their rail entry in the item that builds each page. The Sessions page's "pick two → compare" is the Diff item's: 1a has no Diff page to send it to. The 1a text that was only 1a's moved to `ROADMAP-DONE.md` → §6; what is left in this section is shared with 1b, which stays open.
+
 - **A left rail**, collapsible to icons, over hash-routed pages: Traffic, Stats, Findings, Diff,
   Sessions, Processes, Settings. Hash routes keep the no-build-step, one-`index.html` shape and make
   the back button work. A rail rather than a second tab bar because it spends width, which is
@@ -910,62 +911,13 @@ What must still hold: the export still works offline (new pages either read the 
 or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
 lists; every new pane that sets `display` joins `auditHiddenPanes`; nothing new under 11px.
 
-**1a must leave room for the security advisory's fix** *(added 2026-10-18)*. The maintainer
-scheduled that fix after 1a, 1b and 2 (§5 → "Order from here"), so the bulk endpoints are built
-before it is chosen. Acceptance criterion: the architect's design for `POST /api/peers/kill` and
-`POST /api/sessions/delete` states how the advisory's fix, under any of the options the advisory
-lists, lands without rebuilding either endpoint, and the architect reads the advisory to write it.
-The design note in this public repository names the advisory and does not describe the gaps.
+**1a's advisory criterion is met** *(done 2026-10-21)*. The paragraph that stated it moved verbatim to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell"; QA read the new routes against it on PR #108.
 
 **The web UI layout defects found at base `f574bda`** *(placed 2026-10-18; where each went and why
 is in §5 → "Order from here")*. These are acceptance criteria, stated as what a render shows. Each
 check that can be automated goes into the probes and is proven to fail when broken.
 
-In **1a, the shell**:
-
-- **(e) Nothing in the top bar is out of reach at a 400px window.** At base the bar measured
-  scrollWidth 936 against 400: the session picker was clipped, and live, settings, restart, stop
-  and delete could not be reached. After 1a, the top bar's scrollWidth is at most the window width
-  at 400px, and every control it still holds can be reached by pointer and by keyboard. Restart and
-  stop leave it for Processes anyway.
-- **(e) The call count is on screen at 400px.** *(Added 2026-10-19, from the first verify panel on
-  `item:web-transactions-paged`.)* Below about 600px the count sat past the right edge of the
-  overflowing top bar, so it was off-screen entirely. That is the overflow above, but the criterion
-  above covers controls and the count is not one, so it is stated here: at 400px the whole count
-  text is inside the window. If 1b moves the count into its one-row toolbar (f2), the same check
-  moves with it into 1b. *(Seen again 2026-10-19 by QA on `item:web-live-rows-filtered`, at base
-  `4e5491c` too: at 400px under a filter the count read `5 of 31 call`, cut mid-word. The same
-  criterion covers it; a count cut short is not the whole count text.)*
-- **(e) Keep the session's start time visible when the picker truncates.** *(Added 2026-10-19, from
-  the UX reviewer on `item:web-transactions-paged`.)* Since KIN-49 the closed picker can shrink to
-  "com.example." at 600-700 px, so two sessions of one app look alike until it is opened. After 1a,
-  the part of the label that tells sessions apart, the start time, is still on screen with the
-  picker closed.
-- **(e) Every tab is reachable at a 400px window.** At base the tab bar measured 704 against 400,
-  and screens, state, analytics and tap were hidden. The bar need not *show* every tab at that
-  width, but each must be reachable without resizing: visible, or behind one control that is. The
-  architect chooses which. "The tab bar is always drawn" (`docs/decisions/web-ui.md`) still holds.
-- **(f1) The session picker shows its whole label at 1440px**, or clips it with an ellipsis and the
-  full label as a tooltip. It is not cut off mid-text.
-- **The "Lost the daemon" banner is on screen for as long as the page has lost the daemon.**
-  *(Added 2026-10-19, from the signals verify panels.)* As reported, `Lost the daemon — reconnecting…`
-  (`web/js/05-network.js`, `ws.onclose`) shows only on the first close after an unplanned drop.
-  The code that shows it runs only while `state.serverState` is `running`. The architect confirms
-  the reproduction and its cause first. The criterion holds either way: after any
-  unplanned drop the banner is visible until the page reconnects, and it clears then. That covers
-  the first drop, a second drop after a reconnect, and a drop during a restart that never comes
-  back. The stop probe's replayed `onclose`/`onopen` pair runs twice in a row and asserts the
-  banner both times, and fails with the `running` check put back. *Why 1a:* 1a moves restart and stop
-  into Processes and rebuilds the top bar the banner sits under, so the states this keys on
-  (`stopped`, `restarting`, `away`) are rewritten there anyway. The recorded rule that a stopped
-  daemon's banner offers no restart (`docs/decisions/web-ui.md`) still holds.
-- **The session switch keeps its probes green.** *(Added 2026-10-19, from QA on
-  `item:web-current-session-guard`.)* 1a rebuilds how a session is chosen, as Sessions leaves the
-  dialog and hash routes give a session an address. The probes KIN-51 and
-  `item:web-now-strip-follows-session` add (a late or failed `/current` read across a switch, the
-  out-of-order pair, the switch window) still pass after 1a, driven through whichever control
-  selects a session then, and are not deleted or reported `n/a` because the picker moved. *Why 1a:*
-  it is the item that moves the switch; the defects themselves are fixed earlier, in their own item.
+In **1a, the shell**: *done 2026-10-21.* Its criteria moved verbatim to `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell".
 
 In **1b, room for the list**:
 
@@ -1029,19 +981,7 @@ In **1b, room for the list**:
 If 1b slips to 1.5, (a) leaves this list and becomes its own item ahead of Endpoint latency stats,
 because it is a keyboard trap. See §5 → "Order from here".
 
-**The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
-they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
-`inspector-daemon/.../http/SessionRoutes.kt` each refuse the active session, call
-`deleteSession` with their own `DeletionCause`, and build the deleted/kept reply. `POST
-/api/sessions/delete {ids}` is the second caller of the same rules: refuse the active session,
-refuse the `latest` alias, and answer per item. Copying them into a third route body would make
-three copies of the rule about which sessions may be deleted. Phase D's layering rule is written
-for rules both adapters serve ("a rule both adapters serve lives in `service/` or `archive/`, never
-in a route or tool body"), and deletion is HTTP only, but the reason behind it holds here too: two
-copies of a rule drift. So 1a extracts one session-deletion service, and all three routes call it. It was left in place during phase D on purpose: with one caller, an
-extraction is a move with nothing to prove it right, and phase D allowed no behaviour change. Any
-findings cache built later is removed through the same service, which is the "every deletion path"
-condition recorded under Findings.
+**The delete and clear loops** moved into `service/SessionDeleter.kt` with the bulk delete *(done 2026-10-21)*; the paragraph is in `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell".
 
 **Decided 2026-10-17: split into the shell and room for the list, each landing with its probes.**
 The acceptance criteria at the end of this paragraph apply to both halves.

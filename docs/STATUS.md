@@ -4,11 +4,12 @@ Moved here from the root `AGENTS.md` so the root stays an index; the delivery tr
 **Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon. It is
 old, and **no full run has been counted since**; a branch-wide total by arithmetic is not claimed.
 Latest per-target counts from QA, each at the commit named and none a full-repository total:
-`:inspector-daemon:test` 270/0 and `:inspector-model:jvmTest` 160/0 at `1da0d75`; `:inspector-ui:jvmTest`
+`:inspector-model:jvmTest` 160/0 at `1da0d75`; `:inspector-ui:jvmTest`
 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-core:jvmTest` 73/0, `:inspector-noop:jvmTest` 3/0,
 `:inspector-stream:jvmTest` 3/0, `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at
-`1479c30`; web static checks 90/0, live probe 204 passed 0 failed 1 n/a and archive probe 38 passed at
-`ff4f9de`. Later commits add daemon tests (`6804c94` one fixture test, #108 more) that nobody has counted.
+`1479c30`; `:inspector-daemon:test` 299/0 at `e9f7131` (QA, PR #108; 271 on its base); web static checks 99/0,
+live probe 225 passed 0 failed 1 n/a and archive probe 40 passed at `cc9dbce` (QA, round 2). The daemon figure is older than the web ones, and #115 and
+later commits add daemon tests that nobody has counted.
 Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
 has no Android SDK and no working `xcrun`; CI runs them.
 
@@ -95,6 +96,14 @@ unticked on purpose: KIN-43 AC#4 ("passes ... in CI"), KIN-44 AC#4 (its archive 
 KIN-45 AC#4 ("same text live and offline", amended); the last two follow the maintainer's decision that
 an export draws every embedded call. KIN-42 stays deferred.
 
+**`item:web-foundation-shell` (1a) is done** (2026-10-21, on `main` at `cc9dbce`; PRs #108, #112 and #114, merges
+`e9f7131`, `a7e3946` and `cc9dbce`). KIN-63 to KIN-71 are Done on QA's evidence: PR A on its own, PR B in two rounds, round 1
+failing KIN-68 (the Processes page erased the kill results 300 ms after showing them; fixed in #114, round 2 verified it).
+CI on each PR and on the three merge pushes: `build`, `release-swap`, `repo` and `web` green. Built without a design council or a
+UX pass and with QA after merge, by the maintainer's choice for this run. Counts, base to head: static checks 90 to 99, live
+probe 204 to 225, archive probe 38 to 40, `:inspector-daemon:test` 271 to 299 (28 new cases in `ConfigFileTest`,
+`ConfigRoutesTest`, `PeerBulkKillTest`, `SessionBulkDeleteTest` and `WrongMethodStatusTest`). `docs/ROADMAP-DONE.md` §6 has the detail.
+
 **Six items are done** (2026-10-21, on `main` at `ff4f9de`; each ticket Done on QA's pass over detached
 copies, the items built without QA before merge by the maintainer's choice). CI on each PR and on the
 merge pushes: `build`, `release-swap`, `repo` and `web` green; the push runs for `1da0d75` and `1479c30` were
@@ -136,6 +145,16 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **Web UI shell (1a), in headless Chrome 131 and the probes, at 1440, 1000, 600 and 400 px, live and in an export.** Rail and
+  hash routes (Traffic, Sessions, Processes, Settings; an export keeps Traffic only and falls back); Sessions, Processes and
+  Settings pages; bulk kill and bulk delete answering per item, each on a real daemon (a real peer killed, a live non-inspector
+  process refused and left running, the recording session refused); `config.json` writable through `PUT /api/config` (the
+  file on disk read back, unknown keys kept byte for byte, a malformed file left untouched with a 409). Top bar and tab bar fit
+  at 400 px with the count whole, filtered too (`measure-web-ui.js --base`: 229 readings, 2 failed, both KIN-42's and failing at
+  base). The lost-daemon banner shows on a first drop, a second drop and a restart that never returns, with real process deaths.
+  Guards proven red by QA: a second control-header literal, the `running` check put back on the banner, an input in `#rail`, MCP
+  in a preset, each route un-gated, the active-session check dropped, and (round 2) the old `85-processes.js` against the
+  strengthened `processes bulk`. Daemon loopback: one listener, `127.0.0.1`; the LAN address and `::1` refused.
 - **The ui pair's public API is asserted for equality, JVM only.** At `1479c30`, `UiApiParityTest` ran in both
   `:inspector-ui` (136 tests) and `:inspector-noop-ui` (2) with 0 failures; the golden file holds the
   `InspectorOverlayKt` facade and one composable. Twelve breaks went red and were restored: a public function
@@ -280,6 +299,16 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **The bulk routes and `PUT /api/config` sit behind the control gate only.** The private advisory's fix is not built
+  (`item:control-boundary-advisory`, last in the order). The new routes leave room for it, and the gaps are not described here.
+- **1a's shell in Safari, Firefox and on a phone.** Only headless Chrome 131 was driven. Nobody has judged how the new rail and
+  pages *look*: the builder and QA looked at screenshots, no UX review ran, and no design council sat on this item.
+- **For 1a, the full `./gradlew build` and `-Pinspector=off`** were not run on the QA or builder machine (no Android SDK); CI ran
+  them. The `measure-web-ui.js` `first` section (the 160k-call session) was not run. The engineer's `processes bulk` probe stubs the
+  kill reply; the real case of a peer exiting before the kill was seen only by QA, in round 2.
+- **The "recovers" probe's red proof** is the engineer's record in PR #112's body; QA did not repeat it.
+- **Known and left for 1b:** the closed detail drawer sits off-screen right at 1000 and 400 px and widens the page (1646 px at 1000).
+  **Older, not 1a's:** the Sessions page says sessions live under `~/.inspector/sessions` even with `--data` elsewhere.
 - **The full `./gradlew build` for the six items of 2026-10-21 was not run on the QA machine** (no Android SDK).
   It rests on CI, which was green on each PR. For phase H and phase I the `-Pinspector=off` build on the Android
   and iOS targets, the iOS framework and test links (no working `xcrun`) and the klib half of

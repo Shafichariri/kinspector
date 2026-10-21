@@ -1112,6 +1112,7 @@ tag cut before any of this existed.
 | ~~Row labels drop a non-default port~~ **Done, 2026-10-21** (KIN-60, PR #105, merge `1da0d75`) | §3 → Bugs found | `item:row-label-port` | S |
 | ~~Phase H — split the two large overlay files~~ **Done, 2026-10-21** (KIN-61, PR #103, merge `4dc21d2`) | §5 | `item:structure-phase-h` | S |
 | ~~Phase I — `noop-ui` golden file~~ **Done, 2026-10-21** (KIN-62, PR #106, merge `1479c30`) | §5 | `item:structure-phase-i` | M |
+| ~~1a — Web UI foundation: the shell~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114, merges `e9f7131`, `a7e3946`, `cc9dbce`; two rounds of QA) *(was row 9; the later rows keep their numbers)* | §6 | `item:web-foundation-shell` | L |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -1858,3 +1859,138 @@ cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder s
   after phase I?~~ **Decided 2026-10-19 by the maintainer: it keeps both.** If the architect sizes
   it above S, its own rule applies and it moves after phase I, still ahead of 1a. The maintainer
   accepted that.
+
+## 6. Next: the daemon and the web UI — planned 2026-10-17
+
+### Web UI foundation — 1a, the shell
+
+**Done, 2026-10-21.** Three merges: PR #108 (daemon, merge `e9f7131`), PR #112 (web, merge `a7e3946`)
+and PR #114, a fix round (merge `cc9dbce`). `build`, `release-swap`, `repo` and `web` were green on
+each PR, and the push runs on `e9f7131`, `a7e3946` and `cc9dbce` succeeded. KIN-63 to KIN-71 are Done
+on QA's evidence: PR A on its own, then PR B in two rounds, the first of which failed KIN-68. The
+shared text of this section (the 1b half and the paragraphs both halves rest on) stays in
+`ROADMAP.md`; what follows is the text that was only 1a's, moved verbatim, then what was built and
+learned.
+
+*Ticket label:* `item:web-foundation-shell`.
+
+**1a must leave room for the security advisory's fix** *(added 2026-10-18)*. The maintainer
+scheduled that fix after 1a, 1b and 2 (§5 → "Order from here"), so the bulk endpoints are built
+before it is chosen. Acceptance criterion: the architect's design for `POST /api/peers/kill` and
+`POST /api/sessions/delete` states how the advisory's fix, under any of the options the advisory
+lists, lands without rebuilding either endpoint, and the architect reads the advisory to write it.
+The design note in this public repository names the advisory and does not describe the gaps.
+
+In **1a, the shell**:
+
+- **(e) Nothing in the top bar is out of reach at a 400px window.** At base the bar measured
+  scrollWidth 936 against 400: the session picker was clipped, and live, settings, restart, stop
+  and delete could not be reached. After 1a, the top bar's scrollWidth is at most the window width
+  at 400px, and every control it still holds can be reached by pointer and by keyboard. Restart and
+  stop leave it for Processes anyway.
+- **(e) The call count is on screen at 400px.** *(Added 2026-10-19, from the first verify panel on
+  `item:web-transactions-paged`.)* Below about 600px the count sat past the right edge of the
+  overflowing top bar, so it was off-screen entirely. That is the overflow above, but the criterion
+  above covers controls and the count is not one, so it is stated here: at 400px the whole count
+  text is inside the window. If 1b moves the count into its one-row toolbar (f2), the same check
+  moves with it into 1b. *(Seen again 2026-10-19 by QA on `item:web-live-rows-filtered`, at base
+  `4e5491c` too: at 400px under a filter the count read `5 of 31 call`, cut mid-word. The same
+  criterion covers it; a count cut short is not the whole count text.)*
+- **(e) Keep the session's start time visible when the picker truncates.** *(Added 2026-10-19, from
+  the UX reviewer on `item:web-transactions-paged`.)* Since KIN-49 the closed picker can shrink to
+  "com.example." at 600-700 px, so two sessions of one app look alike until it is opened. After 1a,
+  the part of the label that tells sessions apart, the start time, is still on screen with the
+  picker closed.
+- **(e) Every tab is reachable at a 400px window.** At base the tab bar measured 704 against 400,
+  and screens, state, analytics and tap were hidden. The bar need not *show* every tab at that
+  width, but each must be reachable without resizing: visible, or behind one control that is. The
+  architect chooses which. "The tab bar is always drawn" (`docs/decisions/web-ui.md`) still holds.
+- **(f1) The session picker shows its whole label at 1440px**, or clips it with an ellipsis and the
+  full label as a tooltip. It is not cut off mid-text.
+- **The "Lost the daemon" banner is on screen for as long as the page has lost the daemon.**
+  *(Added 2026-10-19, from the signals verify panels.)* As reported, `Lost the daemon — reconnecting…`
+  (`web/js/05-network.js`, `ws.onclose`) shows only on the first close after an unplanned drop.
+  The code that shows it runs only while `state.serverState` is `running`. The architect confirms
+  the reproduction and its cause first. The criterion holds either way: after any
+  unplanned drop the banner is visible until the page reconnects, and it clears then. That covers
+  the first drop, a second drop after a reconnect, and a drop during a restart that never comes
+  back. The stop probe's replayed `onclose`/`onopen` pair runs twice in a row and asserts the
+  banner both times, and fails with the `running` check put back. *Why 1a:* 1a moves restart and stop
+  into Processes and rebuilds the top bar the banner sits under, so the states this keys on
+  (`stopped`, `restarting`, `away`) are rewritten there anyway. The recorded rule that a stopped
+  daemon's banner offers no restart (`docs/decisions/web-ui.md`) still holds.
+- **The session switch keeps its probes green.** *(Added 2026-10-19, from QA on
+  `item:web-current-session-guard`.)* 1a rebuilds how a session is chosen, as Sessions leaves the
+  dialog and hash routes give a session an address. The probes KIN-51 and
+  `item:web-now-strip-follows-session` add (a late or failed `/current` read across a switch, the
+  out-of-order pair, the switch window) still pass after 1a, driven through whichever control
+  selects a session then, and are not deleted or reported `n/a` because the picker moved. *Why 1a:*
+  it is the item that moves the switch; the defects themselves are fixed earlier, in their own item.
+
+**The delete and clear loops move into `service/` with the bulk delete, and not before.** Today
+they sit in the route bodies: `DELETE /api/sessions/{id}` and `POST /api/sessions/clear` in
+`inspector-daemon/.../http/SessionRoutes.kt` each refuse the active session, call
+`deleteSession` with their own `DeletionCause`, and build the deleted/kept reply. `POST
+/api/sessions/delete {ids}` is the second caller of the same rules: refuse the active session,
+refuse the `latest` alias, and answer per item. Copying them into a third route body would make
+three copies of the rule about which sessions may be deleted. Phase D's layering rule is written
+for rules both adapters serve ("a rule both adapters serve lives in `service/` or `archive/`, never
+in a route or tool body"), and deletion is HTTP only, but the reason behind it holds here too: two
+copies of a rule drift. So 1a extracts one session-deletion service, and all three routes call it. It was left in place during phase D on purpose: with one caller, an
+extraction is a move with nothing to prove it right, and phase D allowed no behaviour change. Any
+findings cache built later is removed through the same service, which is the "every deletion path"
+condition recorded under Findings.
+
+**What was built.** The daemon half: `service/SessionDeleter.kt`, which single delete, clear and the
+new `POST /api/sessions/delete` all call; `POST /api/peers/kill`; `archive/ConfigFile.kt` and
+`GET`/`PUT /api/config`, flags still winning, written by a temporary file and a rename. All three
+routes sit inside `controlGated`. The web half: a left rail over hash routes (Traffic, Sessions,
+Processes, Settings), the settings dialog gone, Sessions and Processes as pages with checkboxes,
+presets and a two-click confirm that sends one request, restart and stop moved to Processes, a
+Settings page with the config editor, `controlFetch` as the only writer of `X-Inspector-Control`, a top
+bar and tab bar that fit a 400 px window with the count whole, and the lost-daemon banner on every
+unplanned close. Counts, base to head: static checks 90 to 99, live probe 204 to 225, archive probe
+38 to 40, daemon tests 271 to 299 at PR A.
+
+**What was learned.**
+- **QA's first round failed KIN-68 on something the probe could not see.** The Processes page drew
+  `signalled N of M` and the per-pid list, and 300 ms later reloaded the table, which cleared the
+  status; a refused kill left nothing on screen. `processes bulk` read the status before the reload.
+  The fix (`loadPeers({ keepStatus })`) and a probe that waits 700 ms and answers one pid as
+  `noSuchProcess` are in PR #114; the probe was red against the old code. The roadmap's reason for
+  answering per item, that a batch with one status hides the failure, was exactly what the page did.
+  Refresh had to become `() => loadPeers()` so the click event is not taken as the options.
+- **The banner's cause was not the plain drop.** The design found a single unplanned drop never
+  reproduced the bug; the `running` check mattered after a failed restart and for a restart that never
+  returns. QA put the check back and `banner after failure` and `banner restart lost` went red while
+  `banner every drop` stayed green. Verified with real process deaths: the banner reads `Restarting…`
+  at +5 s and `Lost the daemon — reconnecting…` at +24 s, past the 20 s grace.
+- **`config.json` is indented by hand.** kotlinx's pretty printer rewrites `2.50` as `2.5`, which
+  breaks "unknown keys kept byte for byte". The bulk bodies refuse unknown keys, pids must be positive,
+  and a symlinked `config.json` stays a symlink. `SessionDeleter` takes `sessionsDir` as a third
+  parameter so the single route's 500 message keeps naming `config.sessionsDir` word for word.
+- **The probes stub every destructive route.** One red run would otherwise have sent real deletes; it
+  was stopped before the Sessions probe, and both fixture sessions survived.
+- **The Chrome `shell` group runs after the parallel batch**: twelve windows at once dropped DevTools
+  requests. `writeHash` falls back to `location` where jsdom refuses history writes on an export's `file:` URL.
+- **A guard that cannot fail was adjusted, not kept.** `route default` needed every page made visible
+  first, because the pages carry `hidden` in the HTML; one neighbour red proof used `tab bar shown`.
+- **`railGone` was rewritten, not deleted**: `rail is navigation` keeps the reasoning that the old rail
+  held the filter and the Now panel and was removed for it. QA proved it red with an input in `#rail`.
+- **The picker face has one writer**, `paintPickerFace`. The next item, `item:web-live-calls-reach-every-pane`
+  (KIN-58), must call it wherever it rewrites an option's text.
+- **Left out, on purpose.** Stats, Findings and Diff have no rail entry until the item that builds each
+  page. "Pick two → compare" waits for Diff. The closed detail drawer sits off-screen to the right at 1000
+  and 400 px and widens the document (1646 px at 1000), which is 1b's (a). The Sessions page still says
+  sessions live under `~/.inspector/sessions` even with `--data` elsewhere, word for word from the old
+  dialog; the Processes page already shows the real data directory.
+- **Not verified.** The full `./gradlew build` and `-Pinspector=off` (no Android SDK; CI ran them). The
+  Chrome `first` section, a 160k-call session. A headless-Chrome reproduction of the fix round with a
+  real peer exiting before the kill was QA's, in round 2, but the engineer's probe stubs the kill reply.
+  The bulk routes and `PUT /api/config` sit behind the control gate only; the private advisory's fix is
+  not built.
+- **How it was built.** A Large item built without a design council or UX pass, by a developer session
+  with engineer subagents, and QA ran after merge, not before. QA rendered the pages in headless Chrome
+  131 at 1440, 1000, 600 and 400 px, live and in an export.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, developer session with engineer subagents, no design council, no QA before merge; QA after merge, 2 rounds
