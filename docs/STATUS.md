@@ -1,10 +1,16 @@
 # Status — what has been checked, and what has not
 Moved here from the root `AGENTS.md` so the root stays an index; the delivery tracker keeps it current.
 
-**Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon.
-Phases A and E (below) added tests since, and **no full run has been counted since**: `:inspector-model:jvmTest`
-ran 159 tests and `:inspector-daemon:test` ran 224, 0 failures each (2026-10-18), and nothing else
-was run. A branch-wide total of 897 was computed by arithmetic, never measured, and is not claimed.
+**Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon. It is
+old, and **no full run has been counted since**; a branch-wide total by arithmetic is not claimed.
+Latest per-target counts from QA, each at the commit named and none a full-repository total:
+`:inspector-daemon:test` 270/0 and `:inspector-model:jvmTest` 160/0 at `1da0d75`; `:inspector-ui:jvmTest`
+136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-core:jvmTest` 73/0, `:inspector-noop:jvmTest` 3/0,
+`:inspector-stream:jvmTest` 3/0, `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at
+`1479c30`; web static checks 90/0, live probe 204 passed 0 failed 1 n/a and archive probe 38 passed at
+`ff4f9de`. Later commits add daemon tests (`6804c94` one fixture test, #108 more) that nobody has counted.
+Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
+has no Android SDK and no working `xcrun`; CI runs them.
 
 **Phase A of the structure pass (web checks and mirror cases in CI) is done**: its first CI run, on
 PR #81, went green on the new `web` job (ubuntu) and on `build` and `release-swap` (macOS: full
@@ -55,7 +61,9 @@ qa-verifier pass. Counts at `eaaadce`, per target and not a full-repository tota
 `:repo-checks:test` 35/0. Guard proven red both ways (guard deleted: 186/1; `catch` fallback put
 back: `now failed read empty` fails). Verified in headless Chrome only. Not run: `:inspector-model`
 and the iOS, Android and overlay targets (nothing there changed). Accepted trade-off: a failed
-`/current` read always empties the strip, also on an unchanged session.
+`/current` read always empties the strip, also on an unchanged session. **Reversed 2026-10-21 by
+`item:web-now-strip-follows-session`**: a failed read now keeps the strip on the session you are on and
+empties it only across a switch.
 
 **`item:web-live-rows-filtered` is done** (2026-10-19, uncommitted on branch
 `shafic/web-live-rows-filtered`, base `4e5491c`, not pushed, so CI has not run). KIN-52 to KIN-55 are
@@ -87,6 +95,23 @@ unticked on purpose: KIN-43 AC#4 ("passes ... in CI"), KIN-44 AC#4 (its archive 
 KIN-45 AC#4 ("same text live and offline", amended); the last two follow the maintainer's decision that
 an export draws every embedded call. KIN-42 stays deferred.
 
+**Six items are done** (2026-10-21, on `main` at `ff4f9de`; each ticket Done on QA's pass over detached
+copies, the items built without QA before merge by the maintainer's choice). CI on each PR and on the
+merge pushes: `build`, `release-swap`, `repo` and `web` green; the push runs for `1da0d75` and `1479c30` were
+queued or in progress when QA wrote and were not seen finishing.
+- `item:structure-split-mcp-test` (KIN-59, PR #102, `49735be`): `McpTest.kt` split into seven test files and
+  a fixture; 268 daemon tests before and after, 43 of 43 test bodies byte-identical.
+- `item:structure-phase-h` (KIN-61, PR #103, `4dc21d2`): the two overlay list files split into four, all under
+  600 lines; 134 jvmTest tests before and after, 12 of 12 360dp screenshots byte-identical.
+- `item:row-label-port` (KIN-60, PR #105, `1da0d75`): labels keep a non-default port through the new
+  `NetworkTransaction.hostPort`; daemon 268 to 270, model 159 to 160.
+- `item:structure-phase-i` (KIN-62, PR #106, `1479c30`): `api/inspector-ui-public-api.txt` asserted by both
+  modules of the ui pair, the three theme types `internal`, `docs/INTEGRATION.md` v59.
+- `item:web-now-strip-follows-session` (KIN-57, PR #107, `6804c94`): the signal side follows the session; live
+  probe 200 to 204.
+- `item:web-list-says-what-it-holds` (KIN-56 with KIN-72 and KIN-73, PRs #104 and #110, `fb8e54e` and `ff4f9de`):
+  QA's first round failed two criteria, the second passed. `docs/ROADMAP-DONE.md` has each item's detail.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -110,6 +135,30 @@ The lesson worth keeping: **the live path and the REST path are two renderings o
 only the REST one was tested.** Any new field on `NetworkTransaction` needs a check on both.
 
 ### Verified
+
+- **The ui pair's public API is asserted for equality, JVM only.** At `1479c30`, `UiApiParityTest` ran in both
+  `:inspector-ui` (136 tests) and `:inspector-noop-ui` (2) with 0 failures; the golden file holds the
+  `InspectorOverlayKt` facade and one composable. Twelve breaks went red and were restored: a public function
+  added to either side, an `InspectorOverlay.kt` renamed in either module, the three theme types made public
+  again, a contract class left empty, a dropped default, a renamed parameter, and a golden-only edit with no
+  `--rerun`. The core and stream golden files are byte-identical after regeneration. The thirteenth, a changed
+  `content` type, is the builder's record only. A public declaration that exists only in `iosMain` or
+  `androidMain` is not guarded.
+- **Phase H moved nothing anyone sees**, on the JVM and desktop only: 134 `:inspector-ui:jvmTest` tests before and
+  after, the 12 360dp screenshots byte-identical under `--rerun` (two read by eye), `InspectorOverlayKt`
+  identical under `javap -public`. Phase I's screenshots are byte-identical too.
+- **Row labels keep a non-default port**, against real daemons built from base and head, nine call shapes
+  through `/ingest`: REST, `export.md`, `export.json`, `export.html` and MCP `timeline` and `explain` over stdio.
+  `url` is byte-identical to base for all nine. Three breaks went red and were restored.
+- **The web now strip, timeline signal rows and glance show none of the previous session's values while a new
+  session loads, in headless Chrome 131 and the web probes only.** `now switch shows none`, `now newest read
+  decides`, `now load read overtaken`, `now failed read kept` and `now late reply dropped` pass in the 204 live
+  checks; four mutants each failed only their own lines. Picker and delete paths driven in Chrome at 1440 and 400.
+- **The web list says when it holds only part of what it counts, in headless Chrome 131 and the web probes only.**
+  At `ff4f9de`, on a 3016-call session: `newest 1000 of 1200 matches shown` under a filter at 1440, 1000 and 400,
+  also with a stretch brushed; the sticky list note; a stretch older than the loaded rows names how to reach it and,
+  under a filter, claims no count. `LIST_CEILING` and the daemon clamp unchanged, 1000 rows drawn.
+- **`SignalToolsTest` and `ExportTest` pin the labels**; the split test files hold 43 tests that moved word for word.
 
 - **With a filter set, a live call or signal the filter does not match is not drawn in the list,
   timeline or path, and the header and traffic tab follow live calls, in headless Chrome 131 and the
@@ -230,6 +279,29 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   encoded traversal are 404.
 
 ### Not verified
+
+- **The full `./gradlew build` for the six items of 2026-10-21 was not run on the QA machine** (no Android SDK).
+  It rests on CI, which was green on each PR. For phase H and phase I the `-Pinspector=off` build on the Android
+  and iOS targets, the iOS framework and test links (no working `xcrun`) and the klib half of
+  `check-release-clean.sh` also rest on CI alone; locally only the JVM artifacts were scanned (self-test found the
+  canary, the plain run found nothing). Phase I's Android and iOS targets were not run locally.
+- **The push runs for `1da0d75` (row labels) and `1479c30` (phase I) were not seen finishing** by QA.
+- **Nothing in phase H or phase I was looked at on a device**; the 360dp screenshots are the evidence.
+- **The ui pair's guard covers the JVM only**: a public declaration in `iosMain` or `androidMain` alone passes on
+  every pair. Applying the completeness check to `core` and `stream`, and declaring their golden files as test inputs
+  (a golden-only edit can hit the build cache and stay green), are follow-ups for the product-owner.
+- **The R12 proof command in the phase I design note** (`:inspector-core:jvmTest :inspector-stream:jvmTest
+  -Dinspector.api.regenerate=true --rerun`) re-ran stream only. The result holds when run with `--rerun` after each
+  task; the note is not in the repository.
+- **IPv6 call labels and URLs are unbracketed** (`http://::1:8080/v6`), at base and head, from a synthetic call; a
+  real captured IPv6 call was not checked. The session summary's `byHost` still merges `:8080` and `:9090`.
+- **In the window after a session switch the timeline's call rows and endpoint chips still show the session just
+  left**, true at base. The path, waterfall and tag browsers are not redrawn by the switch either (by inspection;
+  not rendered).
+- **A stretch under a filter holding some loaded rows and some older unloaded matches** says `at least 10 calls
+  hidden` and not that more matches are older. At 400 px the header count is off-screen; at 1000 px the closed
+  picker drops the start time (ROADMAP 1a (e), 1b).
+- **The two items' web changes in Safari, Firefox and on a phone**: only headless Chrome 131 ran them.
 
 - **`item:web-live-rows-filtered` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it.
   `-Pinspector=off` was not run (no consumer signature changed). Not on CI: the branch is not pushed.

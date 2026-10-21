@@ -35,8 +35,9 @@ daemon they download.
 `release-steward` re-checks it against `git tag` at release, here and in `DAEMON.md` §8.
 `item:web-current-session-guard` (done 2026-10-19) owes a sixth, joining the same daemon-only entry:
 *"Web UI: switching sessions could show the previous session's \"now\" values in the now strip; it now
-shows the selected session's own values, or none."* A failed read of the now values also empties the
-strip, on an unchanged session too, until the next signal or load.
+shows the selected session's own values, or none."* That item's first version also emptied the strip on a failed read of the now
+values on an unchanged session; `item:web-now-strip-follows-session` (below) reversed it, so the
+release-steward does not carry that sentence into the notes.
 `item:web-live-rows-filtered` (done 2026-10-19) owes a seventh, in the same daemon-only entry:
 *"Web UI: with a filter set, a call or signal arriving live that the filter does not match is no
 longer drawn in the list, the timeline or the path's visit lines (screens still mark the path,
@@ -47,3 +48,32 @@ item:web-live-rows-filtered lands" is now true, and the "Loaded is load-bearing"
 applies, so the release-steward drops it when the lines are merged. "Follow" is a throttled re-read,
 not an instant check: a matching live row appears about a second after the first row of a burst, and
 a burst of 100 rows in a second costs at most 2 re-reads. Daemon and wire unchanged.
+`item:web-now-strip-follows-session` (done 2026-10-21) owes an eighth, in the same daemon-only entry:
+*"Web UI: after switching sessions, the now strip, the timeline's signal rows and the session
+glance no longer show the previous session's values while the new one loads; the glance says it is
+loading. Of two overlapping reads of the current state the newer one wins, and a failed read no
+longer empties the strip of the session you are on: it keeps its values, each with its age."*
+The timeline's call rows and the endpoint chips still show the previous session for the same
+window; the line says nothing about calls.
+`item:web-list-says-what-it-holds` (done 2026-10-21, with its fix round) owes a ninth, in the same
+daemon-only entry: *"Web UI: under a filter matching more than 1000 calls, the header no longer
+reads as if only 1000 matched. It says `newest 1000 of 1200 matches shown`, also while a stretch is
+brushed, and the list notes how many matches are loaded. A brushed stretch older than the newest
+1000 calls says those calls are there and how to reach them (under a filter, that none of the loaded
+matches is there and how many older ones are not loaded), instead of `no calls in the selected
+stretch`."* A stretch holding some loaded rows and some older unloaded matches still says nothing
+about the older ones; the line does not claim it.
+`item:row-label-port` (done 2026-10-21) owes a tenth, for agents and anyone handed an export:
+*"Daemon and MCP: call labels in `timeline`, `export.json` and the HTML and Markdown exports now
+include the port when it is not the scheme's default (`GET 127.0.0.1:9090/json`, where it was
+`GET 127.0.0.1/json`), so two local servers no longer read as one. Model: new
+`NetworkTransaction.hostPort`."* `url` is unchanged. The session summary's `byHost` still groups by
+bare host, so the line does not say hosts are split by port everywhere.
+`item:structure-phase-i` (done 2026-10-21) owes an eleventh, and it is not daemon-only: *"Overlay
+(`inspector-ui`): `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` are no longer
+public. An app that named them replaces those uses with its own code; `INTEGRATION.md` v59 says
+how."* **This release must be a minor bump, not a patch** (decided 2026-10-18), and the
+`docs/INTEGRATION.md` v59 text already says "from the next release after 1.3.0". The
+release-steward's changelog entry for the release points back to v59 and names the version that v59
+calls "the next release after 1.3.0", and re-checks that against `git tag`.
+`item:structure-split-mcp-test` and `item:structure-phase-h` owe nothing: tests and file moves only.
