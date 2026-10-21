@@ -4,7 +4,9 @@
  * Measures the web UI in headless Chrome: what jsdom cannot see. That covers layout (the scope bar on
  * top, path stations landing below the sticky box), scrolling (a run toggle or a live row leaving
  * the pane where it is), and scale (first rows on a 160,000-call session). Every defect it pins was
- * found by hand in a verify panel, after the build that caused it.
+ * found by hand in a verify panel, after the build that caused it. `traffic` streams real rows into
+ * a daemon of its own through `/ingest` and judges the page's filtered re-read
+ * (`lib/live-traffic-cases.js`).
  *
  *   node scripts/measure-web-ui.js                       # this working tree's web/, judged
  *   node scripts/measure-web-ui.js --base "$P/base"      # ... and what moved against another tree
@@ -20,7 +22,7 @@
  * a base whose routes differ is measured against today's routes, which the output says.
  *
  * Options: --head <dir> (default: this repository), --base <dir>, --install <dir>,
- * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,shell,first,
+ * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,shell,traffic,first,
  * --first-rows-ms <n> (default 3000), --keep (keep the temp directory).
  * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run.
  */
@@ -35,6 +37,7 @@ const cases = require('./lib/measure-cases');
 const { topBar } = require('./lib/topbar-cases');
 const { shell, statsFirstDraw } = require('./lib/shell-cases');
 const { room } = require('./lib/list-room-cases');
+const { liveTraffic } = require('./lib/live-traffic-cases');
 
 const REPO = path.resolve(__dirname, '..');
 const WEB = 'inspector-daemon/src/main/resources';
@@ -42,7 +45,7 @@ const WEB = 'inspector-daemon/src/main/resources';
 function parseArgs(argv) {
   const opts = {
     head: REPO, base: null, install: path.join(REPO, 'inspector-daemon/build/install/inspector'),
-    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'shell', 'first'], firstRowsMs: 3000, keep: false,
+    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'shell', 'traffic', 'first'], firstRowsMs: 3000, keep: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -164,6 +167,16 @@ async function main() {
     if (opts.only.includes('shell')) {
       await Promise.all(sides.map((side) => onPage(chrome, (p) => shell(p, side.urls.big, 'long'))
         .then((rows) => results[side.name].push(...rows))));
+    }
+    // Against a daemon per tree with an empty data directory, so the streamed sessions are the only
+    // ones it holds; one tree at a time, because the burst's bound is counted against a timer.
+    if (opts.only.includes('traffic')) {
+      for (const side of sides) {
+        const data = path.join(tmp, `${side.name}-traffic-data`);
+        fs.mkdirSync(data);
+        const origin = await startDaemon(opts, path.join(side.tree, WEB), data, path.join(tmp, `${side.name}-traffic.log`));
+        results[side.name].push(...await onPage(chrome, (p) => liveTraffic(p, origin)));
+      }
     }
     if (opts.only.includes('first')) {
       for (const session of ['huge', 'big']) {

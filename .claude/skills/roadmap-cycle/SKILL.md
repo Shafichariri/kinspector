@@ -259,7 +259,11 @@ Teams cost a full context window per member — each loads the project context o
   `scripts/lib/` in the same item, wired into `measure-web-ui.js` or a probe. On
   `item:web-transactions-paged`, three reviewers each wrote a top-bar harness (`bar.js`), and
   KIN-49's fix sat unguarded until it became `lib/topbar-cases.js`. Briefs name the existing
-  `scripts/lib/` harnesses, so a reviewer reuses them instead of writing its own.
+  `scripts/lib/` harnesses, so a reviewer reuses them instead of writing its own. Among them: for
+  live traffic, `lib/ingest-client.js` streams real rows into a daemon's `/ingest` and
+  `lib/live-traffic-cases.js` (`measure-web-ui.js --only traffic`) drives the served page over CDP
+  with a request recorder and a hold hook; QA's scratch driver for this lived outside the
+  repository until `item:guard-live-traffic-driver`.
 - **A new probe on the shared probe page re-proves one neighbouring guard red.** Probes share one
   page, so a probe that leaves state behind can make the guards after it pass with nothing to
   check. The engineer's brief says so: after adding a probe, break one existing guard that runs on
