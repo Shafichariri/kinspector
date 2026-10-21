@@ -1709,7 +1709,7 @@ gpg --verify inspector-core-1.0.1.jar.asc inspector-core-1.0.1.jar
 As v50 said, Gradle does not check these unless you turn on dependency verification. Being on
 Central does not change that.
 
-### v50 — 2026-09-20 (this document)
+### v50 — 2026-09-20
 
 **Released as 1.0.1. The artifacts are signed now. Nothing for you to do.**
 
@@ -1748,7 +1748,7 @@ a token ([`ACCESS.md`](ACCESS.md)). Signing is the prerequisite being put in pla
 itself — and when Central does happen, GitHub Packages keeps running alongside it rather than
 being switched off under anyone.
 
-### v49 — 2026-09-20 (this document)
+### v49 — 2026-09-20
 
 **Released as 1.0.0, and the group id changed. Edit three lines; your source is untouched.**
 
