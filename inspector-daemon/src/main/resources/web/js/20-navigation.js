@@ -200,9 +200,9 @@ function applyView() {
   closeDrawer();
   // Nothing selected means the pane is free to say something useful about the session instead.
   if (!browsing && $('detail').hidden) renderSessionGlance();
-  renderAxis();
   // `Now` is the app's current state, which is only ever read beside the merged timeline.
   $('now-strip').hidden = !all || state.current.length === 0;
+  renderAxis();
 
   if (all) renderTimeline();
   if (waterfall) renderWaterfall();
@@ -241,20 +241,23 @@ function closePops() {
   }
 }
 
+// `[button, pop, anchored]`: an anchored pop is placed under its button by the stylesheet, inside a
+// positioned parent, so it takes no offset from script.
 const POPS = [
   ['markers-button', 'markers-pop'],
   ['keys-button', 'keys-pop'],
+  ['now-toggle', 'current', true],
 ];
 
 function wirePops() {
-  for (const [button, pop] of POPS) {
+  for (const [button, pop, anchored] of POPS) {
     $(button).addEventListener('click', (event) => {
       event.stopPropagation();
       const open = $(pop).hidden;
       closePops();
       $(pop).hidden = !open;
       $(button).setAttribute('aria-expanded', String(open));
-      if (open) {
+      if (open && !anchored) {
         // Anchored under its own button rather than at a fixed offset, so it stays put when
         // the chips wrap and move the button to a second row.
         const rect = $(button).getBoundingClientRect();

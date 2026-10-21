@@ -80,14 +80,6 @@ wireSettingsPage();
   // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
   $('drawer-scrim').addEventListener('click', closeDrawer);
 
-  $('now-toggle').addEventListener('click', () => {
-    const strip = $('now-strip');
-    const open = $('current').hidden;
-    $('current').hidden = !open;
-    strip.classList.toggle('open', open);
-    $('now-toggle').setAttribute('aria-expanded', String(open));
-  });
-
   setRailMode();
 
   // Ages are wall-clock now, so they have to be repainted or they are wrong the moment they

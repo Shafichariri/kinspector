@@ -171,32 +171,34 @@
   </div>
 
   <!--
-    What the app currently holds, as a strip rather than a column. It was 1341px of the rail —
-    70% of it — for a summary, which is header-shaped information, not a list. Collapsed it says
-    how much there is and how stale the oldest of it is; opened it is the same list as before.
-  -->
-  <div id="now-strip" class="now-strip" hidden>
-    <button id="now-toggle" class="now-summary" aria-expanded="false">
-      <span class="now-caret">&#9656;</span>
-      <span class="rail-label">now</span>
-      <span id="now-summary-text" class="muted"></span>
-    </button>
-    <ul id="current" class="current" hidden></ul>
-  </div>
+    The overview line: a map of the session and, on the timeline, what the app holds now. They were
+    two bands of the seven above the first row, each saying one thing; one line gives the rows back
+    about 60px on the list and 90 on the timeline. Hidden when both of its parts are.
 
-  <!--
-    A map of the session, above the list that reads it.
+    The axis: the list answers "what happened"; it is very bad at "when, and how much of it at
+    once". Bursts, idle stretches, the moment everything went red — all of that is shape, and shape
+    is the one thing a scrolling list cannot show. Drag across it to narrow both panes to that
+    stretch.
 
-    The list answers "what happened"; it is very bad at "when, and how much of it at once". Bursts,
-    idle stretches, the moment everything went red — all of that is shape, and shape is the one
-    thing a scrolling list cannot show. Drag across it to narrow both panes to that stretch.
+    Now: what the app currently holds. It was 1341px of the rail — 70% of it — for a summary, which
+    is header-shaped information, not a list. Collapsed it says how much there is and how stale the
+    oldest of it is; opened it is the same list as before, as a popover under its button rather than
+    a band that pushes the rows down.
   -->
-  <div id="axis" class="axis" hidden>
-    <svg id="axis-svg" class="axis-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
-    <div class="axis-foot">
+  <div id="overview" class="overview" hidden>
+    <div id="axis" class="axis" hidden>
       <span id="axis-from" class="axis-time muted mono"></span>
-      <span id="axis-hint" class="axis-hint muted">drag to narrow</span>
+      <svg id="axis-svg" class="axis-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
       <span id="axis-to" class="axis-time muted mono"></span>
+    </div>
+    <span id="axis-hint" class="axis-hint muted" hidden>drag to narrow</span>
+    <div id="now-strip" class="now-strip" hidden>
+      <button id="now-toggle" class="now-summary" type="button" aria-expanded="false">
+        <span class="now-caret">&#9656;</span>
+        <span class="rail-label">now</span>
+        <span id="now-summary-text" class="muted"></span>
+      </button>
+      <ul id="current" class="current" hidden></ul>
     </div>
   </div>
 

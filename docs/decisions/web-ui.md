@@ -431,6 +431,14 @@ removed; `narrow row css` reads the rules, and the live probe's `row parts` hold
 the last one of the path the row shows, after the scope bar's prefix, and that both forms of the mark
 count the calls.
 
+**The now strip and the time axis are one overview line.** Two bands of the seven above the first
+row said one thing each; the axis keeps its brush and its ids, and the now list opens as a popover
+instead of pushing the rows down. The line is hidden when both of its parts are, and hiding the now
+strip closes its list, so a popover left open never comes back over another view's rows. The hint
+counts the session's calls, as the bars do: the live probe's `overview line` reads it under a filter
+that thins the rows, red with the count taken from the rows held. `room 1440 bands list` bounds the
+list pane's top at 160px.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

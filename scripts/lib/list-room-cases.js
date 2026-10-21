@@ -8,7 +8,9 @@
  * (`room <w> tab never enters closed`), and casts no shadow in either colour scheme (`room <w> closed
  * shadow <scheme>`); the open drawer's `✕` overlaps no header action, served and in an HTML export
  * opened from disk (`room 1000 close disjoint served` / `… export`); at 400px every row of the probe
- * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`).
+ * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`);
+ * and at 1440 the list pane starts no lower than 160px (`room 1440 bands list`), the timeline's
+ * start reported beside it, with every band's height in the detail.
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -164,10 +166,37 @@ async function narrowRows(page, url, rows) {
       : `${r.rows} rows, ${r.repeats} repeat marks, ${r.clocks} clocks drawn${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
 }
 
+// Every band above the list, by height, and where the list pane starts. Base and head name their
+// bands differently, so each is read by the ids both carry and any it lacks reads 0.
+const BANDS = `(() => {
+  const h = (id) => { const e = document.getElementById(id); return e && e.getClientRects().length ? Math.round(e.getBoundingClientRect().height) : 0; };
+  const bands = ['topbar', 'server-banner', 'tabs', 'toolbar', 'filter-error', 'overview', 'now-strip', 'axis']
+    .map((id) => id + ' ' + h(id)).filter((b) => !b.endsWith(' 0'));
+  return { top: Math.round(document.getElementById('list-pane').getBoundingClientRect().top), bands };
+})()`;
+
+/**
+ * Room above the first row at 1440: on the list the pane starts no lower than 160px with no banner
+ * and no filter error; on the timeline, where the now strip joins the line, it is reported. The
+ * value carries the pixel top, so --base prints both trees' numbers.
+ */
+async function bands(page, url, rows) {
+  await load(page, url, 1440);
+  for (const [name, view] of [['list', 'network'], ['timeline', 'all']]) {
+    await page.ev(`selectView(${JSON.stringify(view)})`);
+    await sleep(600);
+    const b = await page.ev(BANDS);
+    const ok = name === 'list' ? Boolean(b) && !b.evalError && b.top <= 160 : null;
+    rows.push({ key: `room 1440 bands ${name}`, value: !b || b.evalError ? 'not measured' : `top ${b.top}px`, ok,
+      detail: !b || b.evalError ? String(b && b.evalError) : `${b.bands.join(', ')}${name === 'list' ? '; judged at most 160' : ''}` });
+  }
+}
+
 async function room(page, url) {
   const rows = [];
   await drawer(page, url, rows);
   await narrowRows(page, url, rows);
+  await bands(page, url, rows);
   const seen = [...new Set(page.exceptions)];
   rows.push({ key: 'room page exceptions', value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') });
   return rows;

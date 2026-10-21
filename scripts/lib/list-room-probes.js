@@ -113,4 +113,68 @@ function probeRowParts(ctx) {
     : `yes (${rows.length} rows end in their shown path's last segment, ${repeats} repeat marks read ·repeated Nx and N×)`]];
 }
 
-module.exports = { probeDrawer, probeRowParts };
+/**
+ * `Now` is a summary, and a summary that takes 70% of a column is not one.
+ *
+ * The assertion is that it opens collapsed and still says something useful collapsed — a strip
+ * reading only "now" would have moved the problem rather than fixed it. Open, it is a popover under
+ * its button in the overview line; the list it holds is the same.
+ */
+async function probeNowStrip(ctx) {
+  const { doc } = ctx;
+  const result = { present: false, startsCollapsed: 'n/a', collapsedSummary: 'n/a', expandsTo: 0, collapsesBack: 'n/a' };
+  const all = tabOf(doc, 'all');
+  if (all) {
+    await press(ctx, all, 500);
+    const strip = doc.getElementById('now-strip');
+    result.present = Boolean(strip) && !strip.hidden;
+  }
+  if (result.present) {
+    result.startsCollapsed = doc.getElementById('current').hidden ? 'yes' : 'NO - opens expanded';
+    const summary = doc.getElementById('now-summary-text').textContent.trim();
+    result.collapsedSummary = summary ? `yes ("${summary}")` : 'NO - the strip says nothing collapsed';
+    await press(ctx, doc.getElementById('now-toggle'), 250);
+    result.expandsTo = doc.querySelectorAll('#current .current-item').length;
+    await press(ctx, doc.getElementById('now-toggle'), 250);
+    result.collapsesBack = doc.getElementById('current').hidden ? 'yes' : 'NO';
+  }
+  return [
+    ['now strip present', result.present],
+    ['now starts collapsed', result.startsCollapsed],
+    ['now says collapsed', result.collapsedSummary],
+    ['now expands', result.expandsTo > 0 ? `yes (${result.expandsTo} rows)` : 'NO - nothing listed'],
+    ['now collapses back', result.collapsesBack],
+  ];
+}
+
+/**
+ * The overview line: the axis, its hint and the now strip in one band, every id kept. On the list
+ * the now strip is hidden and the axis shown; the hint counts the session's calls, as the bars do,
+ * so it is read under a filter that thins the rows, where a count of the rows held would differ.
+ */
+async function probeOverview(ctx) {
+  const { window, doc, ORIGIN, settle, pageState } = ctx;
+  const overview = doc.getElementById('overview');
+  if (!overview) return [['overview line', 'NO - there is no #overview']];
+  const missing = ['axis', 'axis-hint', 'now-strip'].filter((id) => doc.getElementById(id)?.parentElement !== overview);
+  await press(ctx, tabOf(doc, 'network'), 400);
+  const onList = { overview: !overview.hidden, axis: !doc.getElementById('axis').hidden, now: doc.getElementById('now-strip').hidden };
+  const filter = doc.getElementById('filter');
+  const type = async (text) => { filter.value = text; filter.dispatchEvent(new window.Event('input', { bubbles: true })); await settle(); };
+  await type('status>=500');
+  const hint = doc.getElementById('axis-hint').textContent;
+  const held = pageState().transactions.length;
+  const id = encodeURIComponent(doc.getElementById('session-picker').value);
+  const total = (await fetch(`${ORIGIN}/api/sessions/${id}/transactions?limit=1`).then((r) => r.json())).total;
+  await type('');
+  const said = /^(\d+) calls in this session\b/.exec(hint);
+  const verdict = missing.length ? `NO - not in #overview: ${missing.join(', ')}`
+    : !onList.overview || !onList.axis || !onList.now ? `NO - on the list: overview shown ${onList.overview}, axis shown ${onList.axis}, now hidden ${onList.now}`
+      : !said ? `NO - the hint reads "${hint}"`
+        : held >= total ? `n/a (status>=500 kept all ${total} calls, so the session's count and the rows' agree)`
+          : Number(said[1]) !== total ? `NO - the hint counts ${said[1]} under a filter keeping ${held} of ${total}`
+            : `yes (axis, hint and now in one line; "${said[0]}" under a filter keeping ${held})`;
+  return [['overview line', verdict]];
+}
+
+module.exports = { probeDrawer, probeRowParts, probeNowStrip, probeOverview };

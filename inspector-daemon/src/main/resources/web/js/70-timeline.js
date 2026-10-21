@@ -264,6 +264,7 @@ function renderCurrent() {
   const list = $('current');
   const rows = state.current;
   $('now-strip').hidden = state.view !== 'all' || rows.length === 0;
+  syncOverview();
   list.innerHTML = '';
 
   // Collapsed, the strip has to earn its line: how much there is, and how stale the oldest of

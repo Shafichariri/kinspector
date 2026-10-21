@@ -1219,37 +1219,6 @@ function runScripts() {
   }
 
   /**
-   * `Now` is a summary, and a summary that takes 70% of a column is not one.
-   *
-   * The assertion is that it opens collapsed and still says something useful collapsed — a strip
-   * reading only "now" would have moved the problem rather than fixed it.
-   */
-  async function probeNowStrip() {
-    const all = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'all');
-    const result = { present: false, collapsedSummary: 'n/a', expandsTo: 0, collapsesBack: 'n/a' };
-    if (!all) return result;
-    await click(all);
-    await new Promise((r) => setTimeout(r, 500));
-
-    const strip = doc.getElementById('now-strip');
-    result.present = Boolean(strip) && !strip.hidden;
-    if (!result.present) return result;
-
-    const list = doc.getElementById('current');
-    result.startsCollapsed = list.hidden ? 'yes' : 'NO - opens expanded';
-    const summary = doc.getElementById('now-summary-text').textContent.trim();
-    result.collapsedSummary = summary || 'NO - the strip says nothing collapsed';
-
-    await click(doc.getElementById('now-toggle'));
-    await new Promise((r) => setTimeout(r, 250));
-    result.expandsTo = doc.querySelectorAll('#current .current-item').length;
-    await click(doc.getElementById('now-toggle'));
-    await new Promise((r) => setTimeout(r, 250));
-    result.collapsesBack = doc.getElementById('current').hidden ? 'yes' : 'NO';
-    return result;
-  }
-
-  /**
    * The transaction detail: one face at a time, response first.
    *
    * The assertions that matter are ordering ones. That the response body is the *first* thing in
@@ -2116,7 +2085,8 @@ function runScripts() {
   const copyProbe = probeCopyFields();
   const drawerLines = await room.probeDrawer(shellCtx);
   const toolbarProbe = await probeToolbar();
-  const nowProbe = await probeNowStrip();
+  const nowLines = await room.probeNowStrip(shellCtx);
+  const overviewLines = await room.probeOverview(shellCtx);
   const tabProbe = probeTabs();
   const toolbarLabelProbe = probeToolbarLabels();
   const browserProbe = await probeBrowser('cache');
@@ -2332,12 +2302,7 @@ function runScripts() {
   console.error('toolbar on traffic :', toolbarProbe.onTraffic);
   console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
   console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
-  console.error('now strip present  :', nowProbe.present);
-  console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
-  console.error('now says collapsed :', String(nowProbe.collapsedSummary).startsWith('NO') || nowProbe.collapsedSummary === 'n/a'
-    ? nowProbe.collapsedSummary : `yes ("${nowProbe.collapsedSummary}")`);
-  console.error('now expands        :', nowProbe.expandsTo > 0 ? `yes (${nowProbe.expandsTo} rows)` : 'NO - nothing listed');
-  console.error('now collapses back :', nowProbe.collapsesBack);
+  report([...nowLines, ...overviewLines]); // lib/list-room-probes.js
   console.error('--- handing to an agent ---');
   console.error('call bundle        :', bundleProbe.txnButton);
   console.error('header values cap  :', bundleProbe.headersCapped ?? 'n/a', '(a bearer token must not fill the paste)');
