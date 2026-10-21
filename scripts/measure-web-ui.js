@@ -126,7 +126,6 @@ async function measureSide(chrome, side, opts) {
   if (opts.only.includes('run')) groups.push((p) => cases.runToggle(p, side.urls.big, 'big'));
   if (opts.only.includes('live')) groups.push((p) => cases.liveArrival(p, side.urls.big, 'big'));
   if (opts.only.includes('topbar')) groups.push((p) => topBar(p, side.urls.big, 'long'));
-  if (opts.only.includes('room')) groups.push((p) => room(p, side.urls.probe));
   return groups;
 }
 
@@ -158,6 +157,10 @@ async function main() {
     await Promise.all(jobs);
     // After the parallel batch, one window per tree: twelve windows opened at once made Chrome's
     // DevTools endpoint drop a request, failing the whole run before anything was measured.
+    if (opts.only.includes('room')) {
+      await Promise.all(sides.map((side) => onPage(chrome, (p) => room(p, side.urls.probe))
+        .then((rows) => results[side.name].push(...rows))));
+    }
     if (opts.only.includes('shell')) {
       await Promise.all(sides.map((side) => onPage(chrome, (p) => shell(p, side.urls.big, 'long'))
         .then((rows) => results[side.name].push(...rows))));
