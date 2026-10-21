@@ -1,10 +1,10 @@
 ---
 id: KIN-56
 title: 'Web: the list says when it holds only part of what it counts'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-20 20:25'
-updated_date: '2026-10-21 07:12'
+updated_date: '2026-10-21 10:50'
 labels:
   - 'item:web-list-says-what-it-holds'
 dependencies: []
@@ -19,14 +19,14 @@ Built in the 2026-10-20 run without an architect or QA before merge, by the main
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:web-list-says-what-it-holds in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:web-list-says-what-it-holds in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -50,3 +50,9 @@ Fix round (QA report qa/web-list-says-what-it-holds-report.md, two failures):
 2. Criterion 1: the filtered header now holds under a stretch: "400 of the newest 1000 of 1200 matches shown". Check: filtered count (static: no stretch, whole stretch, partial) and long filtered count (live, whole-session stretch). Both are red against fb8e54e's code ("1000 of 3016 calls").
 Pace rule: long list note was re-proven red in the same live run.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug): round 1 on PR #104 (fb8e54e) failed criteria 1 (header under a filter plus a stretch) and 3 (stretch under a filter); filed as KIN-73 and KIN-72, fixed in PR #110 (ff4f9de), both Done. Round 2 verified at ff4f9de on a 3016-call qa.cap session in headless Chrome. C1: path:/v3/shop/bulk reads 'newest 1000 of 1200 matches shown' at 1440 and 400, and with a stretch '1000/400/0/40 of the newest 1000 of 1200 matches shown'; long fixture 'newest 1000 of 1201 matches shown' at 1440, 1000, 400; 'N of 3016 calls' never appears under the filter. C2: '1816 calls hidden by the filter path:/v3/shop/bulk - newest 1000 of 1200 matches loaded - clear filter', one producer (filterNote), sticky under the scope bar, wraps at 400 px. C3: no filter '151 calls in this stretch are older than the newest 1000 the list loaded - filter to reach them'; under a filter claims no count (KIN-72). C4 boundary row: not built, n/a by the item. C5: check-web-static.js 90 checks 0 failed; live probe 'checks: 204 passed, 0 failed, 1 n/a' (facet filter, as at base); archive probe 38 passed including 'long list note absent' and 'long stretch oldest'; round-1 reds re-proved by QA (note never drawn: 'list note past the clamp: NO'; branch removed: '1000 of 3016 calls'; M from rows held: 'newest 1000 of 1000'; old wording; 'at least' dropped). C6: git diff 31d0ad0 ff4f9de touches no Kotlin, LIST_CEILING unchanged, 1000 rows drawn. Identity check and name scan clean; repo-checks green; PR #110 four checks and the main push on ff4f9de green. Not run locally: full Gradle build (no Android SDK). Not blockers, open: a mixed stretch under a filter (some loaded rows, older unloaded matches) says 'at least 10 calls hidden' and nothing that more matches are older (criteria do not cover it); at 400 px the header count is off-screen and at 1000 px the closed picker drops the start time (1a (e), 1b (a)).
+<!-- SECTION:FINAL_SUMMARY:END -->

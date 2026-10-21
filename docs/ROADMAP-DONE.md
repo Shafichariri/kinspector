@@ -432,6 +432,37 @@ Android only looked right because 120px clears a status bar at that density.
   Surfaces: daemon, web UI. No public API. It changes what a web UI user sees under a filter, so it
   gets a release-notes line when it ships; the line is owed with phase A's, in `UNRELEASED.md`.
 
+- ~~**`:inspector-noop-ui` still has no golden file, and already diverges.**~~ **Done, 2026-10-21**, as §5 → Phase I (PR #106, merge `1479c30`).
+  `api/inspector-ui-public-api.txt` is asserted by both modules of the pair, `InspectorOverlayKt` is
+  the recorded facade, and the three theme types are `internal`. The detail and the lessons are
+  under Phase I in §5 below.
+
+  cost: see Phase I in §5 below; not recorded — built in the 2026-10-20/21 coordinated run, no QA before merge, QA after merge; 1 round
+
+  Found while writing the
+  stream guard, not fixed with it. `:inspector-ui` publicly exposes `InspectorTheme`,
+  `InspectorColors` and `LocalInspectorColors`; the noop exposes `InspectorOverlay` alone, so a
+  consumer theming anything against those would hit the `lastError` failure exactly. It is latent
+  rather than live — no document has ever told a consumer to use them, which is the only reason
+  nobody has been bitten.
+
+  It is deliberately not folded into the stream fix, because the answer is a design decision and
+  not a stub: mirroring `InspectorColors` means a release artifact carrying the inspector's palette
+  as dead data. Either that cost is accepted, or the three are made `internal` and the divergence
+  disappears — the second looks right, and it is a public-API removal, so it is a decision rather
+  than a tidy-up. The guard itself is also harder here than for stream: `@Composable` functions
+  carry synthetic `Composer` and `changed` parameters into their JVM signatures, which reflection
+  reports and nobody wants in a golden file.
+
+  The facade fix above adds a second thing that guard will have to assert. `InspectorOverlay` is
+  top-level, so its JVM class is named for whichever file declares it in each module — the same
+  defect the `stream` pair shipped. **Measured, and this pair is currently fine:** both modules
+  put it in `InspectorOverlayKt`, on JVM and on Android. But they agree because both files happen
+  to be called `InspectorOverlay.kt`, not because anything checks, and renaming either one is a
+  silent runtime break with nothing to catch it.
+
+  **Decided 2026-10-18: the three become `internal`.** The guard is now §5 → Phase I.
+
 ### Bugs found, not fixed
 
 - ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
@@ -759,6 +790,263 @@ Android only looked right because 120px clears a status bar at that density.
   cost: 9 calls (delivery-tracker 3, engineer 2, QA 2, product-owner 1, release-steward 1), ~1.0M
   tokens, 2 h 07 min, Small, 1 fix round
 
+- ~~**Row labels drop a non-default port.**~~ **Done, 2026-10-21.** PR #105 merged as `1da0d75`; `build`, `release-swap`, `repo` and `web` green
+  on the PR (the push run on `main` was still queued when QA wrote). KIN-60 is Done on QA's pass,
+  with real daemons built from base and head. New `NetworkTransaction.hostPort` in
+  `:inspector-model` is `host`, plus `:port` unless the port is null or `defaultPortFor(scheme)`.
+  `url` is built on it too, so the rule exists once, and `SessionRepository.kt` (MCP `timeline`,
+  `export.json`, the HTML export) and `ExportMarkdown.kt` (the Markdown timeline table) read it.
+  Tests are in `SignalToolsTest`, `ExportTest` and the model's `PortTest`. Each old line put back
+  alone fails exactly its surface's test, and a `hostPort` that keeps every port fails 3 model and 2
+  daemon tests. Counts: model 159 to 160, daemon 268 to 270.
+
+  **What was learned.** `hostPort` is a new public declaration in a published module. It is
+  getter-only like `url`, so it is absent from REST and `export.json`, and no golden file applies
+  (`:inspector-model` has no twin; the exemption is recorded in `structure/twins.txt`). `url` is
+  byte-identical to base for all nine call shapes QA sent, empty `?` included. Port 443 over http
+  and 80 over https are not that scheme's default, so they keep their port. Two older defects
+  surfaced and were not filed: an IPv6 host is not bracketed, so `url` reads `http://::1:8080/v6` at
+  base and head and the label is ambiguous the same way (not confirmed against a real captured IPv6
+  call); and the session summary's `byHost` groups by bare host, so `:8080` and `:9090` still merge
+  there (`SessionRepository.kt`, outside this item). The agent-visible change is in `UNRELEASED.md`.
+  Not verified locally: the full `./gradlew build` (no Android SDK).
+
+  cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 1 round
+
+  *Ticket label:* `item:row-label-port`. **Ordered
+  2026-10-18, scheduled in Order from here**, after the `McpTest.kt` split.
+
+  Two places build a call's label from host and path by hand:
+
+  - `SessionRepository.kt:62`, `label = "${txn.method} ${txn.host}${txn.path}"`. This is the label
+    on every MCP `timeline` entry, and `export.json` and the HTML export carry the same
+    `TimelineEntry`.
+  - `ExportMarkdown.kt:122`, the Markdown export's timeline table.
+
+  Neither has the port. Two local servers on `127.0.0.1:8080` and `127.0.0.1:9090` read as one
+  endpoint, and on a real session a call to `:9090` was labelled `GET 127.0.0.1/json`.
+  `docs/decisions/capture.md` ("Capture records the port, and `url` omits it only when it is the
+  default") records this exact defect for URLs. KIN-23 fixed the same cause in MCP `explain`.
+  Leaving the query out of a label is reasonable, because a label names an endpoint. Leaving the
+  port out is not, because the port is part of which server answered.
+
+  **The user and the problem.** An agent over MCP reading a timeline, and anyone handed a Markdown
+  export. Both are told that calls to two different servers went to one. On a phone, the common case
+  is a local mock server beside the real backend, which is exactly when the difference matters.
+
+  **Acceptance criteria.**
+
+  - Both labels show `host:port` when the port is not the scheme's default, and the bare host when
+    it is or when `port` is null, so archives written before the port existed read as before.
+  - **No third copy of the rule.** The labels get the default-port decision from `defaultPortFor`
+    in `:inspector-model`, the function `url` already uses, through one helper that both call sites
+    share. If the architect puts that helper in `:inspector-model`, it is a new public declaration
+    in a published module. That module has no twin and no golden file, but the item says so.
+  - A daemon test with calls on `:8080` and `:9090` asserts two different labels in the MCP
+    `timeline` output and in the Markdown table, and a call on `:443` over https has no port. It
+    fails with either old line put back. Its test goes in the split test files, not in
+    `McpTest.kt`.
+  - The label still has no query.
+
+  **Why after the split.** Its test belongs with the timeline tests, which the split moves. Landing
+  it first would add to the file being split, which is how KIN-26 happened.
+
+  **Out of scope.** The web UI and overlay rows, which draw the host separately and are not this
+  defect. Any other change to the label's shape. Surfaces: daemon, MCP, exports. An agent sees a
+  different label, so it gets a release-notes line.
+
+- ~~**The traffic list does not say when it holds only part of what it counts.**~~ **Done, 2026-10-21.** PR #104 merged as `fb8e54e` and its fix round, PR #110, as `ff4f9de`;
+  `build`, `release-swap`, `repo` and `web` green on both, and on the push run for `ff4f9de`. KIN-56
+  and the bugs KIN-72 and KIN-73 are Done on QA's second round. Under a filter past the ceiling the
+  header reads `newest N of M matches shown`, with M from the route's `matched`, and `400 of the
+  newest 1000 of 1200 matches shown` when a stretch is brushed. The list draws `filterNote`'s
+  `newest N of M matches loaded` in a sticky `#list-note` outside the listbox. A stretch older than
+  the loaded rows says so and how to reach them: `151 calls in this stretch are older than the
+  newest 1000 the list loaded — filter to reach them`, and under a filter `none of the newest N of M
+  matches the list loaded is in this stretch, and the K older ones are not loaded — narrow the
+  filter to reach any here`. The 'at least' rule holds. No boundary row was built; the note and the
+  stretch text meet the criteria. The export shows no list note. No Kotlin changed and
+  `LIST_CEILING` is untouched. Counts at `ff4f9de`: static checks 90, live probe 204 passed, 0
+  failed, 1 n/a (`facet filter`), archive probe 38.
+
+  **What was learned.** QA's first round failed two criteria and the fix round passed both.
+  `olderThanLoaded` counted the unfiltered whole-session copy, so under a filter a stretch where
+  nothing matched read '500 calls … narrow the filter to reach them' beside an axis that said `0
+  calls`; at base that screen read `no calls in the selected stretch`, which was true, so this was a
+  regression the item introduced. The page evaluates no filter and cannot count matches in a
+  stretch, so under a filter it now claims no count. The new header branch was guarded by
+  `!state.timeRange`, so a brushed stretch under a filter still read `1000 of 3016 calls`, the
+  string the criterion rules out; the builder had deferred that to 1b, but the criterion made no
+  exception. The static check for the first case asserted the wrong number (151 where 76 match), a
+  guard that codified the defect; it now covers five stretches. A stub was not enough: the builder
+  had not run the failing case in Chrome. Left open, not blockers: a stretch holding some loaded
+  rows and some older unloaded matches says `at least 10 calls hidden` and nothing that more matches
+  are older; at 400 px the header count is off-screen and at 1000 px the closed picker drops the
+  start time (1a (e) and 1b (a)).
+
+  cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 2 rounds
+
+  *Ticket label:*
+  `item:web-list-says-what-it-holds`. **Ordered 2026-10-19 by the maintainer: straight after
+  `item:web-current-session-guard`**, with the other web defects (§5 → "Order from here").
+  The product owner had proposed straight after `item:web-transactions-paged`.
+
+  Two defects, one cause. The list draws the newest 1000 matching calls (`LIST_CEILING`), which the
+  maintainer accepted on 2026-10-19 on the condition that the page says so. With no filter it now
+  does (KIN-45). In two other cases it still does not:
+
+  - **Under a filter.** `path:/v3/shop/bulk` on a 3016-call session matches 1200. The header reads
+    `1000 of 3016 calls` and the list pane has no note. The path, the waterfall and the timeline
+    all draw `newest N of M matches loaded` (`filterNote`), and the list, which is the default
+    view, does not. So a reader is told 1000 calls match when 1200 do. The panel called it the most
+    misleading thing left on these screens.
+  - **Under a brushed stretch older than the newest 1000.** The list says `no calls in the selected
+    stretch` while the THIS STRETCH figure counts calls in it. Live, and at base. A filter that
+    narrows the matches under 1000 is the only way out, and nothing tells the reader that.
+
+  **The user and the problem.** A web UI user on a Mac with a long session who narrows it, by a
+  filter or by brushing the axis, which is how anyone looks for one call in a long session. The
+  list states a count, or an absence, that is false, and the panes beside it state the truth.
+
+  **Why now.** The ceiling was accepted on the condition that it is labelled. These are the two
+  places it is not, so until they are fixed the condition is not met. It is also cheap: the note,
+  the route's `matched` number and the stretch rule already exist for the other three panes.
+
+  **Acceptance criteria.**
+
+  - Under a filter that matches more calls than the list draws, the header numbers the matches and
+    says how many are drawn, in words that cannot be read as the match count: for example
+    `newest 1000 of 1200 matches shown`. `1000 of 3016 calls` does not appear. The match count
+    comes from the route's `matched`, never from the rows held.
+  - The list pane draws the same `newest N of M matches loaded` note the path, waterfall and
+    timeline draw, through `filterNote` or whatever the architect makes it, not a fourth wording.
+  - A brushed stretch the list holds no calls for, while the stretch holds calls, never reads `no
+    calls in the selected stretch`. It says the calls there are older than what the list loaded and
+    how to reach them. The rule `docs/decisions/web-ui.md` records for a stretch ("at least" when
+    the stretch reaches below the oldest mono at which both lists are whole) holds here too.
+  - The panel suggested a boundary row at the oldest end of a capped list: `203 older calls not
+    drawn — filter to reach them`. That is one way to meet the last two criteria. The architect
+    chooses.
+  - Checks over a 3016-call stub clamped as the daemon clamps, in `check-web-static.js` and in both
+    probes where a probe can see it: one for the filtered header, one for the list note, one for
+    the stretch. Each is proven red with the old wording put back. An exported session behaves the
+    same offline (`render-web-ui-archive.js`).
+  - The list still draws at most 1000 calls, and the daemon's clamp is unchanged.
+
+  **Out of scope.** Whether the whole-session read is capped (KIN-42). The four-numbers polish,
+  which is 1b's (f3). Virtualising the list. The filter grammar; no filter is evaluated in
+  `web/js`. Surfaces: web UI only. No public API, no `:inspector-model` change. Size S, to be
+  confirmed by the architect. Release-notes line, because a user could have been misled by it.
+
+  **Not a decision overturned.** It extends `docs/decisions/web-ui.md`'s rule that a pane a filter
+  thinned says so to the one pane that does not.
+
+- ~~**The now strip and the signal panes can show what is no longer true.**~~ **Done, 2026-10-21.** PR #107 merged as `6804c94`; `build`, `release-swap`, `repo` and `web` green
+  on the PR, and the push run on `main` succeeded. KIN-57 is Done on QA's pass. A new
+  `followSession` clears the signal side at once on a switch (the picker's path, and
+  `afterSessionChange` after a delete or clear), and the glance reads `loading this session…` until
+  `loadSignals` has written the selected session. One reader, `readCurrent`, serves `loadSignals`
+  and `refreshCurrent` with a sent/written ticket, so the later-started `/current` read decides.
+  `state.currentSessionId` records whose values the strip holds: a failed read keeps them on the
+  same session and empties them after a switch. The fixture's long session has two `state` signals
+  of its own, so `now late reply dropped` asserts them. Four new live-probe lines (`now switch shows
+  none`, `now newest read decides`, `now load read overtaken`, `now failed read kept`); live probe
+  200 to 204 passed, 1 n/a; archive 38; static 90. The only Kotlin change is the test fixture.
+
+  **What was learned.** QA ran four mutated copies of the page scripts in parallel against one
+  daemon, since the probe loads scripts from its own tree and asks the daemon only for data; each
+  mutant failed only its own lines (the ticket check also fails `failed read kept`, which depends on
+  it). The delete path, which the builder said no probe drives, was covered in Chrome. The product
+  owner's ruling reversed KIN-51's accepted trade-off: a failed `/current` read no longer empties
+  the strip on the session you are on, only across a switch, so the KIN-51 wording in
+  `UNRELEASED.md` and `STATUS.md` was amended. Still false in the switch window and not fixed here:
+  the timeline's call rows and the endpoint chips show the session just left until the load lands
+  (true at base; calls are out of this item's scope, and 1a rebuilds the switch); the path, the
+  waterfall and the tag browsers are not redrawn by `followSession` (by inspection only; QA did not
+  render them). Not verified locally: the full Gradle build (no Android SDK).
+
+  cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 1 round
+
+  *Ticket label:*
+  `item:web-now-strip-follows-session`. **Placed 2026-10-19 by the product owner: straight after
+  `item:web-list-says-what-it-holds`** (§5 → "Order from here"), with the other web defects.
+
+  Three ways the signal side of the page shows something false, all left after KIN-51:
+
+  - **The switch window.** The picker's `change` handler (`web/js/99-init.js`) and
+    `afterSessionChange` (`web/js/90-sessions.js`, after a delete or clear) both reach
+    `loadTransactions`, which reads a page of calls, the markers, the whole-session copy of the
+    calls (`syncAllTransactions`) and only then `loadSignals`. Until that lands, `state.current`, `state.signals`, `state.allSignals` and
+    `state.screens` are still the previous session's, so the now strip, the timeline's signal rows
+    and the glance describe the session just left, under the new one's name. True at base, before
+    KIN-51. On a large session the window is as long as the whole-session read, which is the
+    25-second wait recorded under KIN-42 in §3 → Guards, so the reader has time to believe it.
+    `afterSessionChange` clears all of these only when no session is left, and the picker never.
+  - **Out-of-order replies.** `refreshCurrent` runs on every live signal. KIN-51 drops a reply for a
+    session no longer selected, but two reads for the same session have no load counter, so an
+    older reply landing last overwrites a newer one. `loadSignals` has `signalLoad` for exactly
+    this; `refreshCurrent` does not share it.
+  - **A probe that cannot fail on one mutation.** In KIN-51's `now late reply dropped`
+    (`scripts/lib/current-guard-probes.js`), the fixture's second session has no current values,
+    so "the strip lists the new session's own values" and "the strip is empty" are the same
+    assertion. A mutation that writes `[]` on a mismatched session, instead of returning, passes
+    CI. That is a guard only ever seen passing, against "prove guards in both directions".
+
+  **Ruling on KIN-51's trade-off: on an unchanged session, keep the values; blank only across a
+  switch.** Since KIN-51 a failed `/current` read always empties the strip, until the next signal
+  or load. Blank is right after a switch, because the values held belong to another session and
+  nothing says so. On the same session it is the worse of the two. Every row the strip keeps is
+  this session's and carries its own age, so it is a dated fact: `docs/decisions/signals.md`
+  ("The collapsed line says how stale the oldest of it is") is what makes a kept row honest. An
+  empty strip is undated and reads as "this app holds nothing now", which is the confidently wrong
+  reading the age exists to prevent. The cost of keeping is one value that may be one signal old,
+  and the failed read is rare: the usual cause is the daemon going away, which already raises the
+  banner and re-reads everything on reconnect. The fix is to record whose values `state.current`
+  holds, so a failure keeps them only when they are the selected session's. **This touches no
+  recorded decision**: KIN-51's rule ("a failed read after a switch leaves the strip empty")
+  still holds, and the accepted trade-off lives only in `docs/STATUS.md` and the `UNRELEASED.md`
+  line, which the delivery tracker amends when this ships.
+
+  **The user and the problem.** A web UI user on a Mac who switches sessions to compare two runs,
+  or watches the strip under live traffic. The strip and the timeline claim to describe this
+  session now, and for a window, or after one slow reply, they describe another session or an
+  older moment, without a mark that says so.
+
+  **Why now.** KIN-51 just made the strip's session promise. These are the holes left in the same
+  two functions, while the code and the probe are fresh. It is small, and it shows a user
+  something false today, which is the maintainer's rule for going ahead of the structure moves.
+
+  **Acceptance criteria.**
+
+  - From the moment another session is selected until its own signals land, the now strip, the
+    timeline's signal rows and the glance show none of the previous session's values: either
+    nothing, or a loading state that names no values. A probe holds the new session's signal read,
+    asserts all three, and fails with the clear removed.
+  - Of two `/current` reads for one session, the later-started one decides the strip, whatever
+    order they land in. A probe releases them newest first and fails with the counter removed.
+    A `/current` read started by `loadSignals` and one started by a live signal obey the same
+    rule; the architect chooses whether they share `signalLoad` or a counter of their own.
+  - A failed `/current` read on an unchanged session leaves the strip as it was. A failed read
+    after a switch still leaves it empty: KIN-51's `now failed read empty` stays green. A probe
+    for the unchanged case fails with KIN-51's `catch(() => [])` behaviour kept for it.
+  - The live probe's fixture has a second session with current values of its own, different from
+    the first's, so `now late reply dropped` asserts the new session's values and not an empty
+    strip. It is proven red with a mismatched reply written as `[]`, and the `n/a` branches that
+    the old fixture took no longer fire.
+  - No filter is evaluated in `web/js`, and no new route is added.
+
+  **Out of scope.** The call list and the counts, which the first page of the switch already
+  replaces. Making the whole-session read shorter, which is KIN-42. Marking a kept value as "not
+  refreshed", which can be a later polish if the kept-value case is ever seen in use. The overlay,
+  which holds one session. Surfaces: web UI only. No public API, no `:inspector-model` change.
+  Size S, to be confirmed by the architect. Release-notes line, because a user could have seen the
+  switch window.
+
+  **Why not only a criterion on 1a.** 1a rebuilds the session switch, but it comes well after
+  this one in "Order from here" and is sized L, and folding this in would leave a false fact on screen until then,
+  the same argument that made KIN-51 its own item. 1a carries one criterion instead: the probes
+  this item adds stay green through its rebuild.
+
 
 ---
 
@@ -818,6 +1106,12 @@ tag cut before any of this existed.
 | ~~The web traffic list stops at 1000 calls~~ **Done, 2026-10-19** (KIN-43 to KIN-50, QA at `68315b4`; KIN-42 stays deferred and owns whether the whole-session read is capped) *(added 2026-10-18)* | §3 → Bugs found | `item:web-transactions-paged` | ~~S~~ M *(re-sized 2026-10-19; KIN-43 to KIN-46, approved; KIN-47 to KIN-50 from the verify panel)* |
 | ~~One session's "now" values can land under another~~ **Done, 2026-10-19** (KIN-51, `eaaadce`; a failed `/current` read now always empties the strip) *(added 2026-10-19)* | §3 → Bugs found | `item:web-current-session-guard` | S |
 | ~~Live rows ignore the filter until the next reload~~ **Done, 2026-10-19** (KIN-52 to KIN-55; a throttled re-read under a filter, no daemon or wire change; size S) *(added 2026-10-18)* | §3 → Bugs found | `item:web-live-rows-filtered` | S |
+| ~~The traffic list does not say when it holds only part of what it counts~~ **Done, 2026-10-21** (KIN-56, KIN-72, KIN-73; PRs #104 and #110, merges `fb8e54e` and `ff4f9de`; two rounds of QA) | §3 → Bugs found | `item:web-list-says-what-it-holds` | S, to be confirmed |
+| ~~The now strip and the signal panes can show what is no longer true~~ **Done, 2026-10-21** (KIN-57, PR #107, merge `6804c94`) | §3 → Bugs found | `item:web-now-strip-follows-session` | S, to be confirmed |
+| ~~Split `McpTest.kt`~~ **Done, 2026-10-21** (KIN-59, PR #102, merge `49735be`) | §5 | `item:structure-split-mcp-test` | S |
+| ~~Row labels drop a non-default port~~ **Done, 2026-10-21** (KIN-60, PR #105, merge `1da0d75`) | §3 → Bugs found | `item:row-label-port` | S |
+| ~~Phase H — split the two large overlay files~~ **Done, 2026-10-21** (KIN-61, PR #103, merge `4dc21d2`) | §5 | `item:structure-phase-h` | S |
+| ~~Phase I — `noop-ui` golden file~~ **Done, 2026-10-21** (KIN-62, PR #106, merge `1479c30`) | §5 | `item:structure-phase-i` | M |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -1367,6 +1661,168 @@ replaced by this.
 **Not verified.** The no-client-names check on the tickets: the term list is kept out of the repository,
 so QA cannot run it. The release steward scans what it can. `McpTest.kt` was not split, and is the
 "Later" item below.
+
+### Later — split `McpTest.kt`
+
+**Done, 2026-10-21.** PR #102 merged 2026-10-20 as `49735be`; `build`, `release-swap`, `repo` and
+`web` green on the PR, and the push run on `main` succeeded. KIN-59 is Done on QA's pass over
+detached copies of the merge and its first parent. `McpTest.kt` (784 lines, 43 tests) is gone. Its
+tests are in `inspector-daemon/src/test/kotlin/dev/inspector/daemon/mcp/`: `McpProtocolTest` (11),
+`TransactionToolsTest` (17, `get_body` and `explain`, matching `TransactionTools`),
+`SignalToolsTest` (7), `SessionToolsTest` (1), `MarkerToolsTest` (1), `ExportToolsTest` (3),
+`McpAcceptanceTest` (3, questions that cross groups) and the shared `McpToolsFixture`. There were
+268 daemon tests before and after, with identical sorted test-name lists; all 43 test bodies are
+byte-identical at their new home; `inspector-daemon/src/main` has no diff; the deferred line in
+`structure/budgets.txt` is removed and the largest new file is 286 lines.
+
+
+*Ticket label:* `item:structure-split-mcp-test`.
+
+**Left over from phase D. Later.** *(Scheduled 2026-10-18 in "Order from here", before
+§6.)* `McpTools.kt` was split by tool group, and its test file was
+not. `McpTest.kt` is 815 lines, and `structure/budgets.txt` lists it as deferred. Phase D could not
+split it, because its acceptance criterion was that every daemon test passes unchanged, and phase
+D added only five import lines to this file. Splitting the file would have moved every test in it.
+
+**For whom.** Whoever next adds or changes an MCP tool. The tools now live one group per file, and
+their tests are still in one file, so a change to one group means finding its tests in 815 lines.
+
+**Acceptance criteria.** The tests split along the same groups as the tools in `mcp/`, one test
+file per group, plus a shared file if the fixtures need one. The test count is the same before and
+after, stated in the change. Each test moves word for word, and the diff shows nothing reworded.
+The phase B ratchet records the new, smaller budgets, and the deferred line in
+`structure/budgets.txt` is removed.
+
+**Out of scope.** Changing what any test asserts. Adding tests, including the two §3 → Guards items
+that came out of phase D. Those are separate items, so that a move and a new check never share one
+diff.
+
+**What was learned.** The roadmap said 815 lines; the file was 784 when it was split. A
+word-for-word move still widens the fixture's members from `private` to `protected` and the `int()`
+helper to `internal` (test source set only), and that is the whole of the permitted rewording; QA
+found it with a line-level check that every other base line survives. The protocol and acceptance
+tests belong to no one tool group, so they got files of their own. Landing the split first meant the
+row-label test went straight into `SignalToolsTest`, the order the item argued for. The ratchet was
+proved in both directions: padding a new file to 616 lines fails `:repo-checks:test`. Not verified
+locally: the full `./gradlew build` (no Android SDK); CI ran it.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 1 round
+
+### Phase H — split the two large overlay files
+
+**Done, 2026-10-21.** PR #103 merged as `4dc21d2`; `build`, `release-swap`, `repo` and `web` green
+on the PR, and the push run on `main` succeeded. KIN-61 is Done on QA's pass. The builder named the
+seams (no architect on the row): rows out of the list body, and the bars out of what opens over the
+list. `InspectorList.kt` went from 758 to 351 lines and `ListChrome.kt` from 703 to 360; two files
+are new, `ListRows.kt` (333) and `ListSheets.kt` (492: the menu, the filters sheet, their shared
+scrim and the term edits). The only code change is `private` to `internal` on `SignalRow`,
+`RunHeader`, `MarkerDivider` and `TransactionRow`. `InspectorOverlay.kt`, `InspectorTheme.kt` and
+the jvmTest sources have no diff; `ListRenderTest` and `ListControlsTest` pass unchanged (134 tests
+before and after, same names); all 12 360dp screenshots are byte-identical before and after, and two
+were read by eye; `javap -public` shows `InspectorOverlayKt` identical. Both phase H budget lines
+were removed, and `ListControlsTest.kt` keeps its 605-line budget with the reason rewritten.
+
+
+*Ticket label:* `item:structure-phase-h`.
+
+**Audit finding 10. Later.** `ListChrome.kt` (703 lines) and `InspectorList.kt` (758) are the
+overlay's list and its chrome. Nothing in §6 touches the overlay, so the work can wait. The phase B
+ratchet stops them growing in the meantime. *(Scheduled 2026-10-18 in "Order from here",
+before §6. It still does not have to wait; the maintainer chose not to let it.)*
+
+**For whom.** Whoever next changes the overlay's list.
+
+**Acceptance criteria.** Each file is split along a seam the architect names. `ListRenderTest` and
+`ListControlsTest` pass unchanged, and the 360dp screenshots are compared by eye before and after.
+`InspectorOverlay.kt` keeps its name. The ratchet records the new, smaller budgets.
+
+**Out of scope.** Any change to the list's behaviour or look.
+
+**What was learned.** Compare screenshots only with `jvmTest --rerun`: the PNGs are not declared
+task outputs, so a cached test task leaves a stale set that looks like a pass. Changing
+`STRIPE_WIDTH` from 3dp to 4dp produced 5 differing PNGs, which is what shows the comparison can
+see. Kotlin `internal` is public in bytecode, so the four list files' JVM facades differ from before
+while nothing a consumer can call changed; the check that matters is that `InspectorOverlayKt` is
+identical. Not verified locally: the full `./gradlew build`, the `-Pinspector=off` build on the
+Android and iOS targets, and the klib half of `check-release-clean.sh` (no Android SDK and no
+working `xcrun` on the machine); those rest on CI. `ListControlsTest.kt` (605 lines, budgeted) stays
+unsplit because the criteria kept it unchanged; a possible follow-up, not filed.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 1 round
+
+### Phase I — `noop-ui` golden file
+
+**Done, 2026-10-21.** PR #106 merged as `1479c30`; `build`, `release-swap`, `repo` and `web` green
+on the PR (the push run on `main` was still in progress when QA wrote). KIN-62 is Done on QA's pass;
+the `docs/INTEGRATION.md` v59 work was folded into the same PR. `api/inspector-ui-public-api.txt` (a
+header and two lines) is asserted for equality by `UiApiParityTest` in both `:inspector-ui` and
+`:inspector-noop-ui`. A second test in each names every public holder, so a public declaration in
+any file fails and not only one in the facade. `InspectorOverlayKt` is the recorded facade, so
+renaming either `InspectorOverlay.kt` fails both tests. `InspectorTheme`, `InspectorColors` and
+`LocalInspectorColors` are `internal`. The core and stream golden files are byte-identical after
+regeneration. `docs/INTEGRATION.md` v59 tells an affected app what to do before it upgrades past
+1.3.0. There are 136 tests in `:inspector-ui:jvmTest` (134 + 2) and 2 in `:inspector-noop-ui`.
+
+
+*Ticket label:* `item:structure-phase-i`.
+
+**Audit finding 9. Unblocked by decision 2. Does not gate §6.** *(Scheduled 2026-10-18 in
+"Order from here", so it lands before §6 starts, although nothing in §6 depends on it.)*
+
+**This changes public API for `:inspector-ui`, and needs the noop twin and golden-file treatment
+sized honestly.** `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` become `internal`.
+Nothing in this repository outside `:inspector-ui` uses them, the samples included, and no document
+has ever told a consumer to. But they have been public in every published version, so a consuming
+app that themed against them stops compiling. A removal can be undone only by a release, and §3 →
+Guards called this "a decision rather than a tidy-up" for that reason. Two follow-ons:
+
+- `docs/INTEGRATION.md` gets a version bump and a changelog entry that says what to *do*: "if you
+  referenced these, copy the colours you need". The recorded rule is that any change affecting a
+  consumer gets one.
+- ~~**Open for the human:** whether a removal from public API ships in a minor release.~~
+  **Decided 2026-10-18: yes, it may ship in a minor release.** The changelog entry above is what a
+  consumer gets in place of a major version, so it must say plainly that three public types are
+  gone and what to do instead.
+
+**Acceptance criteria.**
+
+- `api/inspector-ui-public-api.txt` (or whatever the architect names it) is asserted for
+  **equality** by both `:inspector-ui` and `:inspector-noop-ui`, as the stream pair is.
+- `InspectorOverlayKt` is recorded as the JVM facade in both. Renaming either `InspectorOverlay.kt`
+  then fails the guard, which closes the gap §3 describes: "they agree because both files happen to
+  be called `InspectorOverlay.kt`, not because anything checks".
+- The constructor and method JVM descriptors are compared, as for the other pairs. Compose's
+  synthetic `Composer` and `changed` parameters are handled by a stated rule and not by an
+  allowlist, and the generated golden file is read by a person before it is trusted.
+- Proven in both directions, on both modules: add a public member to one side, rename one file.
+- `-Pinspector=off` still builds.
+
+**Out of scope.** Mirroring the palette into the noop, which was rejected (decision 2). A class-set
+diff, which is on the "do not" list.
+
+**What was learned.** The builder proved thirteen breaks (R1 to R13), each seen failing and
+restored; QA repeated all but R8. Gradle 9.5.1 rejects a missing file under
+`inputs.file(...).optional()`, so the golden file is declared with `inputs.files(...)`, and R11
+shows it is a real task input. R8 (a changed `content` parameter type) needed `OverlayStateTest.kt`
+moved aside, because that test calls `InspectorOverlay { Text(...) }` and stops compiling first. The
+composable rule needs no name list: a method with more JVM parameters than its Kotlin declaration is
+rendered from the declaration, and otherwise keeps its Java form. The `enabled` rename (R7) is
+caught by the `fun` line alone, not by the descriptor, which is why the golden file holds both
+lines. A trap in the proofs: Gradle's `--rerun` applies only to the task named just before it, so
+the design note's R12 command (`:inspector-core:jvmTest :inspector-stream:jvmTest
+-Dinspector.api.regenerate=true --rerun`) re-ran stream only and left core's golden file untouched.
+Written as `:inspector-core:jvmTest --rerun :inspector-stream:jvmTest --rerun
+-Dinspector.api.regenerate=true`, it rewrote both and the diff stayed empty, so the result stands;
+the faulty command is not quoted anywhere in the repository. The guard is JVM-only: a public
+declaration that exists only in `iosMain` or `androidMain` is unguarded on every pair. Not verified
+locally: the full `./gradlew build`, every Android target and the iOS links (no Android SDK, no
+working `xcrun`); CI ran them. Follow-ups for the product owner, none part of this item: apply the
+completeness check to the `core` and `stream` pairs; declare their golden files as `jvmTest` inputs,
+since a golden-only edit can hit the build cache and stay green; a klib ABI dump for the native-only
+surface; name each pair's golden file in `structure/twins.txt` so a pair without one fails
+`:repo-checks`. `.claude/agents/architect.md` line 31 still says the noop-ui golden file is missing.
+
+cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session, no QA before merge, QA after merge; 1 round
 
 ### Open questions only the human can answer
 
