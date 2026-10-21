@@ -4,7 +4,7 @@ title: 'Web: a live call reaches the timeline, the glance and the picker'
 status: In Progress
 assignee: []
 created_date: '2026-10-20 20:26'
-updated_date: '2026-10-21 12:24'
+updated_date: '2026-10-21 13:38'
 labels:
   - 'item:web-live-calls-reach-every-pane'
 dependencies: []
@@ -43,4 +43,6 @@ Criteria, copied from docs/ROADMAP.md (item:web-live-calls-reach-every-pane), wi
 5. Paused, or a call for another session: none of the three moves. Both return before the branch. Checks: `live paused still`, `live other still`. Red: count and draw moved above those returns.
 6. No filter evaluated in web/js, no new route: no Kotlin change.
 Pace rule: neighbouring `live header plain` re-proven red in the same live run (renderCounts removed from the call branch).
+
+Fix round (QA, qa/web-live-calls-reach-every-pane-report.md, criterion 4): after pause, live calls, resume, the header read 120 while the picker option and face stayed at 118. setLiveTail(true) now calls followLiveCount once its loadTransactions lands, for the same session. That is sessionTotal, the header's number; no /api/sessions read. Check: live paused still sends a second call while paused, resumes, and requires the option and face to end with the header's count. It is red against 952b6c6's setLiveTail (header 18, option 23 calls). The neighbouring live picker count was re-proven red in the same run.
 <!-- SECTION:NOTES:END -->

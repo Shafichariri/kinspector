@@ -546,6 +546,12 @@ function setLiveTail(on) {
   if (on) {
     // The rows missed while paused are missing from the whole-session copies too.
     forgetWholeSession();
-    loadTransactions();
+    // The load moves the header to what the session now holds, calls that arrived while paused
+    // included. The picker's label counts what the header counts, and only a live call moved it,
+    // so after a pause it stayed at the count from before until the next one (`followLiveCount`).
+    const id = state.sessionId;
+    loadTransactions().then(() => {
+      if (state.sessionId === id && state.sessionTotal !== null) followLiveCount();
+    });
   }
 }
