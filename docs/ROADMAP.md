@@ -352,6 +352,65 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   required. Changing any live behaviour. Surfaces: the web UI's check scripts, plus the daemon's
   `/ingest` used as a client. There is no public API, no noop twin and no golden file.
 
+- **Phase I gave the ui pair three guards that the core and stream pairs lack.** *Ticket label:*
+  `item:guard-twin-pairs-alike`. From the phase I hand-over (`item:structure-phase-i`), placed by the
+  product owner on 2026-10-21 with the run's other follow-ups (§3 → Bugs found, not fixed).
+
+  **For whom.** A consuming team building with `-Pinspector=off`. A public declaration in
+  `:inspector-core` or `:inspector-stream` that the noop lacks compiles in debug and fails in
+  release, the `lastError` and theme-type failure again. Behind them, whoever trusts a green
+  `jvmTest` after editing a golden file.
+
+  **Why it is unguarded.** Phase I gave the ui pair three guards. The other two pairs have none of
+  them:
+  - The completeness check (`publicHolders`) in `UiApiParityTest`. Without it, a public class or
+    facade outside `ApiSurface`'s named classes passes, which is how the theme types went unseen.
+  - Golden files declared as test inputs. Only the ui pair's builds declare theirs, so an edit to
+    `api/inspector-public-api.txt` or `api/inspector-stream-public-api.txt` alone can be a build-cache
+    hit and stay green.
+  - Golden files named in `structure/twins.txt`. It lists pairs but not their golden files, so
+    nothing fails a pair that has none, as the ui pair had none for eleven releases.
+
+  **Acceptance criteria.**
+  - The core and stream pairs fail on a public declaration outside their contract, the way the ui
+    pair does. For stream, the contract is the one with Ktor-typed members filtered out.
+  - Each module of the core and stream pairs declares its golden file as a `jvmTest` input, with
+    `inputs.files`. An edit to the golden file alone re-runs the test and fails it, with the build
+    cache on.
+  - `structure/twins.txt` names each pair's golden file, and `:repo-checks` fails a pair whose file is
+    missing or unnamed.
+  - Each guard is proven red: a stray public class in each module, a golden-only edit, a pair line
+    without its file.
+
+  **Out of scope.** Declarations that exist only in `iosMain` or `androidMain`, which are
+  `item:guard-twin-native-surface`. Rebuilding the class-set diff between twins, which §5 → "Deliberately not doing" rules out.
+  The completeness check is not that diff, as `twins-and-api.md` explains. **If the check finds a
+  public declaration outside the contract in core or stream today, that is a public API question for
+  the maintainer**, as the theme types were, and the item stops there. Surfaces: library API guards
+  only, `api-parity/`, the published modules' build files and `:repo-checks`. No golden file
+  changes. **Size:** S.
+
+- **No pair guards a public declaration that exists only on iOS or Android.** *Ticket label:*
+  `item:guard-twin-native-surface`. Phase I's design named it as its first risk, and its QA and
+  `docs/STATUS.md` → Not verified carry it.
+
+  **For whom.** A consuming team shipping iOS or Android. Every parity test reads JVM output. A
+  public function added to `iosMain` or `androidMain` of a real module, and not to its twin, passes
+  every pair's test. The team finds out when their release build fails to compile on that platform
+  alone, which is how the facade-name break reached iOS (`twins-and-api.md`).
+
+  **Acceptance criteria.**
+  - On every pair, a public declaration present in one module's `iosMain` or `androidMain` and absent
+    from its twin fails a check that CI runs. The iOS half runs on the macOS job.
+  - Proven red on each platform with such a declaration added, and green again once it is removed.
+  - The architect chooses the mechanism, for example the Kotlin Gradle plugin's own klib ABI dump or
+    a scan of each platform's compiled output. A choice that adds a dependency or changes a
+    `gradle.lockfile` says so, and §5's "no new tools" is the bar it argues against.
+
+  **Out of scope.** Binary compatibility between released versions. The JVM half, which phase I and
+  `item:guard-twin-pairs-alike` cover. Surfaces: library API guards only, with no consumer-visible
+  change. **Size:** M, until the architect sizes the mechanism.
+
 ### Bugs found, not fixed
 
 - **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
@@ -457,6 +516,209 @@ Placed by the product owner the same day. Two make one new item; the third was a
 | ~~3. At 400 px the header count is clipped, `5 of 31 call`~~ **Done 2026-10-21** (KIN-70; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell`, under (e), "The call count is on screen at 400px" | already owned: that criterion asks for the whole count text inside the window at 400px. Noted there as seen again, under a filter |
 
 - ~~**A live call reaches the list but not the timeline, the glance or the picker.**~~ Done 2026-10-21, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-live-calls-reach-every-pane`.
+
+*The follow-ups below were left open by the coordinated run of 2026-10-20/21. Its builders and QA
+recorded them in hand-overs, in QA's "older defects" and in `docs/STATUS.md` → Not verified. Each is
+true at the base of the item that found it, or outside that item's criteria. Placed by the product
+owner on 2026-10-21 and checked against the code at `c79e902`. Seven are items here, two are guards
+under §3 → Guards, one is a line on Web UI polish (§6) and three are not items. **None is in "Order
+from here" yet**: the maintainer reviews the list first.*
+
+| Follow-up | Goes to | Why there |
+|---|---|---|
+| A live signal or marker redraws the timeline once per message | **new item**, `item:web-live-signal-burst-bounded` | the `drawLive` timer from `item:web-live-calls-reach-every-pane` already exists, and the same branch reads `/current` once per signal, which `docs/STATUS.md` records (50 signals, 53 requests). One item takes both |
+| `#/txn/<id>` has no visible way back | **new item**, `item:web-txn-page-way-back` | a missing control, not a look. Web UI polish is far off |
+| The `⤢` and `⇥` glyphs are 13px and nobody has judged them | §6 → Web UI polish | a judgement with no defect in it, and that item is the first human design pass |
+| At 400px the Stats page's route cell breaks hostnames mid-word | **new item**, `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
+| IPv6 hosts are not bracketed in `url` or the row label | **new item**, `item:host-port-everywhere` | both this and the next row are places where the rule `item:row-label-port` set (a server is its host plus a non-default port) has not reached |
+| The session summary's `byHost` merges `:8080` and `:9090` | **new item**, with the IPv6 row | the key becomes `hostPort`, and once `hostPort` brackets IPv6 the key is right for IPv6 as well |
+| During a session switch the timeline's call rows and the endpoint chips show the session just left | **new item**, `item:web-switch-clears-call-panes` | the same class of false fact as `item:web-now-strip-follows-session`, which put calls out of scope. 1a, where QA suggested it go, has shipped without it |
+| A brushed stretch with some loaded rows says nothing of older unloaded matches under a filter | **new item**, `item:web-stretch-says-older-matches` | `item:web-list-says-what-it-holds` covered only a stretch the list draws nothing of |
+| Small doc fixes: `architect.md`, two INTEGRATION.md headings, the root `AGENTS.md` table, the Sessions page's path | **new item**, `item:docs-housekeeping-2026-10-21` | four edits, none of them worth an item on its own |
+| Phase I's R12 proof command | not an item | `ROADMAP-DONE.md` → §5 → Phase I records that it is quoted nowhere in the repository, and the per-module regenerate commands in `api-parity/AGENTS.md` are correct |
+| `twins-and-api.md` says v59 tells consumers to "copy the colours they need" | not an item | QA called it looser wording, not a false claim. Copying the colours is one of v59's three cases |
+| No item in the run recorded what it cost | not an item | a team rule, in the roadmap-cycle skill ("Record what each item cost"), not a product change. Whether a coordinated run is held to it is a question for the maintainer |
+
+- **A burst of live signals or markers redraws every pane once per message.** *Ticket label:*
+  `item:web-live-signal-burst-bounded`. From the hand-over and QA on
+  `item:web-live-calls-reach-every-pane`, and from `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a Mac watching an app live. An app that snapshots its caches at
+  launch, or a view-model that emits on every keystroke, sends signals in bursts, and the page does a
+  full redraw for each one.
+
+  **Why now.** It is the bug `item:web-live-calls-reach-every-pane` fixed for calls, in the branch
+  beside it, and the fix is already built. The `signal` branch of `ws.onmessage`
+  (`web/js/05-network.js`) calls `renderTimeline`, `renderWaterfall`, `renderPath` and
+  `refreshCurrent` for every signal, so each one costs three whole-session redraws and a `/current`
+  read. The `marker` branch calls `renderTimeline` and `renderPath` for every marker. Calls go
+  through `drawLive` at one redraw per 250 ms.
+
+  **Acceptance criteria.**
+  - A burst of 100 signals over T ms costs at most ⌈T/250⌉+1 redraws of each of the timeline,
+    the waterfall and the path, and at most that many `/current` reads. A burst of markers costs at
+    most that many redraws of the timeline and the path. These are the bound calls already meet.
+  - A single signal or marker is still drawn within 250 ms, and the timeline keeps its follow rule.
+  - The existing `socket at end timeline` lines for markers and signals wait for the throttled draw
+    and still pass. A new burst line is proven red with the per-message redraws put back.
+  - When paused, or for another session, nothing moves, as for calls.
+
+  **Out of scope.** Changing `LIVE_DRAW_MS`. The two payload reads this branch also makes, when the
+  path view or the signal's own tag is on screen: the architect says whether they ride the same timer,
+  and if not, the item says why. Surfaces: web UI only. No public API, no noop twin, no golden file.
+  **Size:** S.
+
+- **`#/txn/<id>` has no visible way back.** *Ticket label:* `item:web-txn-page-way-back`. From the
+  hand-over and QA on `item:web-foundation-list-room` (1b).
+
+  **For whom.** A web UI user on a Mac who opened a call on its own page, from `⤢` or from an address
+  someone pasted. Only the browser's Back and `Esc` leave the page, and nothing on it says so. A
+  call opened in a new tab has no Back to press.
+
+  **Acceptance criteria.**
+  - The `#/txn` page shows a control that leaves it, keyboard-reachable and named for where it goes.
+    It does what `Esc` does (`leaveTxnFull`): Back when `⤢` pushed the page, otherwise the session's
+    list.
+  - At 400px it is on screen, and in an export it works from the embedded data.
+  - A probe line presses it in both cases. It is proven red with the control removed.
+
+  **Out of scope.** Changing what Back and `Esc` do. The size of the `⤢` and `⇥` glyphs, which is
+  Web UI polish's. This does not overturn a recorded decision: `web-ui.md` records that Back and
+  Escape leave the page, not that nothing else may. Surfaces: web UI only. **Size:** S.
+
+- **At 400px the Stats page breaks a route's host mid-word.** *Ticket label:*
+  `item:web-stats-route-breaks-whole`. From QA on `item:endpoint-latency-stats`, and
+  `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a narrow window reading the Stats page. `.stats-host` is
+  `overflow-wrap: anywhere`, so the cell reads `api.qa.invali` / `d`, and `http://127.0.0.1:808` /
+  `0`, which a reader takes for port 808.
+
+  **Acceptance criteria.**
+  - At 400px, served and exported, no line of a route cell ends inside a host label, a port or a path
+    segment. A host breaks only at a `.`, a `:` or a `/`.
+  - A route too long to break that way is still on screen in full within the table's own sideways
+    scroll, and the page itself never scrolls sideways (`shell <w> page stats fits` stays green).
+  - A Chrome reading in `measure-web-ui.js` at 400px is proven red with `overflow-wrap: anywhere`
+    put back.
+
+  **Out of scope.** The table's columns and order, and the term a row links with. Offering
+  `sort=errors` on the page. Surfaces: web UI only. **Size:** S.
+
+- **A server is its host and a non-default port, but not yet everywhere.** *Ticket label:*
+  `item:host-port-everywhere`. From QA and the hand-over on `item:row-label-port`, and
+  `docs/STATUS.md` → Not verified.
+
+  **For whom.** Anyone who copies a URL for an IPv6 call: a cURL or a replay from the web UI, the
+  overlay's Copy URL, an agent reading an export. Also an agent or a CLI user reading the session
+  summary. `NetworkTransaction.url` writes `http://::1:8080/v6`, which is not a URL, and the label
+  `GET ::1:8080/v6` cannot say where the address ends. OkHttp's `HttpUrl.host` gives an IPv6 literal
+  with no brackets, and the OkHttp interceptor stores it as it comes. Whether Ktor's does too is
+  unchecked. Separately, `SessionRepository.summarize` groups `byHost` by bare `host`, so two
+  servers on one machine are one entry in `GET …/summary`, MCP `session_summary`,
+  `inspector summary` and the exports' summary.
+
+  **Acceptance criteria.**
+  - `hostPort` brackets a host that holds a `:`, so the `url` of a call to `::1` on `:8080` is
+    `http://[::1]:8080/v6` and its label reads `GET [::1]:8080/v6`. A host already in brackets is
+    not bracketed twice.
+  - It is decided in `:inspector-model` and in the web UI's `urlOf` mirror, with a mirror case run by
+    both sides, so an archive recorded before the fix reads the same way.
+  - A real call to the IPv6 loopback, captured through Ktor and through OkHttp, gives that `url`. If
+    a CI runner has no IPv6 loopback, the test says it was skipped and why, not that it passed.
+  - `byHost` keys on `hostPort`: `127.0.0.1:8080` and `127.0.0.1:9090` are two entries, and a default
+    port adds nothing to its key.
+  - Proven red with each rule removed.
+
+  **Out of scope.** The filter grammar, which is frozen and has no port term, so two ports of one
+  host still share a `host:` term (a documented superset). The route key, which already keeps ports
+  apart. Zone ids (`%en0`). Surfaces: `:inspector-model` (overlay, web UI, daemon, MCP and exports
+  through it), the web UI mirror and the daemon summary. **Public API:** no signature changes, but
+  `url` is public in the published `:inspector-model` and its value changes for IPv6 hosts, and
+  `byHost`'s keys change for agents. Both need an `UNRELEASED.md` line. Whether INTEGRATION.md
+  needs a version is the release-steward's call. No noop twin applies (the model is exempt), and no
+  golden file changes. **Size:** S, or M if the capture tests need a fallback for CI.
+
+- **During a session switch the timeline's calls and the endpoint chips are the session just left.**
+  *Ticket label:* `item:web-switch-clears-call-panes`. From QA on
+  `item:web-now-strip-follows-session` (screenshots at base and head) and its hand-over.
+
+  **This overturns a recorded decision.** `docs/decisions/web-ui.md`, "The signal side follows the
+  session the moment it changes", says:
+
+  > The calls themselves are left to the switch's first page.
+
+  `followSession` says the same: "The calls are not cleared: the switch's first page replaces them."
+  On the list that holds. On the timeline it does not: the switch's reads take as long as a
+  whole-session read, 25 s on a large session, and until they land the timeline draws the old
+  session's call rows and the endpoints menu counts its chips, under the new session's name. QA saw
+  `GET api.qa.invalid /b` and the chip `b 1` from Beta while Alpha was selected. The premise was a
+  fact about one pane, and it was recorded as if it held for every pane.
+
+  **For whom.** A web UI user on a Mac who switches sessions, or deletes the one on screen. For the
+  length of the switch, the timeline shows calls the selected session never made.
+
+  **Acceptance criteria.**
+  - With the new session's calls held back, the timeline draws none of the left session's calls,
+    and the endpoints button and its popover show none of its chips.
+  - The path, the waterfall and the tag browsers, which read what `followSession` clears but are not
+    redrawn by it, show none of the left session's rows in that window.
+  - The tab bar keeps its tabs through the window, and so does the timeline tab. A count on a tab
+    either describes the selected session or is not shown.
+  - A live probe line for each pane, holding the switch's reads, proven red with that pane's redraw
+    removed. `now switch shows none` stays green.
+
+  **Out of scope.** Making the switch faster, and KIN-42's whole-session read. The list, which the
+  first page already replaces. Surfaces: web UI only. **Size:** S.
+
+- **A brushed stretch under a filter does not say that older matches may be in it.** *Ticket label:*
+  `item:web-stretch-says-older-matches`. From QA on `item:web-list-says-what-it-holds` (its "mixed
+  stretch" note) and `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a long session, with a filter that matches more calls than the list
+  loads, who brushes a stretch that reaches below the oldest match loaded. The list draws the loaded
+  matches in the stretch, and the note says `at least 10 calls hidden by the filter`. Nothing says
+  that the stretch may also hold matches older than the ones loaded, so the list reads as all the
+  matches in the stretch.
+
+  **Acceptance criteria.**
+  - In that case the list's note also says that the stretch reaches below the oldest of the `N`
+    matches loaded, so older matches in it are not drawn, and that narrowing the filter reaches them.
+  - It claims no count of those matches. The page evaluates no filter (`web-ui.md`, "Under a filter
+    it claims no count"), so it has none.
+  - A stretch wholly above the oldest match loaded reads as it does today.
+  - A line in `check-web-static.js` over the 3016-call stub and one in the live probe over the long
+    session, each proven red with the sentence removed.
+
+  **Out of scope.** A daemon route that counts the matches in a range. If the architect finds that
+  the sentence cannot be true without one, the item comes back to the product owner. The header's
+  wording. Surfaces: web UI only. **Size:** S.
+
+- **Housekeeping after the 2026-10-20/21 run.** *Ticket label:* `item:docs-housekeeping-2026-10-21`.
+  Four small edits that each leave someone reading something false or something about to break. None
+  is worth an item of its own.
+
+  **For whom.** The agents who read these files, the consuming team reading `INTEGRATION.md`, and a
+  web UI user whose daemon runs with `--data`.
+
+  **Acceptance criteria.**
+  - `.claude/agents/architect.md` no longer says `:inspector-noop-ui` has no golden file. It names
+    `api/inspector-ui-public-api.txt`. That file is the maintainer's to change, so the edit goes to
+    the maintainer for approval.
+  - In `INTEGRATION.md` only the current version's heading says `(this document)`. v49 and v50 lose
+    the label. This changes nothing a consumer has to do. Whether it takes a version is the
+    release-steward's call.
+  - The root `AGENTS.md`'s "Where we are" table has room for the next row. The four structure-pass
+    rows (S-D, S-F, S-H, S-I) become one row naming phases A to I as done, and pointing to
+    `docs/STATUS.md` for the red `repo` pushes. The file is 14,990 bytes of its 15,000 budget, which
+    is why S-D and S-F were cut short, and the next status row would fail `DecisionsTest`.
+  - With `--data` elsewhere, the Sessions page names the real sessions folder, as the Processes page
+    already shows the real data directory. In an export it names none. The page now says
+    `~/.inspector/sessions` whatever the folder is. A probe line is proven red with the fixed path
+    put back.
+
+  **Out of scope.** Any other rewording of these files. Raising the root's byte budget. Surfaces:
+  docs, plus one web UI string. **Size:** S.
 
 ### Open questions
 
@@ -599,11 +861,36 @@ structure pass before §6 rather than leave it trailing. See below.)*
 The maintainer set this order on 2026-10-18. It runs across §3, §5 and §6, so it is recorded once,
 here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` → §5 → "Order from here — the rows finished". They are not in this table.
 
-| Order | Item | Where | Ticket label | Size |
-|---|---|---|---|---|
-| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| Order | Item | Where | Ticket label | Size | Lane |
+|---|---|---|---|---|---|
+| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
+| 14 | A check that finds nothing to check passes | §3 → Guards | `item:guard-probe-finds-nothing-fails` | not sized | W, alone |
+| 15 | QA's live-traffic Chrome driver, committed | §3 → Guards | `item:guard-live-traffic-driver` | not sized | S; its case in its own `scripts/lib/` file |
+| 16 | Housekeeping after the 2026-10-20/21 run (waits: maintainer approval of the `architect.md` edit, for that edit only) | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-21` | S | S for the docs, then W for the Sessions page line; the `AGENTS.md` edit merges before any status-row close |
+| 17 | The core and stream twin pairs get the ui pair's guards | §3 → Guards | `item:guard-twin-pairs-alike` | S | L |
+| 18 | "A probe leaves no process behind", tested | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized | D, can run beside the advisory |
+| 19 | A server is its host and a non-default port, everywhere | §3 → Bugs found, not fixed | `item:host-port-everywhere` | S, or M | W; one PR, its `urlOf` mirror case runs in Kotlin and the web checks |
+| 20 | A session switch clears the timeline's calls and the endpoint chips (waits: the maintainer on overturning the `web-ui.md` sentence) | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
+| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background (waits: undefer, and a fresh note) | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 22 | At 400px the Stats page keeps a route's host whole | §3 → Bugs found, not fixed | `item:web-stats-route-breaks-whole` | S | beside W, only after `item:host-port-everywhere` merges |
+| 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
+| 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
+| 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
+| 26 | Findings, and the payment-safety rules (waits: the shared STOP before T2, Q1 before T7) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after diff PR A merges; PR B and C in W |
+| 27 | Web UI polish (waits: Q2 to Q5) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
+| 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
+| 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
+| 30 | Sensitive-data detection — detect, never redact (waits: the shared STOP, Q2, Q3) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D; T5 in W after findings PR B |
 
-§6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
+**Rows after the advisory decided 2026-10-21 by the maintainer**, on the architect's and the
+product owner's joint proposal; the order is approved, and each "(waits: …)" is a decision still
+open. This schedules §6 items 3 to 6. Work runs in batches with one writer per lane: W web UI, D
+daemon, L library twins, S scripts and docs. W is strictly serial. `25-traffic-list.js` has a line
+budget to share: KIN-42 takes it to at most 592, polish A4 to 589, the stretch to 591, findings
+T7/T8 to 600. `15-session-data.js` has about 52 lines left, so KIN-42's note states its line count;
+past that a new numbered script, never a raised budget.
+
+§6 items 3 to 6 were **not scheduled** by the 2026-10-18 decision. They keep their place in §6's table and
 wait for the next one.
 
 **Three rows added 2026-10-18 by the product owner**, from defects found that day outside any item.
@@ -780,10 +1067,10 @@ screen, and building those into the current single page would mean building them
 | ~~1b~~ | ~~Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}`~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119) | M *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
 | ~~2~~ | ~~Endpoint latency stats~~ **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115, #121) | M | 1.5 | ~~yes~~ done |
 | — | The private security advisory's fix | not sized | not set | yes, after 2 (done) |
-| 3 | Session diff | L | 1.5 | no |
-| 4 | Findings framework, and the payment-safety rules | L | 1.6 | no |
-| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | no |
-| 6 | Web UI polish, against the finished screens | M | 1.7 | no |
+| 3 | Session diff | L | 1.5 | yes, decided 2026-10-21 |
+| 4 | Findings framework, and the payment-safety rules | L | 1.6 | yes, decided 2026-10-21 |
+| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | yes, decided 2026-10-21 |
+| 6 | Web UI polish, against the finished screens | M | 1.7 | yes, decided 2026-10-21 |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
 
 *Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
@@ -1077,6 +1364,9 @@ config already covers.
 The notes from use, applied once the new screens exist; the first human design pass the web UI
 has had (still listed under open questions); `g s` / `g f`-style keys for the new pages; and empty
 states that say why they are empty, as the traffic list already does.
+
+The `⤢` and `⇥` glyphs in the detail pane's tools row, drawn at 13px since 1b, which nobody has judged
+(placed 2026-10-21 from the coordinated run's follow-ups; §3 → Bugs found, not fixed has the table).
 
 An editor for `routeTemplates` on the Settings page. 1a's editor covers retention and signal caps, and `item:endpoint-latency-stats` left templates to `config.json` and `PUT /api/config`, which validates them.
 
