@@ -27,7 +27,8 @@
  *   other action; the socket's call branch never redrew the timeline.
  * - `live glance filter`: under the filter, the glance still counts every call the session gained.
  * - `live paused still`, `live other still`: a call while paused, or for another session, moves
- *   none of the picker, the glance or the timeline.
+ *   none of the picker, the glance or the timeline; and resuming after two calls while paused brings
+ *   the picker's option and face to the header's count, which only the next live call used to do.
  *
  * Rows "arrive" as `filter-probes.js`'s do: the page's `fetch` is wrapped to answer as the daemon
  * would once it had stored them, which the daemon does before it broadcasts. Which rows the filter
@@ -372,7 +373,18 @@ async function liveRows(ctx, verdicts) {
     };
     await press(ctx, live);
     await still('live paused still', () => send('txn', callLike(passing)), 'a call while paused');
+    // A second call while paused, then resume: the resume's load moves the header, and the picker's
+    // option and face must follow it there, not wait for the next live call.
+    send('txn', callLike(passing));
+    const pausedTotal = ctx.pageState().sessionTotal;
     await press(ctx, live);
+    const resumedDue = () => `${ctx.pageState().sessionTotal} calls`;
+    const followed = await waitFor(() => ctx.pageState().sessionTotal > pausedTotal
+      && pickerText().endsWith(resumedDue()) && faceText().endsWith(resumedDue()), 4000);
+    const stillVerdict = verdicts.get('live paused still');
+    verdicts.set('live paused still', !stillVerdict.startsWith('yes') ? stillVerdict : followed
+      ? `${stillVerdict.slice(0, -1)}; resumed, option and face read ${resumedDue()}, the header's count)`
+      : `NO - resumed after two calls while paused: header total ${ctx.pageState().sessionTotal} (was ${pausedTotal}), option "${pickerText()}", face "${faceText()}", where both were due to end "${resumedDue()}"`);
     await forget();
     showGlance();
     const other = [...doc.getElementById('session-picker').options].map((o) => o.value).find((v) => v && v !== sessionId);
