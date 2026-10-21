@@ -132,6 +132,31 @@ of your own, with no expected count, unclassified lines are reported and not fat
 fall into prose branches for data that session lacks. The probes that read a whole session page
 through the routes, which clamp a reply to 1000 rows.
 
+**A scan that finds nothing to check fails, and says so.** The probes share one page, so a probe
+that leaves state behind can empty the next one's scan. KIN-55's live probe left a path visit open,
+the path probe found no summarised line, and `failures unfolded` printed `yes (0 summarised lines in
+this session)`; `expanded unfolded` passed over nothing as well. The pinned count could not see it,
+because a pass over nothing is still a pass. So a probe in `render-web-ui.js` or `scripts/lib/`
+that judges a rule over a set of rows, lines, bars or elements also asserts that it found at least
+one, prints how many it checked when it passes, and otherwise prints `NO - found no <shape>, so this
+checked nothing`. It says `n/a (why)` instead only where the shape cannot exist, and that is decided
+from a source the scan's emptiness cannot have caused: the daemon's rows, its `/current`, or the
+page's whole-session state, never the elements scanned. `failures unfolded` is the one decided from
+the page: with no summarised line it is `n/a` only when no line is open either, because a line left
+open is the only way a long visit stops being summarised. A count compared with an independent truth
+(`route matches`, `signal tabs count`, the archive's `marker dividers`) is not an empty scan: at
+zero it still asserts that nothing spurious was drawn. The live probe's verdicts are in
+`lib/scan-verdicts.js`; the stylesheet audits `min text size` and `hidden panes hide`, the shell's
+`self has kill btn`, `rail is navigation` and `route pages`, the archive probe's `daemon controls
+hidden`, `pages hidden in export` and `stats rail in export`, and `measure-web-ui.js`'s scope bar
+readings keep the same rule; a hidden scope bar there was a reading silently not taken, and is now a
+failed one unless the page holds no scope. With KIN-55's leak put back, `failures unfolded` read
+`NO - found no summarised line (1 already open: Checkout), so this checked nothing` and the run
+failed. `expanded unfolded`, `every bar visible`, `now rows show age`, `self has kill btn`, the two
+audits, the archive's three lines and the scope bar readings were shown red with their shape taken
+out of the page, the export or the stylesheet text, and the live probe's other verdicts on stub
+pages (KIN-87's notes list which); the others rest on review.
+
 **The CI probe session is written by the daemon's own writer at CI time, and never committed.**
 `ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
 `writeSession` and `SessionWriter` like every daemon test. A committed archive would be a second

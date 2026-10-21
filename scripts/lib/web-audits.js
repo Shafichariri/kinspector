@@ -25,14 +25,17 @@ function auditMinTextSize(cssText) {
   // The method badge, key caps, and the three fold glyphs (▸ ▾), which are shapes, not text.
   const allowed = ['.row .method', 'kbd', '.jt-tw', '.now-caret', '.tl-twisty'];
   const offenders = [];
+  let sized = 0;
   const source = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
   for (const [, selector, body] of source.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const size = body.match(/font-size:\s*(\d+(?:\.\d+)?)px/);
+    if (size) sized++;
     if (!size || Number(size[1]) >= 11) continue;
     const name = selector.trim();
     if (!allowed.includes(name)) offenders.push(`${name} ${size[1]}px`);
   }
-  return offenders.length ? `NO - ${offenders.join(', ')}` : `yes (only ${allowed.join(', ')} below 11px)`;
+  if (!sized) return 'NO - found no px font-size, so this checked nothing';
+  return offenders.length ? `NO - ${offenders.join(', ')}` : `yes (only ${allowed.join(', ')} below 11px, of ${sized} px sizes)`;
 }
 /**
  * A long unbroken token must not be able to widen the detail pane.
@@ -105,9 +108,11 @@ function auditHiddenPanes(cssText) {
     guarded.add(selector);
   }
   const offenders = panes.filter((s) => setsDisplay.has(s) && !guarded.has(s));
+  const checked = panes.filter((s) => setsDisplay.has(s)).length;
+  if (!checked) return 'NO - found no listed pane that sets display, so this checked nothing';
   return offenders.length
     ? `NO - ${offenders.join(', ')} sets display without a [hidden] override`
-    : 'yes';
+    : `yes (${checked} of ${panes.length} panes set display, each with a [hidden] override)`;
 }
 /**
  * Network call sites across every loaded script.

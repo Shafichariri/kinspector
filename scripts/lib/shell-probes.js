@@ -216,9 +216,11 @@ async function probeProcessesPage(ctx) {
   // Whatever inspector processes this machine is running; not a property of the page.
   lines.push(['peers listed', peerRows.length, 'note']);
   lines.push(['peer roles', [...new Set(peerRows.map((n) => n.querySelector('.peer-role')?.textContent || '?'))].sort().join(', ') || 'none', 'note']);
-  const selfKill = peerRows.filter((n) => n.querySelector('.peer-self'))
-    .filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill')).length;
-  lines.push(['self has kill btn', selfKill === 0 ? 'yes (0) (must be 0)' : `NO - ${selfKill} (must be 0)`]);
+  // This daemon is always one of the peers, so a list with no row marked as it checked nothing.
+  const selfRows = peerRows.filter((n) => n.querySelector('.peer-self'));
+  const selfKill = selfRows.filter((n) => [...n.querySelectorAll('button')].some((b) => b.textContent === 'kill')).length;
+  lines.push(['self has kill btn', !selfRows.length ? 'NO - found no row marked as this daemon, so this checked nothing'
+    : selfKill === 0 ? `yes (0 on ${selfRows.length} row) (must be 0)` : `NO - ${selfKill} (must be 0)`]);
 
   // Stop: one click arms, the second stops, and the page says so in a way it cannot miss.
   const stop = doc.getElementById('server-stop');
@@ -441,12 +443,15 @@ async function probeRoutes(ctx, atLoad) {
   const controls = rail ? [...rail.querySelectorAll('a, button, input, select, textarea, [tabindex], .chip')] : [];
   const stray = controls.filter((c) => !(c.matches('a.rail-item[href^="#/"]') || c.id === 'rail-toggle'));
   lines.push(['rail is navigation', !rail ? 'NO - there is no #rail'
+    : !controls.some((c) => c.matches('a.rail-item[href^="#/"]')) ? 'NO - found no rail link, so this checked nothing'
     : stray.length ? `NO - the rail holds ${stray.map((c) => c.id || c.tagName.toLowerCase()).join(', ')}`
       : `yes (${controls.length - 1} links and the collapse button, nothing else)`]);
   lines.push(['route default', atLoad]);
 
   const wrongPages = [];
-  for (const link of doc.querySelectorAll('#rail .rail-item')) {
+  const links = [...doc.querySelectorAll('#rail .rail-item')];
+  if (!links.length) wrongPages.push('found no rail link, so this checked nothing');
+  for (const link of links) {
     await goTo(ctx, link.dataset.page);
     const shown = shownPage(doc);
     if (window.location.hash !== link.getAttribute('href') || shown.join() !== `page-${link.dataset.page}`
@@ -454,7 +459,7 @@ async function probeRoutes(ctx, atLoad) {
       wrongPages.push(`${link.dataset.page}: hash ${window.location.hash}, shown ${shown.join(',') || 'none'}`);
     }
   }
-  lines.push(['route pages', wrongPages.length ? `NO - ${wrongPages.join('; ')}` : 'yes (each rail link wrote its href and showed only its page)']);
+  lines.push(['route pages', wrongPages.length ? `NO - ${wrongPages.join('; ')}` : `yes (each of ${links.length} rail links wrote its href and showed only its page)`]);
 
   await goTo(ctx, 'sessions');
   await goTo(ctx, 'processes');

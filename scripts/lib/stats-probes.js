@@ -264,8 +264,11 @@ async function probeStatsPage(ctx) {
 async function probeStatsOffline(window, doc, archive, attempts) {
   const rail = (page) => doc.querySelector(`#rail .rail-item[data-page="${page}"]`);
   const hiddenByCss = (node) => !node || window.getComputedStyle(node).display === 'none';
+  // A link that is not there is not "hidden": with none found, this would check nothing.
+  const missing = ['sessions', 'processes', 'settings'].filter((page) => !rail(page));
   const others = ['sessions', 'processes', 'settings'].filter((page) => !hiddenByCss(rail(page)));
-  const lines = [['stats rail in export', !hiddenByCss(rail('stats')) && others.length === 0
+  const lines = [['stats rail in export', missing.length ? `NO - found no rail link for ${missing.join(', ')}, so this checked nothing`
+    : !hiddenByCss(rail('stats')) && others.length === 0
     ? 'yes (Stats shown; sessions, processes and settings hidden)'
     : `NO - Stats ${hiddenByCss(rail('stats')) ? 'hidden' : 'shown'}, also shown: ${others.join(', ') || 'none'}`]];
   const report = archive.routeStats;
