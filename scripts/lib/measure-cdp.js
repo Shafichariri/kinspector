@@ -119,6 +119,17 @@ async function openPage(port) {
     async setWidth(width) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     },
+    // A key pressed as the browser receives one, so Tab moves focus as it does for a person; a
+    // synthetic `KeyboardEvent` in the page moves nothing.
+    async key(key, code = key, keyCode = 0) {
+      for (const type of ['rawKeyDown', 'keyUp']) {
+        await send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      }
+    },
+    // `null` puts the system's scheme back.
+    async colorScheme(value) {
+      await send('Emulation.setEmulatedMedia', { features: value ? [{ name: 'prefers-color-scheme', value }] : [] });
+    },
     async navigate(url) {
       exceptions.length = 0;
       await send('Page.navigate', { url });

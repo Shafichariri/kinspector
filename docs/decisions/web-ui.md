@@ -410,6 +410,18 @@ measurement — the element at the bar's centre, the first and newest timeline r
 station's row against the box, at 1440 and 400, with and without a filter — red at e1711a3 and
 green after.
 
+**A closed drawer is hidden from the keyboard and from the page's width, not only moved off screen.**
+Below 1200px the closed pane was translated past the right edge and nothing else, so the document
+was 1646px wide at 1000, Tab reached thirteen controls inside it, and focusing its `✕` scrolled the
+window 646px sideways, half-opening the drawer with no scrim. It is `visibility: hidden` once its
+slide ends, which takes it out of the tab order with no breakpoint in script, and `#panes` is
+`overflow: clip`, not `hidden`, because a `hidden` box can still be scrolled by focus or a swipe. Its
+shadow applies only while open. `closed drawer css` reads the rules; `measure-web-ui.js`'s
+`tab never enters closed` and `doc width closed` are the behaviour, red with each rule removed.
+The `✕` sits in a tools row above the detail header, in flow, rather than absolutely placed over its
+top right corner, where it covered `replay ▾` served and `copy for agent` in an export
+(`room 1000 close disjoint served` and `… export`, red with it placed absolutely again).
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

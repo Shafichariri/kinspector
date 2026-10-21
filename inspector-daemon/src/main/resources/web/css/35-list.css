@@ -13,7 +13,9 @@
 #panes.panes-wide #list-pane { border-right: 0; }
 
 /* The close control and the scrim exist only in drawer mode; as a column there is nothing to
-   close and nothing to dim. */
+   close and nothing to dim. The tools row goes with the close control: as a column it holds
+   nothing else, and an empty row would push the header down. */
+.detail-tools { display: none; }
 .drawer-close { display: none; }
 .drawer-scrim { display: none; }
 
@@ -31,8 +33,17 @@
 @media (max-width: 1199px) {
   #panes,
   #panes.panes-wide { grid-template-columns: 1fr; }
+  /* The closed drawer sits past the right edge, and `#panes` was the box that overflowed: the page
+     was 1646px wide at 1000, and focusing the drawer's own close button scrolled the window 646px
+     sideways. `clip`, not `hidden`, because a `hidden` box is still a scroll container that focus
+     or a swipe can scroll; `hidden` first only for a browser that has no `clip`. */
+  #panes { overflow: hidden; overflow: clip; }
   #list-pane { border-right: 0; }
 
+  /* Closed, it is `visibility: hidden` once its slide ends, not only moved off screen: that takes
+     it out of the tab order and the accessibility tree with no breakpoint in script (`inert` would
+     need one). Tab reached thirteen controls inside a drawer nobody could see. The open rule shows
+     it at once and slides; closing slides first, because the visibility change waits 140ms. */
   #detail-pane {
     position: absolute;
     top: 0;
@@ -42,22 +53,24 @@
     z-index: 30;
     background: var(--bg);
     border-left: 1px solid var(--divider);
-    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
     transform: translateX(101%);   /* past its own border, so no sliver shows */
-    transition: transform 140ms ease-out;
+    visibility: hidden;
+    transition: transform 140ms ease-out, visibility 0s linear 140ms;
   }
-  #panes.drawer-open #detail-pane { transform: translateX(0); }
+  /* The shadow only while open: on the closed pane it fell back across the window's right edge as
+     a dark strip over the list. */
+  #panes.drawer-open #detail-pane {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 140ms ease-out;
+    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
+  }
 
   /* Nothing to open a drawer *to* while the tag browser owns the pane. */
   #panes.panes-wide #detail-pane { display: none; }
 
-  .drawer-close {
-    display: block;
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    z-index: 1;
-  }
+  .detail-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0; }
+  .drawer-close { display: block; }
 
   .drawer-scrim {
     display: block;
@@ -73,9 +86,11 @@
    unpleasant, and the drawer is just as usable arriving instantly.
    Keep this block after the max-width: 1199px block above: both set #detail-pane's transition at
    equal specificity, so the later one wins, and static check 5 does not compare one @media block
-   with another. */
+   with another. The open rule there outranks a bare `#detail-pane`, so it is named here too; with
+   no transition the closed pane's visibility changes at once as well. */
 @media (prefers-reduced-motion: reduce) {
-  #detail-pane { transition: none; }
+  #detail-pane,
+  #panes.drawer-open #detail-pane { transition: none; }
 }
 
 /* The shared path prefix, above the list rather than in it.

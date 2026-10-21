@@ -112,4 +112,26 @@ function auditStickyTop(styles) {
     : `yes (${sticky.size} sticky selector(s), ${tops} top(s), each from --sticky-top)`;
 }
 
-module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop };
+/**
+ * Below 1200px the closed drawer is out of the tab order and the page's width, and casts no shadow:
+ * the narrow block in `35-list.css` makes the closed `#detail-pane` `visibility: hidden`, clips
+ * `#panes`, and draws `box-shadow` on `#detail-pane` only under `.drawer-open`. The behaviour is
+ * Chrome's to judge (`room <w> tab never enters closed`, `room <w> doc width closed` in
+ * `measure-web-ui.js`); this reads that the rules are where the decision put them.
+ */
+function auditClosedDrawer(styles) {
+  const css = sheet(styles, 'css/35-list.css');
+  const narrow = mediaBody(css, 'max-width: 1199px');
+  if (narrow === null) return 'NO - no @media (max-width: 1199px) block in css/35-list.css';
+  const shadows = cssBlocks(narrow).filter(({ prelude, body }) => /#detail-pane/.test(prelude) && /(^|;)\s*box-shadow\s*:/.test(body.trim()));
+  const missing = [
+    !sets(rule(narrow, '#detail-pane'), 'visibility', 'hidden') && 'the closed #detail-pane is not visibility: hidden',
+    !sets(rule(narrow, '#panes.drawer-open #detail-pane'), 'visibility', 'visible') && 'the open #detail-pane is not visibility: visible',
+    !sets(rule(narrow, '#panes'), 'overflow', 'clip') && '#panes is not overflow: clip',
+    !shadows.length && 'no #detail-pane rule draws the shadow',
+    shadows.some(({ prelude }) => !/\.drawer-open/.test(prelude)) && 'a box-shadow applies to the closed #detail-pane',
+  ].filter(Boolean);
+  return missing.length ? `NO - ${missing.join('; ')}` : 'yes (closed: visibility hidden, #panes clipped; shadow only under .drawer-open)';
+}
+
+module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer };

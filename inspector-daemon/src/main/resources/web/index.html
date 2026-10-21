@@ -276,9 +276,16 @@
     </section>
 
     <section id="detail-pane">
-      <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
-      <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet"
-              title="Close (Esc)">&#10005;</button>
+      <!--
+        The pane's own controls, in a row above the header rather than laid over it: the close
+        button was absolutely placed at the top right, where it covered the header's right-aligned
+        actions. In flow, nothing below it can sit under it.
+      -->
+      <div id="detail-tools" class="detail-tools">
+        <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
+        <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet" type="button"
+                title="Close (Esc)" aria-label="Close the detail">&#10005;</button>
+      </div>
       <div id="detail-empty" class="empty muted">select a transaction</div>
       <div id="detail" hidden></div>
     </section>
