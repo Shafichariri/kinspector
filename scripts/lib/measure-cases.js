@@ -191,7 +191,18 @@ async function liveArrival(page, url, session) {
         await view(page, v);
         for (const kind of ['txn', 'marker']) {
           const key = `live ${session} ${width} ${oname} ${v} ${kind}`;
-          const max = await page.ev(`(() => { const sc = ${SCROLLER}; return sc.scrollHeight - sc.clientHeight; })()`);
+          const room = () => page.ev(`(() => { const sc = ${SCROLLER}; return sc.scrollHeight - sc.clientHeight; })()`);
+          let max = await room();
+          // 1b gave the pane its height back, so at 400 on `big` the folded path fits it and these
+          // readings stopped judging anything. Unfolded, every visit's log is drawn and it scrolls.
+          if (max < 50 && v === 'path') {
+            await page.ev(`(() => {
+              document.querySelectorAll('#path .pv-visit:not(.pv-open) .pv-twisty').forEach((t) => t.click());
+              document.querySelectorAll('#path .pv-more').forEach((m) => m.click());
+            })()`);
+            await sleep(300);
+            max = await room();
+          }
           if (max < 50) { rows.push({ key: `${key} scrolled back`, value: 'too short', ok: null, detail: `max ${max}` }); continue; }
 
           const before = await page.ev(`(async () => { const sc = ${SCROLLER}; sc.scrollTop = Math.round((sc.scrollHeight - sc.clientHeight) / 2);
