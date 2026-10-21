@@ -297,7 +297,13 @@ first. The live probe's `blank filter …` and `live …` lines drive rows throu
 socket. They were proven red with the push put back, with the whole-session push removed, with the
 re-read run while paused, with the counts left to the next load, and with spaces kept as a filter.
 `check-web-static.js`'s `reread …` and `older reread …` lines hold the ordering and the
-burst, each proven red with its rule removed.
+burst, each proven red with its rule removed. `measure-web-ui.js --only traffic` holds the same
+rules through the whole path, rows streamed into a real daemon's `/ingest`: `traffic burst reads`
+and `traffic burst counts`, and each race in both orders, because each order has its own guard.
+An old re-read landing after the edit's or switch's own read is dropped by the ticket and by the
+session-and-filter check alike, so only removing both turns `… old lands last` red; one landing
+before it is dropped by that check alone, and removing its filter or session clause turns
+`traffic filter edit race, old lands first` or `traffic session switch race, old lands first` red.
 
 **A live call reaches every pane that counts calls, and the two that redraw from the whole session
 do it on a timer.** Since KIN-54 a live call moved the header and the traffic tab; the timeline, the

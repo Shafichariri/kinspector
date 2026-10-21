@@ -116,6 +116,12 @@ async function openPage(port) {
   const page = {
     exceptions,
     ev,
+    // Runs `source` in every document this page loads from now on, before any page script, as the
+    // socket wrapper above does. A case that records or holds the page's requests installs its
+    // wrapper here (`lib/live-traffic-cases.js`), so this stays the one way a page is opened.
+    async onNewDocument(source) {
+      await send('Page.addScriptToEvaluateOnNewDocument', { source });
+    },
     async setWidth(width) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     },
