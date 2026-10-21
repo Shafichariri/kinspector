@@ -210,13 +210,7 @@ class SessionRepository(private val config: DaemonConfig) {
     fun readTransactions(sessionDir: Path): List<NetworkTransaction> {
         val file = SessionLayout.indexFile(sessionDir)
         if (!file.isRegularFile()) return emptyList()
-        return file.useLines { lines ->
-            lines.filter { it.isNotBlank() }
-                .mapNotNull {
-                    runCatching { InspectorJson.decodeFromString<NetworkTransaction>(it) }.getOrNull()
-                }
-                .toList()
-        }
+        return file.useLines { lines -> lines.mapNotNull(IndexTail::decode).toList() }
     }
 
     fun readMarkers(sessionDir: Path): List<Marker> {

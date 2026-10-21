@@ -4,6 +4,7 @@ import dev.inspector.daemon.archive.ConfigFile
 import dev.inspector.daemon.archive.ConfigFileState
 import dev.inspector.daemon.archive.ConfigMergeResult
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.model.SignalTags
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -189,5 +190,46 @@ class ConfigFileTest {
         threads.forEach { it.join() }
 
         assertEquals(json("""{"maxSessions":25,"maxTotalMb":25}""").keys, json(path.readText()).keys)
+    }
+
+    // --- routeTemplates ----------------------------------------------------------------------------
+
+    @Test
+    fun `a valid routeTemplates list is written and the daemon's reader reads it back`() {
+        written("""{"routeTemplates":["/reports/2024","/articles/{slug}"]}""")
+
+        assertEquals(listOf("/reports/2024", "/articles/{slug}"), DaemonConfig.load(dataDir = tmp).routeTemplates.entries)
+    }
+
+    @Test
+    fun `a bad routeTemplates value is refused in this file's words and nothing is written`() {
+        path.writeText("""{"maxSessions":3}""")
+        val before = path.readBytes()
+        val cases = mapOf(
+            """{"routeTemplates":["/ok/{id}","/a/{bad name}"]}""" to "routeTemplates entry '/a/{bad name}': segment '{bad name}' must be a whole placeholder",
+            """{"routeTemplates":["articles"]}""" to "routeTemplates entry 'articles': a template starts with '/'",
+            """{"routeTemplates":["/a?b=1"]}""" to "routeTemplates entry '/a?b=1': a template is a path only",
+            """{"routeTemplates":"/articles/{slug}"}""" to "routeTemplates must be a list of path templates",
+            """{"routeTemplates":["/a",5]}""" to "routeTemplates entry 5 must be a string",
+            """{"routeTemplates":[null]}""" to "routeTemplates entry null must be a string",
+        )
+        val wrong = cases.mapNotNull { (patch, expected) ->
+            val result = file.merge(json(patch))
+            if (result is ConfigMergeResult.Invalid && expected in result.message) null else "$patch → $result"
+        }
+        assertEquals(emptyList(), wrong)
+        assertContentEquals(before, path.readBytes(), "a refused save changed the file")
+    }
+
+    @Test
+    fun `a null removes routeTemplates and a save of other keys leaves it byte for byte`() {
+        written("""{"routeTemplates":["/articles/{slug}","/reports/2024"]}""")
+        val list = path.readText().substringAfter("\"routeTemplates\": ").substringBefore("]") + "]"
+
+        written("""{"maxSessions":9}""")
+        assertContains(path.readText(), "\"routeTemplates\": $list")
+
+        assertEquals(json("""{"maxSessions":9}"""), written("""{"routeTemplates":null}"""))
+        assertEquals(RouteTemplates.NONE, DaemonConfig.load(dataDir = tmp).routeTemplates)
     }
 }

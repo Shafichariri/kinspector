@@ -36,6 +36,13 @@ data class DaemonConfig(
      * effect: a flag wins, and without this the page could only show the value, not the reason.
      */
     val flags: Set<String> = emptySet(),
+    /**
+     * `routeTemplates` from `config.json`, compiled at start: how route stats group paths. Read
+     * once, like every key in the file, so a saved edit applies when the daemon next starts, and
+     * then to every recorded session, because routes are computed when they are read. There is no
+     * flag for it.
+     */
+    val routeTemplates: RouteTemplates = RouteTemplates.NONE,
 ) {
     val sessionsDir: Path get() = dataDir.resolve("sessions")
     val latestLink: Path get() = dataDir.resolve("latest")
@@ -103,6 +110,9 @@ data class DaemonConfig(
                     if (maxMb != null) add("maxTotalMb")
                     if (signalCaps != null) add("signalCaps")
                 },
+                routeTemplates = RouteTemplates.compile(onDisk?.routeTemplates.orEmpty()) {
+                    System.err.println("inspector: $it")
+                },
             )
         }
 
@@ -157,6 +167,8 @@ data class DaemonConfig(
         val maxTotalMb: Long? = null,
         /** Nullable values on purpose — an explicit `null` uncaps a tag. See [mergeSignalCaps]. */
         val signalCaps: Map<String, Int?>? = null,
+        /** Each entry checked on its own at start; an invalid one is reported and skipped. */
+        val routeTemplates: List<String>? = null,
     )
 }
 

@@ -65,6 +65,16 @@ clamps. The HAR route had asked for `Int.MAX_VALUE` rows from the first under a 
 quietly incomplete export was the thing to avoid, so every HAR of a session over 1000 calls was
 exactly that. It reads `filterTransactions` now, and `HarTest` pins it at 1001 rows.
 
+**The JSON, HTML and Markdown exports carry the route stats the daemon computed; the HAR does
+not.** `routeStats` is the whole session's report, no filter and no limit, folded from the rows
+the export already holds through the same accumulator the route uses, and it has no default, so
+a session with no calls exports `"routes": []`. The HTML export embeds it with the rest of the
+document, so the page can draw the table offline without computing anything. HAR 1.2 has no
+aggregate object, and a route table in `log.comment` would be a second rendering no importer
+shows. `SessionExport.build` takes the route templates as a required parameter, so no caller
+exports heuristic routes while the page shows the config's. `ExportTest` pins it; it was shown
+red with an empty-list default on `routes` and with the table built from `queryTransactions`.
+
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
 bytes the app sent, so payloads travel in `signalData` with the same utf8/base64 rule bodies use.

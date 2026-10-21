@@ -2,6 +2,7 @@ package dev.inspector.daemon.mcp
 
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
+import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.model.FilterParseException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -44,6 +45,7 @@ class McpTools(
     private val tools: List<Tool> = listOf(
         SessionTools(config, repository),
         TransactionTools(config, repository),
+        RouteStatsTool(config, repository, RouteStatsService(repository, config.routeTemplates)),
         SignalTools(config, repository, signalPuller),
         MarkerTools(markerPoster),
         ExportTools(config, repository),

@@ -76,9 +76,68 @@ object ExportMarkdown {
         )
         appendLine()
 
+        renderRoutes(document.routeStats)
         renderTimeline(document, origin)
         renderCalls(document, origin)
         renderCurrent(document)
+    }
+
+    // --- routes --------------------------------------------------------------------------------
+
+    /**
+     * Every route of the session, as the daemon computed it; the Markdown caps nothing. Counts with
+     * their share of attempts that had an outcome, latencies with `n<20` where the tail is withheld.
+     */
+    private fun StringBuilder.renderRoutes(report: RouteStatsReport) {
+        appendLine("## Routes")
+        appendLine()
+        if (report.routes.isEmpty()) {
+            appendLine("No calls were recorded.")
+            appendLine()
+            return
+        }
+        appendLine("| method | host | route | calls | attempts | 4xx | 5xx | failed | p50 | p90 | p95 | p99 | max | mean req | mean res |")
+        appendLine("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for (row in report.routes) {
+            val attempts = if (row.retried) {
+                "${row.attempts} (${row.retries} ${if (row.retries == 1) "retry" else "retries"})"
+            } else {
+                "${row.attempts}"
+            }
+            val tail = { value: Long? -> value?.let(::ms) ?: row.tailWithheld ?: "—" }
+            val cells = listOf(
+                row.method,
+                row.port?.let { "${row.host}:$it" } ?: row.host,
+                row.route,
+                "${row.calls}",
+                attempts,
+                share(row.count4xx, row.rate4xx),
+                share(row.count5xx, row.rate5xx),
+                share(row.transportFailures, row.transportFailureRate),
+                row.p50Ms?.let(::ms) ?: "—",
+                row.p90Ms?.let(::ms) ?: "—",
+                tail(row.p95Ms),
+                tail(row.p99Ms),
+                row.maxMs?.let(::ms) ?: "—",
+                row.meanReqBytes?.let(::bytes) ?: "—",
+                row.meanResBytes?.let(::bytes) ?: "—",
+            )
+            appendLine(cells.joinToString(" | ", prefix = "| ", postfix = " |") { cell(it) })
+        }
+        appendLine()
+        appendLine(
+            "Latency is per attempt, over attempts that got a response; transport failures are counted " +
+                "under failed and never in latency. p95 and p99 read n<20 below 20 samples. A route groups " +
+                "paths whose numeric, UUID, long hex or long base64-like segments differ."
+        )
+        appendLine()
+    }
+
+    /** `3 (75%)`, or `0`: a share of attempts with an outcome, to at most one decimal. */
+    private fun share(count: Int, rate: Double?): String {
+        if (count == 0 || rate == null) return "$count"
+        val percent = "%.1f".format(Locale.ROOT, rate * 100).removeSuffix(".0")
+        return "$count ($percent%)"
     }
 
     // --- timeline ------------------------------------------------------------------------------

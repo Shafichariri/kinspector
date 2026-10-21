@@ -181,6 +181,65 @@ order across eight filters, on a session whose `mono` ties are written out of ar
 `ts` runs against `mono`. Every mechanism in the scan must find something to check, so an import
 reader or a name matcher that stops matching fails instead of reporting a clean tree.
 
+**A route is the daemon's template of a path, and the page never derives one.** The traffic
+page's endpoint chips key on the last path segment (`shared-rules.md`) and answer "take me there
+in one tap"; a route keys on method, scheme, host, port and the whole path, with numeric, UUID,
+long hex and long base64-like segments read as `{id}`, and answers "how does this route behave".
+They are kept apart and named apart, "endpoint" for the chips and "route" everywhere else,
+because one name for both made two different numbers read as a bug (ROADMAP §6, decided
+2026-10-17). The rule lives in `archive/RouteTemplates.kt`, not `:inspector-model`, so it needs
+no web mirror: the daemon returns each row's route and filter term and the page draws them. It is
+in `archive/` so `ConfigFile`, the config's validator, can reach its override syntax. The host is part of the key
+because one template on two servers is two routes, and the diff and the findings reuse the key.
+Trailing slashes and path case are kept, and the query never takes part. The segment rule is a
+heuristic; among what it misses: a long camelCase name with a digit reads as `{id}`, and slugs,
+short tokens and ids with an extension stay literal. `routeTemplates` in `config.json` overrides
+it, first match wins, matched segment by segment with no regular expressions, so no entry can
+make a stats read slow. Like every key in `config.json` it is read at start (see "`config.json`
+is written by merging …" above). The daemon and `inspector mcp` are two processes, so after an
+edit each groups by the new templates once it has restarted. `RouteTemplatesTest` pins each
+class and each miss, and `ConfigFileTest` pins the key's validation.
+
+**A route's filter term is a superset of the route, and nothing tighter can be written.** The
+grammar is frozen and its `*` crosses `/`, so `GET /users/{id}/profile` links with
+`method:GET host:… path:/users/*/profile`, which also matches `/users/1/x/profile`. The term is
+the path with each `{id}` segment, and each segment the tokenizer cannot carry, replaced by `*`;
+a route with no `*` gets one in front, the chips' shape; the root route has no path term, because
+no glob matches both an empty path and `/` without matching every path. Replacing whole segments
+is what makes the superset provable: `globMatches` matches any value its pattern was cut from,
+and lowercasing cannot cross a `/`. Normalising trailing slashes would break it, which is the
+second reason they are kept. The stats filter is carried into the term only when the parser says
+it has no top-level `|`, as marker chips ask the parser rather than look for a quote; with one,
+the term is the route's alone and the reply says `filterCarried: false`. `RouteFilterTermTest`
+parses every term and matches it against every path of its corpus; it was shown red with trailing
+slashes normalised and with `{id}` emitted verbatim. It also asserts the known superset cases
+match, so the Traffic caveat stays true if somebody tightens the term.
+
+**Route stats count attempts, and a percentile below 20 samples is withheld, not printed.**
+Every row is one attempt, so `attempts` counts rows and `calls` counts distinct `callId`s. A
+retry is an attempt after a non-3xx attempt of the same call, and a redirect hop is one after a
+3xx; the schema records neither, so this is inferred, from every row of the session and not the
+filtered ones, or `status:200` would turn redirects into retries. Rates divide by attempts with
+an outcome. Latency is over attempts that got a response: a transport failure is counted and
+never averaged in, because a timeout is not a response time. Percentiles are nearest-rank, so
+each is a latency somebody waited and two implementations cannot round differently. Below 20
+samples p95 and p99 are absent and the row says `tailWithheld: "n<20"`, and the page prints that
+string rather than compare against 20 itself. `RouteStatsTest` pins each rule; it was shown red
+with interpolated percentiles, with the threshold at 19, with transport failures in the samples
+and with the 3xx set built from filtered rows.
+
+**Route stats are computed on read and folded from where the last read stopped.** Never on
+ingest, so a slow stats read cannot slow archiving, and on `Dispatchers.IO`, so a cold read of a
+large session does not hold a worker the live socket and `/ingest` share. They read every row
+through `IndexTail`, never `queryTransactions`, for the reason `HarTest` exists. A cache entry
+per session and filter keeps the byte offset after the last complete line; the
+next read folds only what was appended, because `index.jsonl` is append-only. A final line
+without its newline waits, because the writer flushes a long row in pieces; a session file that
+shrank or was replaced, or a markers file that grew under a filter, rebuilds from the start.
+Memory only, four entries. `RouteStatsServiceTest` holds a fold equal to a cold compute, and was
+shown red with the offset advanced past an incomplete line. `StatsRouteTest` and
+`RouteStatsToolTest` pin 1203 rows on both adapters.
+
 **A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization
 quotes a class's serial name in `MissingFieldException`, and a serial name defaults to the fully
 qualified class name. The replay and signal-pull routes echo that message into their 400 body, and
