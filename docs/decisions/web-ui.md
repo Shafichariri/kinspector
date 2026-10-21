@@ -538,8 +538,9 @@ panel, and it was taken out because it spent a fifth of the window on controls t
 most views — the Now panel alone ran 1341px. This rail is navigation, which applies on every page,
 so `render-web-ui.js`'s `rail is navigation` fails if `#rail` holds anything but its links and its
 collapse button. A view control put back there is a red run, not a precedent. In an export the rail
-offers Traffic alone and every other route lands there, because the other pages send something or
-read the machine (`pages hidden in export`, `routes fall back in export`); `route parse` in
+offers Traffic and Stats, which read only the embedded session, and every other route lands on
+Traffic, because the other pages send something or read the machine (`pages hidden in export`,
+`routes fall back in export`, `stats rail in export`); `route parse` in
 `check-web-static.js` holds the parser. An export is a file opened from disk, where some engines,
 jsdom among them, refuse the history API, so there the address is written through `location`
 instead (`writeHash`).
@@ -586,3 +587,25 @@ somebody most wants to mark where it happened. The web UI's add-marker form asks
 navigation computes its own sort, `j` moves up the screen the moment newest-first is on. Marker
 dividers are interleaved oldest-first and the whole sequence is then reversed, so a divider stays
 attached to the same rows; `scripts/render-web-ui.js` asserts the sequence is an exact mirror.
+
+**The Stats page computes nothing, and a row opens Traffic on a superset that says so.** Routes,
+terms, the order, the rates and the `n<20` cell all come from the daemon, so the page has no
+mirror block and no case file: there is nothing to keep in step. It has its own filter field,
+because a row click replaces the Traffic filter with the row's term, and a shared field would
+re-filter the Stats page to one route on return. A row sets Traffic's filter through
+`applyFilter`, and `#filter-caveat` says the list "may include paths the route keeps apart" for
+exactly as long as the filter is that term: any other filter clears it, so typing the term back by
+hand is not a list a row opened, and so does a switch to another session. It sits under
+`#filter-error`, outside the toolbar's one row. It is one row in `PAGES`, and its `enter` is an
+arrow, because `PAGES` is built when `08-routes.js` loads, before the stats file has declared
+anything. In an export its rail link stays, because it reads only the embedded report. Live, it
+asks again at most once a second and never twice at once, the `oweReread` rule, and only while it
+is shown and live tail is on; a switch through `switchSession`, a changed session list, resuming
+and the socket opening after an absence read it again. In an export its rows are inert and its
+headers do not sort, because both need the daemon. The table scrolls sideways in its own box with
+the route held at the left, so the page never does (`shell <w> page stats fits` in Chrome, red at
+600 and 400 with the box's `overflow-x` removed). `check-web-static.js`'s `stats refresh …` lines
+hold the refresh rule, each shown red with its check removed; the live probe's `stats …` lines hold
+the page and the caveat, `stats n<20` and `stats long session whole` red against a daemon with the
+threshold at 0 and its fold cut at 1000 rows, and `stats restored` leaves the page as it found it,
+proven by breaking the next probe's guard (`chip marks active`).

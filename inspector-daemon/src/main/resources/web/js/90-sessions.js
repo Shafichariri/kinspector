@@ -151,6 +151,7 @@ async function switchSession(id) {
     if (!keep) showTxnFull(null);
   }
   if (currentPage() === 'sessions') renderSessionRows();
+  statsSessionChanged();
   await loadTransactions();
 }
 
@@ -219,6 +220,7 @@ async function afterSessionChange() {
   followSession();
   await loadSessions();
   renderSessionRows();
+  statsSessionChanged();
   if (state.sessionId) {
     await loadTransactions();
   } else {

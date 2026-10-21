@@ -147,7 +147,7 @@ function socketPage(sources, view, newestFirst) {
       prefs: { get: () => null, set() {} }, ageOf: () => 0, fmtAge: () => '', setConn() {},
       showServerBanner() {}, setControlsEnabled() {}, loadServerInfo() {}, loadSessions: async () => {},
       renderBrowser() {}, loadPayload: async () => {}, methodClass: () => 'm-get', statusClass: () => '2',
-      followLiveCount() {},
+      followLiveCount() {}, oweStats() {},
     },
   });
   for (const name of ['connectLive', 'setSortOrder', 'setTimeRange', 'loadTransactions', 'applyView']) {

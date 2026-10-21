@@ -75,6 +75,7 @@ window.addEventListener('hashchange', applyRoute);
 wireSessionsPage();
 wireProcessesPage();
 wireSettingsPage();
+wireStatsPage();
 
 (async function init() {
   setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
@@ -109,6 +110,9 @@ wireSettingsPage();
   // The page first, and a `?session=` before the list is read, so the first load is that session's.
   await applyRoute();
   await loadSessions();
+  // Opened on `#/stats`, it had no session to ask about until now. Asked before the calls are read,
+  // not after: on a 160,000-call session that read takes half a minute, and the table needs none of it.
+  statsReload();
   await loadTransactions();
   // Then the view, which a session must have loaded to offer.
   await applyRoute();

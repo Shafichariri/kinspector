@@ -20,3 +20,4 @@ css/65-tabs.css
 css/70-browser.css
 css/75-sessions.css
 css/80-json-tree.css
+css/85-stats.css

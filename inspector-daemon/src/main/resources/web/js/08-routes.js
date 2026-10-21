@@ -3,22 +3,27 @@
 
 /**
  * The pages the rail offers, in rail order. `live` is a page that sends something to the daemon or
- * reads the machine it runs on, so an export, which has neither, offers Traffic alone and every
- * other route lands there.
+ * reads the machine it runs on, so an export, which has neither, offers Traffic and Stats, and every
+ * other route lands on Traffic.
  *
- * Stats, Findings and Diff get their row in the item that builds each page: a rail entry leading to
- * an empty page is a dead end.
+ * Findings and Diff get their row in the item that builds each page: a rail entry leading to an
+ * empty page is a dead end.
+ *
+ * `enter`, where a page has one, runs each time the page becomes shown, in an export too. It is an
+ * arrow, never `enter: statsEnter`: this table is built when this file loads, before a later file
+ * has declared anything, and hoisting does not cross files.
  */
 const PAGES = [
   { id: 'traffic', label: 'Traffic', live: false },
+  { id: 'stats', label: 'Stats', live: false, enter: () => statsEnter() },
   { id: 'sessions', label: 'Sessions', live: true },
   { id: 'processes', label: 'Processes', live: true },
   { id: 'settings', label: 'Settings', live: true },
 ];
 
 /**
- * `#/traffic[/<view>]`, `#/sessions`, `#/processes` or `#/settings`, each optionally ending
- * `?session=<id>`, as `{ page, view, session, known }`. Pure, and the only reader of the hash's
+ * `#/traffic[/<view>]`, `#/stats`, `#/sessions`, `#/processes` or `#/settings`, each optionally
+ * ending `?session=<id>`, as `{ page, view, session, known }`. Pure, and the only reader of the hash's
  * shape: nothing else parses `location.hash`.
  *
  * A page this build does not have is Traffic with `known: false`, so the caller rewrites the address
@@ -114,7 +119,10 @@ async function applyRoute() {
   document.body.dataset.page = pageOf(route);
   for (const p of PAGES) $(`page-${p.id}`).hidden = p.id !== pageOf(route);
   renderRail();
-  if (entering) enterPage(pageOf(route));
+  if (entering) {
+    enterPage(pageOf(route));
+    PAGES.find((p) => p.id === pageOf(route)).enter?.();
+  }
 
   if (route.session && route.session !== state.sessionId) {
     if (!state.sessionsLoaded) state.sessionId = route.session;

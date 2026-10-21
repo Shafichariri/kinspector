@@ -18,8 +18,8 @@ const declared = (sources, file, name) => {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Thirteen addresses: each page, a view, an encoded tag and session, an unknown page, a call's own
- * page with and without an id, and round trips.
+ * Fifteen addresses: each page, a view, an encoded tag and session, an unknown page, a call's own
+ * page with and without an id, Stats with and without a session, and round trips.
  */
 function checkRouteParse(sources) {
   const { parseRoute, routeHash } = declared(sources, 'js/08-routes.js', 'parseRoute');
@@ -39,11 +39,13 @@ function checkRouteParse(sources) {
     ['#/txn/t-42', { page: 'txn', view: null, session: null, known: true, txn: 't-42' }],
     ['#/txn/a%2Fb?session=s1', { page: 'txn', view: null, session: 's1', known: true, txn: 'a/b' }],
     ['#/txn', traffic(null, null, false)],
+    ['#/stats', { page: 'stats', view: null, session: null, known: true }],
+    ['#/stats?session=a%2Fb', { page: 'stats', view: null, session: 'a/b', known: true }],
   ];
   const wrong = cases.filter(([hash, due]) => !same({ ...parseRoute(hash) }, due))
     .map(([hash, due]) => `${hash || "''"} -> ${JSON.stringify(parseRoute(hash))}, where ${JSON.stringify(due)} was due`);
   const trips = ['#/traffic', '#/traffic/all', '#/traffic/cache?session=a%2Fb', '#/sessions', '#/settings?session=x', '#/traffic/my%20tag',
-    '#/txn/t-42?session=s1', '#/txn/a%2Fb'];
+    '#/txn/t-42?session=s1', '#/txn/a%2Fb', '#/stats', '#/stats?session=a%2Fb'];
   const broken = trips.filter((hash) => routeHash(parseRoute(hash)) !== hash)
     .map((hash) => `${hash} came back ${routeHash(parseRoute(hash))}`);
   const all = [...wrong, ...broken];

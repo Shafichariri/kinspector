@@ -55,6 +55,10 @@
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7 16V4M4 7l3-3 3 3M13 4v12M10 13l3 3 3-3"/></svg>
       <span class="rail-text">Traffic</span>
     </a>
+    <a class="rail-item" data-page="stats">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 16.5h14M5.5 14V9.5M9 14V4.5M12.5 14v-3M16 14V7.5"/></svg>
+      <span class="rail-text">Stats</span>
+    </a>
     <a class="rail-item" data-page="sessions">
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="3.5" width="14" height="5" rx="1"/><rect x="3" y="11.5" width="14" height="5" rx="1"/></svg>
       <span class="rail-text">Sessions</span>
@@ -148,6 +152,16 @@
   </div>
 
   <div id="filter-error" class="filter-error" hidden></div>
+  <!--
+    Shown while the filter is the term a Stats row opened Traffic on, and gone with any other filter
+    or a session switch. A filter cannot say a route exactly: its `*` crosses `/`. Beside the filter
+    error and outside the toolbar row, which must stay one line; a band only while shown.
+  -->
+  <div id="filter-caveat" class="filter-caveat" role="status" hidden>
+    <span>From Stats: <span id="filter-caveat-route" class="mono"></span>. A filter cannot say a route
+      exactly, so this list may include paths the route keeps apart.</span>
+    <button id="filter-caveat-back" class="btn btn-sm" type="button">back to Stats</button>
+  </div>
 
   <div id="markers-pop" class="pop" hidden>
     <ul id="markers" class="markers"><li class="muted">none</li></ul>
@@ -323,6 +337,38 @@
     -->
     <div id="drawer-scrim" class="drawer-scrim" hidden></div>
   </main>
+  </section>
+
+  <!--
+    One row per method, host and route of the selected session, as the daemon computes it: the page
+    derives nothing, so the order, the rates and `n<20` are the daemon's. Its own filter, because a
+    row replaces the Traffic filter with its term, and a shared field would then narrow this table to
+    that one route on the way back. The table scrolls sideways in its own box; the page never does.
+  -->
+  <section id="page-stats" class="page page-doc" aria-labelledby="stats-title" hidden>
+    <h1 id="stats-title" class="page-title" tabindex="-1">Stats</h1>
+    <div class="page-actions">
+      <input id="stats-filter" class="stats-filter" type="text" spellcheck="false" autocomplete="off"
+             placeholder="status&gt;=400  host:api  method:POST" aria-label="Stats filter">
+      <span id="stats-count" class="muted" role="status"></span>
+    </div>
+    <div id="stats-filter-error" class="filter-error" hidden></div>
+    <p id="stats-export-note" class="settings-note muted" hidden>
+      Sorting and opening a route's calls need the daemon — this is an exported session.
+    </p>
+    <div id="stats-empty" class="empty muted" hidden></div>
+    <div id="stats-scroll" class="stats-scroll" hidden>
+      <table id="stats-table" class="page-table stats-table">
+        <thead><tr id="stats-head"></tr></thead>
+        <tbody id="stats-rows"></tbody>
+      </table>
+    </div>
+    <p id="stats-more" class="settings-note muted" hidden></p>
+    <p id="stats-note" class="settings-note muted">
+      Routes group paths by template: numeric, UUID, long hex and long base64-like segments read as
+      {id}. If two paths are grouped wrongly, add a template to <code>routeTemplates</code> in
+      <code>config.json</code>; it applies when the daemon restarts.
+    </p>
   </section>
 
   <!--
