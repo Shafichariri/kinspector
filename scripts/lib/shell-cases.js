@@ -13,7 +13,17 @@
  * fits`). Once: rail clicks, then Back (`shell back`). And, in measure-web-ui.js's `first` group,
  * how long the Stats page takes to draw its first row on the 160,000-call session, reported and not
  * judged (`stats huge first draw`): the daemon folds the whole session on a cold read.
+ *
+ * And at 400px on the `routes` session, served and in an export opened from disk: every line of a
+ * route cell ends at a `.`, `:` or `/` of its server, never inside a bracketed IPv6 address, and at
+ * a `/` of its path (`stats 400 route breaks <where>`), read per character from where Chrome put
+ * it, and every route whole on screen while the document stays as wide as the window (`stats 400
+ * routes whole <where>`). `overflow-wrap: anywhere` read `api.qa.invali` / `d` (KIN-93). At 1440,
+ * served, every route is still one line (`stats 1440 routes one line served`).
  */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { sleep } = require('./measure-cdp');
 const { LONG_SESSION_ID } = require('./long-session-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
@@ -150,4 +160,95 @@ async function statsFirstDraw(page, url, session) {
     detail: drawn === null ? '' : `${drawn} ms` }];
 }
 
-module.exports = { shell, statsFirstDraw };
+// Per route cell, the server's and the path's characters in order with the top of each glyph's box:
+// a later glyph lower than the one before it started a line. `<wbr>` splits a span into several
+// text nodes, so the characters are walked across all of them.
+const ROUTE_BREAKS = `(() => {
+  const cells = [...document.querySelectorAll('#stats-rows .stats-route')];
+  const bad = [];
+  const cut = [];
+  let spans = 0;
+  let hosts = 0;
+  let breaks = 0;
+  for (const cell of cells) {
+    const box = cell.getBoundingClientRect();
+    for (const span of cell.querySelectorAll('.stats-host, .stats-path')) {
+      const host = span.classList.contains('stats-host');
+      spans++;
+      if (host) hosts++;
+      const chars = [];
+      const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (let i = 0; i < node.length; i++) {
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          const rect = range.getClientRects()[0];
+          chars.push({ c: node.data[i], top: rect ? rect.top : null });
+        }
+      }
+      const text = chars.map((x) => x.c).join('');
+      for (let i = 1; i < chars.length; i++) {
+        if (chars[i].top === null || chars[i - 1].top === null || chars[i].top <= chars[i - 1].top + 2) continue;
+        breaks++;
+        const before = text.slice(0, i);
+        const inBrackets = before.lastIndexOf('[') > before.lastIndexOf(']');
+        const at = (host ? '.:/' : '/').includes(text[i - 1]) && !inBrackets;
+        if (!at) bad.push(before + '|' + text.slice(i));
+      }
+      const r = span.getBoundingClientRect();
+      if (span.scrollWidth > span.clientWidth + 0.5 || r.left < box.left - 0.5 || r.right > box.right + 0.5) cut.push(text);
+    }
+  }
+  return { cells: cells.length, spans, hosts, breaks, bad, cut, doc: document.documentElement.scrollWidth, width: innerWidth };
+})()`;
+
+function routeRows(where, r) {
+  if (!r || r.evalError) return [{ key: `stats 400 route breaks ${where}`, value: 'threw', ok: false, detail: String(r && r.evalError) }];
+  // The routes session has more than one server, so a cell with no server drawn is a scan of nothing.
+  const found = r.cells > 0 && r.hosts > 0;
+  const nothing = `NO - found no route cell${r.cells ? ' with a server' : ''}, so this checked nothing`;
+  const breaksOk = found && r.bad.length === 0;
+  const wholeOk = found && r.cut.length === 0 && r.doc <= r.width;
+  return [
+    { key: `stats 400 route breaks ${where}`, value: !found ? nothing : breaksOk ? 'at . : /' : 'mid-word', ok: breaksOk,
+      detail: `${r.cells} route cells, ${r.hosts} servers, ${r.breaks} line breaks${r.bad.length ? `; ${r.bad.join(', ')}` : ''}` },
+    { key: `stats 400 routes whole ${where}`, value: !found ? nothing : wholeOk ? 'whole' : 'cut', ok: wholeOk,
+      detail: `document ${r.doc} of ${r.width}${r.cut.length ? `; cut: ${r.cut.join(', ')}` : ''}` },
+  ];
+}
+
+/** Reads the route cells at 400px on [url]'s latest session, served and from its export on disk. */
+async function statsRouteBreaks(page, url) {
+  const drawn = `document.querySelectorAll('#stats-rows .stats-row').length > 0`;
+  const rows = [];
+  await page.setWidth(400);
+  await page.navigate(`${url}#/stats`);
+  if (await page.waitFor(drawn, 20000) === null) throw new Error(`${url}#/stats drew no route within 20 s`);
+  await sleep(500);
+  rows.push(...routeRows('served', await page.ev(ROUTE_BREAKS)));
+  // Wide, a route is one line and its path ends in an ellipsis: Chrome honours a `<wbr>` under
+  // `nowrap`, so the pieces wrapped there too until the stylesheet took them out above 700px.
+  await page.setWidth(1440);
+  await sleep(500);
+  const wide = await page.ev(ROUTE_BREAKS);
+  const wideFound = Boolean(wide) && !wide.evalError && wide.cells > 0 && wide.hosts > 0;
+  rows.push({ key: 'stats 1440 routes one line served', ok: wideFound && wide.breaks === 0,
+    value: !wideFound ? 'NO - found no route cell with a server, so this checked nothing' : wide.breaks === 0 ? 'one line' : 'wrapped',
+    detail: wideFound ? `${wide.cells} route cells, ${wide.breaks} line breaks` : String(wide && wide.evalError) });
+  await page.setWidth(400);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stats-export-'));
+  try {
+    const file = path.join(dir, 'export.html');
+    fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
+    await page.navigate(`file://${file}#/stats`);
+    if (await page.waitFor(drawn, 20000) === null) throw new Error('the export drew no route within 20 s');
+    await sleep(500);
+    rows.push(...routeRows('export', await page.ev(ROUTE_BREAKS)));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return rows;
+}
+
+module.exports = { shell, statsFirstDraw, statsRouteBreaks };

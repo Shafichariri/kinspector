@@ -46,6 +46,9 @@
 .stats-route .method { font-size: 11px; flex: none; }
 .stats-host { font-size: 11px; flex: none; }
 .stats-path { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+/* Wide, a route is one line ending in an ellipsis. Chrome breaks at a `<wbr>` even under `nowrap`,
+   so `statsBreakable`'s are taken out of layout here and put back only in the narrow block below. */
+.stats-label wbr { display: none; }
 .stats-row { cursor: pointer; }
 .stats-row:hover td, .stats-row:hover .stats-route { background: var(--bg-hover); }
 body.archive .stats-row { cursor: default; }
@@ -81,9 +84,16 @@ body.archive .stats-row:hover .stats-route { background: var(--bg-elevated); }
 .txn-page > #filter-caveat { display: none !important; }
 
 /* Narrow: the held route column wraps inside a capped width. Kept on one line it was nearly the
-   window's width at 400px, and every number scrolled out from under it. */
+   window's width at 400px, and every number scrolled out from under it. It wraps only between the
+   pieces `statsBreakable` cut, each held whole: `overflow-wrap: anywhere` broke `api.qa.invali` /
+   `d`. A piece wider than the cap widens the column instead, inside the table's own sideways
+   scroll. So the cap is on the label, where `min-width: min-content` outranks it; on the cell,
+   Chrome held the column at 150px and the piece painted over the numbers beside it. 134px is the
+   cell's old 150 less its padding. `overflow: visible`, or the path's ellipsis would cut it. */
 @media (max-width: 699px) {
-  .stats-table .stats-route { white-space: normal; min-width: 120px; max-width: 150px; }
-  .stats-label { flex-wrap: wrap; gap: 2px 6px; max-width: none; }
-  .stats-host, .stats-path { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .stats-table .stats-route { white-space: normal; min-width: 120px; }
+  .stats-label { flex-wrap: wrap; gap: 2px 6px; max-width: 134px; min-width: min-content; }
+  .stats-host, .stats-path { flex: 0 1 auto; min-width: min-content; overflow: visible; }
+  .stats-host > span, .stats-path > span { white-space: nowrap; }
+  .stats-label wbr { display: inline; }
 }

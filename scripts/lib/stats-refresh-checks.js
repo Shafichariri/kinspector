@@ -156,6 +156,35 @@ function checkStatsOrigin(sources) {
   return wrong.length ? `NO - ${wrong.join(', ')}` : `yes (${cases.length} origins, IPv6 bracketed once)`;
 }
 
+/**
+ * The pieces `statsBreakable` cuts a route cell's server and path into, which the narrow stylesheet
+ * keeps whole with a line break allowed only between them. Chrome's `stats 400 route breaks` reads
+ * where the lines fell, but only on what was long enough to wrap; this holds the cut itself: after a
+ * run of `.`, `:` or `/`, never inside `[::1]`, and the path only at a `/`. `el` is stubbed, so the
+ * pieces are read as text with a `|` for each `<wbr>`.
+ */
+function checkStatsPieces(sources) {
+  const el = (tag, cls, text) => {
+    const node = { tag, text: text || '', kids: [] };
+    node.appendChild = (kid) => node.kids.push(kid);
+    node.append = (...kids) => node.kids.push(...kids);
+    return node;
+  };
+  const context = runFile(sources, FILE, { state: {}, api: null, ARCHIVE: null, clearTimeout, el, currentPage: () => 'stats' });
+  const breakable = vm.runInContext('typeof statsBreakable === "function" ? statsBreakable : null', context);
+  if (!breakable) throw new HarnessError(`statsBreakable is not declared in ${FILE}`);
+  const read = (node) => node.kids.map((k) => (k.tag === 'wbr' ? '|' : k.text)).join('');
+  const cases = [
+    ['http://[::1]:8080', '.:/', 'http://|[::1]:|8080'],
+    ['https://api.qa.example.invalid', '.:/', 'https://|api.|qa.|example.|invalid'],
+    ['http://127.0.0.1:8080', '.:/', 'http://|127.|0.|0.|1:|8080'],
+    ['/v3/files/{id}/report.pdf', '/', '/v3/|files/|{id}/|report.pdf'],
+  ];
+  const wrong = cases.filter(([text, at, want]) => read(breakable('x', text, at)) !== want)
+    .map(([text, at, want]) => `${read(breakable('x', text, at))} for ${want}`);
+  return wrong.length ? `NO - ${wrong.join(', ')}` : `yes (${cases.length} routes cut only after . : /, [::1] whole)`;
+}
+
 async function checkStatsRefresh(sources) {
   return [
     ['stats refresh burst', await checkBurst(sources)],
@@ -164,6 +193,7 @@ async function checkStatsRefresh(sources) {
     ['stats refresh hidden', await checkQuiet(sources, 'hidden')],
     ['stats refresh stale dropped', await checkStaleDropped(sources)],
     ['stats origin', checkStatsOrigin(sources)],
+    ['stats route pieces', checkStatsPieces(sources)],
   ];
 }
 
