@@ -861,11 +861,36 @@ structure pass before §6 rather than leave it trailing. See below.)*
 The maintainer set this order on 2026-10-18. It runs across §3, §5 and §6, so it is recorded once,
 here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` → §5 → "Order from here — the rows finished". They are not in this table.
 
-| Order | Item | Where | Ticket label | Size |
-|---|---|---|---|---|
-| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
+| Order | Item | Where | Ticket label | Size | Lane |
+|---|---|---|---|---|---|
+| 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
+| 14 | A check that finds nothing to check passes | §3 → Guards | `item:guard-probe-finds-nothing-fails` | not sized | W, alone |
+| 15 | QA's live-traffic Chrome driver, committed | §3 → Guards | `item:guard-live-traffic-driver` | not sized | S; its case in its own `scripts/lib/` file |
+| 16 | Housekeeping after the 2026-10-20/21 run (waits: maintainer approval of the `architect.md` edit, for that edit only) | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-21` | S | S for the docs, then W for the Sessions page line; the `AGENTS.md` edit merges before any status-row close |
+| 17 | The core and stream twin pairs get the ui pair's guards | §3 → Guards | `item:guard-twin-pairs-alike` | S | L |
+| 18 | "A probe leaves no process behind", tested | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized | D, can run beside the advisory |
+| 19 | A server is its host and a non-default port, everywhere | §3 → Bugs found, not fixed | `item:host-port-everywhere` | S, or M | W; one PR, its `urlOf` mirror case runs in Kotlin and the web checks |
+| 20 | A session switch clears the timeline's calls and the endpoint chips (waits: the maintainer on overturning the `web-ui.md` sentence) | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
+| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background (waits: undefer, and a fresh note) | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 22 | At 400px the Stats page keeps a route's host whole | §3 → Bugs found, not fixed | `item:web-stats-route-breaks-whole` | S | beside W, only after `item:host-port-everywhere` merges |
+| 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
+| 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
+| 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
+| 26 | Findings, and the payment-safety rules (waits: the shared STOP before T2, Q1 before T7) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after diff PR A merges; PR B and C in W |
+| 27 | Web UI polish (waits: Q2 to Q5) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
+| 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
+| 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
+| 30 | Sensitive-data detection — detect, never redact (waits: the shared STOP, Q2, Q3) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D; T5 in W after findings PR B |
 
-§6 items 3 to 6 are **not scheduled** by this decision. They keep their place in §6's table and
+**Rows after the advisory decided 2026-10-21 by the maintainer**, on the architect's and the
+product owner's joint proposal; the order is approved, and each "(waits: …)" is a decision still
+open. This schedules §6 items 3 to 6. Work runs in batches with one writer per lane: W web UI, D
+daemon, L library twins, S scripts and docs. W is strictly serial. `25-traffic-list.js` has a line
+budget to share: KIN-42 takes it to at most 592, polish A4 to 589, the stretch to 591, findings
+T7/T8 to 600. `15-session-data.js` has about 52 lines left, so KIN-42's note states its line count;
+past that a new numbered script, never a raised budget.
+
+§6 items 3 to 6 were **not scheduled** by the 2026-10-18 decision. They keep their place in §6's table and
 wait for the next one.
 
 **Three rows added 2026-10-18 by the product owner**, from defects found that day outside any item.
@@ -1042,10 +1067,10 @@ screen, and building those into the current single page would mean building them
 | ~~1b~~ | ~~Web UI foundation: room for the list — divider, overview line, one-row toolbar, density, `#/txn/{id}`~~ **Done, 2026-10-21** (KIN-78 to KIN-86; PR #119) | M *(includes its share of the probe rewrite)* | 1.4 | ~~yes~~ done |
 | ~~2~~ | ~~Endpoint latency stats~~ **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115, #121) | M | 1.5 | ~~yes~~ done |
 | — | The private security advisory's fix | not sized | not set | yes, after 2 (done) |
-| 3 | Session diff | L | 1.5 | no |
-| 4 | Findings framework, and the payment-safety rules | L | 1.6 | no |
-| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | no |
-| 6 | Web UI polish, against the finished screens | M | 1.7 | no |
+| 3 | Session diff | L | 1.5 | yes, decided 2026-10-21 |
+| 4 | Findings framework, and the payment-safety rules | L | 1.6 | yes, decided 2026-10-21 |
+| 5 | Sensitive-data detection — detect, never redact | M | 1.6 | yes, decided 2026-10-21 |
+| 6 | Web UI polish, against the finished screens | M | 1.7 | yes, decided 2026-10-21 |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
 
 *Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
