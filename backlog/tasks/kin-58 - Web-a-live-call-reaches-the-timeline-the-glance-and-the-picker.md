@@ -1,10 +1,10 @@
 ---
 id: KIN-58
 title: 'Web: a live call reaches the timeline, the glance and the picker'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-20 20:26'
-updated_date: '2026-10-21 13:38'
+updated_date: '2026-10-21 14:18'
 labels:
   - 'item:web-live-calls-reach-every-pane'
 dependencies: []
@@ -19,14 +19,14 @@ Built in the 2026-10-20 run without an architect or QA before merge, by the main
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:web-live-calls-reach-every-pane in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:web-live-calls-reach-every-pane in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -45,4 +45,12 @@ Criteria, copied from docs/ROADMAP.md (item:web-live-calls-reach-every-pane), wi
 Pace rule: neighbouring `live header plain` re-proven red in the same live run (renderCounts removed from the call branch).
 
 Fix round (QA, qa/web-live-calls-reach-every-pane-report.md, criterion 4): after pause, live calls, resume, the header read 120 while the picker option and face stayed at 118. setLiveTail(true) now calls followLiveCount once its loadTransactions lands, for the same session. That is sessionTotal, the header's number; no /api/sessions read. Check: live paused still sends a second call while paused, resumes, and requires the option and face to end with the header's count. It is red against 952b6c6's setLiveTail (header 18, option 23 calls). The neighbouring live picker count was re-proven red in the same run.
+
+QA round 1 (at 952b6c6, PR #113): criterion 4 FAILED, the other five Verified. After a pause, two calls while paused and a resume, the header and the glance read N+2 while the selected picker option and the face read N until the next live call for that session. Reproduced in real Chrome; red proof m2 (followLiveCount removed) also red. No new ticket was filed, by the maintainer's instruction (another session holds unmerged ticket numbers); the finding is recorded here, and it was fixed inside this item by PR #117 (433f30d). QA round 2 (at 433f30d): fixed and Verified at 1440, 1000 and 400 px; the check live paused still is red against 952b6c6's setLiveTail ('header total 18 (was 16), option 23 calls'), green at head.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Done 2026-10-21 on QA's two rounds (qa/web-live-calls-reach-every-pane-report.md), PRs #113 (952b6c6) and fix #117 (433f30d). Round 1 failed criterion 4 only: after pause, two calls, resume, the picker option and face lagged the header (118 against 120); the finding is recorded here, with no separate ticket. Round 2 at 433f30d, close yes. AC1 / the six roadmap criteria: (1) real Chrome at 1440, 1000, 400: a live call is drawn by +500 ms, scrolled-back scrollTop unchanged 1421 to 1421, at the end it follows; base does not draw it; red with drawLive removed (m1: 'socket call drawn: NO', 'live timeline plain: NO'). An open run staying open is checked in jsdom only. (2) 100 calls over about 1.2 s cost 5 renderTimeline calls and 0 /api/sessions reads, bound ceil(T/250)+1; red with a redraw per call (m3: 'live draw burst of 100: NO - 100 timeline and 100 glance redraws, bound 7'). (3) glance calls = header, no filter (14) and under status>=500 (16 against '4 of 16 calls'), 116 = 116 after the burst, 122 = 122 after reconnect. (4) round 2: header, glance, option and face all read 120 at 159 ms after the resume, at every width; check red against 952b6c6 ('live paused still: NO - header total 18 (was 16), option 23 calls'); m2 'live picker count: NO' with followLiveCount removed. (5) paused and other-session calls moved nothing ([118,118,118,118,119] before and after). (6) no filter evaluated in web/js, no new route. Counts at 433f30d: check-web-static.js 99/0, render-web-ui.js 225 passed 0 failed 1 n/a, render-web-ui-archive.js 40, :repo-checks:test --rerun green; PR #117 build, release-swap, repo and web pass; check-commit-identity.sh 4e9d363 433f30d passes; client-name scan no match. DoD1 per the table; DoD2 by m1 to m3 and the round-2 revert; DoD3 by QA's scan. Not verified: Safari, Firefox, a phone; the full ./gradlew build locally (no Android SDK; CI ran it); the main push CI run on 433f30d was queued when QA looked.
+<!-- SECTION:FINAL_SUMMARY:END -->

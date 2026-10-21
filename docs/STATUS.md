@@ -8,7 +8,7 @@ Latest per-target counts from QA, each at the commit named and none a full-repos
 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-core:jvmTest` 73/0, `:inspector-noop:jvmTest` 3/0,
 `:inspector-stream:jvmTest` 3/0, `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at
 `1479c30`; `:inspector-daemon:test` 299/0 at `e9f7131` (QA, PR #108; 271 on its base); web static checks 99/0,
-live probe 225 passed 0 failed 1 n/a and archive probe 40 passed at `cc9dbce` (QA, round 2). The daemon figure is older than the web ones, and #115 and
+live probe 225 passed 0 failed 1 n/a and archive probe 40 passed at `433f30d` (QA, KIN-58 round 2). The daemon figure is older than the web ones, and #115 and
 later commits add daemon tests that nobody has counted.
 Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
 has no Android SDK and no working `xcrun`; CI runs them.
@@ -121,6 +121,14 @@ queued or in progress when QA wrote and were not seen finishing.
 - `item:web-list-says-what-it-holds` (KIN-56 with KIN-72 and KIN-73, PRs #104 and #110, `fb8e54e` and `ff4f9de`):
   QA's first round failed two criteria, the second passed. `docs/ROADMAP-DONE.md` has each item's detail.
 
+**`item:web-live-calls-reach-every-pane` is done** (2026-10-21, on `main` at `433f30d`; KIN-58, PRs #113 and #117, merges `952b6c6`
+and `433f30d`). Done on QA's evidence in two rounds: round 1 failed one criterion (after a pause, two calls and a resume, the
+picker's option and face read 118 under a header of 120), fixed in #117 and verified in round 2. Built without an architect or QA
+before merge, by the maintainer's choice for this run. CI on PR #117: `build`, `release-swap`, `repo` and `web` green; the push run
+on `main` at `433f30d` was queued when QA looked and was not seen finishing. Counts, base to head: static checks 96 to 99, live
+probe 219 to 225 (the fix round strengthened a line and added none), archive probe 40, `:repo-checks:test` green; no Kotlin change.
+`docs/ROADMAP-DONE.md` §3 has the detail.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -145,6 +153,15 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **With live on, a call reaches the timeline, the glance and the selected picker option, without a reload, in headless Chrome 131
+  at 1440, 1000 and 400 px, against a real daemon fed over `/ingest`.** At `433f30d` (QA, round 2): a live call is drawn by +500 ms
+  with no other action; scrolled back, `scrollTop` is unchanged (1421 to 1421, 1456 at 400) and at the end the pane follows; 100
+  calls over about 1.2 s cost 5 timeline redraws and 0 `/api/sessions` reads (bound ceil(T/250)+1); the glance's `calls` equals the
+  header with no filter (14) and after the burst (116), and under `status>=500` it reads the session (16) beside `4 of 16 calls`;
+  after a reconnect 122 equals the daemon's total; after a pause, two calls and a resume, the header, glance, option and face
+  read 120 together, and paused or for another session nothing moved. Red by QA: `drawLive()` removed (`socket call drawn`,
+  `live timeline plain`, `live glance plain`, `live glance filter`), `followLiveCount()` removed (`live picker count`), a redraw
+  per call (`live draw burst of 100`), and `setLiveTail` put back to `952b6c6` (`live paused still`).
 - **Web UI shell (1a), in headless Chrome 131 and the probes, at 1440, 1000, 600 and 400 px, live and in an export.** Rail and
   hash routes (Traffic, Sessions, Processes, Settings; an export keeps Traffic only and falls back); Sessions, Processes and
   Settings pages; bulk kill and bulk delete answering per item, each on a real daemon (a real peer killed, a live non-inspector
@@ -356,8 +373,11 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 - **A ~160,000-call session shows a false empty state for about 25 s before the first rows**, in
   headless Chrome (rows at 26 to 27 s, connected at 26 to 29 s, over the 3000 ms bar). KIN-42, introduced
   by KIN-34, deferred by the maintainer on 2026-10-19.
-- **A live call never redraws the timeline**: the socket's `txn` branch does not call `renderTimeline`.
-  Predates the signals item and is unplaced (ROADMAP §3).
+- **`item:web-live-calls-reach-every-pane` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it. **An open run staying
+  open under a live call** was checked in jsdom only (`socket run stays open`), and that line stays green with the redraw removed, so
+  it guards the follow rule, not the redraw. **A live signal or marker** still redraws the timeline once per message, so a signal
+  burst is unbounded the way calls were; the builder proposed routing both through `drawLive`, and it is unplaced. **The full
+  `./gradlew build`** was not run on the builder or QA machine (no Android SDK); CI ran it on both PRs.
 - **Follow behaviour on a live socket in Safari, Firefox, or on a real phone-width browser.** Only
   headless Chrome 131 was driven, at 1440 and 400.
 
