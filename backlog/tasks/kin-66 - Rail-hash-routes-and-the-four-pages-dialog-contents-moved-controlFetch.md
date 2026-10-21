@@ -1,11 +1,11 @@
 ---
 id: KIN-66
 title: 'Rail, hash routes and the four pages; dialog contents moved; controlFetch'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 04:39'
-updated_date: '2026-10-21 12:03'
+updated_date: '2026-10-21 13:34'
 labels:
   - 'item:web-foundation-shell'
 dependencies: []
@@ -20,17 +20,17 @@ Design: the architect's note for item:web-foundation-shell (1a, order row 10, ru
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 route lines, rail is navigation, control header once, moved probe lines green with before/after counts stated
-- [ ] #2 Export shows Traffic only and falls back
-- [ ] #3 Row 4's switch probes green through the picker and through the hash route
-- [ ] #4 render-web-ui.js no longer than its budget, budget tightened
+- [x] #1 route lines, rail is navigation, control header once, moved probe lines green with before/after counts stated
+- [x] #2 Export shows Traffic only and falls back
+- [x] #3 Row 4's switch probes green through the picker and through the hash route
+- [x] #4 render-web-ui.js no longer than its budget, budget tightened
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -43,3 +43,9 @@ PR B (web), built in the working tree on shafic/web-foundation-shell-b, not comm
 - Probe move: probeSessions, probeTopBar, the settings/peers block and probeEndpointLimit moved to scripts/lib/shell-probes.js; render-web-ui.js 2758 -> 2561 lines, budget tightened.
 - Counts: render-web-ui.js 204 -> 219 passing; archive 38 -> 40; check-web-static.js 90 -> 96.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (PR B, a7e3946, qa/web-foundation-shell-report.md), Chrome 131 plus probes. AC1: check-web-static 90 -> 96/0, render-web-ui 204 -> 219 passed 1 n/a (facet filter, as at base), archive 38 -> 40; every base probe label present at head except the two intended renames (header delete -> row delete, rail gone -> rail is navigation); m1 (second X-Inspector-Control literal in 75-replay.js) gives 'control header once: NO - 2 times'; m3 (input in #rail) gives 'rail is navigation: NO - the rail holds rail-filter'. AC2: in file://...long.html the rail is traffic only and #/processes falls back to #/traffic ('pages hidden in export', 'routes fall back in export'). AC3: 'now switch shows none' and 'route switch window' pass; a picker switch leaves history.length 20 -> 20. AC4: render-web-ui.js 2561 lines, budget tightened to 2561.
+<!-- SECTION:FINAL_SUMMARY:END -->

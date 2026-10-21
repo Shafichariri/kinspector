@@ -77,3 +77,16 @@ how."* **This release must be a minor bump, not a patch** (decided 2026-10-18), 
 release-steward's changelog entry for the release points back to v59 and names the version that v59
 calls "the next release after 1.3.0", and re-checks that against `git tag`.
 `item:structure-split-mcp-test` and `item:structure-phase-h` owe nothing: tests and file moves only.
+`item:web-foundation-shell` (1a, done 2026-10-21) owes a twelfth, in the same daemon-only entry, and it is consumer-visible: the
+web UI and the daemon's HTTP API both change. Web UI: *"a left rail with Traffic, Sessions, Processes and Settings pages replaces
+the settings dialog. Sessions and processes can be selected and deleted or killed in one step, with a result for each. Restart and
+stop moved to Processes. Settings can now edit the daemon's `config.json` (retention and signal caps); changes apply when the
+daemon restarts. The top bar and tabs fit a 400px window, the closed session picker keeps the start time visible, and the 'Lost the
+daemon' banner now stays up through a restart that never comes back."* Daemon: *"new `POST /api/peers/kill`,
+`POST /api/sessions/delete` and `GET`/`PUT /api/config`; all three need `X-Inspector-Control: 1` where they change something."*
+`docs/DAEMON.md` already documents the three routes, a `curl` for each and the config rules (checked at the close: the Processes
+section, "Deleting sessions", the config section and the control-header list), so no docs gap there. `docs/INTEGRATION.md`
+v60 (2026-10-21) carries the web UI change: §6c (the rail, restart and stop on Processes), §6e (the Sessions page), §12h (the
+Settings editor) and a changelog entry, "Nothing to do. The web UI's session list moved from the settings dialog to a Sessions
+page." The release's own entry points back to v60 as it does to v59, and names the version v60 calls "the next daemon release
+after 1.3.0".

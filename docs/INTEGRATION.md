@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v59 — 2026-10-21.**
+**Document version: v60 — 2026-10-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -485,14 +485,19 @@ Then, whichever launcher you have, whenever you want to watch traffic:
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
 past 100 sessions or 300 MB.
 
-The top bar has **restart** and **stop**. `restart` relaunches the daemon in place — the page
-reconnects by itself and the archive is untouched. `stop` takes two clicks (`stop daemon?`), then
+A rail down the left of the page holds four pages: **Traffic**, where every session opens (§6e),
+**Sessions**, **Processes** and **Settings**. Each page has its own address (`#/sessions`, and so
+on), so the browser's back button and a bookmark both work.
+
+The **Processes** page has **restart** and **stop**. `restart` relaunches the daemon in place —
+the page reconnects by itself and the archive is untouched. `stop` takes two clicks (`stop daemon?`), then
 ends it: the page shows a **daemon stopped** banner with the time of the last capture and dims
 everything under it. Start it again with the same command above and the page reconnects on its
 own. Both refuse any request that does not come from this page, so another browser tab cannot reach
-in and kill your daemon.
+in and kill your daemon. The same page lists every Inspector process on your Mac — daemons and
+your editor's MCP servers — and kills one, or a selection, with a result per process.
 
-Beside them, `● connected` is the page's link to the daemon, and `live` / `paused` is whether the
+In the top bar, `● connected` is the page's link to the daemon, and `live` / `paused` is whether the
 list follows new traffic — resuming catches up on what arrived while paused.
 
 ### 6d. Android: permit cleartext to the daemon
@@ -570,10 +575,12 @@ back and a `new visit ↓` pill appears instead.
 
 The columns are filled from your payload — see §12d for the field names the tag browser reads.
 
-**Sessions** can be deleted from the UI: the `✕` beside the session picker removes the one on
-screen, and Settings → Sessions lists every session with a per-row delete and a **clear all**.
-Both arm on the first click and fire on the second. A session the app is still writing to is never
-deleted — pulling the folder out from under an open writer would lose the traffic on screen.
+**Sessions** can be deleted from the UI, on the **Sessions** page: it lists every session with a
+checkbox and a per-row `✕`, presets that select for you (`keep last N`, `older than N` days),
+**delete selected**, and a **clear all**. Each arms on the first click and fires on the second, and
+a bulk delete reports a result per session. A session the app is still writing to is never
+deleted, and no preset selects it — pulling the folder out from under an open writer would lose the
+traffic on screen.
 
 **A session can be exported** from the **export ▾** menu beside the session picker, as one file:
 **HTML** is this web UI working from disk with the session inside it — send it to someone with no
@@ -1255,7 +1262,8 @@ memory and sends. What the daemon *keeps on disk* is trimmed per tag when a sess
 `cache` and `state` keep their newest 500 rows, and every other tag is kept in full. So a signal
 can be delivered, shown live, and still not be in the session you open tomorrow.
 
-Raise it in `~/.inspector/config.json` on your Mac — it is daemon-side, so it is not in
+Raise it in `~/.inspector/config.json` on your Mac, by hand or from the web UI's **Settings**
+page, which applies it when the daemon next starts. It is daemon-side, so it is not in
 `InspectorConfig` and does not need a rebuild of your app:
 
 ```json
@@ -1300,7 +1308,24 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v59 — 2026-10-21 (this document)
+### v60 — 2026-10-21 (this document)
+
+**Nothing to do. The web UI's session list moved from the settings dialog to a Sessions page.**
+
+This describes the web UI of the next daemon release after 1.3.0. Your code, your coordinates and
+your release build are untouched; the change reaches you when you download that daemon. Until
+then, the 1.3.0 daemon's web UI is the one v59 described.
+
+- **A rail on the left replaces the settings dialog**, with Traffic, Sessions, Processes and
+  Settings pages (§6c).
+- **Sessions** (§6e): the list, its per-row delete and **clear all** are on the Sessions page, which
+  adds selection, presets and **delete selected**. The `✕` beside the session picker is gone.
+- **Processes** (§6c): **restart** and **stop** moved here from the top bar, beside the list of
+  Inspector processes, which can now be killed several at once.
+- **Settings**: the browser preferences, and an editor for the daemon's `config.json` (retention
+  and signal caps, §12h), applied when the daemon next starts.
+
+### v59 — 2026-10-21
 
 **If your code names `InspectorTheme`, `InspectorColors` or `LocalInspectorColors`, replace those
 uses with your own code before you upgrade past 1.3.0 — the steps are below. Otherwise there is
