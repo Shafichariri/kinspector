@@ -49,6 +49,7 @@ const { probeLiveRows } = require('./lib/live-filter-probes');
 const shell = require('./lib/shell-probes');
 const room = require('./lib/list-room-probes');
 const stats = require('./lib/stats-probes');
+const scan = require('./lib/scan-verdicts'); // each scan asserts it found something; see its header
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -381,19 +382,17 @@ function runScripts() {
     const rows = [...doc.querySelectorAll('#list .row')];
     const paths = rows.map((r) => [...r.querySelectorAll('.path-head, .path-tail')].map((n) => n.textContent).join(''));
     const hosts = rows.map((r) => r.querySelector('.host')?.textContent || null);
-    const strippedIdx = paths.map((p, i) => (p && !p.startsWith('/') ? i : -1)).filter((i) => i !== -1);
 
     return {
       shown: true,
       stickyInCss,
       label,
       count,
-      strippedRows: strippedIdx.length,
+      strippedRows: paths.filter((p) => p && !p.startsWith('/')).length,
       totalRows: rows.length,
       // A covered row must not also name the host the bar already claims, and a row that was not
       // stripped must name its own — otherwise it reads as belonging under the bar.
-      noRepeatedHost: strippedIdx.every((i) => !hosts[i]),
-      uncoveredNameTheirHost: paths.every((p, i) => (p && !p.startsWith('/')) || Boolean(hosts[i])),
+      ...scan.scopeRowVerdicts(vm.runInContext('state', vmContext), paths, hosts),
     };
   }
 
@@ -668,7 +667,9 @@ function runScripts() {
   const litChips = [orderOldest, orderNewest].filter((c) => c.classList.contains('on')).length;
   const flippedLabel = `${litChips} chip lit`;
   await click(startedNewest ? orderNewest : orderOldest);
-  const restored = rowIds().every((id, i) => id === beforeFlip[i]);
+  const back = rowIds();
+  const restored = scan.emptyScan(back.length, 'row after flipping back', beforeFlip.length ? null : 'no rows')
+    ?? (back.every((id, i) => id === beforeFlip[i]) ? `yes (${back.length} rows in their first order)` : 'NO - the rows came back in another order');
 
   /**
    * The timeline view: lanes, spans, provenance, and the payload viewer.
@@ -712,19 +713,8 @@ function runScripts() {
 
     // A tag this build has no styling for must still render, in the generic lane. Dropping it
     // would silently discard whatever an app chose to record.
-    const tags = [...doc.querySelectorAll('#timeline .tl-signal')].map((n) => n.dataset.tag);
-    const known = ['screen', 'state', 'cache', 'session'];
-    const unknown = tags.filter((t) => !known.includes(t));
-    if (unknown.length) {
-      const laneOf = [...doc.querySelectorAll('#timeline .tl-signal')]
-        .filter((n) => !known.includes(n.dataset.tag))
-        .map((n) => n.dataset.lane);
-      result.unknownTagRendered = laneOf.every((l) => l === 'other')
-        ? `yes (${unknown.length} in lane 'other')`
-        : `NO - landed in ${laneOf.join(',')}`;
-    } else {
-      result.unknownTagRendered = 'no unknown tags in this session';
-    }
+    const sessionId = encodeURIComponent(doc.getElementById('session-picker').value);
+    result.unknownTagRendered = scan.unknownTagVerdict(doc, await sessionSignals(sessionId));
 
     // The merge is the whole point: traffic and signals must interleave by mono, not sit in
     // separate blocks. Check that both kinds appear and that the order is monotonic.
@@ -739,9 +729,9 @@ function runScripts() {
       : `n/a (kinds: ${[...new Set(kinds)].join(',') || 'none'})`;
 
     // The "Now" panel.
-    const currentItems = [...doc.querySelectorAll('#current .current-item')];
-    result.currentRows = currentItems.length;
-    result.currentHasAge = currentItems.every((n) => n.querySelector('.current-age'));
+    result.currentRows = doc.querySelectorAll('#current .current-item').length;
+    const current = await fetch(`${ORIGIN}/api/sessions/${sessionId}/current`).then((r) => r.json());
+    result.currentHasAge = scan.currentAgeVerdict(doc, current);
 
     // Click a signal and confirm the payload viewer actually fetched and rendered it.
     const withPayload = [...doc.querySelectorAll('#timeline .tl-signal')].find(
@@ -1447,16 +1437,6 @@ function runScripts() {
     result.rows = doc.querySelectorAll('.wf-row').length;
     result.names = [...doc.querySelectorAll('.wf-name')].map((n) => n.textContent);
 
-    const listed = [...doc.querySelectorAll('.wf-row')].map((r) => r.dataset.id);
-    const unique = new Set(listed);
-    const inList = doc.querySelectorAll('#list .row').length;
-    result.everyCallOnce = listed.length === unique.size
-      ? `yes (${unique.size} of ${inList} calls, each once)`
-      : `NO - ${listed.length} rows for ${unique.size} calls`;
-    result.noneLost = unique.size === inList
-      ? 'yes'
-      : `NO - ${inList} calls in the list, ${unique.size} in the waterfall`;
-
     // Conservation only has teeth where the awkward case exists. A call that starts after the
     // last screen signal is caught by its own branch, and deleting that branch passes this probe
     // unnoticed on a session that happens to end on a signal — so report whether this session
@@ -1476,21 +1456,8 @@ function runScripts() {
         ? `yes (${trailing} after the last screen — the branch that catches them ran)`
         : 'n/a (none in this session, so that branch was not exercised here)';
     }
-
-    // Oldest first inside each visit. The daemon sends rows newest first, and a grouping that kept
-    // that order drew every visit upside down; only a screenshot noticed.
-    const monoOf = new Map((txns.items || []).map((x) => [x.id, x.mono]));
-    const backwards = [...doc.querySelectorAll('.wf-group')].filter((g) => {
-      const monos = [...g.querySelectorAll('.wf-row')].map((r) => monoOf.get(r.dataset.id));
-      return monos.some((m, i) => i > 0 && m < monos[i - 1]);
-    }).length;
-    result.oldestFirst = backwards ? `NO - ${backwards} groups out of order` : 'yes';
-
-    // Every bar has to be visible. A zero-width bar reads as a row that failed to draw.
-    const widths = [...doc.querySelectorAll('.wf-bar')].map((b) => parseFloat(b.style.width));
-    result.barsVisible = widths.every((w) => w > 0)
-      ? 'yes'
-      : `NO - ${widths.filter((w) => !(w > 0)).length} bars have no width`;
+    // Every call once and none lost, oldest first in each visit, every bar visible.
+    Object.assign(result, scan.waterfallVerdicts(doc, txns.items || []));
 
     const row = doc.querySelector('.wf-row');
     if (row) {
@@ -1625,26 +1592,18 @@ function runScripts() {
       ? `yes (${drawn.length} visits${leading ? ', one before the first screen' : ''})`
       : `NO - expected ${expected.join(' > ') || 'nothing'}, drew ${drawn.join(' > ') || 'nothing'}`;
     const stations = stops().map((s) => s.dataset.screen);
-    result.mapMatchesLog = stations.join(' > ') === drawn.join(' > ')
-      ? `yes (${stations.length} stations)`
-      : `NO - map ${stations.join(' > ')}, log ${drawn.join(' > ')}`;
+    result.mapMatchesLog = scan.emptyScan(stations.length, 'station', expected.length ? null : 'the session recorded nothing')
+      ?? (stations.join(' > ') === drawn.join(' > ')
+        ? `yes (${stations.length} stations)`
+        : `NO - map ${stations.join(' > ')}, log ${drawn.join(' > ')}`);
 
     // Conservation through the card counts, which survive folding: every call on exactly one visit.
     const counted = cols().reduce((n, c) => n + Number(c.querySelector('.pv-stats')?.dataset.calls || 0), 0);
     const inList = (txns.items || []).length;
     result.everyCallOnce = counted === inList ? `yes (${counted} calls)` : `NO - cards count ${counted}, session has ${inList}`;
 
-    // Every failure named: a line's "N failed" against the failures its chips account for when
-    // collapsed, or the failed rows drawn when expanded.
-    const failedIn = (c) => Number((c.querySelector('.pv-failed')?.textContent.match(/(\d+) failed/) || [0, 0])[1]);
-    const shownIn = (c) => (c.classList.contains('pv-open')
-      ? [...c.querySelectorAll('.pv-call .pv-status')].filter((n) => /s[45x]/.test(n.className)).length
-      : [...c.querySelectorAll('.pv-chip[data-failed]')].reduce((n, chip) => n + Number(chip.dataset.failed), 0));
-    const hiding = cols().filter((c) => failedIn(c) !== shownIn(c));
-    const summarised = cols().filter((c) => c.querySelector('.pv-chip[title="expand this visit"]')).length;
-    result.errorsUnfolded = hiding.length
-      ? `NO - ${hiding.map((c) => c.dataset.screen || 'leading').join(', ')} hide a failure`
-      : `yes (${summarised} summarised ${summarised === 1 ? 'line' : 'lines'} in this session)`;
+    // Every failure named, collapsed or expanded; read before anything here opens a line.
+    result.errorsUnfolded = scan.failuresUnfolded(cols());
 
     // A station opens its line. Expanded, the same failure rule must still hold.
     const target = stops()[Math.min(1, stops().length - 1)];
@@ -1656,8 +1615,7 @@ function runScripts() {
       result.stationOpensLine = line && line.classList.contains('pv-open') && line.classList.contains('pv-focus')
         ? `yes (${line.dataset.screen || 'leading'})`
         : 'NO - the line did not open';
-      const expandedHiding = cols().filter((c) => failedIn(c) !== shownIn(c));
-      result.expandedUnfolded = expandedHiding.length ? 'NO - an expanded line hides a failure' : 'yes';
+      result.expandedUnfolded = scan.expandedUnfolded(cols());
     }
 
     const call = doc.querySelector('#path .pv-chip-call, #path .pv-call');
@@ -1766,7 +1724,8 @@ function runScripts() {
       opened: true,
       seeded: Boolean(methodInput && methodInput.value) && Boolean(urlInput && urlInput.value.startsWith('http')),
       headerLines: headerNames.length,
-      hopByHopStripped: headerNames.every((n) => !HOP.includes(n)),
+      hopByHopStripped: scan.emptyScan(headerNames.length, 'seeded header', 'the row seeded no headers')
+        ?? (headerNames.every((n) => !HOP.includes(n)) ? `yes (${headerNames.length} seeded)` : `NO - ${headerNames.filter((n) => HOP.includes(n)).join(', ')} seeded`),
       hasBodyBox: Boolean(bodyBox),
       resignDefaultsOn: Boolean(form.querySelector('input[type=checkbox]')?.checked),
       malformedHeaderRejected: rejected,
@@ -2118,11 +2077,11 @@ function runScripts() {
   note('duplicate rows     :', dupRows.length, '(their labels and badges are checked on the next lines)');
   console.error('repeat counts calls:', repeatLabel, '(a retry inside a repeat is a row, not a call)');
   console.error(
-    'duplicate badges   :', dupBadges === dupRows.length ? `yes (${dupBadges})` : `NO - ${dupBadges} for ${dupRows.length} rows`,
+    'duplicate badges   :', !dupRows.length ? 'n/a (no repeats in this session)' : dupBadges === dupRows.length ? `yes (${dupBadges})` : `NO - ${dupBadges} for ${dupRows.length} rows`,
     '(must equal the rows — colour alone is not enough)',
   );
   const rowCount = doc.querySelectorAll('#list .row').length;
-  console.error('start times shown  :', clocks === rowCount ? `yes (${clocks} of ${rowCount})` : `NO - ${clocks} of ${rowCount}`);
+  console.error('start times shown  :', !rowCount ? 'n/a (no rows)' : clocks === rowCount ? `yes (${clocks} of ${rowCount})` : `NO - ${clocks} of ${rowCount}`);
   report(room.probeRowParts(shellCtx)); // a path's last segment and the repeat mark's two forms
   // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
   // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
@@ -2169,7 +2128,7 @@ function runScripts() {
 
   note('endpoint labels    :', chipLabels.join(' ') || 'none', '(their order is the next line)');
   console.error('chip order         :', chipOrder);
-  console.error('unanchored chips   :', unanchored === 0 ? 'yes (0)' : `NO - ${unanchored}`, '(must be 0)');
+  console.error('unanchored chips   :', !endpointChips.length ? 'n/a (no endpoint chips)' : unanchored === 0 ? `yes (0 of ${endpointChips.length})` : `NO - ${unanchored}`, '(must be 0)');
   console.error('chip filters rows  :', chipProbe.narrowed, `(${chipProbe.before} -> ${chipProbe.after} rows)`);
   console.error('chips survive click:', chipProbe.survived, `(${endpointChips.length} -> ${chipProbe.chipsAfter})`);
   console.error('chip marks active  :', chipProbe.active, '(the clicked chip, and only it)');

@@ -299,7 +299,8 @@ async function probeMoreMenu(ctx) {
     const listed = exports.length === 4 && rest.length === 2 && rest[0] === 'keyboard shortcuts' && rest[1].startsWith('compact rows');
     if (!hasSession) {
       return [['more menu', listed ? 'yes (4 exports, keyboard shortcuts, compact rows)' : `NO - ${exports.length} exports, then ${rest.join(', ')}`],
-        ['exportMenu', exports.every((a) => a.hidden) ? 'yes (hidden: nothing to export)' : 'NO - offered with no session']];
+        ['exportMenu', !exports.length ? 'NO - found no export item, so this checked nothing'
+          : exports.every((a) => a.hidden) ? `yes (${exports.length} hidden: nothing to export)` : 'NO - offered with no session']];
     }
     const id = encodeURIComponent(doc.getElementById('session-picker').value);
     const expected = ['export.html', 'export.md', 'export.json', 'har'].map((p) => `/api/sessions/${id}/${p}`);

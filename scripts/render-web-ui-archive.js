@@ -221,8 +221,11 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   );
   const daemonOnly = ['#live-btn', '.daemon-group', '.export-item', '#chips', '#endpoints-button',
     '#endpoint-chips', '#marker-form', '#browser-pull'];
+  // A control that is not there counts as hidden, so one whose selector matches nothing checked nothing.
+  const absent = daemonOnly.filter((sel) => !doc.querySelector(sel));
   const visible = daemonOnly.filter((sel) => !hiddenByCss(doc.querySelector(sel)));
-  check('daemon controls hidden', visible.length === 0, visible.join(', ') || 'all hidden');
+  check('daemon controls hidden', !absent.length && visible.length === 0,
+    absent.length ? `found no ${absent.join(', ')}, so this checked nothing` : visible.join(', ') || `all ${daemonOnly.length} hidden`);
   // `⋮` is offered, for the shortcut legend and compact rows; the exports in it would ask a daemon
   // for this session, so opened, it draws none of them.
   const more = doc.getElementById('more-button');
@@ -237,8 +240,10 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   // something or reads the machine.
   const rail = (page) => doc.querySelector(`#rail .rail-item[data-page="${page}"]`);
   const railShown = ['sessions', 'processes', 'settings'].filter((page) => !hiddenByCss(rail(page)));
-  check('pages hidden in export', railShown.length === 0 && !hiddenByCss(rail('traffic')),
-    railShown.length ? `shown: ${railShown.join(', ')}` : `traffic ${hiddenByCss(rail('traffic')) ? 'hidden too' : 'alone'}`);
+  const railAbsent = ['sessions', 'processes', 'settings'].filter((page) => !rail(page));
+  check('pages hidden in export', !railAbsent.length && railShown.length === 0 && !hiddenByCss(rail('traffic')),
+    railAbsent.length ? `found no rail link for ${railAbsent.join(', ')}, so this checked nothing`
+      : railShown.length ? `shown: ${railShown.join(', ')}` : `traffic ${hiddenByCss(rail('traffic')) ? 'hidden too' : 'alone'}`);
   window.location.hash = '#/processes';
   await sleep(300);
   check(

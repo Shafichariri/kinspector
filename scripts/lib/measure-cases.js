@@ -32,10 +32,12 @@ const SCROLLER = `(() => {
 })()`;
 
 // Is the scope bar the topmost element across its own width? A sticky note drawn over it (KIN-33)
-// fails this.
+// fails this. A hidden bar is a reading too, not a skipped one: it measured nothing, so it fails
+// unless the page holds no scope for the session (`state.scope`, from the whole session, which no
+// filter or view clears), and then it says n/a.
 const BAR_ON_TOP = `(() => {
   const bar = document.getElementById('scope-bar');
-  if (!bar || bar.hidden) return { hidden: true };
+  if (!bar || bar.hidden) return { hidden: true, due: Boolean(state.scope) };
   const b = bar.getBoundingClientRect();
   const hits = [b.left + 12, (b.left + b.right) / 2, b.right - 30].map((x) => {
     const e = document.elementFromPoint(x, (b.top + b.bottom) / 2);
@@ -43,6 +45,9 @@ const BAR_ON_TOP = `(() => {
   });
   return { onTop: hits.every((h) => h === 'bar'), hits };
 })()`;
+const barRow = (key, r) => (r.hidden
+  ? { key, value: r.due ? 'hidden' : 'n/a (no scope in this session)', ok: r.due ? false : null, detail: r.due ? 'the page holds a scope, so this measured nothing' : '' }
+  : { key, value: r.onTop ? 'on top' : 'covered', ok: r.onTop, detail: `${r.hits.length} points: ${r.hits.join(',')}` });
 
 async function load(page, url, width) {
   await page.setWidth(width);
@@ -79,7 +84,7 @@ async function layout(page, url, session) {
 
       await view(page, 'all');
       let r = await page.ev(BAR_ON_TOP);
-      if (!r.hidden) rows.push({ key: `${key} timeline scope bar`, value: r.onTop ? 'on top' : 'covered', ok: r.onTop, detail: r.hits.join(',') });
+      rows.push(barRow(`${key} timeline scope bar`, r));
       r = await page.ev(`(async () => {
         const sc = ${SCROLLER}; sc.scrollTop = 0; await new Promise((res) => setTimeout(res, 200));
         const bar = document.getElementById('scope-bar');
@@ -98,7 +103,7 @@ async function layout(page, url, session) {
 
       await view(page, 'path');
       r = await page.ev(BAR_ON_TOP);
-      if (!r.hidden) rows.push({ key: `${key} path scope bar`, value: r.onTop ? 'on top' : 'covered', ok: r.onTop, detail: r.hits.join(',') });
+      rows.push(barRow(`${key} path scope bar`, r));
       const stations = await page.ev(`document.querySelectorAll('#path .pv-stop').length`);
       for (let i = 0; i < stations; i++) {
         r = await page.ev(`(async () => {
@@ -119,7 +124,7 @@ async function layout(page, url, session) {
         await view(page, 'waterfall');
         r = await page.ev(`(async () => { const lp = document.getElementById('list-pane'); lp.scrollTop = lp.scrollHeight / 2;
           await new Promise((res) => setTimeout(res, 200)); return ${BAR_ON_TOP}; })()`);
-        if (!r.hidden) rows.push({ key: `${key} waterfall scope bar mid-scroll`, value: r.onTop ? 'on top' : 'covered', ok: r.onTop, detail: r.hits.join(',') });
+        rows.push(barRow(`${key} waterfall scope bar mid-scroll`, r));
       }
       await view(page, 'network');
     }
