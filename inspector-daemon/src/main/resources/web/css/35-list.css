@@ -144,7 +144,10 @@
 /* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
    the path column lines up across rows whose verbs differ in length. */
 .row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
-.row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A head and a last segment: the head ellipsizes, and the segment gives way after it — below 520px
+   not at all, because it is the part of the path that names the endpoint. */
+.row .path { font-family: var(--mono); flex: 1; min-width: 0; display: flex; white-space: nowrap; overflow: hidden; }
+.row .path-head, .row .path-tail { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Only drawn on rows the scope bar does not cover, so this is never repetition — it is the one
    row in a session that went somewhere else. */
 .row .host { font-size: 11px; flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -153,6 +156,18 @@
 .row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
 .row .attempt { font-size: 11px; color: var(--warn); }
+
+/* At 400px the fixed columns kept their width and every path was cut to four characters. Below
+   520px the columns narrow, the host gives way first and stops at 64px, and the path's last
+   segment does not shrink; the clock and the long repeat mark go in `55-duplicates.css`, where
+   their rules are. */
+@media (max-width: 519px) {
+  .row { gap: 6px; }
+  .row .method { width: 44px; }
+  .row .ms, .row .size { width: 46px; flex: none; }
+  .row .host { max-width: 64px; flex-shrink: 3; }
+  .row .path-tail { flex: none; }
+}
 
 .s2 { color: var(--ok); } .b2 { background: var(--ok); }
 .s3 { color: var(--redirect); } .b3 { background: var(--redirect); }

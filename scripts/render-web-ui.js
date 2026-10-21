@@ -47,6 +47,7 @@ const { probeLongSession } = require('./lib/long-session-probes');
 const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
 const { probeLiveRows } = require('./lib/live-filter-probes');
 const shell = require('./lib/shell-probes');
+const room = require('./lib/list-room-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -373,7 +374,7 @@ function runScripts() {
     // rows the bar does not cover as stripped — they start with a slash and a different prefix —
     // and the check would report 7 of 7 on a session where only 6 are covered.
     const rows = [...doc.querySelectorAll('#list .row')];
-    const paths = rows.map((r) => r.querySelector('.path')?.firstChild?.textContent || '');
+    const paths = rows.map((r) => [...r.querySelectorAll('.path-head, .path-tail')].map((n) => n.textContent).join(''));
     const hosts = rows.map((r) => r.querySelector('.host')?.textContent || null);
     const strippedIdx = paths.map((p, i) => (p && !p.startsWith('/') ? i : -1)).filter((i) => i !== -1);
 
@@ -1249,68 +1250,6 @@ function runScripts() {
   }
 
   /**
-   * The narrow-width drawer.
-   *
-   * Split in two on purpose. Whether it *opens and closes* is behaviour and is driven here;
-   * whether it is a drawer *at all* is a media query, and jsdom has no layout, so that half is
-   * read out of the stylesheet — a computed-style check would pass with the whole media block
-   * deleted, the same trap `auditHiddenPanes` and the long-token guard already avoid. The
-   * geometry itself was measured in a browser and is recorded in the commit.
-   */
-  async function probeDrawer() {
-    const result = { opensOnSelect: 'n/a', scrim: 'n/a', closeButton: 'n/a', escape: 'n/a', tabSwitch: 'n/a' };
-    const panes = doc.getElementById('panes');
-    const isOpen = () => panes.classList.contains('drawer-open');
-
-    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
-    if (network) {
-      await click(network);
-      await new Promise((r) => setTimeout(r, 400));
-    }
-    const row = doc.querySelector('#list .row');
-    if (!row) return result;
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 400));
-    result.opensOnSelect = isOpen() ? 'yes' : 'NO - selecting a row left it shut';
-    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'yes (shown)';
-
-    await click(doc.getElementById('drawer-close'));
-    await new Promise((r) => setTimeout(r, 200));
-    result.closeButton = isOpen() ? 'NO' : 'yes (closes)';
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    // jsdom dispatches a click to a hidden element as readily as to a shown one, so a scrim that
-    // never appeared would still "close" the drawer here. Nobody can click what is not drawn.
-    const scrim = doc.getElementById('drawer-scrim');
-    const scrimShown = !scrim.hidden;
-    await click(scrim);
-    await new Promise((r) => setTimeout(r, 200));
-    result.scrimCloses = !scrimShown
-      ? 'NO - the scrim was hidden, so there was nothing to click'
-      : isOpen() ? 'NO' : 'yes (closes)';
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await new Promise((r) => setTimeout(r, 200));
-    result.escape = isOpen() ? 'NO' : 'yes (closes)';
-
-    // A drawer covers the list it came from; carrying it across a tab switch would leave it
-    // sitting over a list that never produced it.
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    const other = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view !== 'network');
-    if (other) {
-      await click(other);
-      await new Promise((r) => setTimeout(r, 700));
-      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'yes (closes)';
-    }
-    return result;
-  }
-
-  /**
    * The transaction detail: one face at a time, response first.
    *
    * The assertions that matter are ordering ones. That the response body is the *first* thing in
@@ -2175,7 +2114,7 @@ function runScripts() {
   const jsonTreeProbe = await probeJsonTree();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
-  const drawerProbe = await probeDrawer();
+  const drawerLines = await room.probeDrawer(shellCtx);
   const toolbarProbe = await probeToolbar();
   const nowProbe = await probeNowStrip();
   const tabProbe = probeTabs();
@@ -2275,6 +2214,7 @@ function runScripts() {
   );
   const rowCount = doc.querySelectorAll('#list .row').length;
   console.error('start times shown  :', clocks === rowCount ? `yes (${clocks} of ${rowCount})` : `NO - ${clocks} of ${rowCount}`);
+  report(room.probeRowParts(shellCtx)); // a path's last segment and the repeat mark's two forms
   // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
   // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
   // also matched `profile/status` would quietly be lying.
@@ -2442,15 +2382,7 @@ function runScripts() {
   console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
   console.error('chain numbered     :', detailTabProbe.chainOrder, '(a first attempt has no `attempt` field)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
-  console.error('drawer opens       :', drawerProbe.opensOnSelect);
-  console.error('drawer scrim       :', drawerProbe.scrim ?? 'n/a');
-  const drawerCloses = [drawerProbe.closeButton, drawerProbe.scrimCloses, drawerProbe.escape];
-  console.error(
-    'drawer closes by   :',
-    drawerCloses.every((v) => String(v).startsWith('yes')) ? 'yes (button, scrim, esc)' : 'NO -',
-    `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`,
-  );
-  console.error('drawer on tab swap :', drawerProbe.tabSwitch);
+  report(drawerLines); // lib/list-room-probes.js
   note('tab labels         :', tabProbe.labels);
   console.error('tab bar shown      :', tabProbe.alwaysShown);
   console.error('tabs menu          :', tabsMenu);

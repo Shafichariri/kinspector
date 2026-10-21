@@ -422,6 +422,15 @@ The `✕` sits in a tools row above the detail header, in flow, rather than abso
 top right corner, where it covered `replay ▾` served and `copy for agent` in an export
 (`room 1000 close disjoint served` and `… export`, red with it placed absolutely again).
 
+**A narrow row gives up its clock and host before its path's last segment, its byte count or its
+repeat mark.** At 400px paths were cut to four characters while the fixed columns kept full width.
+The path is drawn as a head that ellipsizes and a last segment that never shrinks; the repeat mark is
+its own item, reading `2×` below 520px, the overlay's form, because a tint alone does not say how
+many times. `room 400 rows` measures every row of the probe session, red with the 519px row block
+removed; `narrow row css` reads the rules, and the live probe's `row parts` holds that the segment is
+the last one of the path the row shows, after the scope bar's prefix, and that both forms of the mark
+count the calls.
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

@@ -425,6 +425,15 @@ function setSortOrder(newestFirst) {
   if (state.view !== 'all' && state.view !== 'network') renderBrowser();
 }
 
+/**
+ * A displayed path as `[head, tail]`: the tail is its last non-empty segment with any trailing `/`,
+ * the head everything before it. A path with no segment (`/`) is all tail.
+ */
+function splitPath(path) {
+  const at = String(path).search(/[^/]+\/*$/);
+  return at === -1 ? ['', String(path)] : [path.slice(0, at), path.slice(at)];
+}
+
 function rowFor(txn) {
   const cls = statusClass(txn.status);
   const row = el('div', 'row');
@@ -457,16 +466,28 @@ function rowFor(txn) {
 
   // Stripped when the bar above already says this front. The bar is what makes that safe: it is
   // on screen, it does not scroll away, and it names the exact prefix that was removed.
-  const path = el('span', 'path', scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path);
+  const shown = scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path;
+  // Two parts, so a narrow row ellipsizes the front and keeps the end: at 400px one span cut every
+  // path to four characters, and the last segment is the part that names the endpoint.
+  const [head, tail] = splitPath(shown);
+  const path = el('span', 'path');
+  path.title = shown;
+  path.appendChild(el('span', 'path-head', head));
+  path.appendChild(el('span', 'path-tail', tail));
   if (attemptOf(txn) > 1) {
     const badge = el('span', 'attempt', ` ·attempt ${attemptOf(txn)}`);
     path.appendChild(badge);
   }
-  if (duplicate) {
-    // Colour alone is invisible to some readers and unexplained to the rest.
-    path.appendChild(el('span', 'dup-badge', ` ·repeated ${duplicate.count}x`));
-  }
   row.appendChild(path);
+  if (duplicate) {
+    // Colour alone is invisible to some readers and unexplained to the rest. Its own item rather
+    // than the end of the path, which a narrow row cut; below 520px it reads `2×`, the overlay's
+    // form, because a tint alone does not say how many times.
+    const badge = el('span', 'dup-badge');
+    badge.appendChild(el('span', 'dup-long', ` ·repeated ${duplicate.count}x`));
+    badge.appendChild(el('span', 'dup-short', `${duplicate.count}×`));
+    row.appendChild(badge);
+  }
 
   row.appendChild(el('span', 'ms', fmtMs(txn.ms)));
   row.appendChild(el('span', 'size', fmtBytes(Math.max(txn.reqBytes || 0, txn.resBytes || 0))));

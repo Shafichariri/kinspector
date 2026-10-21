@@ -134,4 +134,23 @@ function auditClosedDrawer(styles) {
   return missing.length ? `NO - ${missing.join('; ')}` : 'yes (closed: visibility hidden, #panes clipped; shadow only under .drawer-open)';
 }
 
-module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer };
+/**
+ * Below 520px a row keeps its path's last segment, its byte count and its repeat mark whole: the
+ * `max-width: 519px` blocks hide the clock and the long repeat mark and show the short one
+ * (`55-duplicates.css`, where those rules are), and the last segment does not shrink
+ * (`35-list.css`). `room 400 rows` in `measure-web-ui.js` measures the rows themselves.
+ */
+function auditNarrowRow(styles) {
+  const dup = mediaBody(sheet(styles, 'css/55-duplicates.css'), 'max-width: 519px');
+  const list = mediaBody(sheet(styles, 'css/35-list.css'), 'max-width: 519px');
+  if (dup === null || list === null) return `NO - no @media (max-width: 519px) block in ${dup === null ? 'css/55-duplicates.css' : 'css/35-list.css'}`;
+  const missing = [
+    !sets(rule(dup, '.row .clock'), 'display', 'none') && 'the clock is drawn',
+    !sets(rule(dup, '.dup-long'), 'display', 'none') && '.dup-long is drawn',
+    !sets(rule(dup, '.dup-short'), 'display', 'inline') && '.dup-short is not shown',
+    !sets(rule(list, '.row .path-tail'), 'flex', 'none') && '.path-tail can shrink',
+  ].filter(Boolean);
+  return missing.length ? `NO - ${missing.join('; ')}` : 'yes (below 520px: no clock, the repeat mark as N×, the last segment never shrinks)';
+}
+
+module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow };

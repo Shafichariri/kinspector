@@ -33,7 +33,8 @@
  *   - the shell: the address parser, the Sessions and Processes presets, the control header written in
  *     one place, and the narrow top bar and tab bar rules;
  *   - the list pane's room: nothing sticky in it taking its `top` from anything but `--sticky-top`,
- *     and a closed drawer hidden from the keyboard and the page's width, with no shadow.
+ *     a closed drawer hidden from the keyboard and the page's width, with no shadow, and a narrow
+ *     row keeping its path's last segment and its repeat mark.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -59,7 +60,7 @@ const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
-const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer } = require('./lib/layout-audits');
+const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow } = require('./lib/layout-audits');
 
 const results = [];
 const report = (label, value) => {
@@ -139,6 +140,7 @@ async function main() {
   report('narrow tabs css', auditNarrowTabs(styles));
   report('sticky top', auditStickyTop(styles));
   report('closed drawer css', auditClosedDrawer(styles));
+  report('narrow row css', auditNarrowRow(styles));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

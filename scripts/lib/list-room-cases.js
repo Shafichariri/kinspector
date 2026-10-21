@@ -7,7 +7,8 @@
  * nor takes focus from Tab, which is walked with real key presses until focus comes back round
  * (`room <w> tab never enters closed`), and casts no shadow in either colour scheme (`room <w> closed
  * shadow <scheme>`); the open drawer's `✕` overlaps no header action, served and in an HTML export
- * opened from disk (`room 1000 close disjoint served` / `… export`).
+ * opened from disk (`room 1000 close disjoint served` / `… export`); at 400px every row of the probe
+ * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`).
  *
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
@@ -127,9 +128,46 @@ async function drawer(page, url, rows) {
   }
 }
 
+// Every row at this width: its path's last segment, its byte count and its repeat mark whole and
+// inside the row, the clock gone, the short repeat mark the one shown.
+const ROWS = `(() => {
+  const whole = (e, box) => { const r = e.getBoundingClientRect();
+    return e.getClientRects().length > 0 && e.scrollWidth <= e.clientWidth + 0.5 && r.left >= box.left - 0.5 && r.right <= box.right + 0.5; };
+  const rows = [...document.querySelectorAll('#list .row')];
+  const bad = [];
+  let repeats = 0;
+  for (const row of rows) {
+    const box = row.getBoundingClientRect();
+    const tail = row.querySelector('.path-tail');
+    const size = row.querySelector('.size');
+    const badge = row.querySelector('.dup-badge');
+    const said = (tail ? tail.textContent : '?') + ' ' + (size ? size.textContent : '?');
+    if (!tail || !whole(tail, box)) bad.push('tail of ' + said);
+    if (!size || !whole(size, box)) bad.push('size of ' + said);
+    if (badge) {
+      repeats++;
+      const short = badge.querySelector('.dup-short');
+      if (!whole(badge, box) || !short || getComputedStyle(short).display === 'none') bad.push('repeat of ' + said);
+    }
+  }
+  const clocks = [...document.querySelectorAll('#list .row .clock')].filter((c) => c.getClientRects().length).length;
+  return { rows: rows.length, repeats, bad, clocks };
+})()`;
+
+/** Below 520px a row gives up its clock and its host before its last segment, bytes or repeat mark. */
+async function narrowRows(page, url, rows) {
+  await load(page, url, 400);
+  const r = await page.ev(ROWS);
+  const ok = Boolean(r) && !r.evalError && r.rows > 0 && r.bad.length === 0;
+  rows.push({ key: 'room 400 rows', value: ok ? 'whole' : r && r.bad ? 'cut' : 'not measured', ok,
+    detail: !r || r.evalError ? String(r && r.evalError)
+      : `${r.rows} rows, ${r.repeats} repeat marks, ${r.clocks} clocks drawn${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
+}
+
 async function room(page, url) {
   const rows = [];
   await drawer(page, url, rows);
+  await narrowRows(page, url, rows);
   const seen = [...new Set(page.exceptions)];
   rows.push({ key: 'room page exceptions', value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') });
   return rows;
