@@ -7,9 +7,9 @@ Latest per-target counts from QA, each at the commit named and none a full-repos
 `:inspector-model:jvmTest` 160/0 at `1da0d75`; `:inspector-ui:jvmTest`
 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-core:jvmTest` 73/0, `:inspector-noop:jvmTest` 3/0,
 `:inspector-stream:jvmTest` 3/0, `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at
-`1479c30`; `:inspector-daemon:test` 299/0 at `e9f7131` (QA, PR #108; 271 on its base); web static checks 99/0,
-live probe 225 passed 0 failed 1 n/a and archive probe 40 passed at `433f30d` (QA, KIN-58 round 2). The daemon figure is older than the web ones, and #115 and
-later commits add daemon tests that nobody has counted.
+`1479c30`; `:inspector-daemon:test` 299/0 at `e9f7131` (QA, PR #108; 271 on its base); web static checks 102/0,
+live probe 236 passed 0 failed 1 n/a and archive probe 43 passed at `4fe71dc` (QA, `item:web-foundation-list-room`, round 1). The daemon figure is older than the web ones, and #115 and
+later commits add daemon tests that nobody has counted. At `4fe71dc` QA also ran `:repo-checks:test --rerun`, green.
 Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
 has no Android SDK and no working `xcrun`; CI runs them.
 
@@ -129,6 +129,12 @@ on `main` at `433f30d` was queued when QA looked and was not seen finishing. Cou
 probe 219 to 225 (the fix round strengthened a line and added none), archive probe 40, `:repo-checks:test` green; no Kotlin change.
 `docs/ROADMAP-DONE.md` §3 has the detail.
 
+**`item:web-foundation-list-room` (1b) is done** (2026-10-21, on `main` at `4fe71dc`; PR #119; KIN-78 to KIN-86). Done on QA's evidence, one round,
+no blocking findings. CI on PR #119: `build`, `release-swap`, `repo` and `web` green; the push run on `main` at `4fe71dc` was in progress
+when QA wrote and was not seen finishing. Built from the architect's design note without a design review and without a UX pass, and with QA
+after the merge, by the maintainer's choice for this run. Counts, base `1e9d720` to head: static checks 99 to 102, live probe 225 to 236,
+archive probe 40 to 43; no Kotlin change. `docs/ROADMAP-DONE.md` §6 has the detail.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -162,6 +168,22 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   read 120 together, and paused or for another session nothing moved. Red by QA: `drawLive()` removed (`socket call drawn`,
   `live timeline plain`, `live glance plain`, `live glance filter`), `followLiveCount()` removed (`live picker count`), a redraw
   per call (`live draw burst of 100`), and `setLiveTail` put back to `952b6c6` (`live paused still`).
+- **Web UI room for the list (1b), in headless Chrome at 1440, 1000 and 400 px, live and in an export.** At `4fe71dc` (QA, round 1): the toolbar is
+  one row from 1000 px (37 px; at 400 it wraps and fits) with `endpoints ▾` and a `⋮` menu holding the exports, keyboard shortcuts and compact
+  rows, and an export offers no export item; the overview is one line (33 px) and the list pane's top is 145 px at 1440 on the list and the
+  timeline views (base 208 and 234 px; the bar is 160 px); the divider resizes the list from 605 to 805 px, keeps it across a reload and a
+  double-click restores 605, and `⇥` hides the detail column; `#/txn/{id}` opens the oldest call of a 1203-call session, which is not among the
+  1000 rows the list holds, on its own page, Back and Esc return, an unknown id reads `no transaction …` served and `… is not in this export`
+  in the export; a closed drawer at 1000 px leaves the document 1000 wide, draws no shadow and none of the 8 controls inside it can take focus,
+  and the open drawer's close box overlaps none of the 7 header actions; across 1000 rows at 400 px, none has its path tail or byte count cut,
+  and the repeat mark reads `2×`; on the 1203-call session the tab (`traffic 1203`), the header (`newest 1000 of 1203 shown`), the scope bar
+  (`1203 of 1203 calls under this prefix`), the overview and the glance each say what they count, and the two that count the session agree,
+  live and exported; with live paused, the list returns at 5000, the timeline opens at 0 and then where it was left (2000), and with live on
+  it opens at its end. Counts: static 102/0, live probe 236 passed 0 failed 1 n/a, archive probe 43 passed; `measure-web-ui.js --base`
+  265 readings, 18 failing at base and 2 at head (`first rows huge`, `connected huge`, KIN-42's, on both sides). Red by QA: `top: 0` on
+  `#timeline > .filter-note` (`sticky top`), `visibility: hidden` removed from the closed drawer (`closed drawer css`), an unlabelled scope
+  count (`counts agree`), and `openViewPlace` restoring nothing (`views keep place`). Two base probes were replaced by stronger ones, not
+  deleted: `rowLabels` by `toolbar one row`, `shortcuts` by `shortcuts in menu`.
 - **Web UI shell (1a), in headless Chrome 131 and the probes, at 1440, 1000, 600 and 400 px, live and in an export.** Rail and
   hash routes (Traffic, Sessions, Processes, Settings; an export keeps Traffic only and falls back); Sessions, Processes and
   Settings pages; bulk kill and bulk delete answering per item, each on a real daemon (a real peer killed, a live non-inspector
@@ -320,12 +342,20 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   (`item:control-boundary-advisory`, last in the order). The new routes leave room for it, and the gaps are not described here.
 - **1a's shell in Safari, Firefox and on a phone.** Only headless Chrome 131 was driven. Nobody has judged how the new rail and
   pages *look*: the builder and QA looked at screenshots, no UX review ran, and no design council sat on this item.
+- **1b's room for the list was built without a design review and without a UX pass, and QA rendered it in headless Chrome only.** Nobody has
+  judged how the one-row toolbar, the `⋮` menu, the overview line, the divider or the `#/txn` page *look* or feel, in Safari, Firefox or on a
+  phone. The tools row's `⤢` and `⇥` glyphs are 13 px and nobody has judged them. `#/txn` has no visible way back (Back and Esc only).
+- **For 1b, the full `./gradlew build`** was not run on the QA machine (no Android SDK); CI ran it on the PR. The push run on `main` at `4fe71dc`
+  was not seen finishing. Not looked at by anyone: the drawer's slide-in and its reduced-motion behaviour (readings cover state, not the
+  animation), `#/txn` exported at 400 px, and the divider dragged by keyboard in real Chrome (jsdom covers it). QA ran no mutation on the
+  `#/txn` route, the toolbar or the divider probes; for those, base-red and head-green stand in, and the engineers' red proofs are in their
+  reports, not repeated.
 - **For 1a, the full `./gradlew build` and `-Pinspector=off`** were not run on the QA or builder machine (no Android SDK); CI ran
   them. The `measure-web-ui.js` `first` section (the 160k-call session) was not run. The engineer's `processes bulk` probe stubs the
   kill reply; the real case of a peer exiting before the kill was seen only by QA, in round 2.
 - **The "recovers" probe's red proof** is the engineer's record in PR #112's body; QA did not repeat it.
-- **Known and left for 1b:** the closed detail drawer sits off-screen right at 1000 and 400 px and widens the page (1646 px at 1000).
-  **Older, not 1a's:** the Sessions page says sessions live under `~/.inspector/sessions` even with `--data` elsewhere.
+- **Fixed by 1b (2026-10-21):** the closed detail drawer that widened the page at 1000 and 400 px; see Verified.
+- **Older, not 1a's:** the Sessions page says sessions live under `~/.inspector/sessions` even with `--data` elsewhere.
 - **The full `./gradlew build` for the six items of 2026-10-21 was not run on the QA machine** (no Android SDK).
   It rests on CI, which was green on each PR. For phase H and phase I the `-Pinspector=off` build on the Android
   and iOS targets, the iOS framework and test links (no working `xcrun`) and the klib half of

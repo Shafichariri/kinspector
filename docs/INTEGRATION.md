@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v60 — 2026-10-21.**
+**Document version: v61 — 2026-10-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -545,16 +545,24 @@ One tab per kind of thing the session recorded, because each kind reads differen
 
 | Tab | What it is |
 |---|---|
-| `network` | Traffic, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL. Every session opens here |
+| `traffic` | The calls, with marker dividers, filters, endpoint shortcuts, and a detail pane carrying headers, bodies and copy-as-cURL. Every session opens here, and its count is the whole session's |
 | `path` | The screens the user moved through: a map of stations along the top, and beneath it one line per visit with the calls, signals and markers that started while it was on. Click a station or a line to open it. Needs `screen` signals (§12c); without them it is one line saying so |
-| `all` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12) |
+| `timeline` | Traffic, signals and markers merged on the device clock — appears once the session has signals (§12) |
 | `waterfall` | Calls grouped by the screen that was on when each started, with a bar per call showing where the time went |
 | one per tag | A key list beside one key's detail, for `cache`, `screen`, `state`, and any tag Inspector has never heard of |
 
-On `all`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value was
-held, and an unrecognised tag gets a generic lane. A **Now** panel in the rail answers what screen
-was up and what was cached, whatever tab you are on, with an age counted against your device's own
-timestamp.
+On `timeline`, `screen` and `state` are drawn as points, `cache` as spans showing how long a value
+was held, and an unrecognised tag gets a generic lane. There a **now** strip, on the same line as
+the time axis, answers what screen was up and what was cached, with an age counted against your
+device's own timestamp; click it for the list.
+
+The traffic toolbar is one row from 1000px wide: the filter box, the quick filters,
+**endpoints ▾** (the session's own endpoints, one click each), the order control, **markers**, and
+**⋮**, which holds the exports (below), the keyboard shortcuts and **compact rows** (also on the
+Settings page). From 1200px wide
+the list and the detail sit side by side: drag the divider between them to resize (double-click
+resets), or hide the detail with **⇥** and bring it back from the tab at the right edge. **⤢** opens
+the selected call on a page of its own, at `#/txn/<id>`; Back or Esc returns to the list.
 
 A tag tab lists one entry per key — the cache key, or the signal name — with its freshness
 and how long ago it was last seen. Selecting one shows its current value as a foldable JSON tree
@@ -582,7 +590,7 @@ a bulk delete reports a result per session. A session the app is still writing t
 deleted, and no preset selects it — pulling the folder out from under an open writer would lose the
 traffic on screen.
 
-**A session can be exported** from the **export ▾** menu beside the session picker, as one file:
+**A session can be exported** from the **⋮** menu at the end of the traffic toolbar, as one file:
 **HTML** is this web UI working from disk with the session inside it — send it to someone with no
 Inspector and they can open it — **Markdown** is a readable record for a ticket or a chat, **JSON**
 is everything for tools, and **HAR** is the calls alone for DevTools. Each holds the whole session,
@@ -1308,7 +1316,31 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v60 — 2026-10-21 (this document)
+### v61 — 2026-10-21 (this document)
+
+**Nothing to do. The web UI's exports moved from `export ▾` beside the session picker to the `⋮`
+menu at the end of the traffic toolbar; nothing else about exporting changed.**
+
+Like v60, this describes the web UI of the next daemon release after 1.3.0. Your code, your
+coordinates and your release build are untouched; the change reaches you when you download that
+daemon. Until then, the 1.3.0 daemon's web UI is the one v59 described.
+
+- **The traffic toolbar is one row** from 1000px wide (§6e). The session's endpoint shortcuts are
+  behind **endpoints ▾**, and **⋮** holds the four exports, the keyboard shortcuts and
+  **compact rows**, which is also on the Settings page.
+- **The time axis and the now strip share one line**, and the now list opens over the rows instead
+  of pushing them down.
+- **The list and the detail can be resized** from 1200px wide by dragging the divider (double-click
+  resets), and the detail can be hidden and brought back.
+- **A call opens on a page of its own** at `#/txn/<id>`, from **⤢** in the detail; Back or Esc
+  returns to the list.
+- **Every count says what it counts**, and the traffic tab counts the whole session, as the signal
+  tabs do.
+- **Fixed**: below 1200px a closed detail drawer could be reached with Tab and widened the page; at
+  400px rows lost their path and byte count; with live tail paused, each traffic view now reopens
+  where you left it.
+
+### v60 — 2026-10-21
 
 **Nothing to do. The web UI's session list moved from the settings dialog to a Sessions page.**
 
@@ -1417,9 +1449,9 @@ changed, so a release build using the no-op artifacts is unaffected.
   dials it through usbmuxd. Cable only — Wi-Fi pairing is skipped by design. See §6f. Until now
   only the overlay worked on an iPhone.
 - **A session can be exported as one file** — HTML (the web UI, working offline with the session
-  inside), Markdown, or JSON — from the web UI's **export ▾** menu, from REST, or by an agent
-  through the new MCP tool `export_session`. See §6e. The files carry whatever capture recorded,
-  credentials included unless you enabled redaction.
+  inside), Markdown, or JSON — from the web UI's **export ▾** menu (the toolbar's **⋮** since
+  v61), from REST, or by an agent through the new MCP tool `export_session`. See §6e. The files
+  carry whatever capture recorded, credentials included unless you enabled redaction.
 - **A HAR export of a session over 1000 calls is no longer cut off at 1000.** It stopped there
   silently before. If you handed someone a HAR of a long session, it was incomplete.
 - **The MCP server reports its real version** in `serverInfo.version`. It said `1.0.0` from 1.0.0
