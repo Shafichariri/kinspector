@@ -1,9 +1,10 @@
 ---
 id: KIN-85
 title: Every count says what it counts
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-21 13:45'
+updated_date: '2026-10-21 14:36'
 labels:
   - 'item:web-foundation-list-room'
 dependencies:
@@ -29,3 +30,9 @@ Design: the architect's note for item:web-foundation-list-room (run of 2026-10-2
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built in d9484cf. Traffic tab counts state.sessionTotal (js/20-navigation.js); scope bar 'N of M calls under this prefix', 'N/M under prefix' below 520px (js/25-traffic-list.js, css/35-list.css); overview hint 'N calls in this session' and in a stretch 'N calls in this stretch · <from> – <to>', counted from the whole session (js/55-axis.js); glance 'calls in session' ('calls in stretch' under a brushed stretch) (js/65-browser-detail.js). Review finding: the hint was cut at 1440/1000 because .axis had flex-basis auto (its svg's width); it now has a zero basis and gives way (css/25-axis.css). Checks: 'counts agree' live and 'counts agree in export' on the 1203-call session, label table includes row 3's header and list-note match wordings (red: bare scope count -> unlabelled, tab counting rows -> 1000 for the session); row 5's 'live glance plain/filter' read 'calls in session'; 'live header filter' now asserts the tab's session count, with the reason in a comment (red: tab back to rows); measure-web-ui 'room <w> hint whole' at 1440 and 1000 (red: flex-basis auto) and 'topbar <w> count' now also at 1000 and for 'N of M calls' and the filter-plus-stretch wording. Ready for QA.
+<!-- SECTION:NOTES:END -->
