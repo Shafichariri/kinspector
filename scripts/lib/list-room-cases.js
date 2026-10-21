@@ -108,10 +108,15 @@ async function drawer(page, url, rows) {
   }
   await load(page, url, 1000);
   await openThenClose(page);
+  // Focus never entering the drawer passes over a drawer with nothing in it, so the closed drawer
+  // must still hold the row's detail, the controls a Tab could wrongly reach.
+  const held = await page.ev(`document.querySelectorAll('#detail button, #detail a[href], #detail input, #detail select, #detail [tabindex]').length`);
   const t = await tabWalk(page);
-  const ok = t.round && t.inside.length === 0 && t.maxX === 0;
-  rows.push({ key: 'room 1000 tab never enters closed', value: ok ? 'never' : t.inside.length ? 'enters' : t.maxX ? 'scrolls' : 'no round',
-    ok, detail: `${t.stops} stops in ${t.presses} presses${t.inside.length ? `; inside: ${t.inside.slice(0, 4).join(' ')}` : ''}; scrollX at most ${t.maxX}` });
+  const ok = held > 0 && t.round && t.inside.length === 0 && t.maxX === 0;
+  rows.push({ key: 'room 1000 tab never enters closed', ok,
+    value: !(held > 0) ? 'NO - found no control in the closed drawer, so this checked nothing'
+      : ok ? 'never' : t.inside.length ? 'enters' : t.maxX ? 'scrolls' : 'no round',
+    detail: `${held} controls in the closed drawer; ${t.stops} stops in ${t.presses} presses${t.inside.length ? `; inside: ${t.inside.slice(0, 4).join(' ')}` : ''}; scrollX at most ${t.maxX}` });
   for (const scheme of ['light', 'dark']) {
     await page.colorScheme(scheme);
     await sleep(200);
@@ -159,17 +164,24 @@ const ROWS = `(() => {
     }
   }
   const clocks = [...document.querySelectorAll('#list .row .clock')].filter((c) => c.getClientRects().length).length;
-  return { rows: rows.length, repeats, bad, clocks };
+  // How many held rows are repeats, from the session's duplicates rather than the marks scanned.
+  const due = state.transactions.filter((t) => state.duplicates.has(t.id)).length;
+  return { rows: rows.length, repeats, due, bad, clocks };
 })()`;
 
 /** Below 520px a row gives up its clock and its host before its last segment, bytes or repeat mark. */
 async function narrowRows(page, url, rows) {
   await load(page, url, 400);
   const r = await page.ev(ROWS);
-  const ok = Boolean(r) && !r.evalError && r.rows > 0 && r.bad.length === 0;
-  rows.push({ key: 'room 400 rows', value: ok ? 'whole' : r && r.bad ? 'cut' : 'not measured', ok,
+  // The repeat marks are a scan of their own: none drawn where the list holds a repeat checked nothing.
+  const noMarks = Boolean(r) && !r.evalError && r.repeats === 0 && r.due > 0;
+  const ok = Boolean(r) && !r.evalError && r.rows > 0 && r.bad.length === 0 && !noMarks;
+  rows.push({ key: 'room 400 rows', ok,
+    value: noMarks ? `NO - found no repeat mark (${r.due} rows held are repeats), so this checked nothing`
+      : ok ? 'whole' : r && r.bad ? 'cut' : 'not measured',
     detail: !r || r.evalError ? String(r && r.evalError)
-      : `${r.rows} rows, ${r.repeats} repeat marks, ${r.clocks} clocks drawn${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
+      : `${r.rows} rows, ${r.repeats} repeat marks${r.due ? '' : ' (n/a: no row held is a repeat)'}, ${r.clocks} clocks drawn`
+        + `${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
 }
 
 // Every band above the list, by height, and where the list pane starts. Base and head name their
@@ -222,13 +234,15 @@ async function toolbar(page, url, rows) {
       rows.push({ key: `room ${width} toolbar`, value: 'not measured', ok: false, detail: String(t && (t.evalError || 'no .toolbar-row')) });
       continue;
     }
-    const fits = t.scroll <= t.client + 0.5 && t.doc <= t.width;
+    // An empty row fits, so a toolbar that drew no control would pass over nothing.
+    const none = t.controls === 0 ? 'NO - found no toolbar control, so this checked nothing' : null;
+    const fits = t.controls > 0 && t.scroll <= t.client + 0.5 && t.doc <= t.width;
     const detail = `${t.controls} controls on ${t.lines} line(s), ${t.height}px tall; row ${t.scroll} of ${t.client}, document ${t.doc} of ${t.width}`;
     if (width >= 1000) {
       const ok = t.lines === 1 && fits;
-      rows.push({ key: `room ${width} toolbar one row`, value: ok ? 'one row' : t.lines > 1 ? `${t.lines} rows` : 'overflows', ok, detail });
+      rows.push({ key: `room ${width} toolbar one row`, value: none || (ok ? 'one row' : t.lines > 1 ? `${t.lines} rows` : 'overflows'), ok, detail });
     } else {
-      rows.push({ key: `room ${width} toolbar fits`, value: fits ? 'fits' : 'overflows', ok: fits, detail });
+      rows.push({ key: `room ${width} toolbar fits`, value: none || (fits ? 'fits' : 'overflows'), ok: fits, detail });
     }
   }
 }

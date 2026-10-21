@@ -63,8 +63,9 @@ async function topBar(page, url, session) {
     await page.setWidth(width);
     await sleep(400);
     const r = await page.ev(READ);
+    // No word read is no line, so an empty count already fails; it says so rather than "wrapped".
     const whole = r.lines === 1 && r.out.length === 0;
-    rows.push({ key: `${key} count`, value: whole ? 'one line, inside the bar' : 'wrapped or clipped',
+    rows.push({ key: `${key} count`, value: whole ? 'one line, inside the bar' : r.lines === 0 ? 'NO - found no word in #counts, so this checked nothing' : 'wrapped or clipped',
       ok: whole, detail: `"${r.text}", ${r.lines} line(s)${r.out.length ? `, outside: ${r.out.join(' ')}` : ''}` });
     return r;
   };

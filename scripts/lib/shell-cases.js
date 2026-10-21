@@ -55,11 +55,12 @@ const READ = `(() => {
   const fr = face ? face.getBoundingClientRect() : null;
   const timeWhole = Boolean(time && time.textContent.trim()) && time.scrollWidth <= time.clientWidth + 0.5
     && tr.left >= fr.left - 0.5 && tr.right <= fr.right + 0.5 && inside(tr);
-  const railOut = [...document.querySelectorAll('#rail .rail-item')]
-    .filter((a) => !a.getClientRects().length || !inside(a.getBoundingClientRect())).map((a) => a.dataset.page);
+  const rail = [...document.querySelectorAll('#rail .rail-item')];
+  const railOut = rail.filter((a) => !a.getClientRects().length || !inside(a.getBoundingClientRect())).map((a) => a.dataset.page);
   return {
     bar: { scroll: bar.scrollWidth, width: innerWidth, height: Math.round(bar.getBoundingClientRect().height) },
-    controls, timeWhole, time: time ? time.textContent : null, railOut, railWidth: Math.round(document.getElementById('rail').getBoundingClientRect().width),
+    controls, timeWhole, time: time ? time.textContent : null, rail: rail.length, railOut,
+    railWidth: Math.round(document.getElementById('rail').getBoundingClientRect().width),
   };
 })()`;
 
@@ -115,8 +116,12 @@ async function shell(page, url, session) {
     rows.push({ key: `shell ${width} controls`, value: reached ? 'pointer+keyboard' : r.controls.filter((c) => !c.endsWith(':pointer+keyboard')).join(' '),
       ok: reached, detail: '' });
     rows.push({ key: `shell ${width} picker time`, value: r.timeWhole ? 'whole' : 'cut', ok: r.timeWhole, detail: `"${r.time}"` });
-    rows.push({ key: `shell ${width} rail`, value: r.railOut.length ? 'outside' : 'inside', ok: r.railOut.length === 0,
-      detail: `${r.railWidth}px${r.railOut.length ? `, outside: ${r.railOut.join(' ')}` : ''}` });
+    // Every rail link inside the window passes over no link at all, so the scan must find one: with
+    // `class="rail-item"` renamed it read `inside` at every width (KIN-87).
+    const railOk = r.rail > 0 && r.railOut.length === 0;
+    rows.push({ key: `shell ${width} rail`, ok: railOk,
+      value: !r.rail ? 'NO - found no rail item, so this checked nothing' : r.railOut.length ? 'outside' : 'inside',
+      detail: `${r.railWidth}px, ${r.rail} rail items${r.railOut.length ? `, outside: ${r.railOut.join(' ')}` : ''}` });
     for (const name of PAGES) {
       await page.ev(`location.hash = '#/${name}'`);
       const shown = await page.waitFor(`document.getElementById('page-${name}') && !document.getElementById('page-${name}').hidden`, 3000);

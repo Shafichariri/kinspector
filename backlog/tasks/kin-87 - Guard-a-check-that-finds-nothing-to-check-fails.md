@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-21 18:15'
-updated_date: '2026-10-21 19:03'
+updated_date: '2026-10-21 22:05'
 labels:
   - 'item:guard-probe-finds-nothing-fails'
 dependencies: []
@@ -70,6 +70,31 @@ lib/
 - already guarded: auditStickyTop, auditCssClosesPerFile, auditMediaOverrideOrder, auditOneDeclarationPerName, auditWindowNames, auditUseStrict, row parts, list-room-cases room 400 rows, current-guard probes (skip when no values).
 render-web-ui-archive.js (shares the pattern): `daemon controls hidden` and `pages hidden in export` count a missing node as hidden -> NO when a selector matches nothing.
 Out of scope, check-web-static.js lib/*-checks.js: they build their own stub inputs in-process, so a scan there cannot be emptied by another probe's leftover state; the shared CSS audits above are fixed where they live.
+
+INVENTORY ADDENDUM (fix round after QA, measure-web-ui.js cases; file: check - verdict)
+lib/shell-cases.js
+- shell <w> rail: scans #rail .rail-item, passed over none (QA's finding) - FIXED: 0 -> NO found no rail item; detail prints the count.
+- shell <w> topbar fits, picker time, page <name> fits, shell back: one named element each; a missing one throws or fails - not scans, left.
+- shell <w> controls: a fixed list of three selectors, a missing one reads :hidden and fails - left.
+- shell <w> tabs reachable: scans the page's availableViews(), which always holds traffic, against the drawn tabs; prints the view count - left.
+- stats <s> first draw: a reading (ok null), not judged - left.
+- stats 400 route breaks / routes whole, stats 1440 routes one line: already require a route cell with a server (KIN-93); line breaks are printed - left.
+lib/topbar-cases.js
+- topbar <...> count: no word in #counts is 0 lines, which already failed as 'wrapped or clipped' - WORDING ONLY: now says NO found no word in #counts.
+- topbar <...> controls: a reading (ok null) - left.
+lib/list-room-cases.js
+- room <w> doc width closed, closed shadow, divider, hint whole, bands, views keep place: single elements or values - not scans, left.
+- room 1000 close disjoint served/export: already requires actions > 0 - left.
+- room 1000 tab never enters closed: passed over a closed drawer holding nothing - FIXED: 0 controls in #detail -> NO; detail prints the count.
+- room 400 rows: rows > 0 already; its repeat-mark part passed over no mark - FIXED: 0 marks while state.duplicates marks a held row -> NO; n/a in the detail when no held row is a repeat.
+- room <w> toolbar fits / one row: an empty row fits - FIXED: 0 controls -> NO (one row already failed at 0 lines, now worded).
+- room page exceptions: none thrown is the rule itself, not a scan - left.
+lib/live-traffic-cases.js
+- traffic reaches: passed over a recorder that recorded nothing - FIXED: no request or no socket recorded -> NO; detail prints origins and socket hosts.
+- traffic hosts: already hosts.size > 0 - left.
+- traffic burst reads: an upper bound, so 0 reads is within it; a page that did no re-read cannot agree with the daemon, which burst counts judges - left.
+- traffic burst counts, the four races: compared with the daemon's answer, and the races fail with 'no re-read held' - left.
+- traffic exceptions: absence is the rule - left.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -87,4 +112,11 @@ Red proofs, each restored and re-run green:
 - lib/scan-verdicts.js functions driven on stub jsdom pages for empty, absent (n/a), good and bad scans: every branch as designed.
 Reasoned only, not run red: rail is navigation, route pages, exportMenu (empty archive only), sort flip restores, map matches log, start times shown, duplicate badges, unanchored chips, hop-by-hop stripped, onTop's n/a branch.
 Finding, out of scope: on the clean fixture run "expanded unfolded" opens Home, which holds no failure ("1 expanded line, 0 failures drawn"); the failure-bearing visit is never expanded there, so the expanded half of the rule is exercised only weakly. Needs placing by the product owner.
+
+Fix round (QA: shell <w> rail passed over no rail item), branch shafic/guard-probe-finds-nothing-fails-fix from 7b37d7a, not committed. Ready for QA.
+Changed: scripts/lib/shell-cases.js, list-room-cases.js, live-traffic-cases.js, topbar-cases.js. Inventory addendum in the plan.
+Red, on one mutant copy of this tree (rail-item renamed in index.html; toolbar-row children display:none; dup-badge class renamed; renderCounts empties #counts; the traffic recorder not recording origins; openThenClose not opening a row): 'shell <w> rail: NO - found no rail item, so this checked nothing (168px, 0 rail items)' at all four widths; 'room 1000 tab never enters closed: NO - found no control in the closed drawer'; 'room 400 rows: NO - found no repeat mark (3 rows held are repeats)'; the four toolbar readings 'NO - found no toolbar control'; 20 topbar count readings 'NO - found no word in #counts'; 'traffic reaches: NO - found no request'. 95 readings, 32 failed; the only other failure is shell back (navigation needs the rail).
+Green: measure-web-ui.js --only shell,topbar,room,traffic --base <origin/main worktree>: base 95 / head 95 readings, 0 failed, moved against base: nothing. check-web-static.js 110/0. :repo-checks:test --rerun green (36 tests).
+Not run: render-web-ui.js (no shared probe changed); the traffic socket half was not run red (the case needs the live socket open to start).
+Not done here, by instruction: expanded unfolded's weak exercise on the fixture (follow-up in the hand-over).
 <!-- SECTION:NOTES:END -->

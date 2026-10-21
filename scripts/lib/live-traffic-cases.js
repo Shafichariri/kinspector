@@ -216,16 +216,22 @@ async function burst(page, origin, app, sent) {
 }
 
 async function reaches(page, origin, sessions) {
-  const seen = await page.ev(`({ asked: window.__origins,
-    sockets: [...new Set(window.__sockets.map((s) => new URL(s.url).host))] })`);
+  const seen = await page.ev(`({ asked: window.__origins || [],
+    sockets: [...new Set((window.__sockets || []).map((s) => new URL(s.url).host))] })`);
   const host = new URL(origin).host;
   const elsewhere = [...seen.asked.filter((o) => o !== `http://${host}`), ...seen.sockets.filter((h) => h !== host)];
+  // "None went elsewhere" passes over a recorder that recorded nothing. The page has fetched its
+  // rows and opened `/api/live` by now (the case waited for both), so an empty record is a NO.
+  const unseen = [!seen.asked.length && 'request', !seen.sockets.length && 'socket'].filter(Boolean);
   const hosts = new Set();
   for (const id of sessions) for (const t of (await calls(origin, id, '')).items) hosts.add(t.host);
   const invalid = [...hosts].filter((h) => !/\.invalid$/.test(h));
   return [
-    { key: 'traffic reaches', value: elsewhere.length ? 'beyond 127.0.0.1' : '127.0.0.1 only', ok: !elsewhere.length,
-      detail: elsewhere.length ? elsewhere.join(', ') : `the page's requests and sockets, ${host}` },
+    { key: 'traffic reaches', ok: !unseen.length && !elsewhere.length,
+      value: unseen.length ? `NO - found no ${unseen.join(' and no ')}, so this checked nothing`
+        : elsewhere.length ? 'beyond 127.0.0.1' : '127.0.0.1 only',
+      detail: elsewhere.length ? elsewhere.join(', ')
+        : `the page's requests and sockets, ${host}: ${seen.asked.length} origins asked, ${seen.sockets.length} socket hosts` },
     { key: 'traffic hosts', value: invalid.length ? 'not .invalid' : '.invalid only', ok: hosts.size > 0 && !invalid.length,
       detail: hosts.size ? [...hosts].join(', ') : 'the daemon archived no call' },
   ];
