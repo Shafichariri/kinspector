@@ -4,11 +4,14 @@
 # The published set must be exactly the modules below: both members of each pair, plus each
 # exemption. An exemption must give its reason on the same line.
 #
-#   pair   <real module> <noop module>
+# A pair names the golden file both of its modules assert, relative to the repository root, and
+# the file must exist. A twin without one drifts unseen: the ui pair had none for eleven releases.
+#
+#   pair   <real module> <noop module> <golden file>
 #   exempt <module> <reason>
 
-pair :inspector-core :inspector-noop
-pair :inspector-ui :inspector-noop-ui
-pair :inspector-stream :inspector-noop-stream
+pair :inspector-core :inspector-noop api/inspector-public-api.txt
+pair :inspector-ui :inspector-noop-ui api/inspector-ui-public-api.txt
+pair :inspector-stream :inspector-noop-stream api/inspector-stream-public-api.txt
 
 exempt :inspector-model both members of the core pair `api` it, so it ships in either build and there is nothing to swap; it holds no capture code

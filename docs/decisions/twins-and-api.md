@@ -21,7 +21,7 @@ in debug and failed to compile under `-Pinspector=off` — the one failure the t
 prevent, shipped by the module that prevents it. Nothing caught it because the golden file
 covered the `core` pair only. There are now three:
 `api/inspector-public-api.txt`, `api/inspector-stream-public-api.txt` and
-`api/inspector-ui-public-api.txt`.
+`api/inspector-ui-public-api.txt`, one per pair, each named on its pair's line in `structure/twins.txt`.
 
 The stream pair needs a rule the core pair does not, because the two are **not** identical: the
 real module exposes Ktor types the noop must never name, or a release build would carry a Ktor
@@ -185,8 +185,28 @@ types went internal, it named exactly them and `InspectorOverlayKt`: no spurious
 generated `Res` classes included, which are public classes nested in an `internal` one.
 `Method.kotlinFunction` cannot do this job. One `internal` composable with a value-class parameter,
 `inspectorScreen`, makes it throw for every method of its facade, so the facade's members are read
-through `getOrCreateKotlinPackage` instead. The check is not yet applied to the `core` and `stream`
-pairs.
+through `getOrCreateKotlinPackage` instead.
+
+**Every pair runs it, not only `ui`.** The `core` and `stream` pairs got the same test on
+2026-10-21, through one shared `ApiSurface.assertEveryPublicDeclarationListed`, and measured
+before it was written, both modules of each pair held public API in exactly their contract
+classes, so nothing was made internal and no golden file changed. It asks which classes hold
+public API, not what they hold, so the stream pair's Ktor rule does not enter it:
+`defaultStreamClient` passes because it sits on the contract facade `StreamSinkKt`. A new class
+or file holding only Ktor-typed API fails, and has to: it cannot be added to
+`STREAM_CONTRACT_CLASSES`, because the noop would then fail on a class it does not have.
+
+**A golden file is a declared `jvmTest` input of both modules that read it.** The test reads it
+from outside the module at run time, so nothing else tells Gradle it matters, and a hand-edited
+golden file left `jvmTest` up to date, or a cache hit, and green. Measured with the input removed
+from `:inspector-noop` and `:inspector-stream`. The declaration is `inputs.files`: with Gradle
+9.5.1, `inputs.file(...).optional()` still rejects a file that does not exist, and the first
+regeneration runs before it does.
+
+**`structure/twins.txt` names each pair's golden file, and `NoopTwinTest` fails a pair that names
+none or one that does not exist.** Listing pairs without their files is how the ui pair went
+eleven releases with no golden file and nothing failing. The test checks that the file exists,
+not what is in it; the parity tests own the contents.
 
 **Both `InspectorOverlay.kt` files are load-bearing, and only their file name holds the facade.**
 Consumers' compiled code calls `dev.inspector.ui.InspectorOverlayKt`. Neither module can pin it:

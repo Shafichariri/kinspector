@@ -296,6 +296,43 @@ object ApiSurface {
         return holders
     }
 
+    /**
+     * Fails unless the classes holding public API in this module are exactly [contract]: the
+     * completeness test every pair runs beside its golden-file test, in both of its modules.
+     *
+     * Class-level, so it needs no Ktor rule for the stream pair. A contract class's *members* are
+     * the golden test's business, filter included; this asks only which classes hold public API at
+     * all. The real stream module's Ktor-typed `defaultStreamClient` therefore passes here, because
+     * it sits on the contract facade `StreamSinkKt`. A new class holding only Ktor-typed API would
+     * fail, and rightly: it has no twin, and adding it to [contract] would fail the noop's dump.
+     *
+     * @param listName the contract list's name, quoted back in the failure.
+     * @param rule what the pair's public API is meant to be, quoted back so the fix is not a guess.
+     */
+    fun assertEveryPublicDeclarationListed(contract: List<String>, listName: String, rule: String, regenerateWith: String) {
+        val listed = contract.toSet()
+        val holders = publicHolders(anchor = contract.first())
+        val unlisted = holders.filterKeys { it !in listed }
+        val empty = listed - holders.keys
+        if (unlisted.isEmpty() && empty.isEmpty()) return
+        fail(
+            buildString {
+                if (unlisted.isNotEmpty()) {
+                    appendLine("Public API outside the contract, so the parity test does not compare it and the twin could lack it:")
+                    unlisted.forEach { (name, members) -> appendLine("  + $name $members") }
+                    appendLine(rule)
+                    appendLine("Make it internal. If it must be public, add it to the noop twin and to $listName, then run:")
+                    appendLine("  $regenerateWith")
+                }
+                if (empty.isNotEmpty()) {
+                    appendLine("Named in $listName but holding no public declaration in this module:")
+                    empty.forEach { appendLine("  - $it") }
+                    appendLine("Its public declarations were removed or made internal. Restore them, or remove the entry and regenerate.")
+                }
+            }
+        )
+    }
+
     private fun effectivelyPublic(klass: Class<*>): Boolean =
         generateSequence(klass) { it.enclosingClass }.all { c ->
             // Null for a local or anonymous class: not API. A throw is a class Kotlin cannot

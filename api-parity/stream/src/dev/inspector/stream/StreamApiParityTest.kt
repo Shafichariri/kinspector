@@ -52,6 +52,12 @@ import kotlin.test.Test
  * unmirrorable member like `defaultStreamClient()Lio/ktor/client/HttpClient;` still carries Ktor
  * in its descriptor and is still skipped.
  *
+ * [every_public_declaration_is_in_the_contract] is the second test, as for the ui pair: the golden
+ * test compares only the classes named in `STREAM_CONTRACT_CLASSES`, so a public class or facade
+ * anywhere else was invisible to it. It asks which classes hold public API, not what they hold, so
+ * the Ktor filter does not enter it: `defaultStreamClient` is on the contract facade `StreamSinkKt`.
+ * Measured when it was added, both modules' public holders were exactly the four contract classes.
+ *
  * To change the API deliberately: update both modules, then regenerate with
  * `./gradlew :inspector-stream:jvmTest -Dinspector.api.regenerate=true`.
  */
@@ -68,6 +74,16 @@ class StreamApiParityTest {
             header = HEADER,
             why = "Both :inspector-stream and :inspector-noop-stream must expose this surface, " +
                 "or -Pinspector=off would change what compiles in consuming apps.",
+            regenerateWith = REGENERATE,
+        )
+    }
+
+    @Test
+    fun every_public_declaration_is_in_the_contract() {
+        ApiSurface.assertEveryPublicDeclarationListed(
+            contract = ApiSurface.STREAM_CONTRACT_CLASSES,
+            listName = "STREAM_CONTRACT_CLASSES",
+            rule = "Everything public in the stream pair is in its golden file, Ktor-typed members of the real module excepted.",
             regenerateWith = REGENERATE,
         )
     }

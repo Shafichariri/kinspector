@@ -3,7 +3,6 @@ package dev.inspector.ui
 import dev.inspector.ApiSurface
 import dev.inspector.GoldenSurface
 import kotlin.test.Test
-import kotlin.test.fail
 
 /**
  * Asserts `:inspector-ui` and `:inspector-noop-ui` expose the same surface to app code.
@@ -45,26 +44,11 @@ class UiApiParityTest {
 
     @Test
     fun every_public_declaration_is_in_the_contract() {
-        val contract = ApiSurface.UI_CONTRACT_CLASSES.toSet()
-        val holders = ApiSurface.publicHolders(anchor = ApiSurface.UI_CONTRACT_CLASSES.first())
-        val unlisted = holders.filterKeys { it !in contract }
-        val empty = contract - holders.keys
-        if (unlisted.isEmpty() && empty.isEmpty()) return
-        fail(
-            buildString {
-                if (unlisted.isNotEmpty()) {
-                    appendLine("Public API outside the contract, so the parity test does not compare it and the twin could lack it:")
-                    unlisted.forEach { (name, members) -> appendLine("  + $name $members") }
-                    appendLine("The public API of the ui pair is InspectorOverlay alone, by decision (docs/decisions/twins-and-api.md).")
-                    appendLine("Make it internal. If it must be public, add it to the noop twin and to UI_CONTRACT_CLASSES, then run:")
-                    appendLine("  $REGENERATE")
-                }
-                if (empty.isNotEmpty()) {
-                    appendLine("Named in UI_CONTRACT_CLASSES but holding no public declaration in this module:")
-                    empty.forEach { appendLine("  - $it") }
-                    appendLine("Its public declarations were removed or made internal. Restore them, or remove the entry and regenerate.")
-                }
-            }
+        ApiSurface.assertEveryPublicDeclarationListed(
+            contract = ApiSurface.UI_CONTRACT_CLASSES,
+            listName = "UI_CONTRACT_CLASSES",
+            rule = "The public API of the ui pair is InspectorOverlay alone, by decision (docs/decisions/twins-and-api.md).",
+            regenerateWith = REGENERATE,
         )
     }
 
