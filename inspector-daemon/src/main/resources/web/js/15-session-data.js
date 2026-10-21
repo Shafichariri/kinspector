@@ -58,7 +58,8 @@ function sessionLabel(meta) {
  * words: `1000 of 4210 calls` is the shape a filter produces, and it sent readers looking for a
  * filter that was not there. Under a filter that matched more calls than the list holds, the header
  * numbers the matches from the route's `matched`, never from the rows held: `1000 of 3016 calls`
- * there read as "1000 calls match" where 1200 did. Under a stretch the plain count stays.
+ * there read as "1000 calls match" where 1200 did — with a stretch brushed too, where the drawn
+ * rows are the ones in the stretch: `400 of the newest 1000 of 1200 matches shown`.
  */
 function renderCounts() {
   const node = $('counts');
@@ -74,9 +75,12 @@ function renderCounts() {
     node.title = `the list draws the newest ${shown} calls; the session holds ${total}`;
     return;
   }
-  if (state.filter && !state.timeRange && state.matched !== null && shown < state.matched) {
-    node.textContent = `newest ${shown} of ${state.matched} matches shown`;
-    node.title = `the filter matched ${state.matched} of the session's ${total} calls; the list draws the newest ${shown}`;
+  const held = state.transactions.length;
+  if (state.filter && state.matched !== null && held < state.matched) {
+    const newest = `newest ${held} of ${state.matched} matches`;
+    node.textContent = state.timeRange ? `${shown} of the ${newest} shown` : `${newest} shown`;
+    node.title = `the filter matched ${state.matched} of the session's ${total} calls; the list loaded the newest ${held}` +
+      (state.timeRange ? ` and draws the ${shown} of them in the selected stretch` : '');
     return;
   }
   // With its noun: a bare `12/12` beside a session picker could be a count of anything.

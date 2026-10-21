@@ -83,8 +83,9 @@ const CAPPED_LABELS = ['long filtered count', 'long list note', 'long stretch ol
  * The list past its ceiling, on the page showing the long session with no filter. Under
  * `path:/v3/long/bulk`, which matches 1201, the header numbers the matches and the list draws the
  * note the other panes draw; with no filter, a stretch over the oldest 151 calls, all below the
- * newest 1000, says they are older than what the list loaded rather than that there are none.
- * Leaves the page unfiltered and unbrushed.
+ * newest 1000, says they are older than what the list loaded rather than that there are none. Under
+ * the filter a stretch keeps the matches in the header, and the oldest stretch claims no count of
+ * matches, which the page cannot know. Leaves the page unfiltered and unbrushed.
  */
 async function probeCapped(ctx, calls) {
   const { doc, window } = ctx;
@@ -100,28 +101,41 @@ async function probeCapped(ctx, calls) {
   const noteText = note ? note.textContent : '';
   const noteHidden = !note || note.hidden;
   const rows = doc.querySelectorAll('#list .row').length;
-  await typeFilter(ctx, '');
   const byMono = calls.slice().sort((a, b) => a.mono - b.mono);
+  const empty = doc.getElementById('list-empty');
+  const emptyText = () => (empty.hidden ? '(hidden)' : empty.textContent);
+  // Still filtered: a stretch over the whole session keeps the matches in the header, and the
+  // oldest 151 calls claim no count, since the page cannot tell which of them match.
+  window.setTimeRange({ from: byMono[0].mono, to: byMono[byMono.length - 1].mono });
+  await ctx.settle();
+  const wholeStretch = counts();
   window.setTimeRange({ from: byMono[0].mono, to: byMono[150].mono });
   await ctx.settle();
-  const empty = doc.getElementById('list-empty');
-  const stretchText = empty.hidden ? '(hidden)' : empty.textContent;
+  const filteredStretch = emptyText();
+  window.setTimeRange(null);
+  await typeFilter(ctx, '');
+  window.setTimeRange({ from: byMono[0].mono, to: byMono[150].mono });
+  await ctx.settle();
+  const stretchText = emptyText();
   window.setTimeRange(null);
   if (shown && shown !== 'network') tab(shown)?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await ctx.settle();
   const countDue = `newest 1000 of ${bulk} matches shown`;
   const noteDue = `newest 1000 of ${bulk} matches loaded`;
+  const wholeDue = `1000 of the newest 1000 of ${bulk} matches shown`;
   const stretchDue = '151 calls in this stretch are older than the newest 1000 the list loaded — filter to reach them';
+  const filteredDue = `none of the newest 1000 of ${bulk} matches the list loaded is in this stretch, ` +
+    `and the ${bulk - 1000} older ones are not loaded — narrow the filter to reach any here`;
   return [
-    [CAPPED_LABELS[0], filtered === countDue
-      ? `yes ("${filtered}", ${bulk} matched by the route, ${rows} rows drawn)`
-      : `NO - "${filtered}", where "${countDue}" was due`],
+    [CAPPED_LABELS[0], filtered === countDue && wholeStretch === wholeDue
+      ? `yes ("${filtered}", and "${wholeStretch}" over the whole session; ${bulk} matched by the route, ${rows} rows drawn)`
+      : `NO - "${filtered}" and "${wholeStretch}" over the whole session, where "${countDue}" and "${wholeDue}" were due`],
     [CAPPED_LABELS[1], !noteHidden && noteText.includes(noteDue)
       ? `yes ("${noteText.slice(0, noteText.indexOf(noteDue) + noteDue.length)}")`
       : `NO - ${note ? `"${noteText}"${noteHidden ? ' (hidden)' : ''}` : 'no #list-note'}, where "… ${noteDue}" was due`],
-    [CAPPED_LABELS[2], stretchText === stretchDue
-      ? `yes ("${stretchText.slice(0, 60)}…")`
-      : `NO - "${stretchText}", where "${stretchDue}" was due`],
+    [CAPPED_LABELS[2], stretchText === stretchDue && filteredStretch === filteredDue
+      ? `yes ("${stretchText.slice(0, 60)}…", and no count claimed under the filter)`
+      : `NO - "${stretchText}" and, filtered, "${filteredStretch}", where "${stretchDue}" and "${filteredDue}" were due`],
   ];
 }
 
