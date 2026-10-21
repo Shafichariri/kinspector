@@ -12,8 +12,15 @@
 /* One column, so the divider has nothing to divide. */
 #panes.panes-wide #list-pane { border-right: 0; }
 
-/* The close control and the scrim exist only in drawer mode; as a column there is nothing to
-   close and nothing to dim. */
+/* The pane's tools row, above the header and in flow, at every width: open on its own page, hide
+   the column, or close the drawer. The close control and the scrim exist only in drawer mode; as a
+   column there is nothing to close and nothing to dim. */
+.detail-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0; }
+/* Glyphs, so a size up from `.btn-sm`'s 11px: at 11 the `⤢` read as a speck. */
+.detail-tools .btn { font-size: 13px; line-height: 1.2; padding: 1px 7px; }
+/* `⤢` is offered only while a call is shown; `hidden` alone loses to `.btn`'s own display. */
+.detail-full { text-decoration: none; }
+.detail-full[hidden] { display: none; }
 .drawer-close { display: none; }
 .drawer-scrim { display: none; }
 
@@ -31,8 +38,17 @@
 @media (max-width: 1199px) {
   #panes,
   #panes.panes-wide { grid-template-columns: 1fr; }
+  /* The closed drawer sits past the right edge, and `#panes` was the box that overflowed: the page
+     was 1646px wide at 1000, and focusing the drawer's own close button scrolled the window 646px
+     sideways. `clip`, not `hidden`, because a `hidden` box is still a scroll container that focus
+     or a swipe can scroll; `hidden` first only for a browser that has no `clip`. */
+  #panes { overflow: hidden; overflow: clip; }
   #list-pane { border-right: 0; }
 
+  /* Closed, it is `visibility: hidden` once its slide ends, not only moved off screen: that takes
+     it out of the tab order and the accessibility tree with no breakpoint in script (`inert` would
+     need one). Tab reached thirteen controls inside a drawer nobody could see. The open rule shows
+     it at once and slides; closing slides first, because the visibility change waits 140ms. */
   #detail-pane {
     position: absolute;
     top: 0;
@@ -42,22 +58,27 @@
     z-index: 30;
     background: var(--bg);
     border-left: 1px solid var(--divider);
-    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
     transform: translateX(101%);   /* past its own border, so no sliver shows */
-    transition: transform 140ms ease-out;
+    visibility: hidden;
+    transition: transform 140ms ease-out, visibility 0s linear 140ms;
   }
-  #panes.drawer-open #detail-pane { transform: translateX(0); }
+  /* The shadow only while open: on the closed pane it fell back across the window's right edge as
+     a dark strip over the list. */
+  #panes.drawer-open #detail-pane {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 140ms ease-out;
+    box-shadow: -12px 0 28px rgb(0 0 0 / 0.28);
+  }
 
   /* Nothing to open a drawer *to* while the tag browser owns the pane. */
   #panes.panes-wide #detail-pane { display: none; }
 
-  .drawer-close {
-    display: block;
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    z-index: 1;
-  }
+  .drawer-close { display: block; }
+  /* Nothing beside a drawer to share the width with or to hide it in favour of. */
+  #pane-divider,
+  #detail-restore,
+  .detail-hide { display: none; }
 
   .drawer-scrim {
     display: block;
@@ -73,9 +94,11 @@
    unpleasant, and the drawer is just as usable arriving instantly.
    Keep this block after the max-width: 1199px block above: both set #detail-pane's transition at
    equal specificity, so the later one wins, and static check 5 does not compare one @media block
-   with another. */
+   with another. The open rule there outranks a bare `#detail-pane`, so it is named here too; with
+   no transition the closed pane's visibility changes at once as well. */
 @media (prefers-reduced-motion: reduce) {
-  #detail-pane { transition: none; }
+  #detail-pane,
+  #panes.drawer-open #detail-pane { transition: none; }
 }
 
 /* The shared path prefix, above the list rather than in it.
@@ -114,6 +137,8 @@
   min-width: 0;
 }
 .scope-count { font-size: 11px; flex: 0 0 auto; }
+/* `N of M calls under this prefix`, or below 520px `N/M under prefix` (the 519px block below). */
+.scope-short { display: none; }
 
 .row {
   display: flex;
@@ -129,7 +154,10 @@
 /* No colour here: the .m-* class carries it, and this selector would outrank it. Fixed width so
    the path column lines up across rows whose verbs differ in length. */
 .row .method { font-size: 10px; width: 52px; flex: 0 0 auto; }
-.row .path { font-family: var(--mono); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A head and a last segment: the head ellipsizes, and the segment gives way after it — below 520px
+   not at all, because it is the part of the path that names the endpoint. */
+.row .path { font-family: var(--mono); flex: 1; min-width: 0; display: flex; white-space: nowrap; overflow: hidden; }
+.row .path-head, .row .path-tail { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Only drawn on rows the scope bar does not cover, so this is never repetition — it is the one
    row in a session that went somewhere else. */
 .row .host { font-size: 11px; flex: 0 0 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -138,6 +166,22 @@
 .row .status.lead { width: 34px; flex: 0 0 auto; text-align: left; }
 .row .ms, .row .size { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); width: 58px; text-align: right; }
 .row .attempt { font-size: 11px; color: var(--warn); }
+/* Compact rows, from `⋮` or the Settings page: less padding, never smaller text. */
+body.density-compact .row { padding-top: 3px; padding-bottom: 3px; }
+
+/* At 400px the fixed columns kept their width and every path was cut to four characters. Below
+   520px the columns narrow, the host gives way first and stops at 64px, and the path's last
+   segment does not shrink; the clock and the long repeat mark go in `55-duplicates.css`, where
+   their rules are. */
+@media (max-width: 519px) {
+  .row { gap: 6px; }
+  .row .method { width: 44px; }
+  .row .ms, .row .size { width: 46px; flex: none; }
+  .row .host { max-width: 64px; flex-shrink: 3; }
+  .row .path-tail { flex: none; }
+  .scope-long { display: none; }
+  .scope-short { display: inline; }
+}
 
 .s2 { color: var(--ok); } .b2 { background: var(--ok); }
 .s3 { color: var(--redirect); } .b3 { background: var(--redirect); }

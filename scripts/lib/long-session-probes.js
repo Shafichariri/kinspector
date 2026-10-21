@@ -46,7 +46,62 @@ function twicePair(calls) {
 }
 
 /** The report's labels, in the order the lines print. */
-const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter'];
+const LONG_LABELS = ['long chips count oldest', 'long repeat marked', 'long count no filter', 'counts agree'];
+
+/**
+ * Every count the traffic page draws, by the words around it: which numbers it labels the session's,
+ * and which it labels as something else — the rows drawn, the matches, the calls under the prefix.
+ * Row 3's header and list-note wordings are here as the matches they count. A count that fits none
+ * is unlabelled, which is the defect: `traffic 1000` beside `newest 1000 of 1203 shown`, a bare
+ * `1203 of 1203` on the scope bar and `1203 calls` on the axis were four numbers for one session.
+ * `session` lists the capture groups that are the session's call count.
+ */
+const COUNT_LABELS = [
+  { where: 'header', label: 'rows of the session', re: /^newest (\d+) of (\d+) shown$/, session: [2] },
+  { where: 'header', label: 'matches drawn', re: /^newest (\d+) of (\d+) matches shown$/, session: [] },
+  { where: 'header', label: 'matches in a stretch', re: /^(\d+) of the newest (\d+) of (\d+) matches shown$/, session: [] },
+  { where: 'header', label: 'calls drawn', re: /^(\d+) of (\d+) calls?$/, session: [2] },
+  { where: 'list note', label: 'matches loaded', re: /newest (\d+) of (\d+) matches loaded/, session: [] },
+  { where: 'scope', label: 'under the prefix', re: /^(\d+) of (\d+) calls under this prefix$/, session: [2] },
+  { where: 'scope short', label: 'under the prefix', re: /^(\d+)\/(\d+) under prefix$/, session: [2] },
+  { where: 'overview', label: 'the session', re: /^(\d+) calls in this session\b/, session: [1] },
+  { where: 'overview', label: 'the stretch', re: /^(\d+) calls in this stretch\b/, session: [] },
+  { where: 'glance', label: 'the session', re: /^calls in session (\d+)$/, session: [1] },
+  { where: 'glance', label: 'the stretch', re: /^calls in stretch (\d+)$/, session: [] },
+  { where: 'tab', label: 'the session', re: /^traffic (\d+)$/, session: [1] },
+];
+
+/**
+ * `counts agree`: reads the traffic tab, the header, the scope bar's two forms, the overview line's
+ * hint, the glance and, where drawn, the list note; each must match a label its place may carry, and
+ * every number a label calls the session's must be the route's `total`.
+ */
+function countsAgree(doc, total, label) {
+  const text = (node) => (node && !node.hidden ? node.textContent.replace(/\s+/g, ' ').trim() : null);
+  const tab = doc.querySelector('#tabs .tab[data-view="network"]');
+  const glance = [...doc.querySelectorAll('#detail-empty.glance .glance-row')].find((r) => /^calls in /.test(r.querySelector('.glance-label')?.textContent || ''));
+  const read = [
+    ['tab', tab && `${tab.querySelector('.tab-label')?.textContent} ${tab.querySelector('.tab-count')?.textContent}`],
+    ['header', text(doc.getElementById('counts'))],
+    ['scope', text(doc.querySelector('#scope-bar:not([hidden]) .scope-long'))],
+    ['scope short', text(doc.querySelector('#scope-bar:not([hidden]) .scope-short'))],
+    ['overview', text(doc.querySelector('#axis-hint > span'))],
+    ['glance', glance && `${glance.querySelector('.glance-label').textContent} ${glance.querySelector('.glance-value').textContent}`],
+    ['list note', text(doc.getElementById('list-note'))],
+  ].filter(([, value]) => value);
+  const unlabelled = [];
+  const wrong = [];
+  for (const [where, value] of read) {
+    const fit = COUNT_LABELS.filter((l) => l.where === where).map((l) => [l, l.re.exec(value)]).find(([, m]) => m);
+    if (!fit) { unlabelled.push(`${where} "${value}"`); continue; }
+    for (const group of fit[0].session) if (Number(fit[1][group]) !== total) wrong.push(`${where} "${value}" says ${fit[1][group]} for the session`);
+  }
+  const places = read.map(([where]) => where);
+  const missing = ['tab', 'header', 'overview', 'glance'].filter((where) => !places.includes(where));
+  return [label, unlabelled.length || wrong.length || missing.length
+    ? `NO - ${[...unlabelled.map((u) => `unlabelled: ${u}`), ...wrong, ...missing.map((m) => `no ${m} count to read`)].join('; ')}`
+    : `yes (${read.map(([where, value]) => `${where} "${value}"`).join(', ')}; the session's ${total} wherever a label says session)`];
+}
 const every = (why) => LONG_LABELS.map((label) => [label, why]);
 
 /**
@@ -73,6 +128,7 @@ function readLongSession(doc, calls, { exported = false } = {}) {
     [LONG_LABELS[2], counts === due
       ? `yes ("${counts}", ${exported ? 'every call the export embeds' : 'which no filter reads like'})`
       : `NO - "${counts}", where "${due}" was due`],
+    countsAgree(doc, calls.length, exported ? 'counts agree in export' : LONG_LABELS[3]),
   ];
 }
 
@@ -139,6 +195,37 @@ async function probeCapped(ctx, calls) {
   ];
 }
 
+/**
+ * `#/txn/<id>` for the oldest call, which the list's newest 1000 do not hold: the page reads it from
+ * the single-call route and shows it. The whole-session copy is emptied for the read and put back,
+ * standing in for an address opened before that copy has landed — on a loaded page the copy holds
+ * every call and the route is never needed. The page's `fetch` is watched for the request. Back then
+ * returns to the list's address.
+ */
+async function probeTxnPastCeiling(ctx, calls) {
+  const { window, doc } = ctx;
+  const oldest = calls.slice().sort((a, b) => a.mono - b.mono)[0];
+  const page = ctx.pageState();
+  if (!oldest || page.transactions.some((t) => t.id === oldest.id)) return [['txn route past ceiling', `n/a (the list holds the oldest call)`]];
+  const listHash = window.location.hash;
+  const asked = [];
+  const fetch = window.fetch;
+  window.fetch = (path, init) => { asked.push(String(path)); return fetch(path, init); };
+  const whole = page.allTransactions;
+  page.allTransactions = [];
+  window.location.hash = `#/txn/${encodeURIComponent(oldest.id)}?session=${encodeURIComponent(LONG_SESSION_ID)}`;
+  const shown = () => doc.querySelector('#detail .detail-head .path')?.textContent;
+  const drawn = await waitFor(() => doc.getElementById('panes').classList.contains('txn-full') && shown() === oldest.path, 5000);
+  page.allTransactions = whole;
+  window.fetch = fetch;
+  const read = asked.some((p) => p.endsWith(`/transactions/${encodeURIComponent(oldest.id)}`));
+  window.history.back();
+  const back = await waitFor(() => !doc.getElementById('panes').classList.contains('txn-full') && window.location.hash === listHash, 5000);
+  return [['txn route past ceiling', drawn && read && back
+    ? `yes (${oldest.id}, older than the newest 1000, read from its route and shown; Back returned to ${listHash || 'the list'})`
+    : `NO - drawn ${drawn} ("${shown()}", "${oldest.path}" due), single-call route read ${read}, Back returned ${back} (${window.location.hash})`]];
+}
+
 /** Picks a session through the picker's real `change` event. */
 function choose(ctx, sessionId) {
   const picker = ctx.doc.getElementById('session-picker');
@@ -157,14 +244,18 @@ async function probeLongSession(ctx) {
   const { doc } = ctx;
   const picker = doc.getElementById('session-picker');
   const before = picker.value;
-  const none = (why) => [...every(why), ...CAPPED_LABELS.map((label) => [label, why])];
+  const none = (why) => [...every(why), ['txn route past ceiling', why], ...CAPPED_LABELS.map((label) => [label, why])];
   if (![...picker.options].some((o) => o.value === LONG_SESSION_ID)) return none(`n/a (no session ${LONG_SESSION_ID})`);
   const calls = (await ctx.sessionTransactions(encodeURIComponent(LONG_SESSION_ID))).items || [];
   const pair = twicePair(calls);
   choose(ctx, LONG_SESSION_ID);
   if (pair.length === 2) await waitFor(() => doc.querySelector(`#list .row[data-id="${pair[1].id}"]`));
   await ctx.settle();
+  // Nothing selected, so the pane draws the glance, whose count `counts agree` reads; a switch keeps
+  // the previous session's call drawn there.
+  doc.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   const verdicts = readLongSession(doc, calls);
+  verdicts.push(...await probeTxnPastCeiling(ctx, calls));
   verdicts.push(...(calls.length > 1150 ? await probeCapped(ctx, calls) : CAPPED_LABELS.map((label) => [label, `n/a (${calls.length} calls)`])));
 
   choose(ctx, before);

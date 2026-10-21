@@ -6,7 +6,10 @@
    check-web-static.js fails if the order is reversed. */
 #panes {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.1fr);
+  /* List, divider, detail. The list's share is `--list-share`, set by dragging the divider
+     (`setListShare`); unset, it is the 1fr : 1.1fr split the grid had before the divider. The
+     detail keeps its 360px floor whatever the share, so a wide list never pushes it off the page. */
+  grid-template-columns: minmax(320px, var(--list-share, 47.6%)) 6px minmax(360px, 1fr);
   flex: 1 1 auto;
   min-height: 0;
   /* The narrow-width drawer anchors to this. */
@@ -17,23 +20,90 @@
    rather than being squeezed into the list column. The track has to go with it: hiding the pane
    alone would leave the grid holding an empty second column. */
 #panes.panes-wide { grid-template-columns: minmax(520px, 1fr); }
-#panes.panes-wide #detail-pane { display: none; }
+#panes.panes-wide #detail-pane,
+#panes.panes-wide #pane-divider,
+#panes.panes-wide #detail-restore { display: none; }
+
+/* `#/txn/<id>`: one call on the whole page, the detail pane given the grid. These outrank the
+   narrow drawer's rules in css/35-list.css by specificity rather than load order, so the page is the
+   same at every width. The list, the divider and the drawer's chrome are not drawn, and neither are
+   the toolbar and the overview line, which act only on the list (`.txn-page`). */
+#panes.txn-full { grid-template-columns: minmax(0, 1fr); }
+#panes.txn-full #list-pane,
+#panes.txn-full #pane-divider,
+#panes.txn-full #detail-restore,
+#panes.txn-full .drawer-scrim,
+#panes.txn-full #drawer-close,
+#panes.txn-full #detail-hide,
+#panes.txn-full #detail-full { display: none; }
+#panes.txn-full #detail-pane {
+  display: block;
+  position: static;
+  width: auto;
+  transform: none;
+  visibility: visible;
+  border-left: 0;
+}
+.txn-page > #toolbar,
+.txn-page > #filter-error,
+.txn-page > #overview { display: none !important; }
+
+/* The divider: a 6px track that is all handle, drawing a line only where it is held or focused. */
+.pane-divider {
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  outline: none;
+}
+.pane-divider:hover,
+.pane-divider:focus-visible,
+.pane-divider.dragging { background: rgb(var(--accent-rgb) / 0.35); }
+
+/* The detail column put away: the list takes the width and a slim tab at the right edge, in flow
+   so it covers no row, names the call it would bring back. Two-column mode only; below 1200px the
+   detail is a drawer, which a row still opens. */
+@media (min-width: 1200px) {
+  #panes.detail-hidden { grid-template-columns: minmax(0, 1fr) auto; }
+  #panes.detail-hidden #pane-divider,
+  #panes.detail-hidden #detail-pane { display: none; }
+}
+#detail-restore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  writing-mode: vertical-rl;
+  max-height: 100%;
+  padding: 10px 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  border: 0;
+  border-left: 1px solid var(--divider);
+  font: inherit;
+  font-size: 11px;
+  font-family: var(--mono);
+  cursor: pointer;
+}
+#detail-restore:hover { color: var(--fg); background: var(--bg-hover); }
+#detail-restore[hidden] { display: none; }
 
 /* --- the per-view toolbar ----------------------------------------------- */
 
 .toolbar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 7px 10px;
+  padding: 5px 10px;
   border-bottom: 1px solid var(--divider);
   flex: 0 0 auto;
 }
 
+/* One row from 1000px up; below, it wraps rather than hide a control. */
 .toolbar-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   flex-wrap: wrap;
 }
 /* `hidden` alone loses to the `display: flex` above — the same bug the panes already shipped
@@ -50,8 +120,9 @@
 
 #filter {
   /* Wide enough for a real filter expression, and the first thing to give width back when the
-     chips need to wrap. */
-  flex: 1 1 240px;
+     chips need to wrap. A 180px basis, growing to 380, so at 600px the quick filters still share
+     its line and the toolbar wraps to two lines rather than three. */
+  flex: 1 1 180px;
   max-width: 380px;
   min-width: 150px;
   background: var(--bg-elevated);
@@ -74,6 +145,23 @@
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chips[hidden] { display: none !important; }
+/* The quick filters keep one line and wrap as a group: shrinking, they broke over two lines inside
+   the toolbar's one row while the filter box still had room to give. */
+#chips { flex: none; }
+
+/* `endpoints ▾ N` and its chips, which open under the button rather than at the window's edge. */
+.endpoints-wrap { position: relative; flex: none; }
+.endpoints-wrap .endpoints-pop {
+  left: 0;
+  right: auto;
+  top: calc(100% + 4px);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
+}
+
+/* `⋮`: exports, the shortcut legend and compact rows. */
+.more-host { flex: none; }
+.more-button { font-size: 13px; line-height: 1.2; padding: 1px 9px; }
 
 /* Popovers for the two things that were reference material taking up permanent space. */
 .pop {

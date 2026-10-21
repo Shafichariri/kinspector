@@ -142,7 +142,14 @@ async function switchSession(id) {
   showSessionLabel();
   $('session-picker').value = id;
   paintPickerFace();
-  if (currentPage() === 'traffic') replaceRoute({ ...parseRoute(location.hash), page: 'traffic', session: id });
+  if (currentPage() === 'traffic') {
+    // An address naming a call of this session keeps naming it; any other switch leaves the call's
+    // page, since the call belongs to the session switched away from.
+    const route = parseRoute(location.hash);
+    const keep = route.page === 'txn' && route.session === id;
+    replaceRoute(keep ? route : { ...route, page: 'traffic', session: id });
+    if (!keep) showTxnFull(null);
+  }
   if (currentPage() === 'sessions') renderSessionRows();
   await loadTransactions();
 }

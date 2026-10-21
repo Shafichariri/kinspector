@@ -299,7 +299,9 @@ function menuButton({ label, className, title, items, onOpen, alignLeft = false 
     if (onOpen) onOpen();
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
-    menu.querySelector('.menu-item').focus();
+    // The first item drawn: `⋮` hides its exports in an export and with no session.
+    const items = [...menu.querySelectorAll('.menu-item')];
+    (items.find((i) => !i.hidden && getComputedStyle(i).display !== 'none') || items[0]).focus();
     document.addEventListener('click', onOutside, true);
   };
   const wrap = el('span', 'menu-wrap');
@@ -335,31 +337,46 @@ const EXPORTS = [
     title: 'Calls only, in the format DevTools, Charles and Postman import. Fields capture never measured are -1' },
 ];
 
-function wireExportMenu() {
-  if (ARCHIVE) return;
+/**
+ * `⋮`, the toolbar's last control: the four exports, the shortcut legend and compact rows — what
+ * is used rarely enough to sit behind one button, so the toolbar fits one row at 1000px. The
+ * exports moved here from the top bar. An export of nothing would be a 404 with a filename, so they
+ * are offered only with a session; in an export they are built and hidden by `body.archive`, as
+ * every control that would send something to a daemon is.
+ */
+function wireMoreMenu() {
   const links = EXPORTS.map((spec) => {
-    const link = el('a', 'menu-item', spec.label);
+    const link = el('a', 'menu-item export-item', spec.label);
     link.title = spec.title;
     link.dataset.export = spec.ext;
     link.setAttribute('role', 'menuitem');
     link.setAttribute('download', '');
     return link;
   });
-  const exportMenu = menuButton({
-    label: 'export ▾',
-    className: 'btn btn-sm btn-quiet',
-    title: 'Save this whole session as a file',
-    items: links,
-    alignLeft: true,
+  const keys = menuItem('keyboard shortcuts', 'The keys that move through and act on the list', showKeys);
+  keys.id = 'keys-item';
+  const density = menuItem('compact rows', 'Fit more calls on screen; the text stays the same size',
+    () => setDensity(state.density === 'compact' ? 'comfortable' : 'compact'));
+  density.id = 'density-item';
+  density.setAttribute('role', 'menuitemcheckbox');
+  const more = menuButton({
+    label: '⋮',
+    className: 'btn btn-sm btn-quiet more-button',
+    title: 'Export this session, keyboard shortcuts, row density',
+    items: [...links, keys, density],
     onOpen: () => {
       const id = encodeURIComponent(state.sessionId || '');
-      EXPORTS.forEach((spec, i) => { links[i].href = `/api/sessions/${id}/${spec.path}`; });
+      EXPORTS.forEach((spec, i) => {
+        links[i].href = `/api/sessions/${id}/${spec.path}`;
+        links[i].hidden = !state.sessionId;
+      });
     },
   });
-  exportMenu.wrap.id = 'export-menu';
-  const host = $('export-host');
-  host.replaceChildren(exportMenu.wrap);
-  host.hidden = false;
+  more.button.id = 'more-button';
+  more.button.setAttribute('aria-label', 'More: exports, keyboard shortcuts, row density');
+  more.wrap.id = 'more-menu';
+  $('more-host').replaceChildren(more.wrap);
+  paintDensity();
 }
 
 function bundleButton(label, build, title) {

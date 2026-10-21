@@ -208,7 +208,13 @@ function renderScopeBar() {
   const label = el('span', 'scope-label mono', `${scope.host} · ${scope.prefix.replace(/\/$/, '')}`);
   label.title = `${scope.label} — shared by most of this session, and lifted out of the rows below`;
   bar.appendChild(label);
-  bar.appendChild(el('span', 'scope-count muted mono', `${scope.covered} of ${state.allTransactions.length}`));
+  // Says what it counts: a bare `1203 of 1203` beside the header's `newest 1000 of 1203 shown` read
+  // as a third count of the same thing. The short form is the stylesheet's, below 520px.
+  const count = el('span', 'scope-count muted mono');
+  const total = state.allTransactions.length;
+  count.appendChild(el('span', 'scope-long', `${scope.covered} of ${total} calls under this prefix`));
+  count.appendChild(el('span', 'scope-short', `${scope.covered}/${total} under prefix`));
+  bar.appendChild(count);
 }
 
 /** The list's "clear filter" control, shared by every pane a filter can empty or thin. */
@@ -425,6 +431,15 @@ function setSortOrder(newestFirst) {
   if (state.view !== 'all' && state.view !== 'network') renderBrowser();
 }
 
+/**
+ * A displayed path as `[head, tail]`: the tail is its last non-empty segment with any trailing `/`,
+ * the head everything before it. A path with no segment (`/`) is all tail.
+ */
+function splitPath(path) {
+  const at = String(path).search(/[^/]+\/*$/);
+  return at === -1 ? ['', String(path)] : [path.slice(0, at), path.slice(at)];
+}
+
 function rowFor(txn) {
   const cls = statusClass(txn.status);
   const row = el('div', 'row');
@@ -457,16 +472,28 @@ function rowFor(txn) {
 
   // Stripped when the bar above already says this front. The bar is what makes that safe: it is
   // on screen, it does not scroll away, and it names the exact prefix that was removed.
-  const path = el('span', 'path', scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path);
+  const shown = scope && scope.covers(txn) ? scope.strip(txn.path) : txn.path;
+  // Two parts, so a narrow row ellipsizes the front and keeps the end: at 400px one span cut every
+  // path to four characters, and the last segment is the part that names the endpoint.
+  const [head, tail] = splitPath(shown);
+  const path = el('span', 'path');
+  path.title = shown;
+  path.appendChild(el('span', 'path-head', head));
+  path.appendChild(el('span', 'path-tail', tail));
   if (attemptOf(txn) > 1) {
     const badge = el('span', 'attempt', ` ·attempt ${attemptOf(txn)}`);
     path.appendChild(badge);
   }
-  if (duplicate) {
-    // Colour alone is invisible to some readers and unexplained to the rest.
-    path.appendChild(el('span', 'dup-badge', ` ·repeated ${duplicate.count}x`));
-  }
   row.appendChild(path);
+  if (duplicate) {
+    // Colour alone is invisible to some readers and unexplained to the rest. Its own item rather
+    // than the end of the path, which a narrow row cut; below 520px it reads `2×`, the overlay's
+    // form, because a tint alone does not say how many times.
+    const badge = el('span', 'dup-badge');
+    badge.appendChild(el('span', 'dup-long', ` ·repeated ${duplicate.count}x`));
+    badge.appendChild(el('span', 'dup-short', `${duplicate.count}×`));
+    row.appendChild(badge);
+  }
 
   row.appendChild(el('span', 'ms', fmtMs(txn.ms)));
   row.appendChild(el('span', 'size', fmtBytes(Math.max(txn.reqBytes || 0, txn.resBytes || 0))));
@@ -478,12 +505,17 @@ function rowFor(txn) {
 // --- interaction --------------------------------------------------------
 
 function select(id) {
+  markSelected(id);
+  const txn = state.transactions.find((t) => t.id === id);
+  if (txn) renderDetail(txn);
+}
+
+/** The selected call, in state and on every row that draws it, in each view. */
+function markSelected(id) {
   state.selectedId = id;
   for (const row of document.querySelectorAll('.row, .wf-row, .pv-call, .pv-chip-call')) {
     row.classList.toggle('selected', row.dataset.id === id);
   }
-  const txn = state.transactions.find((t) => t.id === id);
-  if (txn) renderDetail(txn);
 }
 
 function move(delta) {

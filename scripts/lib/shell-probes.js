@@ -56,11 +56,12 @@ const deletesSessions = (p, init) => init.method === 'DELETE' || /\/api\/session
 const killsPeers = (p) => /\/api\/peers\/(\d+\/)?kill/.test(p);
 
 /**
- * The top bar's controls, pressed. The picker's option, the count's noun, the connection dot, the
- * export menu and the live toggle; stop, restart and delete moved to their pages.
+ * The top bar's controls, pressed. The picker's option, the count's noun, the connection dot and the
+ * live toggle; stop, restart and delete moved to their pages, and the export menu to the toolbar's
+ * `⋮` (`exportMenu` in lib/list-room-probes.js).
  */
 async function probeTopBar(ctx) {
-  const { window, doc, ORIGIN, settle } = ctx;
+  const { window, doc, settle } = ctx;
   const lines = [];
   const option = doc.querySelector('#session-picker option');
   const hasSession = Boolean(option);
@@ -72,27 +73,6 @@ async function probeTopBar(ctx) {
   lines.push(['countsNoun', !hasSession ? 'n/a (no sessions)' : / of \d+ calls?$/.test(counts) ? `yes ("${counts}")` : `NO - "${counts}"`]);
   const conn = doc.getElementById('conn').dataset.state;
   lines.push(['conn', conn === 'connected' ? 'yes (connected)' : `NO - ${conn}`]);
-
-  // The export menu: offered only when there is a session, and each link names a route this
-  // daemon actually answers — pressed, not read, because the hrefs are filled in as it opens.
-  const exportHost = doc.getElementById('export-host');
-  const exportButton = exportHost.querySelector('button');
-  if (!hasSession) {
-    lines.push(['exportMenu', exportHost.hidden ? 'yes (hidden: nothing to export)' : 'NO - offered with no session']);
-  } else if (exportHost.hidden || !exportButton) {
-    lines.push(['exportMenu', 'NO - not offered']);
-  } else {
-    exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    const id = encodeURIComponent(doc.getElementById('session-picker').value);
-    const expected = ['export.html', 'export.md', 'export.json', 'har'].map((p) => `/api/sessions/${id}/${p}`);
-    const hrefs = [...exportHost.querySelectorAll('a.menu-item')].map((a) => a.getAttribute('href'));
-    const opened = !exportHost.querySelector('.menu').hidden;
-    const statuses = await Promise.all(hrefs.map((h) => fetch(ORIGIN + h).then((r) => r.status).catch(() => 0)));
-    exportButton.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-    lines.push(['exportMenu', opened && JSON.stringify(hrefs) === JSON.stringify(expected) && statuses.every((c) => c === 200)
-      ? `yes (${hrefs.length} links, all 200)`
-      : `NO - opened ${opened}, hrefs ${hrefs.join(' ')}, statuses ${statuses.join(' ')}`]);
-  }
 
   // Live: the button names its state, and resuming re-reads the session.
   const live = doc.getElementById('live-btn');

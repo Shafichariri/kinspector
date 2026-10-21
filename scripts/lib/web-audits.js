@@ -89,7 +89,8 @@ function auditHiddenPanes(cssText) {
   // the class of bug it guards: both set `display` and both are shown and hidden with `hidden`.
   const panes = [
     '.browser', '#browser', '.tabs', '#tabs', '#timeline', '#list', '.toolbar', '.now-strip',
-    '.drawer-scrim', '.axis', '.waterfall', '.path-view', '.path-new', '.page',
+    '.drawer-scrim', '.axis', '.waterfall', '.path-view', '.path-new', '.page', '.overview', '.axis-hint',
+    '#endpoint-chips', '#detail-restore',
     // Hidden on the path tab, where order has no meaning; it rendered anyway until this was here.
     '.seg2',
   ];
@@ -583,4 +584,6 @@ module.exports = {
   NETWORK_EXPECTED,
   mirrorBlockNames,
   liftBlock,
+  cssBlocks,
+  selectorList,
 };

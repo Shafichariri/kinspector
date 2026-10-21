@@ -7,10 +7,15 @@
 .row.duplicate { background: var(--dup-bg); }
 .row.duplicate.selected { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--accent); }
 
+/* Its own item in the row, never shrunk: it was the end of the path span, and a narrow row cut it
+   to `·repea`. Two forms, one shown per width. */
 .dup-badge {
   color: var(--fg-muted);
   font-size: 11px;
+  flex: none;
+  white-space: nowrap;
 }
+.dup-short { display: none; }
 
 /* Fixed width and no shrink, so the path column stays the one that flexes. */
 .row .clock {
@@ -22,6 +27,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Below 520px a row gives up its clock before its path's last segment, its byte count or its repeat
+   mark, and the mark reads `2×`, the overlay's form. The row's tooltip still names the time span of
+   a repeat. Here, after `.row .clock` and `.dup-badge`, so it loads after the rules it overrides. */
+@media (max-width: 519px) {
+  .row .clock { display: none; }
+  .dup-long { display: none; }
+  .dup-short { display: inline; }
+}
+
 .settings-field {
   display: inline-flex;
   align-items: center;
@@ -29,7 +43,7 @@
   font-size: 13px;
 }
 
-.settings-field input {
+.settings-field input, .settings-field select {
   width: 84px;
   padding: 4px 6px;
   border: 1px solid var(--divider);

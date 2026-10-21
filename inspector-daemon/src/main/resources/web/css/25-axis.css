@@ -1,16 +1,37 @@
 /* axis: the time axis */
+/* --- the overview line ------------------------------------------------- */
+
+/* The axis, its hint and, on the timeline, the now strip: one line where there were two bands. */
+.overview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--divider);
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: 11px;
+}
+.overview[hidden] { display: none !important; }
+
 /* --- the time axis ------------------------------------------------------ */
 
+/* Start time, bars and screen band, end time. It takes what the hint and the now strip leave: a
+   zero basis, because with `auto` it claimed the svg's own width and shrank only in step with the
+   hint, which cut `16 calls in this session · 2.1s — drag to narrow` at 1440. The bars stretch to any
+   width, and words cut short stop saying what they count, so the axis is the part that gives. */
 .axis {
-  flex: 0 0 auto;
-  padding: 6px 10px 3px;
-  border-bottom: 1px solid var(--divider);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 120px;
   user-select: none;
   cursor: crosshair;
 }
 .axis[hidden] { display: none !important; }
 
-.axis-svg { display: block; width: 100%; height: 37px; }
+.axis-svg { display: block; flex: 1 1 auto; min-width: 0; height: 24px; }
 
 /* All activity, dim: the shape of the session, drawn from every call it holds. */
 .axis-bar-all { fill: var(--fg-muted); opacity: 0.3; }
@@ -28,20 +49,21 @@
 .axis-mask { fill: var(--bg); opacity: 0.66; }
 .axis-edge { stroke: var(--accent); stroke-width: 1; }
 
-.axis-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 11px;
-  line-height: 1.6;
-}
 .axis-time { flex: 0 0 auto; }
+/* Gives way before the axis does: the words ellipsize, and `show all` in a stretch stays whole. */
 .axis-hint {
-  flex: 1 1 auto;
-  text-align: center;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
+}
+.axis-hint[hidden] { display: none !important; }
+.axis-hint > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.axis-hint > button { flex: none; }
+
+/* At 400px the times go: the bars, the hint and the now strip are what the line is for. */
+@media (max-width: 519px) {
+  .axis-time { display: none; }
 }
 

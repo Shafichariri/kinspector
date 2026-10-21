@@ -32,9 +32,11 @@
 /* --- the map --- */
 /* The map and, under a filter, the note saying what it hid: one sticky box, so neither covers the other. */
 .pv-top { position: sticky; top: var(--sticky-top, 0px); z-index: 2; background: var(--bg); }
+/* Sticky inside `.pv-top`, which already stops at `--sticky-top`, so this offset moves nothing; it
+   reads the same variable so `sticky top` in check-web-static.js holds with no exception. */
 .pv-metro {
   position: sticky;
-  top: 0;
+  top: var(--sticky-top, 0px);
   z-index: 2;
   display: flex;
   overflow-x: auto;

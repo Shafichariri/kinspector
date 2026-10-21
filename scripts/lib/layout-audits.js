@@ -7,7 +7,7 @@
  * (`shell <width> …` in `measure-web-ui.js`). Zero dependencies, like the rest of
  * `check-web-static.js`.
  */
-const { HarnessError } = require('./web-audits');
+const { HarnessError, cssBlocks, selectorList } = require('./web-audits');
 
 const uncomment = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -70,4 +70,87 @@ function auditNarrowTabs(styles) {
   return missing.length ? `NO - ${missing.join('; ')}` : 'yes (below 700px: the active tab and views ▾; above, no menu)';
 }
 
-module.exports = { auditNarrowTopBar, auditNarrowTabs };
+/**
+ * Nothing sticky in the list pane stops above the scope bar (`web-ui.md`). Every selector declared
+ * `position: sticky`, other than `.scope-bar` itself, must take any `top` it declares — in any file,
+ * plain or inside `@media` — from `--sticky-top`, bare or inside `calc()`. Read from the text because
+ * jsdom has no layout, so a computed check would pass whatever the sheet says.
+ *
+ * A heuristic over selector text, not the cascade: among what it misses are a `top` set for the same
+ * element through another selector, and an `inset` shorthand. It fails when it found no sticky rule,
+ * because then it checked nothing.
+ */
+function auditStickyTop(styles) {
+  if (!styles.length) return 'NO - no stylesheets to read';
+  const rules = [];
+  const walk = (file, text, query) => {
+    for (const { prelude, body } of cssBlocks(text)) {
+      if (/^@media\b/i.test(prelude)) { walk(file, body, prelude); continue; }
+      if (prelude.startsWith('@')) continue;
+      const decls = uncomment(body).split(';').map((d) => d.match(/^\s*([a-zA-Z-]+)\s*:\s*([\s\S]*?)\s*$/)).filter(Boolean)
+        .map(([, name, value]) => [name.toLowerCase(), value]);
+      for (const selector of selectorList(prelude)) rules.push({ file, query, selector, decls });
+    }
+  };
+  for (const { file, text } of styles) walk(file, text, null);
+  const sticky = new Set(rules.filter((r) => r.decls.some(([n, v]) => n === 'position' && /^sticky\b/.test(v)))
+    .map((r) => r.selector).filter((s) => s !== '.scope-bar'));
+  if (!sticky.size) return 'NO - found no sticky rule, so this checked nothing';
+  const fromStickyTop = /^(var\(--sticky-top\b[^)]*\)|calc\([\s\S]*var\(--sticky-top\b[\s\S]*\))$/;
+  let tops = 0;
+  const offenders = [];
+  for (const r of rules) {
+    if (!sticky.has(r.selector)) continue;
+    for (const [name, value] of r.decls) {
+      if (name !== 'top') continue;
+      tops++;
+      if (!fromStickyTop.test(value)) offenders.push(`${r.selector} { top: ${value} }${r.query ? ` in ${r.query}` : ''} (${r.file})`);
+    }
+  }
+  return offenders.length
+    ? `NO - sticky, and stops above the scope bar: ${offenders.join('; ')}`
+    : `yes (${sticky.size} sticky selector(s), ${tops} top(s), each from --sticky-top)`;
+}
+
+/**
+ * Below 1200px the closed drawer is out of the tab order and the page's width, and casts no shadow:
+ * the narrow block in `35-list.css` makes the closed `#detail-pane` `visibility: hidden`, clips
+ * `#panes`, and draws `box-shadow` on `#detail-pane` only under `.drawer-open`. The behaviour is
+ * Chrome's to judge (`room <w> tab never enters closed`, `room <w> doc width closed` in
+ * `measure-web-ui.js`); this reads that the rules are where the decision put them.
+ */
+function auditClosedDrawer(styles) {
+  const css = sheet(styles, 'css/35-list.css');
+  const narrow = mediaBody(css, 'max-width: 1199px');
+  if (narrow === null) return 'NO - no @media (max-width: 1199px) block in css/35-list.css';
+  const shadows = cssBlocks(narrow).filter(({ prelude, body }) => /#detail-pane/.test(prelude) && /(^|;)\s*box-shadow\s*:/.test(body.trim()));
+  const missing = [
+    !sets(rule(narrow, '#detail-pane'), 'visibility', 'hidden') && 'the closed #detail-pane is not visibility: hidden',
+    !sets(rule(narrow, '#panes.drawer-open #detail-pane'), 'visibility', 'visible') && 'the open #detail-pane is not visibility: visible',
+    !sets(rule(narrow, '#panes'), 'overflow', 'clip') && '#panes is not overflow: clip',
+    !shadows.length && 'no #detail-pane rule draws the shadow',
+    shadows.some(({ prelude }) => !/\.drawer-open/.test(prelude)) && 'a box-shadow applies to the closed #detail-pane',
+  ].filter(Boolean);
+  return missing.length ? `NO - ${missing.join('; ')}` : 'yes (closed: visibility hidden, #panes clipped; shadow only under .drawer-open)';
+}
+
+/**
+ * Below 520px a row keeps its path's last segment, its byte count and its repeat mark whole: the
+ * `max-width: 519px` blocks hide the clock and the long repeat mark and show the short one
+ * (`55-duplicates.css`, where those rules are), and the last segment does not shrink
+ * (`35-list.css`). `room 400 rows` in `measure-web-ui.js` measures the rows themselves.
+ */
+function auditNarrowRow(styles) {
+  const dup = mediaBody(sheet(styles, 'css/55-duplicates.css'), 'max-width: 519px');
+  const list = mediaBody(sheet(styles, 'css/35-list.css'), 'max-width: 519px');
+  if (dup === null || list === null) return `NO - no @media (max-width: 519px) block in ${dup === null ? 'css/55-duplicates.css' : 'css/35-list.css'}`;
+  const missing = [
+    !sets(rule(dup, '.row .clock'), 'display', 'none') && 'the clock is drawn',
+    !sets(rule(dup, '.dup-long'), 'display', 'none') && '.dup-long is drawn',
+    !sets(rule(dup, '.dup-short'), 'display', 'inline') && '.dup-short is not shown',
+    !sets(rule(list, '.row .path-tail'), 'flex', 'none') && '.path-tail can shrink',
+  ].filter(Boolean);
+  return missing.length ? `NO - ${missing.join('; ')}` : 'yes (below 520px: no clock, the repeat mark as N×, the last segment never shrinks)';
+}
+
+module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow };

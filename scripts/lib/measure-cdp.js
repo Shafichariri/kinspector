@@ -119,6 +119,26 @@ async function openPage(port) {
     async setWidth(width) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
     },
+    // A key pressed as the browser receives one, so Tab moves focus as it does for a person; a
+    // synthetic `KeyboardEvent` in the page moves nothing.
+    async key(key, code = key, keyCode = 0) {
+      for (const type of ['rawKeyDown', 'keyUp']) {
+        await send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      }
+    },
+    // A drag, as a mouse makes one: press at the start, moves in steps, release at the end. A
+    // synthetic `PointerEvent` in the page would skip what the browser does between them.
+    async drag(fromX, y, toX, steps = 10) {
+      const at = (type, x, extra = {}) => send('Input.dispatchMouseEvent', { type, x, y, button: 'left', ...extra });
+      await at('mouseMoved', fromX, { button: 'none' });
+      await at('mousePressed', fromX, { buttons: 1, clickCount: 1 });
+      for (let i = 1; i <= steps; i++) await at('mouseMoved', fromX + ((toX - fromX) * i) / steps, { buttons: 1 });
+      await at('mouseReleased', toX, { buttons: 0, clickCount: 1 });
+    },
+    // `null` puts the system's scheme back.
+    async colorScheme(value) {
+      await send('Emulation.setEmulatedMedia', { features: value ? [{ name: 'prefers-color-scheme', value }] : [] });
+    },
     async navigate(url) {
       exceptions.length = 0;
       await send('Page.navigate', { url });

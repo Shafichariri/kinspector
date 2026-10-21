@@ -47,6 +47,7 @@ const { probeLongSession } = require('./lib/long-session-probes');
 const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
 const { probeLiveRows } = require('./lib/live-filter-probes');
 const shell = require('./lib/shell-probes');
+const room = require('./lib/list-room-probes');
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
  * running a throwaway daemon there to smoke-test the UI invites a real app to connect to it and
@@ -308,6 +309,9 @@ function runScripts() {
     const chip = doc.querySelector('#endpoint-chips .chip');
     const before = doc.querySelectorAll('#list .row').length;
     if (!chip) return { before, after: before, narrowed: 'no chips', survived: 'n/a', active: 'n/a', chipsAfter: 0 };
+    // The chips are behind `endpoints ▾`; opened as a person would, and shut again below.
+    const opener = doc.getElementById('endpoints-button');
+    opener.dispatchEvent(new window.Event('click', { bubbles: true }));
 
     const chipsBefore = doc.querySelectorAll('#endpoint-chips .chip').length;
     const label = chip.firstChild.textContent;
@@ -330,6 +334,7 @@ function runScripts() {
     // Put the page back the way it was, so the snapshot and every later count are unaffected.
     chip.dispatchEvent(new window.Event('click', { bubbles: true }));
     await settle();
+    opener.dispatchEvent(new window.Event('click', { bubbles: true }));
     return result;
   }
 
@@ -373,7 +378,7 @@ function runScripts() {
     // rows the bar does not cover as stripped — they start with a slash and a different prefix —
     // and the check would report 7 of 7 on a session where only 6 are covered.
     const rows = [...doc.querySelectorAll('#list .row')];
-    const paths = rows.map((r) => r.querySelector('.path')?.firstChild?.textContent || '');
+    const paths = rows.map((r) => [...r.querySelectorAll('.path-head, .path-tail')].map((n) => n.textContent).join(''));
     const hosts = rows.map((r) => r.querySelector('.host')?.textContent || null);
     const strippedIdx = paths.map((p, i) => (p && !p.startsWith('/') ? i : -1)).filter((i) => i !== -1);
 
@@ -551,7 +556,7 @@ function runScripts() {
    */
   if (!doc.querySelector('#session-picker option')) {
     const listProbe = await probeList();
-    const topBarLines = [...await shell.probeTopBar(shellCtx), ...await shell.probeProcessesPage(shellCtx)];
+    const topBarLines = [...await shell.probeTopBar(shellCtx), ...await room.probeMoreMenu(shellCtx), ...await shell.probeProcessesPage(shellCtx)];
     verdict.reporting = true;
     console.error('--- empty archive ---');
     note('sessions           : 0');
@@ -967,38 +972,6 @@ function runScripts() {
   }
 
   /**
-   * The toolbar's labels and controls, as a reader meets them.
-   *
-   * The order control is judged by `aria-pressed` agreeing with the visible `on` state, because
-   * the segmented control's whole claim is that it states which order the list is in — a
-   * control whose two halves disagree about that says nothing.
-   */
-  function probeToolbarLabels() {
-    const toolbar = doc.getElementById('toolbar');
-    const labels = [...toolbar.querySelectorAll('.row-label')].map((n) => n.textContent);
-    const endpoints = doc.getElementById('endpoint-chips');
-    const oldest = doc.getElementById('order-oldest');
-    const newest = doc.getElementById('order-newest');
-    const pressedAgrees = [oldest, newest].every(
-      (b) => b.getAttribute('aria-pressed') === String(b.classList.contains('on')),
-    );
-    const markerLabels = new Set([...doc.querySelectorAll('#markers li')].filter((li) => !li.classList.contains('muted')).map((li) => li.textContent)).size;
-    const markersText = doc.getElementById('markers-button').textContent;
-    return {
-      rowLabels: labels.includes('filters') && (endpoints.hidden || labels.includes('endpoints'))
-        ? `yes (${labels.join(', ')})`
-        : `NO - ${labels.join(', ') || 'none'}`,
-      orderSegmented: oldest.parentElement.classList.contains('seg2') && pressedAgrees
-        && [oldest, newest].filter((b) => b.classList.contains('on')).length === 1
-        ? `yes (${oldest.classList.contains('on') ? 'oldest' : 'newest'} first pressed)`
-        : 'NO - the order control does not state one order',
-      markersCount: markerLabels ? (markersText === `markers · ${markerLabels}` ? `yes ("${markersText}")` : `NO - "${markersText}" for ${markerLabels}`)
-        : markersText === 'markers' ? 'yes ("markers", none in this session)' : `NO - "${markersText}"`,
-      shortcuts: doc.getElementById('keys-button').textContent === 'shortcuts' ? 'yes' : 'NO',
-    };
-  }
-
-  /**
    * The tag browser: does a key list plus one key's detail come out of app-defined payloads?
    *
    * Driven through the real tab, real input and real clicks rather than by calling render
@@ -1185,129 +1158,6 @@ function runScripts() {
       after,
       ticks: before !== after ? `yes ("${before}" -> "${after}")` : `NO - stuck at "${before}"`,
     };
-  }
-
-  /**
-   * Controls belong to the view they act on.
-   *
-   * The toolbar filters *transactions*. On a tag browser it would be a second filter box meaning
-   * something else entirely, above a list it cannot filter — which is what the rail was, for a
-   * fifth of the window, on five tabs out of seven.
-   */
-  async function probeToolbar() {
-    const result = { onTraffic: 'n/a', onBrowser: 'n/a' };
-    const tabOf = (view) => [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === view);
-
-    const network = tabOf('network');
-    if (network) {
-      await click(network);
-      await new Promise((r) => setTimeout(r, 400));
-      result.onTraffic = doc.getElementById('toolbar').hidden ? 'NO - hidden on traffic' : 'yes (shown)';
-    }
-
-    const browser = firstTagBrowserTab();
-    if (browser) {
-      await click(browser);
-      await new Promise((r) => setTimeout(r, 700));
-      result.onBrowser = doc.getElementById('toolbar').hidden
-        ? `yes (hidden on '${browser.dataset.view}')`
-        : `NO - still shown on '${browser.dataset.view}'`;
-      result.ownFilterInstead = doc.getElementById('browser-filter') ? 'yes' : 'NO';
-    }
-    return result;
-  }
-
-  /**
-   * `Now` is a summary, and a summary that takes 70% of a column is not one.
-   *
-   * The assertion is that it opens collapsed and still says something useful collapsed — a strip
-   * reading only "now" would have moved the problem rather than fixed it.
-   */
-  async function probeNowStrip() {
-    const all = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'all');
-    const result = { present: false, collapsedSummary: 'n/a', expandsTo: 0, collapsesBack: 'n/a' };
-    if (!all) return result;
-    await click(all);
-    await new Promise((r) => setTimeout(r, 500));
-
-    const strip = doc.getElementById('now-strip');
-    result.present = Boolean(strip) && !strip.hidden;
-    if (!result.present) return result;
-
-    const list = doc.getElementById('current');
-    result.startsCollapsed = list.hidden ? 'yes' : 'NO - opens expanded';
-    const summary = doc.getElementById('now-summary-text').textContent.trim();
-    result.collapsedSummary = summary || 'NO - the strip says nothing collapsed';
-
-    await click(doc.getElementById('now-toggle'));
-    await new Promise((r) => setTimeout(r, 250));
-    result.expandsTo = doc.querySelectorAll('#current .current-item').length;
-    await click(doc.getElementById('now-toggle'));
-    await new Promise((r) => setTimeout(r, 250));
-    result.collapsesBack = doc.getElementById('current').hidden ? 'yes' : 'NO';
-    return result;
-  }
-
-  /**
-   * The narrow-width drawer.
-   *
-   * Split in two on purpose. Whether it *opens and closes* is behaviour and is driven here;
-   * whether it is a drawer *at all* is a media query, and jsdom has no layout, so that half is
-   * read out of the stylesheet — a computed-style check would pass with the whole media block
-   * deleted, the same trap `auditHiddenPanes` and the long-token guard already avoid. The
-   * geometry itself was measured in a browser and is recorded in the commit.
-   */
-  async function probeDrawer() {
-    const result = { opensOnSelect: 'n/a', scrim: 'n/a', closeButton: 'n/a', escape: 'n/a', tabSwitch: 'n/a' };
-    const panes = doc.getElementById('panes');
-    const isOpen = () => panes.classList.contains('drawer-open');
-
-    const network = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view === 'network');
-    if (network) {
-      await click(network);
-      await new Promise((r) => setTimeout(r, 400));
-    }
-    const row = doc.querySelector('#list .row');
-    if (!row) return result;
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 400));
-    result.opensOnSelect = isOpen() ? 'yes' : 'NO - selecting a row left it shut';
-    result.scrim = doc.getElementById('drawer-scrim').hidden ? 'NO - no scrim' : 'yes (shown)';
-
-    await click(doc.getElementById('drawer-close'));
-    await new Promise((r) => setTimeout(r, 200));
-    result.closeButton = isOpen() ? 'NO' : 'yes (closes)';
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    // jsdom dispatches a click to a hidden element as readily as to a shown one, so a scrim that
-    // never appeared would still "close" the drawer here. Nobody can click what is not drawn.
-    const scrim = doc.getElementById('drawer-scrim');
-    const scrimShown = !scrim.hidden;
-    await click(scrim);
-    await new Promise((r) => setTimeout(r, 200));
-    result.scrimCloses = !scrimShown
-      ? 'NO - the scrim was hidden, so there was nothing to click'
-      : isOpen() ? 'NO' : 'yes (closes)';
-
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    doc.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await new Promise((r) => setTimeout(r, 200));
-    result.escape = isOpen() ? 'NO' : 'yes (closes)';
-
-    // A drawer covers the list it came from; carrying it across a tab switch would leave it
-    // sitting over a list that never produced it.
-    await click(row);
-    await new Promise((r) => setTimeout(r, 300));
-    const other = [...doc.querySelectorAll('#tabs .tab')].find((t) => t.dataset.view !== 'network');
-    if (other) {
-      await click(other);
-      await new Promise((r) => setTimeout(r, 700));
-      result.tabSwitch = isOpen() ? `NO - carried onto '${other.dataset.view}'` : 'yes (closes)';
-    }
-    return result;
   }
 
   /**
@@ -2175,11 +2025,14 @@ function runScripts() {
   const jsonTreeProbe = await probeJsonTree();
   // After the detail probe, which is what leaves a row open and its panes populated.
   const copyProbe = probeCopyFields();
-  const drawerProbe = await probeDrawer();
-  const toolbarProbe = await probeToolbar();
-  const nowProbe = await probeNowStrip();
+  const drawerLines = [...await room.probeDrawer(shellCtx), ...await room.probeColumns(shellCtx)];
+  const toolbarLines = await room.probeToolbar(shellCtx);
+  const nowLines = await room.probeNowStrip(shellCtx);
+  const overviewLines = await room.probeOverview(shellCtx);
   const tabProbe = probeTabs();
-  const toolbarLabelProbe = probeToolbarLabels();
+  const toolbarControlLines = [ // lib/list-room-probes.js; each leaves the list unfiltered and every menu shut
+    ...await room.probeToolbarControls(shellCtx), ...await room.probeEndpointsMenu(shellCtx),
+    ...await room.probeMoreMenu(shellCtx), ...await room.probeDensity(shellCtx)];
   const browserProbe = await probeBrowser('cache');
   const stateProbe = await probeBrowser('state');
   const ageProbe = await probeAges();
@@ -2275,6 +2128,7 @@ function runScripts() {
   );
   const rowCount = doc.querySelectorAll('#list .row').length;
   console.error('start times shown  :', clocks === rowCount ? `yes (${clocks} of ${rowCount})` : `NO - ${clocks} of ${rowCount}`);
+  report(room.probeRowParts(shellCtx)); // a path's last segment and the repeat mark's two forms
   // Endpoint chips must be built from the whole session, not the filtered view, and each chip's
   // filter must be the anchored glob rather than a bare substring — a chip labelled `profile` that
   // also matched `profile/status` would quietly be lying.
@@ -2389,15 +2243,8 @@ function runScripts() {
   console.error('signal tabs count  :', tabProbe.signalTabTotal === everySignal.length
     ? `yes (${everySignal.length}, every signal in the session)`
     : `NO - the tabs count ${tabProbe.signalTabTotal}, the session holds ${everySignal.length}`);
-  console.error('toolbar on traffic :', toolbarProbe.onTraffic);
-  console.error('toolbar on browser :', toolbarProbe.onBrowser, '(it filters calls, not keys)');
-  console.error('browser own filter :', toolbarProbe.ownFilterInstead ?? 'n/a');
-  console.error('now strip present  :', nowProbe.present);
-  console.error('now starts collapsed:', nowProbe.startsCollapsed ?? 'n/a');
-  console.error('now says collapsed :', String(nowProbe.collapsedSummary).startsWith('NO') || nowProbe.collapsedSummary === 'n/a'
-    ? nowProbe.collapsedSummary : `yes ("${nowProbe.collapsedSummary}")`);
-  console.error('now expands        :', nowProbe.expandsTo > 0 ? `yes (${nowProbe.expandsTo} rows)` : 'NO - nothing listed');
-  console.error('now collapses back :', nowProbe.collapsesBack);
+  report(toolbarLines);
+  report([...nowLines, ...overviewLines]); // lib/list-room-probes.js
   console.error('--- handing to an agent ---');
   console.error('call bundle        :', bundleProbe.txnButton);
   console.error('header values cap  :', bundleProbe.headersCapped ?? 'n/a', '(a bearer token must not fill the paste)');
@@ -2442,23 +2289,13 @@ function runScripts() {
   console.error('attempt chain      :', detailTabProbe.chainPinned, '(a correction must not be tabbed away)');
   console.error('chain numbered     :', detailTabProbe.chainOrder, '(a first attempt has no `attempt` field)');
   console.error('drawer css         :', auditDrawerCss(css), '(narrow: list keeps the width)');
-  console.error('drawer opens       :', drawerProbe.opensOnSelect);
-  console.error('drawer scrim       :', drawerProbe.scrim ?? 'n/a');
-  const drawerCloses = [drawerProbe.closeButton, drawerProbe.scrimCloses, drawerProbe.escape];
-  console.error(
-    'drawer closes by   :',
-    drawerCloses.every((v) => String(v).startsWith('yes')) ? 'yes (button, scrim, esc)' : 'NO -',
-    `button ${drawerProbe.closeButton}, scrim ${drawerProbe.scrimCloses ?? 'n/a'}, esc ${drawerProbe.escape}`,
-  );
-  console.error('drawer on tab swap :', drawerProbe.tabSwitch);
+  report(drawerLines); // lib/list-room-probes.js
   note('tab labels         :', tabProbe.labels);
   console.error('tab bar shown      :', tabProbe.alwaysShown);
   console.error('tabs menu          :', tabsMenu);
   console.error('signal separator   :', tabProbe.signalSeparator);
   console.error('--- toolbar labels ---');
-  for (const [name, value] of Object.entries(toolbarLabelProbe)) {
-    console.error(`${name.padEnd(19)}:`, value);
-  }
+  report(toolbarControlLines);
   console.error('min text size      :', auditMinTextSize(css));
   console.error('--- scope bar ---');
   console.error('scope bar shown    :', scopeProbe.shown, scopeProbe.shown ? `- ${scopeProbe.label} (${scopeProbe.count})` : `- ${scopeProbe.reason}`);

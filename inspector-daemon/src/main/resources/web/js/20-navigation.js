@@ -34,7 +34,11 @@ function availableViews() {
   // session the merged timeline ran 126 rows of which 13 were calls, so landing there puts
   // what you came for at one row in ten. The merge is a correlation tool you reach for once
   // you know which call you care about, which makes it the second tab, not the first.
-  views.push({ id: 'network', label: 'traffic', title: 'HTTP calls', count: state.transactions.length });
+  //
+  // It counts the session's calls, as the signal tabs count the session's signals: counting the rows
+  // held put `traffic 1000` beside `newest 1000 of 1203 shown` on a session past the list's ceiling,
+  // and shrank under a filter while every signal tab stood still. The header says what is drawn.
+  views.push({ id: 'network', label: 'traffic', title: 'HTTP calls in this session', count: state.sessionTotal ?? state.transactions.length });
   // Always offered, even with no screen signals: a tab that came and went between sessions moved
   // everything after it, and a session with no screens still has a path — one honest column
   // saying so, which is also the only place that tells you how to get more.
@@ -164,6 +168,10 @@ function applyView() {
   const waterfall = state.view === 'waterfall';
   const path = state.view === 'path';
   const browsing = !all && !network && !waterfall && !path;
+  // The traffic view the pane showed until now, whose place is saved before the pane changes hands.
+  const left = state.paneView;
+  const switching = left !== state.view;
+  if (switching) saveViewPlace(left);
 
   $('list').hidden = !network;
   $('list-empty').hidden = !network || state.transactions.length > 0;
@@ -200,14 +208,49 @@ function applyView() {
   closeDrawer();
   // Nothing selected means the pane is free to say something useful about the session instead.
   if (!browsing && $('detail').hidden) renderSessionGlance();
-  renderAxis();
   // `Now` is the app's current state, which is only ever read beside the merged timeline.
   $('now-strip').hidden = !all || state.current.length === 0;
+  renderAxis();
 
   if (all) renderTimeline();
   if (waterfall) renderWaterfall();
   if (path) renderPath();
   if (browsing) renderBrowser();
+  if (switching) openViewPlace(state.view);
+  state.paneView = state.view;
+}
+
+/**
+ * Each traffic view's own place in the pane they share, while live tail is paused.
+ *
+ * Since KIN-33 the list, the timeline, the waterfall and the path scroll one pane, so a list left at
+ * row 5000 opened the timeline at 5000 of 29,800, a place nobody chose. Leaving a view saves the
+ * pane's position under its id; opening one restores its own, or the first time its own rule: the
+ * top for the list, the timeline and the waterfall, and for the path whatever `renderPath` chose on
+ * opening it. With live tail on neither runs, and each view follows as it always did — restoring a
+ * place under rows that keep arriving would undo the follow.
+ *
+ * A new session, filter, order or stretch is a new list, where no saved place means anything, so
+ * each place is kept with the list it was saved on (`viewPlaces`) and every one is dropped the first
+ * time a view opens on another. Kept with the place rather than cleared by each of the four changes,
+ * so no loader has to remember to clear it.
+ */
+function viewPlaces() {
+  const list = JSON.stringify([state.sessionId, state.filter, state.newestFirst, state.timeRange]);
+  if (state.viewScroll.list !== list) state.viewScroll = { list, places: new Map() };
+  return state.viewScroll.places;
+}
+
+function saveViewPlace(view) {
+  if (state.liveTail || !TRAFFIC_VIEWS.includes(view)) return;
+  viewPlaces().set(view, $('list-pane').scrollTop);
+}
+
+function openViewPlace(view) {
+  if (state.liveTail || !TRAFFIC_VIEWS.includes(view)) return;
+  const saved = viewPlaces().get(view);
+  if (saved !== undefined) $('list-pane').scrollTop = saved;
+  else if (view !== 'path') $('list-pane').scrollTop = 0;
 }
 
 /**
@@ -228,33 +271,47 @@ function closeDrawer() {
 }
 
 /**
- * Markers and the shortcut legend, one click away.
+ * Markers, the endpoint chips, the now list and the shortcut legend, one click away.
  *
- * Both were permanent rail sections and both sat below the fold, which is the worst of both:
- * space spent, and not readable anyway. A popover costs a click and is the first time the
- * shortcut list has been visible at all.
+ * Markers and shortcuts were permanent rail sections and both sat below the fold, which is the
+ * worst of both: space spent, and not readable anyway. A popover costs a click and is the first
+ * time the shortcut list has been visible at all. The legend opens from the `⋮` menu, not a button
+ * of its own, so it is closed with the rest and opened by `showKeys`.
  */
 function closePops() {
   for (const [button, pop] of POPS) {
     $(pop).hidden = true;
     $(button).setAttribute('aria-expanded', 'false');
   }
+  $('keys-pop').hidden = true;
 }
 
+/** The shortcut legend, under the `⋮` button it was chosen from. */
+function showKeys(event) {
+  // The menu item's click would reach the document and close the legend it just opened.
+  event.stopPropagation();
+  closePops();
+  $('keys-pop').style.top = `${$('more-button').getBoundingClientRect().bottom + 4}px`;
+  $('keys-pop').hidden = false;
+}
+
+// `[button, pop, anchored]`: an anchored pop is placed under its button by the stylesheet, inside a
+// positioned parent, so it takes no offset from script.
 const POPS = [
   ['markers-button', 'markers-pop'],
-  ['keys-button', 'keys-pop'],
+  ['endpoints-button', 'endpoint-chips', true],
+  ['now-toggle', 'current', true],
 ];
 
 function wirePops() {
-  for (const [button, pop] of POPS) {
+  for (const [button, pop, anchored] of POPS) {
     $(button).addEventListener('click', (event) => {
       event.stopPropagation();
       const open = $(pop).hidden;
       closePops();
       $(pop).hidden = !open;
       $(button).setAttribute('aria-expanded', String(open));
-      if (open) {
+      if (open && !anchored) {
         // Anchored under its own button rather than at a fixed offset, so it stays put when
         // the chips wrap and move the button to a second row.
         const rect = $(button).getBoundingClientRect();
@@ -263,7 +320,117 @@ function wirePops() {
     });
   }
   document.addEventListener('click', closePops);
-  for (const [, pop] of POPS) {
+  for (const pop of [...POPS.map(([, id]) => id), 'keys-pop']) {
     $(pop).addEventListener('click', (event) => event.stopPropagation());
   }
+}
+
+// --- the divider and the detail column --------------------------------------
+
+/**
+ * The list's share of `#panes` beside the detail column, in percent. The default is the
+ * `1fr : 1.1fr` split the grid had before there was a divider.
+ */
+const LIST_SHARE = { min: 25, max: 75, step: 2, initial: 47.6 };
+
+/**
+ * Sets the list's share, clamped, and keeps it in this browser; `null` resets it and forgets the
+ * choice. A share rather than pixels, so a split chosen at 1440 still splits a window resized to
+ * 1280 the same way. Only two-column mode reads it: below 1200px the stylesheet gives the list the
+ * whole width and does not draw the divider.
+ */
+function setListShare(share, { save = true } = {}) {
+  const panes = $('panes');
+  const divider = $('pane-divider');
+  if (share === null || !Number.isFinite(share)) {
+    if (save) prefs.remove('inspector.listShare');
+    panes.style.removeProperty('--list-share');
+    divider.setAttribute('aria-valuenow', String(LIST_SHARE.initial));
+    return;
+  }
+  const clamped = Math.round(Math.min(LIST_SHARE.max, Math.max(LIST_SHARE.min, share)) * 10) / 10;
+  panes.style.setProperty('--list-share', `${clamped}%`);
+  divider.setAttribute('aria-valuenow', String(clamped));
+  if (save) prefs.set('inspector.listShare', String(clamped));
+}
+
+const listShare = () => Number($('pane-divider').getAttribute('aria-valuenow')) || LIST_SHARE.initial;
+
+/**
+ * Drag, arrows and Home on the divider. A drag moves the share by the pointer's travel from where
+ * it was pressed, not to the pointer's position, so pressing it does not make the split jump by
+ * half the divider's width; it is saved once, when a drag that moved ends, rather than on every move.
+ */
+function wireDivider() {
+  const divider = $('pane-divider');
+  const saved = prefs.get('inspector.listShare');
+  setListShare(saved === null ? null : Number(saved), { save: false });
+  divider.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const width = $('panes').getBoundingClientRect().width;
+    const startX = event.clientX;
+    const startShare = listShare();
+    divider.classList.add('dragging');
+    let moved = false;
+    const move = (e) => {
+      moved = true;
+      setListShare(startShare + ((e.clientX - startX) / width) * 100, { save: false });
+    };
+    // A press with no travel saves nothing: each half of a double-click is one, and saving there
+    // would store the default as a choice.
+    const end = () => {
+      divider.classList.remove('dragging');
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', end);
+      document.removeEventListener('pointercancel', end);
+      if (moved) setListShare(listShare());
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  });
+  divider.addEventListener('dblclick', () => setListShare(null));
+  divider.addEventListener('keydown', (event) => {
+    const step = { ArrowLeft: -LIST_SHARE.step, ArrowRight: LIST_SHARE.step }[event.key];
+    if (step) setListShare(listShare() + step);
+    else if (event.key === 'Home') setListShare(null);
+    else return;
+    event.preventDefault();
+  });
+}
+
+/**
+ * The detail column put away, and the tab at the right edge that brings it back, naming the call it
+ * would show. Selecting another row keeps it put away: hiding is a choice about the layout, and a
+ * click on a row is not a request to undo it. Not kept across reloads. Column mode only; below
+ * 1200px the stylesheet ignores the class, so the drawer still opens on a row.
+ */
+function hideDetail() {
+  $('panes').classList.add('detail-hidden');
+  paintDetailTools();
+}
+
+function restoreDetail() {
+  $('panes').classList.remove('detail-hidden');
+  paintDetailTools();
+  $('detail-hide').focus();
+}
+
+/**
+ * What the tools row and the restore tab say about the call the pane shows: `⤢` links to its own
+ * page and is offered only while a call is shown, and the restore tab, shown while the column is
+ * put away, names it.
+ */
+function paintDetailTools() {
+  const hidden = $('panes').classList.contains('detail-hidden');
+  const id = $('detail').hidden ? null : state.selectedId;
+  const txn = id && (state.transactions.find((t) => t.id === id) || state.allTransactions.find((t) => t.id === id));
+  const label = txn ? `${txn.method} ${txn.path}` : 'detail';
+  $('detail-restore').hidden = !hidden;
+  $('detail-restore-label').textContent = label;
+  $('detail-restore').title = `Show the detail again: ${label}`;
+  const full = $('detail-full');
+  full.hidden = !id;
+  if (id) full.href = routeHash({ page: 'txn', txn: id, session: state.sessionId });
 }

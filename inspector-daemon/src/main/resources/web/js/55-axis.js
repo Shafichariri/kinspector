@@ -5,8 +5,10 @@
 
 const AXIS_BUCKETS = 200;
 const AXIS_W = 1000;          // viewBox units; the element itself stretches to its container
-const AXIS_BARS_H = 30;
-const AXIS_BAND_H = 7;
+// Bars and the screen band as one 24px strip, the height of the overview line it shares with the
+// hint and the now strip. It was 37px over a foot line of its own.
+const AXIS_BARS_H = 18;
+const AXIS_BAND_H = 6;
 const AXIS_H = AXIS_BARS_H + AXIS_BAND_H;
 
 const svgEl = (tag, attrs = {}) => {
@@ -74,6 +76,9 @@ function renderAxis() {
   // narrows it, so hiding the control that does the brushing would be the odd choice.
   const onTimeView = ['all', 'network', 'waterfall', 'path'].includes(state.view);
   host.hidden = !onTimeView || !win || state.allTransactions.length + state.allSignals.length < 2;
+  // The hint sits beside the axis rather than inside it, and goes with it.
+  $('axis-hint').hidden = host.hidden;
+  syncOverview();
   if (host.hidden) return;
 
   const svg = $('axis-svg');
@@ -170,18 +175,36 @@ function renderAxisFoot(win) {
 
   const hint = $('axis-hint');
   hint.innerHTML = '';
+  // The text in a span of its own, so it ellipsizes inside the flex line rather than pushing the
+  // now strip off it. The count is the session's, as the bars are, never the filtered rows'.
   if (!state.timeRange) {
     hint.className = 'axis-hint muted';
-    hint.textContent = `${state.allTransactions.length} calls over ${fmtMs(win.span)} — drag to narrow`;
+    hint.appendChild(el('span', null, `${state.allTransactions.length} calls in this session · ${fmtMs(win.span)} — drag to narrow`));
     return;
   }
   hint.className = 'axis-hint';
-  const kept = visibleTransactions().length;
-  const label = el('span', null, `${clock(state.timeRange.from)} – ${clock(state.timeRange.to)} · ${kept} calls`);
+  // The session's calls in the stretch, as the bars draw them: the rows held would count only the
+  // newest 1000 on a session past the list's ceiling, and only the matches under a filter.
+  let inStretch = 0;
+  for (const t of state.allTransactions) if (inRange(t.mono)) inStretch++;
+  const label = el('span', null, `${inStretch} calls in this stretch · ${clock(state.timeRange.from)} – ${clock(state.timeRange.to)}`);
   const clear = el('button', 'btn btn-sm btn-quiet', 'show all');
   clear.addEventListener('click', () => setTimeRange(null));
   hint.appendChild(label);
   hint.appendChild(clear);
+}
+
+/**
+ * The overview line holds the axis and, on the timeline, the now strip; it is hidden when both are,
+ * so an empty band never takes a row's height. A now strip hidden — another view, or a session that
+ * holds nothing now — closes its list, which would otherwise come back open over other rows.
+ */
+function syncOverview() {
+  if ($('now-strip').hidden && !$('current').hidden) {
+    $('current').hidden = true;
+    $('now-toggle').setAttribute('aria-expanded', 'false');
+  }
+  $('overview').hidden = $('axis').hidden && $('now-strip').hidden;
 }
 
 let axisPaintSuspended = false;

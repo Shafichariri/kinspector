@@ -20,11 +20,6 @@
       <span class="picker-face" aria-hidden="true"><span class="picker-time"></span><span class="picker-rest"></span></span>
       <select id="session-picker" aria-label="Session" title="Session"></select>
     </span>
-    <!--
-      The whole session as one file: HTML that is this page working offline, Markdown to read,
-      JSON to process, HAR for DevTools. Filled in by the page's script, which builds the menu.
-    -->
-    <span id="export-host" hidden></span>
     <span id="counts" class="muted mono"></span>
     <span class="spacer"></span>
     <!--
@@ -101,16 +96,16 @@
   -->
   <div id="toolbar" class="toolbar" hidden>
     <!--
-      Two rows, not one wrapping row. The endpoint chips are the only part whose length depends on
-      the session — ten of them is normal — and letting them share a row means the sort order and
-      the buttons move somewhere different for every app you point this at.
+      One row from 1000px up, wrapping below rather than hiding a control. It was two: the endpoint
+      chips are the only part whose length depends on the session — ten of them is normal — and
+      sharing a row made the order control and the buttons move for every app. Behind
+      `endpoints ▾` they can never push anything, and everything else fits one row at 1000.
     -->
     <div class="toolbar-row">
       <input id="filter" type="text" spellcheck="false" autocomplete="off"
-             placeholder="status&gt;=400  path:/v2  slower:500ms">
+             placeholder="status&gt;=400  path:/v2  slower:500ms" aria-label="Filter">
 
-      <span id="chips-label" class="row-label">filters</span>
-      <div class="chips" id="chips">
+      <div class="chips" id="chips" role="group" aria-label="Quick filters">
         <button class="chip" data-filter="has:error">errors</button>
         <button class="chip" data-filter="status&gt;=500">5xx</button>
         <button class="chip" data-filter="status&gt;=400 status&lt;500">4xx</button>
@@ -119,26 +114,37 @@
         <button class="chip" data-filter="attempt&gt;1">retries</button>
       </div>
 
+      <!-- The session's own endpoints, one click each; the button says how many. -->
+      <span class="endpoints-wrap">
+        <button id="endpoints-button" class="btn btn-sm btn-quiet" type="button" aria-expanded="false"
+                title="This session's endpoints, most-used first" hidden>endpoints ▾</button>
+        <div class="chips pop endpoints-pop" id="endpoint-chips" hidden></div>
+      </span>
+
       <span class="spacer"></span>
 
       <!--
         A segmented control, not two chips. The chips beside it change what the list *contains*;
         this changes how it is *arranged*, and two identical-looking controls invited clicking
-        `newest first` expecting fewer rows.
+        `newest first` expecting fewer rows. One word each, the full phrase in the title, so the row
+        fits at 1000px.
       -->
       <div class="seg2" id="order-seg" role="group" aria-label="Order">
-        <button id="order-oldest" type="button" data-newest="0" aria-pressed="false" title="Causal reading order">oldest first</button>
-        <button id="order-newest" type="button" data-newest="1" aria-pressed="false" title="Tail-a-log order">newest first</button>
+        <button id="order-oldest" type="button" data-newest="0" aria-pressed="false" title="Oldest first: causal reading order">oldest</button>
+        <button id="order-newest" type="button" data-newest="1" aria-pressed="false" title="Newest first: tail-a-log order">newest</button>
       </div>
 
-      <!-- Rarely-read reference, one click away rather than occupying the fold. -->
+      <!-- Rarely-read reference, one click away rather than occupying the fold. A button of its own
+           because it carries a count and a form. -->
       <button id="markers-button" class="btn btn-sm btn-quiet" aria-expanded="false"
               title="Markers in this session">markers</button>
-      <button id="keys-button" class="btn btn-sm btn-quiet" aria-expanded="false"
-              title="Keyboard shortcuts">shortcuts</button>
+      <!--
+        `⋮`: the whole session as one file (HTML that is this page working offline, Markdown to
+        read, JSON to process, HAR for DevTools), the keyboard shortcuts and the row density. Built
+        by the page's script, which builds the menu.
+      -->
+      <span id="more-host" class="more-host"></span>
     </div>
-
-    <div class="chips" id="endpoint-chips" hidden></div>
   </div>
 
   <div id="filter-error" class="filter-error" hidden></div>
@@ -171,32 +177,34 @@
   </div>
 
   <!--
-    What the app currently holds, as a strip rather than a column. It was 1341px of the rail —
-    70% of it — for a summary, which is header-shaped information, not a list. Collapsed it says
-    how much there is and how stale the oldest of it is; opened it is the same list as before.
-  -->
-  <div id="now-strip" class="now-strip" hidden>
-    <button id="now-toggle" class="now-summary" aria-expanded="false">
-      <span class="now-caret">&#9656;</span>
-      <span class="rail-label">now</span>
-      <span id="now-summary-text" class="muted"></span>
-    </button>
-    <ul id="current" class="current" hidden></ul>
-  </div>
+    The overview line: a map of the session and, on the timeline, what the app holds now. They were
+    two bands of the seven above the first row, each saying one thing; one line gives the rows back
+    about 60px on the list and 90 on the timeline. Hidden when both of its parts are.
 
-  <!--
-    A map of the session, above the list that reads it.
+    The axis: the list answers "what happened"; it is very bad at "when, and how much of it at
+    once". Bursts, idle stretches, the moment everything went red — all of that is shape, and shape
+    is the one thing a scrolling list cannot show. Drag across it to narrow both panes to that
+    stretch.
 
-    The list answers "what happened"; it is very bad at "when, and how much of it at once". Bursts,
-    idle stretches, the moment everything went red — all of that is shape, and shape is the one
-    thing a scrolling list cannot show. Drag across it to narrow both panes to that stretch.
+    Now: what the app currently holds. It was 1341px of the rail — 70% of it — for a summary, which
+    is header-shaped information, not a list. Collapsed it says how much there is and how stale the
+    oldest of it is; opened it is the same list as before, as a popover under its button rather than
+    a band that pushes the rows down.
   -->
-  <div id="axis" class="axis" hidden>
-    <svg id="axis-svg" class="axis-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
-    <div class="axis-foot">
+  <div id="overview" class="overview" hidden>
+    <div id="axis" class="axis" hidden>
       <span id="axis-from" class="axis-time muted mono"></span>
-      <span id="axis-hint" class="axis-hint muted">drag to narrow</span>
+      <svg id="axis-svg" class="axis-svg" preserveAspectRatio="none" aria-hidden="true"></svg>
       <span id="axis-to" class="axis-time muted mono"></span>
+    </div>
+    <span id="axis-hint" class="axis-hint muted" hidden>drag to narrow</span>
+    <div id="now-strip" class="now-strip" hidden>
+      <button id="now-toggle" class="now-summary" type="button" aria-expanded="false">
+        <span class="now-caret">&#9656;</span>
+        <span class="rail-label">now</span>
+        <span id="now-summary-text" class="muted"></span>
+      </button>
+      <ul id="current" class="current" hidden></ul>
     </div>
   </div>
 
@@ -275,13 +283,39 @@
 
     </section>
 
+    <!--
+      The list's share of the width, dragged, or moved with the arrow keys; double-click or Home puts
+      the default back. Two columns only: a drawer has nothing beside it to share the width with.
+    -->
+    <div id="pane-divider" class="pane-divider" role="separator" tabindex="0" aria-orientation="vertical"
+         aria-controls="list-pane" aria-label="Resize the list and the detail" aria-valuemin="25"
+         aria-valuemax="75" aria-valuenow="47.6" title="Drag to resize; double-click to reset"></div>
+
     <section id="detail-pane">
-      <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
-      <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet"
-              title="Close (Esc)">&#10005;</button>
+      <!--
+        The pane's own controls, in a row above the header rather than laid over it: the close
+        button was absolutely placed at the top right, where it covered the header's right-aligned
+        actions. In flow, nothing below it can sit under it.
+      -->
+      <div id="detail-tools" class="detail-tools">
+        <!-- The shown call on a page of its own, `#/txn/<id>`; Back or Escape returns here. -->
+        <a id="detail-full" class="detail-full btn btn-sm btn-quiet" hidden
+           title="Open this call on its own page" aria-label="Open this call on its own page">&#10530;</a>
+        <!-- Column mode only: the list takes the width, and the tab at the right edge brings it back. -->
+        <button id="detail-hide" class="detail-hide btn btn-sm btn-quiet" type="button"
+                title="Hide the detail; the list takes the width" aria-label="Hide the detail">&#8677;</button>
+        <!-- Only ever a control in drawer mode; the CSS hides it where the pane is a column. -->
+        <button id="drawer-close" class="drawer-close btn btn-sm btn-quiet" type="button"
+                title="Close (Esc)" aria-label="Close the detail">&#10005;</button>
+      </div>
       <div id="detail-empty" class="empty muted">select a transaction</div>
       <div id="detail" hidden></div>
     </section>
+
+    <!-- The detail column put away: a slim tab at the right edge, naming the call it would show. -->
+    <button id="detail-restore" class="detail-restore" type="button" hidden>
+      <span aria-hidden="true">&#9666;</span> <span id="detail-restore-label">detail</span>
+    </button>
 
     <!--
       Below the breakpoint the detail pane stops being a column and slides over the list, so the
@@ -412,6 +446,23 @@
 
   <section id="page-settings" class="page page-doc" aria-labelledby="settings-title" hidden>
     <h1 id="settings-title" class="page-title" tabindex="-1">Settings</h1>
+
+    <section class="settings-section">
+      <h2 class="settings-title">Rows</h2>
+      <p class="settings-note muted">
+        Compact rows fit more calls on screen; the text stays the same size. The same switch is in
+        the traffic page's <code>⋮</code> menu. Kept in this browser.
+      </p>
+      <div class="settings-actions">
+        <label class="settings-field">
+          density
+          <select id="density">
+            <option value="comfortable">comfortable</option>
+            <option value="compact">compact</option>
+          </select>
+        </label>
+      </div>
+    </section>
 
     <section class="settings-section">
       <h2 class="settings-title">Repeated requests</h2>

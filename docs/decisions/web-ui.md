@@ -380,7 +380,12 @@ group heads, the new-visit pill. Each stuck at `top: 0`, so whichever came later
 drew over the bar — the timeline's note under any filter, the path's map at 400 wide. They stop at
 `--sticky-top` now, which is the bar's height while it is drawn and 0 otherwise, set by
 `#scope-bar:not([hidden]) ~ *`; the bar's height is fixed so the offset is a number, not a
-measurement. The timeline is no longer its own full-height scroller: beside the bar it made the pane
+measurement. `check-web-static.js`'s `sticky top` holds it from the stylesheet text, because jsdom
+has no layout and a computed check would pass whatever the CSS says: every selector declared sticky,
+other than `.scope-bar`, must take any `top` it declares, in any file and any `@media` block, from
+`--sticky-top`. It was proven red by putting `top: 0` back on `#timeline > .filter-note`, and it
+landed before the overview line, the first band added under it. A heuristic over selector text;
+among what it misses is a `top` set for the same element through another selector. The timeline is no longer its own full-height scroller: beside the bar it made the pane
 overflow by the bar's height, live follow scrolled the pane that far, and the bar sat on the first
 row while the timeline's own foot was never followed. It flows in the pane as the list does. That
 made its follow move the whole pane on every redraw, so expanding a run in the middle of a 3016-call
@@ -404,6 +409,86 @@ to 33px under the box. Layout again, so not a probe: KIN-33's notes record the h
 measurement — the element at the bar's centre, the first and newest timeline rows, and each
 station's row against the box, at 1440 and 400, with and without a filter — red at e1711a3 and
 green after.
+
+**Each traffic view keeps its own place in the shared pane while live tail is paused.** Since KIN-33
+the list, the timeline, the waterfall and the path scroll one pane, so a list left at row 5000 opened
+the timeline at 5000 of 29,800, a place nobody chose. Leaving a view now saves the pane's position
+under its view id, and opening it restores that, or the view's own first-open rule. Only while
+paused: with live tail on each view follows as before, and KIN-38's rule that opening a run never
+moves the pane is untouched. A new session, filter, order or stretch drops every saved place, since
+each is a new list; the places are kept with the list they were saved on and dropped the first time
+a view opens on another, so no loader has to remember to clear them. `views keep place` drives it in
+jsdom, which holds an assigned `scrollTop`, and Chrome confirms it on the 3016-call session (`room
+views keep place`); both were red with the restore removed.
+
+**A closed drawer is hidden from the keyboard and from the page's width, not only moved off screen.**
+Below 1200px the closed pane was translated past the right edge and nothing else, so the document
+was 1646px wide at 1000, Tab reached thirteen controls inside it, and focusing its `✕` scrolled the
+window 646px sideways, half-opening the drawer with no scrim. It is `visibility: hidden` once its
+slide ends, which takes it out of the tab order with no breakpoint in script, and `#panes` is
+`overflow: clip`, not `hidden`, because a `hidden` box can still be scrolled by focus or a swipe. Its
+shadow applies only while open. `closed drawer css` reads the rules; `measure-web-ui.js`'s
+`tab never enters closed` and `doc width closed` are the behaviour, red with each rule removed.
+The `✕` sits in a tools row above the detail header, in flow, rather than absolutely placed over its
+top right corner, where it covered `replay ▾` served and `copy for agent` in an export
+(`room 1000 close disjoint served` and `… export`, red with it placed absolutely again).
+
+**A narrow row gives up its clock and host before its path's last segment, its byte count or its
+repeat mark.** At 400px paths were cut to four characters while the fixed columns kept full width.
+The path is drawn as a head that ellipsizes and a last segment that never shrinks; the repeat mark is
+its own item, reading `2×` below 520px, the overlay's form, because a tint alone does not say how
+many times. `room 400 rows` measures every row of the probe session, red with the 519px row block
+removed; `narrow row css` reads the rules, and the live probe's `row parts` holds that the segment is
+the last one of the path the row shows, after the scope bar's prefix, and that both forms of the mark
+count the calls.
+
+**The now strip and the time axis are one overview line.** Two bands of the seven above the first
+row said one thing each; the axis keeps its brush and its ids, and the now list opens as a popover
+instead of pushing the rows down. The line is hidden when both of its parts are, and hiding the now
+strip closes its list, so a popover left open never comes back over another view's rows. The hint
+counts the session's calls, as the bars do: the live probe's `overview line` reads it under a filter
+that thins the rows, red with the count taken from the rows held. `room 1440 bands list` bounds the
+list pane's top at 160px. The hint's words are whole at 1440 and 1000, because the axis is the part
+that gives: its bars stretch to any width, and a count cut to `16 calls in this session · 2.1s — drag
+to …` no longer says what it counts. The axis has a zero flex basis for that; with `auto` it claimed
+the svg's own width and the two shrank in step (`room <w> hint whole`, red with `auto` put back).
+
+**Every count on the traffic page says what it counts, and every tab counts the session.** One
+1203-call session once showed four numbers: the tab's `traffic 1000`, the header's `newest 1000 of
+1203 shown`, the scope bar's `1203 of 1203` and the axis's `1203 calls`. The traffic tab counted the
+rows held while the signal tabs counted the session; now it counts the session too, as `allSignals`
+does for the signal tabs. The scope bar says `calls under this prefix` (`N/M under prefix` below
+520px), the overview `calls in this session` and in a stretch `calls in this stretch`, counted from
+the whole session as its bars are, the glance `calls in session`, and the header keeps its own
+wording for drawn rows. `counts agree`, on the capped long session live and exported, fails when a
+count matches no label or two counts of the session differ; its label table holds the header's and
+the list note's match wordings too. It was red with the scope count bare and with the tab counting
+rows. The live probe's `live header filter` asserts the tab's session count under a filter, where it
+used to assert the filtered rows. `topbar <w> count` in `measure-web-ui.js` holds each header
+wording to one line at 1000 as well as below, where the toolbar has no room for it.
+
+**The toolbar is one row from 1000px up, with endpoint chips behind `endpoints ▾`.** It was two rows
+because the chips are the only part whose length depends on the session, and sharing a row made
+the order control move for every app. Behind a menu they can never push it, and the quick filters,
+the order control, markers and `⋮` all fit one row at 1000. Below 1000 it wraps rather than hide a
+control. The button counts the chips its popover holds, from the whole session as the chips are, so
+the filter a chip sets does not shrink it (`endpoints menu`, red with the count taken from the
+filtered rows). `⋮` holds the four exports, which left the top bar, the shortcut legend and compact
+rows; in an export its exports are hidden by `body.archive` with every other control that would ask
+a daemon for something (`export items hidden`). Row density has one writer, `setDensity`, behind the
+`⋮` item and the Settings page's control, stored as `inspector.density`; compact takes padding off a
+row and never makes text smaller (`density`, red with the Settings control writing a key of its own).
+`room <w> toolbar one row` at 1440 and 1000 and `room <w> toolbar fits` at 600 and 400 measure it in
+Chrome.
+
+**`#/txn/{id}` is the detail pane given the page, not a second rendering of a call.** It reuses
+`renderDetail`, so the evidence on it is the evidence everywhere else, and it reads a call past the
+list's ceiling from the single-call route rather than saying it does not exist. The call is looked
+up in the whole-session copy, then the rows the list holds, and only then read; an export has no
+route and embeds every call, so there a missing id says `not in this export`. `route parse` holds
+the address, the live probe's `txn route` and `txn route past ceiling` the page, Back and Escape,
+and the archive probe's `txn route in export` the export, the last two red with the lookup made in
+the list's rows alone and with the page's class not set.
 
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as

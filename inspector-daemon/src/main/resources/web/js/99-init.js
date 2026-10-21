@@ -8,6 +8,11 @@ document.addEventListener('keydown', (e) => {
   }
   // Every key below moves through, filters or copies the traffic list, which only one page draws.
   if (currentPage() !== 'traffic') return;
+  // A call's own page has no list to move through; Escape leaves it as Back does.
+  if ($('panes').classList.contains('txn-full')) {
+    if (e.key === 'Escape') leaveTxnFull();
+    return;
+  }
   switch (e.key) {
     case 'j': move(1); break;
     case 'k': move(-1); break;
@@ -21,6 +26,7 @@ document.addEventListener('keydown', (e) => {
       $('detail-empty').hidden = false;
       renderSessionGlance();
       closeDrawer();
+      paintDetailTools();
       for (const row of document.querySelectorAll('.row')) row.classList.remove('selected');
       break;
     case 'c': {
@@ -77,16 +83,19 @@ wireSettingsPage();
   wireAxis();
   wirePath();
   $('drawer-close').addEventListener('click', closeDrawer);
+  wireDivider();
+  $('detail-hide').addEventListener('click', hideDetail);
+  $('detail-restore').addEventListener('click', restoreDetail);
+  // `⤢` is a link, so a modified click opens the call in a new tab; a plain one pushes the address,
+  // which is what lets Back and Escape return to the list as it was.
+  $('detail-full').addEventListener('click', (e) => {
+    if (e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !state.selectedId) return;
+    e.preventDefault();
+    state.txnPushed = true;
+    navigate({ page: 'txn', txn: state.selectedId, session: state.sessionId });
+  });
   // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
   $('drawer-scrim').addEventListener('click', closeDrawer);
-
-  $('now-toggle').addEventListener('click', () => {
-    const strip = $('now-strip');
-    const open = $('current').hidden;
-    $('current').hidden = !open;
-    strip.classList.toggle('open', open);
-    $('now-toggle').setAttribute('aria-expanded', String(open));
-  });
 
   setRailMode();
 
@@ -96,7 +105,7 @@ wireSettingsPage();
 
   if (ARCHIVE) enterArchiveMode(ARCHIVE);
   else await loadServerInfo();
-  wireExportMenu();
+  wireMoreMenu();   // paints the density the page was left in
   // The page first, and a `?session=` before the list is read, so the first load is that session's.
   await applyRoute();
   await loadSessions();

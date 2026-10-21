@@ -218,10 +218,20 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
       (!archive.meta || banner.textContent.includes(archive.meta.sessionId)),
     banner.textContent.trim().replace(/\s+/g, ' ').slice(0, 140),
   );
-  const daemonOnly = ['#live-btn', '.daemon-group', '#export-host', '#chips', '#chips-label',
+  const daemonOnly = ['#live-btn', '.daemon-group', '.export-item', '#chips', '#endpoints-button',
     '#endpoint-chips', '#marker-form', '#browser-pull'];
   const visible = daemonOnly.filter((sel) => !hiddenByCss(doc.querySelector(sel)));
   check('daemon controls hidden', visible.length === 0, visible.join(', ') || 'all hidden');
+  // `⋮` is offered, for the shortcut legend and compact rows; the exports in it would ask a daemon
+  // for this session, so opened, it draws none of them.
+  const more = doc.getElementById('more-button');
+  click(more);
+  const moreItems = more ? [...more.parentElement.querySelectorAll('.menu-item')] : [];
+  const exportsShown = moreItems.filter((i) => i.classList.contains('export-item') && !hiddenByCss(i));
+  const othersShown = moreItems.filter((i) => !i.classList.contains('export-item') && !hiddenByCss(i)).map((i) => i.textContent);
+  check('export items hidden', Boolean(more) && moreItems.length === 6 && exportsShown.length === 0 && othersShown.length === 2,
+    more ? `${exportsShown.length} exports shown; offered: ${othersShown.join(', ') || 'nothing'}` : 'no ⋮');
+  click(more);
   // The rail offers Traffic alone: every other page sends something or reads the machine.
   const rail = (page) => doc.querySelector(`#rail .rail-item[data-page="${page}"]`);
   const railShown = ['sessions', 'processes', 'settings'].filter((page) => !hiddenByCss(rail(page)));
@@ -235,6 +245,22 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     `${window.location.hash}, traffic ${doc.getElementById('page-traffic').hidden ? 'hidden' : 'shown'}`,
   );
   check('filter disabled', doc.getElementById('filter').disabled);
+
+  // A call's own page reads the call from the export's data, with no request — every one is
+  // forbidden here — and an id the export does not hold says so rather than drawing nothing.
+  const embedded = txns[Math.floor(txns.length / 2)];
+  const sid = encodeURIComponent(archive.meta?.sessionId ?? '');
+  const panes = doc.getElementById('panes');
+  const headPath = () => doc.querySelector('#detail .detail-head .path')?.textContent;
+  window.location.hash = `#/txn/${encodeURIComponent(embedded.id)}?session=${sid}`;
+  const opened = await waitFor(() => panes.classList.contains('txn-full') && headPath() === embedded.path, 3000);
+  window.location.hash = `#/txn/no-such-call?session=${sid}`;
+  const missing = await waitFor(() => doc.getElementById('detail').hidden && doc.getElementById('detail-empty').textContent.includes('not in this export'), 3000);
+  const said = doc.getElementById('detail-empty').textContent.slice(0, 60);
+  window.location.hash = '#/traffic';
+  const left = await waitFor(() => !panes.classList.contains('txn-full'), 3000);
+  check('txn route in export', opened && missing && left && attempts.length === 0,
+    `${embedded.method} ${embedded.path} drawn ${opened}; an unknown id: "${said}" ${missing}; left ${left}; ${attempts.length} requests`);
 
   // A marker item would ask for since:marker(...). It must leave the list alone and say why.
   const markerItem = [...doc.querySelectorAll('#markers li')].find((li) => !li.classList.contains('muted'))

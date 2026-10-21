@@ -1,28 +1,48 @@
 /* now strip and chips: the now strip, chips, the order control, markers and key caps */
 /* --- the now strip ------------------------------------------------------ */
 
-.now-strip { border-bottom: 1px solid var(--divider); flex: 0 0 auto; }
+/* The last part of the overview line, and the one whose list opens under it. Positioned, so the
+   list is placed against it. */
+.now-strip { position: relative; display: flex; flex: 0 1 auto; min-width: 0; }
 .now-strip[hidden] { display: none !important; }
 
 .now-summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
-  padding: 5px 10px;
+  min-width: 0;
+  padding: 2px 6px;
   background: none;
   border: 0;
+  border-radius: 4px;
   color: inherit;
   font: inherit;
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 .now-summary:hover { background: var(--bg-hover); }
+#now-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .now-caret { font-size: 9px; color: var(--fg-muted); }
-.now-strip.open .now-caret { transform: rotate(90deg); }
-/* Open, it is the same list it always was — capped, because "everything the app holds" can be
-   long and this is a strip, not a pane. */
-.now-strip .current { max-height: 220px; overflow-y: auto; padding: 0 10px 8px; }
+.now-summary[aria-expanded="true"] .now-caret { transform: rotate(90deg); }
+/* Open, it is the same list it always was, as a popover under its button rather than a band that
+   pushed the rows down — capped, because "everything the app holds" can be long. */
+.now-strip .current {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  width: min(440px, calc(100vw - 24px));
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  font-size: 12px;
+}
 
 .chip {
   background: var(--bg-elevated);
@@ -41,16 +61,6 @@
   border-color: var(--accent);
   color: var(--accent);
   background: rgb(var(--accent-rgb) / 0.12);
-}
-
-/* Names a row of chips. Uppercase and muted so it reads as a caption, never as a chip. */
-.row-label {
-  font-size: 11px;
-  color: var(--fg-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  align-self: center;
-  margin-right: 4px;
 }
 
 /* Two mutually exclusive options that arrange the list. Joined, so it reads as one control with a

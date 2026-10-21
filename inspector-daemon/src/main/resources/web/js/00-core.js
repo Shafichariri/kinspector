@@ -28,6 +28,7 @@ const ARCHIVE = window.INSPECTOR_ARCHIVE || null;
 const prefs = {
   get(key) { try { return localStorage.getItem(key); } catch { return null; } },
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* a preference, not data */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* a preference, not data */ } },
 };
 
 const state = {
@@ -55,6 +56,8 @@ const state = {
   // false = oldest first (causal reading order), true = newest first (tail-a-log order).
   // Remembered across reloads because it is a reading preference, not session state.
   newestFirst: prefs.get('inspector.newestFirst') === '1',
+  // 'comfortable' or 'compact' rows, set through `setDensity` from `⋮` or the Settings page.
+  density: prefs.get('inspector.density') === 'compact' ? 'compact' : 'comfortable',
   // Window for duplicate detection, in ms. 0 disables it.
   duplicateWindowMs: Number(prefs.get('inspector.duplicateWindowMs') ?? 3000),
   // id -> group ordinal, recomputed whenever the transaction list changes.
@@ -125,6 +128,10 @@ const state = {
   pathFresh: true,
   // The timeline was just opened, so it follows once whatever the pane's position (`renderTimeline`).
   timelineFresh: true,
+  // The traffic view the shared pane last showed, and each view's place in it by view id, saved
+  // while live tail is paused, with the list they were saved on (`viewPlaces`).
+  paneView: null,
+  viewScroll: { list: null, places: new Map() },
   // Signal payloads, keyed by signal id. Fetched lazily: the signal list deliberately omits
   // them — a session can hold thousands — but every field a browser row shows lives in one.
   payloads: new Map(),
@@ -163,6 +170,10 @@ const state = {
   // Session ids an app is connected to right now, from `/api/recording`. Not derivable from
   // `endedAt`: a session whose daemon was killed has neither an `endedAt` nor an open app.
   recording: [],
+  // `#/txn/<id>`: reads of a call's own page, counted so a later address overtakes an earlier one
+  // still reading, and whether the page pushed the address, so leaving it can go Back.
+  txnRead: 0,
+  txnPushed: false,
   // A stretch of the session selected on the axis, in device `mono` ms, or null for all of it.
   // Client-side on purpose: the text filter round-trips to the daemon, and a brush you drag
   // across a chart cannot wait for a fetch per pixel.

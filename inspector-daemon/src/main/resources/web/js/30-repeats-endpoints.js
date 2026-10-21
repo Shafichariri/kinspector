@@ -110,14 +110,23 @@ function endpointShortcuts(txns, limit) {
 }
 // @mirror-end endpointShortcuts
 
+/**
+ * The chips, in the popover under `endpoints ▾ N`. Always behind the button: inline, their number
+ * decided whether the controls after them fit, so those moved between sessions. N is the chips the
+ * popover holds, built from the whole session like the chips themselves, so a filter does not
+ * shrink it. With no chips there is no button, and an open popover closes.
+ */
 function renderEndpointChips() {
   const box = $('endpoint-chips');
+  const button = $('endpoints-button');
   const shortcuts = endpointShortcuts(state.allTransactions, state.endpointLimit);
   box.innerHTML = '';
-  box.hidden = shortcuts.length === 0;
-  // Named, like the row above it: two rows of identical chips otherwise read as one list that
-  // wrapped, and these are a different kind of thing — the session's own endpoints.
-  if (shortcuts.length) box.appendChild(el('span', 'row-label', 'endpoints'));
+  button.textContent = `endpoints ▾ ${shortcuts.length}`;
+  button.hidden = shortcuts.length === 0;
+  if (!shortcuts.length) {
+    box.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+  }
 
   for (const { segment, count } of shortcuts) {
     const value = endpointFilter(segment);
