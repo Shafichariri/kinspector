@@ -4,6 +4,7 @@
 # and inlines it for an HTML export; nothing serves or fetches this file.
 js/00-core.js
 js/05-network.js
+js/08-routes.js
 js/10-json-tree.js
 js/15-session-data.js
 js/20-navigation.js

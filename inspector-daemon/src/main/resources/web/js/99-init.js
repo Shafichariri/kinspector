@@ -6,6 +6,8 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') e.target.blur();
     return;
   }
+  // Every key below moves through, filters or copies the traffic list, which only one page draws.
+  if (currentPage() !== 'traffic') return;
   switch (e.key) {
     case 'j': move(1); break;
     case 'k': move(-1); break;
@@ -30,13 +32,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 $('filter').addEventListener('input', applyFilter);
-$('session-picker').addEventListener('change', (e) => {
-  state.sessionId = e.target.value;
-  state.selectedId = null;
-  state.timeRange = null;
-  showSessionLabel();
-  loadTransactions();
-});
+$('session-picker').addEventListener('change', (e) => switchSession(e.target.value));
 $('live-btn').addEventListener('click', () => setLiveTail(!state.liveTail));
 // Scoped to the filter rail, not every `.chip` on the page. Order chips and facet chips are
 // chips too, and they carry no `data-filter` — a blanket handler set the filter box to
@@ -49,12 +45,6 @@ for (const chip of document.querySelectorAll('#chips .chip')) {
   });
 }
 
-// Two clicks, like deleting a session: stopping ends recording for every app on this machine.
-// It replaces a `confirm()` dialog, which blocks the whole page and is easy to dismiss by reflex.
-$('server-stop').addEventListener('click', () => {
-  confirmThen($('server-stop'), 'stop', 'stop daemon?', requestStop);
-});
-$('server-restart').addEventListener('click', requestRestart);
 $('order-oldest').addEventListener('click', () => setSortOrder(false));
 $('order-newest').addEventListener('click', () => setSortOrder(true));
 
@@ -64,18 +54,21 @@ $('browser-filter').addEventListener('input', (e) => {
   renderBrowser();
 });
 
-$('session-delete').addEventListener('click', () => {
-  if (state.sessionId) {
-    confirmThen($('session-delete'), '✕', 'delete session?', () => deleteSession(state.sessionId));
-  }
-});
-$('sessions-clear').addEventListener('click', () => {
-  confirmThen($('sessions-clear'), 'clear all', 'delete every session?', clearSessions);
-});
-$('sessions-refresh').addEventListener('click', async () => {
-  await loadSessions();
-  renderSessionRows();
-});
+// The rail's links go through `navigate`, so a page is a history entry and its heading takes focus.
+// A modified click is left to the browser, which opens the address in a new tab or window.
+for (const link of document.querySelectorAll('#rail .rail-item')) {
+  link.addEventListener('click', (e) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    navigate({ page: link.dataset.page });
+  });
+}
+$('rail-toggle').addEventListener('click', toggleRail);
+// Back and Forward, and an address typed or pasted, arrive here; `navigate` applies its own.
+window.addEventListener('hashchange', applyRoute);
+wireSessionsPage();
+wireProcessesPage();
+wireSettingsPage();
 
 (async function init() {
   setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
@@ -95,28 +88,7 @@ $('sessions-refresh').addEventListener('click', async () => {
     $('now-toggle').setAttribute('aria-expanded', String(open));
   });
 
-  $('open-settings').addEventListener('click', () => {
-    $('settings').showModal();
-    loadPeers();
-    loadMcp();
-    applyDuplicateWindow(state.duplicateWindowMs);   // refreshes the count for this session
-    applyEndpointLimit(state.endpointLimit);
-    renderSessionRows();
-  });
-  $('peers-refresh').addEventListener('click', loadPeers);
-  $('dup-window').value = state.duplicateWindowMs;
-  $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
-  $('endpoint-limit').value = state.endpointLimit;
-  $('endpoint-limit').addEventListener('change', (e) => applyEndpointLimit(Number(e.target.value)));
-  $('mcp-probe').addEventListener('click', probeMcp);
-  $('mcp-copy').addEventListener('click', () => {
-    const text = $('mcp-command').textContent;
-    navigator.clipboard.writeText(text).then(() => {
-      const button = $('mcp-copy');
-      button.textContent = 'copied';
-      setTimeout(() => (button.textContent = 'copy command'), 1200);
-    });
-  });
+  setRailMode();
 
   // Ages are wall-clock now, so they have to be repainted or they are wrong the moment they
   // are drawn. Only the text of the age nodes changes; nothing re-renders around them.
@@ -125,8 +97,12 @@ $('sessions-refresh').addEventListener('click', async () => {
   if (ARCHIVE) enterArchiveMode(ARCHIVE);
   else await loadServerInfo();
   wireExportMenu();
+  // The page first, and a `?session=` before the list is read, so the first load is that session's.
+  await applyRoute();
   await loadSessions();
   await loadTransactions();
+  // Then the view, which a session must have loaded to offer.
+  await applyRoute();
   // Not merely pointless in an export: opened from disk, `location.host` is empty and the
   // socket URL is malformed, so the constructor throws and takes the rest of init with it.
   if (!ARCHIVE) connectLive();

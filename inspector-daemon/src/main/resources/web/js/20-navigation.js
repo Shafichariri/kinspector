@@ -94,9 +94,37 @@ function renderTabs() {
     tab.appendChild(el('span', 'tab-label', view.label));
     if (view.count !== undefined) tab.appendChild(el('span', 'tab-count muted mono', String(view.count)));
     tab.classList.toggle('active', view.id === state.view);
-    tab.addEventListener('click', () => selectView(view.id));
+    // Through the address, so a tab is a place Back returns to.
+    tab.addEventListener('click', () => navigate({ page: 'traffic', view: view.id }));
     bar.appendChild(tab);
   }
+  bar.appendChild(viewsMenu(views));
+}
+
+/**
+ * `views ▾`: every view and its count, one control, for a bar too narrow to draw every tab. The
+ * stylesheet shows it, and only the active tab beside it, below 700px; above, it is not drawn. A
+ * rule rather than a measured overflow, because a rule can be read and jsdom cannot measure.
+ * Built from the same `availableViews()` as the tabs, so a tag's view is never out of reach.
+ */
+function viewsMenu(views) {
+  const items = views.map((view) => {
+    const item = menuItem(view.count === undefined ? view.label : `${view.label}  ${view.count}`, view.title,
+      () => navigate({ page: 'traffic', view: view.id }));
+    item.dataset.view = view.id;
+    if (view.id === state.view) item.setAttribute('aria-current', 'true');
+    return item;
+  });
+  const menu = menuButton({
+    label: 'views ▾',
+    className: 'tabs-more-btn',
+    title: 'Every view this session offers',
+    items,
+    alignLeft: true,
+  });
+  menu.wrap.id = 'tabs-more';
+  menu.wrap.classList.add('tabs-more');
+  return menu.wrap;
 }
 
 async function selectView(id) {
@@ -115,6 +143,11 @@ async function selectView(id) {
   if (id === 'path') await loadScreenPayloads();
   renderTabs();
   applyView();
+  // The address says which view is shown, whoever chose it: a tab goes through `navigate`, which
+  // pushed it already, and a direct call such as a measuring case is written in place.
+  if (currentPage() === 'traffic' && parseRoute(location.hash).view !== id) {
+    replaceRoute({ ...parseRoute(location.hash), page: 'traffic', view: id });
+  }
 }
 
 

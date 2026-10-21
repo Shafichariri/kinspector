@@ -29,7 +29,9 @@
  *     and the path, past the clamp, says which visits' calls are not loaded rather than "0 of N";
  *   - the timeline under live tail: a run opened or closed leaves the pane where it is, a new row is
  *     followed only from the end it follows, and opening the view follows once; and the live socket's
- *     calls and markers leave the timeline, the path and the waterfall where the reader put them.
+ *     calls and markers leave the timeline, the path and the waterfall where the reader put them;
+ *   - the shell: the address parser, the Sessions and Processes presets, the control header written in
+ *     one place, and the narrow top bar and tab bar rules.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -54,6 +56,8 @@ const { checkListHolds } = require('./lib/list-holds-checks');
 const { checkLiveReread } = require('./lib/live-reread-checks');
 const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
+const { checkShell } = require('./lib/shell-checks');
+const { auditNarrowTopBar, auditNarrowTabs } = require('./lib/layout-audits');
 
 const results = [];
 const report = (label, value) => {
@@ -126,6 +130,11 @@ async function main() {
   console.error('--- live follow ---');
   for (const [label, value] of await checkTimelineFollow(scripts)) report(label, value);
   for (const [label, value] of await checkSocketFollow(scripts)) report(label, value);
+
+  console.error('--- shell ---');
+  for (const [label, value] of checkShell(scripts)) report(label, value);
+  report('narrow top bar css', auditNarrowTopBar(styles));
+  report('narrow tabs css', auditNarrowTabs(styles));
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

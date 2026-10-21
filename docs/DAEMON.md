@@ -196,11 +196,11 @@ Three ways, in order of preference.
 
 ### From the web UI
 
-The **stop** button in the top bar. Click it twice: the first click changes it to `stop daemon?`
-and the second stops the daemon (it disarms on its own after a few seconds). The page then shows a
-`daemon stopped` banner with the time of the last capture, dims everything below it, and keeps
-trying to reconnect — so running `inspector serve` again is enough, and the banner clears itself
-when the daemon is back. There is no restart button on the banner, because there is no process
+**Stop** on the **Processes** page, under *This daemon*. Click it twice: the first click changes it
+to `stop daemon?` and the second stops the daemon (it disarms on its own after a few seconds). The
+page then shows a `daemon stopped` banner with the time of the last capture, dims everything below
+it, and keeps trying to reconnect — so running `inspector serve` again is enough, and the banner
+clears itself when the daemon is back. There is no restart button on the banner, because there is no process
 left to receive one. This is the easiest option when you have lost track of which terminal
 launched it.
 
@@ -241,11 +241,15 @@ pgrep -fl "MainKt serve"
 loss is the metadata flush for a session still recording, which shows up as a session with a stale
 transaction count.
 
-### From the web UI — Settings
+### From the web UI — Processes
 
-The **settings** button lists every inspector process on the machine and offers to kill the ones
-that are not this daemon. It exists precisely because the `pkill` patterns above are easy to get
-wrong.
+The **Processes** page lists every inspector process on the machine and offers to kill the ones
+that are not this daemon: one row's `kill`, or several at once with the checkboxes, the presets
+(**all servers**, **all except this one**, and **stale**, those that started before this daemon)
+and `kill selected`. Every kill arms on the first click and fires on the second, and the page then
+says what happened to each process. No preset ever ticks an `mcp` process — it is your editor's
+connection — and ticking one by hand shows a warning. The page exists precisely because the `pkill`
+patterns above are easy to get wrong.
 
 The daemon identifies siblings by **exact argv token** — the launcher's main class,
 `dev.inspector.daemon.MainKt`, followed by the subcommand — never by a substring of the command
@@ -316,8 +320,10 @@ argv shape and so are not listed. Kill those where you started them.
 
 ### From the web UI
 
-The **restart** button. The daemon relaunches itself and the page reconnects on its own — no manual
-reload. The archive is untouched, so every session is still there afterwards.
+**Restart** on the **Processes** page, under *This daemon*. The daemon relaunches itself and the
+page reconnects on its own — no manual reload. If it has not reconnected 20 s later, the page says
+the daemon is lost rather than reading `Restarting…` for ever. The archive is untouched, so every
+session is still there afterwards.
 
 This also picks up a rebuilt daemon, which makes it a genuinely fast development loop:
 
@@ -387,8 +393,11 @@ the file, and the file wins over defaults:
 A malformed `config.json` is reported on stderr and ignored rather than blocking startup — a
 debugging tool that will not start because of its own settings file is worse than one on defaults.
 
-The daemon can also write the file. `GET /api/config` shows the file, the values this daemon is
-running on, and which keys a flag is overriding; `PUT /api/config` saves:
+The daemon can also write the file, and the web UI's **Settings** page does, under *The daemon's
+config.json*: it shows what this daemon runs on beside each value, disables a key a flag sets, and
+does not offer `port` (a page that saved a new port and restarted would be left dialling one nobody
+listens on). `GET /api/config` shows the file, the values this daemon is running on, and which keys
+a flag is overriding; `PUT /api/config` saves:
 
 ```bash
 curl -s http://127.0.0.1:8099/api/config
@@ -461,9 +470,10 @@ credentials. Treat `~/.inspector` as you would a log directory full of tokens.
 A pile of one-run simulator sessions is the normal state of this directory. Retention prunes the
 oldest once the archive passes `maxSessions` or `maxTotalMb`, but you can remove them yourself.
 
-From the web UI: the `✕` beside the session picker deletes the session on screen, and
-**Settings → Sessions** lists every session with a per-row delete and a **clear all**. Both arm on
-the first click and fire on the second.
+From the web UI: the **Sessions** page lists every session with a checkbox, presets (**keep last N**
+and **older than D days**, which never select a session still recording), `delete selected`, a
+per-row `✕` and **clear all**. Each arms on the first click and fires on the second, and a bulk
+delete says what happened to each session, the daemon's reason included when it refused one.
 
 From a terminal:
 
@@ -658,9 +668,9 @@ replacement characters that would read as a captured body.
 
 ## 8. The MCP server
 
-### From the web UI — Settings
+### From the web UI — Processes
 
-The settings panel has an MCP section with a **test** button and a copyable registration command.
+The **Processes** page has an MCP section with a **test** button and a copyable registration command.
 
 There is **no start button**, and that is deliberate rather than missing. The MCP server speaks
 stdio: `McpServer.run` blocks on `input.readLine()` and stops at EOF, so a server the daemon

@@ -275,7 +275,8 @@ async function checkAfterSessionChange(sources) {
     sessions: [], payloads: new Map(), current: [],
   };
   const page = runFile(sources, ['js/15-session-data.js', 'js/90-sessions.js'], {
-    state, api: async (path) => (path === '/api/recording' ? [] : []), document: {},
+    // `querySelector` for the picker's face, which `loadSessions` paints; there is none here.
+    state, api: async (path) => (path === '/api/recording' ? [] : []), document: { querySelector: () => null },
     $: (id) => (id === 'session-rows' ? null : element),
     renderList() {}, renderMarkers() {}, renderCurrent() {}, renderTabs() {}, applyView() {},
     renderTimeline() {}, renderSessionGlance() {},

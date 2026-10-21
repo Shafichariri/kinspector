@@ -148,6 +148,8 @@ function stubPage(sources, state, { before = [], globals = {} } = {}) {
     fmtMs: (ms) => `${ms}ms`, fmtBytes: (n) => `${n} B`, ageNode: () => stubNode(),
     selectSignal() {}, source: { fetch: async () => ({ ok: false }) }, ARCHIVE: null,
     closeDrawer() {}, closePops() {}, renderSessionGlance() {},
+    // The tab bar's `views ▾` menu, from 40-copy-export.js, which is not run here.
+    menuItem: () => stubNode(), menuButton: () => ({ wrap: stubNode(), button: stubNode(), menu: stubNode(), close() {} }),
     ...globals,
   });
   // A call's row is the list's, which reads `00-core.js`'s formatters; its shape is not checked here.

@@ -5,17 +5,20 @@
  * a wrapped `newest 1000 of 1203 shown` left `1000 of 1203` visible, the shape only a filter
  * produces. jsdom has no layout, so no static check can see it.
  *
- * Judged: every word of `#counts` is inside the bar and the viewport, at 975 and 800 px, on the
- * 1203-call session (its count is the longest the probes draw). Not judged: each control's state
- * per width. With --base, measure-web-ui prints any that moved, so a control going off screen at
- * head shows up there. Below about 900 px the bar overflows by design until 1a rebuilds it.
+ * Judged: every word of `#counts` is inside the bar and the viewport, at 975, 800, 600 and 400 px,
+ * on the 1203-call session, and on `big`'s probe session under `path:/v3/shop`, whose `newest 1000
+ * of N matches shown` is the longest count the page draws. Below 720 px the bar is two lines and the
+ * count has the second to itself. Not judged here: each control's state per width, which `shell
+ * <width> controls` in lib/shell-cases.js judges; with --base, measure-web-ui prints any that moved.
  */
 const { sleep } = require('./measure-cdp');
 const { LONG_SESSION_ID } = require('./long-session-probes');
+const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
-const WIDTHS = [975, 800];
-const CONTROLS = ['.brand', '#session-picker', '#session-delete', '#export-host', '#counts', '#live-btn',
-  '#conn', '#open-settings', '#server-restart', '#server-stop'];
+// 975 and 800 keep their keys, so --base compares them with the bar before 1a rebuilt it.
+const WIDTHS = [975, 800, 600, 400];
+const CONTROLS = ['.brand', '#session-picker', '.picker-time', '#export-host', '#counts', '#live-btn', '#conn'];
+const FILTER = 'path:/v3/shop';
 
 const READ = `(() => {
   const bar = document.getElementById('topbar').getBoundingClientRect();
@@ -51,15 +54,29 @@ async function topBar(page, url, session) {
     p.dispatchEvent(new Event('change', { bubbles: true })); })()`);
   await page.waitFor(`/1203/.test(document.getElementById('counts').textContent)`, 20000);
   await sleep(1000);
-  for (const width of WIDTHS) {
+  const read = async (key, width) => {
     await page.setWidth(width);
     await sleep(400);
     const r = await page.ev(READ);
     const whole = r.lines === 1 && r.out.length === 0;
-    rows.push({ key: `topbar ${session} ${width} count`, value: whole ? 'one line, inside the bar' : 'wrapped or clipped',
+    rows.push({ key: `${key} count`, value: whole ? 'one line, inside the bar' : 'wrapped or clipped',
       ok: whole, detail: `"${r.text}", ${r.lines} line(s)${r.out.length ? `, outside: ${r.out.join(' ')}` : ''}` });
+    return r;
+  };
+  for (const width of WIDTHS) {
+    const r = await read(`topbar ${session} ${width}`, width);
     rows.push({ key: `topbar ${session} ${width} controls`, value: r.controls.join(' '), ok: null, detail: '' });
   }
+  // The filtered count is read on the probe session, whose extra rows in `big` are under /v3/shop:
+  // `newest 1000 of 3018 matches shown`, the longest count the page draws.
+  await page.ev(`(() => { const p = document.getElementById('session-picker'); p.value = ${JSON.stringify(PROBE_SESSION_ID)};
+    p.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await page.waitFor(`state.sessionId === ${JSON.stringify(PROBE_SESSION_ID)} && state.signalSessionId === state.sessionId`, 20000);
+  await page.ev(`(() => { const f = document.getElementById('filter'); f.value = ${JSON.stringify(FILTER)};
+    f.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await page.waitFor(`/matches/.test(document.getElementById('counts').textContent)`, 20000);
+  await sleep(800);
+  for (const width of WIDTHS) await read(`topbar big ${width} filtered`, width);
   return rows;
 }
 

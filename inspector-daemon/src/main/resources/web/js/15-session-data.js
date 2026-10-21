@@ -4,6 +4,7 @@
 async function loadSessions() {
   state.sessions = await api('/api/sessions');
   state.recording = await api('/api/recording').catch(() => state.recording);
+  state.sessionsLoaded = true;
   const picker = $('session-picker');
   picker.innerHTML = '';
   for (const s of state.sessions) {
@@ -13,38 +14,15 @@ async function loadSessions() {
     option.title = s.sessionId;
     picker.appendChild(option);
   }
-  if (!state.sessionId && state.sessions.length) state.sessionId = state.sessions[0].sessionId;
+  // A session that is not in the list — deleted, pruned, or named by an address that was never
+  // right — falls back to the newest rather than leaving the page on nothing.
+  if (!state.sessions.some((s) => s.sessionId === state.sessionId)) {
+    state.sessionId = state.sessions.length ? state.sessions[0].sessionId : null;
+  }
   if (state.sessionId) picker.value = state.sessionId;
 
   showSessionLabel();
-}
-
-/**
- * `● app · device · 09:41 today · 12 calls`.
- *
- * The option used to be the session id, which is a timestamp and three slugs run together — the
- * facts were in it, but in the order a folder name needs rather than the one a reader asks in.
- * The dot marks a session an app is attached to right now, asked of `/api/recording` rather than
- * inferred from `endedAt`: a session whose app vanished has no `endedAt` and no app either.
- */
-function sessionLabel(meta) {
-  const started = new Date(meta.startedAt);
-  let when = '';
-  if (!Number.isNaN(started.getTime())) {
-    const pad = (n) => String(n).padStart(2, '0');
-    const today = new Date();
-    const sameDay = started.toDateString() === today.toDateString();
-    const day = sameDay
-      ? 'today'
-      : started.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-    when = `${pad(started.getHours())}:${pad(started.getMinutes())} ${day}`;
-  }
-  // `?? 0`, not `||`: kotlinx omits a field equal to its default, so a session with no traffic
-  // arrives with `txnCount` missing rather than zero.
-  const count = meta.txnCount ?? 0;
-  const parts = [meta.appId, meta.device, when, `${count} ${count === 1 ? 'call' : 'calls'}`];
-  const recording = (state.recording || []).includes(meta.sessionId);
-  return `${recording ? '● ' : ''}${parts.filter(Boolean).join(' · ')}`;
+  paintPickerFace();
 }
 
 /**
@@ -85,15 +63,6 @@ function renderCounts() {
   }
   // With its noun: a bare `12/12` beside a session picker could be a count of anything.
   node.textContent = `${shown} of ${total} ${total === 1 ? 'call' : 'calls'}`;
-}
-
-/**
- * Which app the page is showing, in the window title — the picker already names it in the bar.
- * Also runs on switch, or it would name the old one.
- */
-function showSessionLabel() {
-  const meta = state.sessions.find((s) => s.sessionId === state.sessionId);
-  document.title = meta ? `${meta.appId} · inspector` : 'inspector';
 }
 
 /**

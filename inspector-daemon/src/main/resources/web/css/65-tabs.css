@@ -34,6 +34,29 @@
 /* The first signal tab: the line that separates arrangements of the traffic from single tags. */
 .tab.tab-signal-first { margin-left: 6px; padding-left: 14px; border-left: 1px solid var(--divider); }
 
+/* `views ▾`, every view in one menu, drawn only where the bar is too narrow for every tab. */
+.tabs-more { display: none; align-items: center; margin-left: 4px; }
+.tabs-more-btn {
+  background: none;
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.tabs-more-btn:hover { background: var(--bg-hover); }
+.tabs-more .menu-item[aria-current] { color: var(--accent); }
+
+/* Below 700px the bar draws the active tab and `views ▾`, which lists every view with its count,
+   so none is out of reach at 400px and the band itself never comes and goes. A rule rather than a
+   measured overflow: jsdom cannot measure, and a rule can be read. After the tab rules. */
+@media (max-width: 699px) {
+  #tabs .tab:not(.active) { display: none; }
+  .tabs-more { display: flex; }
+}
+
 /* --- the glance (what an empty pane says) -------------------------------- */
 
 /* Deliberately not centred like `.empty`: this is content now, and centred content that grows

@@ -1,4 +1,4 @@
-/* base: the page, shared utilities and the top bar */
+/* base: the page, shared utilities and the top bar, wide and narrow */
 
 * { box-sizing: border-box; }
 
@@ -35,24 +35,64 @@ body { display: flex; flex-direction: column; }
 
 .brand { font-weight: 600; letter-spacing: 0.2px; }
 
-#session-picker {
+/* The picker is a native <select> laid transparent over a drawn face (`paintPickerFace`). The
+   select keeps the focus, the keyboard, the option list and the `change` event; the face leads
+   with the start time, which never shrinks, and ellipsizes the rest. A closed <select> clipped its
+   own label from the end, mid-word, and the end was where the start time was. The picker is what
+   gives way first when the bar runs short, down to a width that keeps the time whole. */
+.picker {
+  position: relative;
+  display: flex;
+  flex: 0 1 520px;
+  min-width: 200px;
+}
+.picker-face {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
   background: var(--bg);
   color: var(--fg);
   border: 1px solid var(--divider);
   border-radius: 5px;
-  padding: 4px 8px;
+  padding: 4px 22px 4px 8px;
   font-family: var(--mono);
   font-size: 12px;
-  max-width: 380px;
+  white-space: nowrap;
 }
-/* The picker is what gives way when the bar runs short, down to a width that still shows the start
-   of a session's name. Without it the count below is the first thing to shrink, and kept on one
-   line it pushes restart and stop off the right edge instead. 1a rebuilds the bar. */
-#session-picker { min-width: 120px; flex: 0 1 380px; }
+/* The caret a native select draws, which the transparent select no longer shows. */
+.picker-face::after { content: '▾'; position: absolute; right: 8px; color: var(--fg-muted); }
+.picker-time { flex: none; }
+.picker-rest { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--fg-muted); }
+#session-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+/* The face shows where the invisible control has the keyboard. */
+.picker:focus-within .picker-face { border-color: var(--accent); }
+
+/* Only the picker gives way. A shrinking export button broke `export ▾` over two lines at 1000px. */
+#export-host, #live-btn, .daemon-group { flex: none; }
 
 /* The count must not wrap. The bar's 44px clips a wrapped count at the top and the bottom, and a
    wrapped "newest 1000 of 1203 shown" read as "1000 of 1203", the shape only a filter produces. */
 #counts { white-space: nowrap; }
+
+/* Hidden from sight and kept for a screen reader, which reads it as the element's text. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 /* Whether the list follows new rows. Names its state; the dot is green only while following. */
 .live-btn {
@@ -95,3 +135,22 @@ body { display: flex; flex-direction: column; }
 }
 .dot.on { background: var(--ok); }
 
+/* Below 720px the bar wraps to two lines. Line 1 is the picker, export, live and the connection
+   dot; line 2 is the count, alone and whole, because it is not a control and is the one item that
+   must be read entire — `5 of 31 call` was what 400px left of it. The brand goes first, and the
+   connection keeps its word as the dot's accessible name. After every rule it overrides. */
+@media (max-width: 719px) {
+  #topbar { flex-wrap: wrap; height: auto; row-gap: 4px; padding-top: 6px; padding-bottom: 6px; }
+  .brand { display: none; }
+  .picker { flex: 1 1 150px; min-width: 150px; }
+  #counts { order: 10; flex-basis: 100%; }
+  .daemon-group { padding-left: 6px; }
+  .conn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

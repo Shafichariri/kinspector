@@ -88,4 +88,4 @@ function writeSessions(probeDir, outDir) {
   };
 }
 
-module.exports = { writeSessions };
+module.exports = { writeSessions, PROBE_SESSION_ID };
