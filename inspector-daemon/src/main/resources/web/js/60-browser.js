@@ -293,7 +293,7 @@ function renderBrowser() {
   empty.hidden = shown.length > 0;
   empty.textContent = groups.length
     ? 'nothing matches these filters'
-    : `no ${tag} signals in this session`;
+    : sessionPending() ? beingRead() : `no ${tag} signals in this session`;
 
   const observations = groups.reduce((n, g) => n + g.rows.length, 0);
   $('browser-count').textContent = groups.length

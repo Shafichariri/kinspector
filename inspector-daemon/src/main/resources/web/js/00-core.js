@@ -100,7 +100,7 @@ const state = {
   currentSessionId: null,
   currentRead: { sent: 0, written: 0 },
   // The session the last signal load finished drawing, or null from a switch until it lands. Until
-  // it is the selected one, the glance says it is loading rather than describing the session left.
+  // it is the selected one, each pane says it is being read rather than describing the session left.
   signalSessionId: null,
   // Every signal in the session, ignoring the filter, and the session it belongs to — the same
   // split as `allTransactions`, for the same reason: tabs, their counts, the tag browsers, the
@@ -141,6 +141,8 @@ const state = {
   // and no tags to tab through, so landing on an empty view would be worse than useless.
   // Sessions recorded before signals existed therefore behave exactly as they always did.
   view: 'network',
+  // The tabs last drawn, which a switch keeps until the session lands (`renderTabs`).
+  tabViews: [],
   selectedSignalId: null,
   // Tag-browser state. Facets are per-tag and rebuilt on every switch, because the words in a
   // payload are the app's — one app's `storage` values mean nothing to the next.

@@ -185,33 +185,6 @@ async function loadSignals(filter = state.filter) {
 }
 
 /**
- * Clears the signal side the moment the selected session is no longer the one it was loaded for.
- *
- * A switch reads a page of calls, the markers and the whole-session calls before `loadSignals`, and
- * until that lands the now strip, the timeline's signal rows and the glance described the session
- * just left under the new one's name — for as long as a whole-session read takes, 25 s on a large
- * one. Called by the picker (through `loadTransactions`) and by `afterSessionChange` before it waits
- * for the session list, so a delete or a clear does not show the deleted session meanwhile. It
- * overtakes the signal load and every `/current` read in flight, which belong to the session left.
- * The calls are not cleared: the switch's first page replaces them.
- */
-function followSession() {
-  if (state.signalSessionId === state.sessionId) return;
-  state.signalSessionId = null;
-  state.signalLoad++;
-  state.currentRead.written = state.currentRead.sent;
-  state.signals = [];
-  state.allSignals = [];
-  state.allSignalsSessionId = null;
-  state.screens = [];
-  state.current = [];
-  state.currentSessionId = null;
-  renderCurrent();
-  renderTimeline();
-  if ($('detail').hidden) renderSessionGlance();
-}
-
-/**
  * Reads `/current` for [sessionId] and writes it, the one reader `loadSignals` and a live signal's
  * `refreshCurrent` share.
  *

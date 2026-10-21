@@ -82,7 +82,9 @@ const TRAFFIC_VIEWS = ['network', 'path', 'all', 'waterfall'];
 
 function renderTabs() {
   const bar = $('tabs');
-  const views = availableViews();
+  // Until a switch lands the tabs stay as drawn: rebuilt from what it cleared they would drop the
+  // timeline tab, and a count would be the session left's.
+  const views = sessionPending() ? state.tabViews.map(({ count, ...view }) => view) : (state.tabViews = availableViews());
   // Always drawn, even with one tab. Hiding it when a session had no signals made the bar appear
   // and disappear between sessions — and moved everything under it — for no change in what the
   // page could do. A lone `traffic` tab also says, correctly, that nothing else was recorded.
