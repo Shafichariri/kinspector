@@ -1,5 +1,6 @@
 package dev.inspector.daemon.http
 
+import dev.inspector.daemon.archive.ConfigFile
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
@@ -11,6 +12,7 @@ import dev.inspector.daemon.service.ProcessMcpControl
 import dev.inspector.daemon.service.ProcessServerControl
 import dev.inspector.daemon.service.Replayer
 import dev.inspector.daemon.service.ServerControl
+import dev.inspector.daemon.service.SessionDeleter
 import dev.inspector.daemon.service.SessionManager
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -70,6 +72,7 @@ class InspectorDaemon(
     private val repository = SessionRepository(config)
     private val retention = Retention(config, repository)
     private val manager = SessionManager(config, repository, retention)
+    private val deleter = SessionDeleter(repository, config.sessionsDir, manager::activeSessionIds)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var server: EmbeddedServer<*, *>? = null
@@ -152,12 +155,13 @@ class InspectorDaemon(
         routing {
             ingestRoutes(manager, liveApps)
             liveRoutes(manager)
-            sessionRoutes(config, repository, manager)
+            sessionRoutes(repository, manager, deleter)
             exportRoutes(repository)
             signalRoutes(repository, liveApps)
             markerRoutes(repository, manager)
             lifecycleRoutes()
             peerRoutes(peers)
+            configRoutes(config, ConfigFile(config.dataDir))
             replayRoutes(replayLazy)
             mcpRoutes(mcpControlLazy)
             webUiRoutes()

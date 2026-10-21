@@ -46,6 +46,29 @@ alone is not evidence of what it identifies. Without that re-check the endpoint 
 "kill any pid" facility on an unauthenticated loopback port. It also refuses the daemon's own pid —
 `/api/server/stop` is the path that replies before shutting down.
 
+**A bulk control route answers per item, through the same rule as its single route.**
+`POST /api/peers/kill {pids}` calls `PeerRegistry.kill` once per pid, so each pid's identity is
+re-verified at kill time and the daemon's own is refused exactly as on the single route; `POST
+/api/sessions/delete {ids}` calls `SessionDeleter`, the one place that refuses the active session and
+the `latest` alias, which the single delete and `clear` call too. Both answer 200 with one result per
+item in request order whenever the body is well formed, because a batch that reports one status for
+five kills hides the one that failed. Both read nothing from a request but its JSON body and are
+registered only inside `controlGated { }`, so whatever the control boundary later requires is a
+change to the gate, never to them. `SessionBulkDeleteTest` and `PeerBulkKillTest` pin it, the latter
+with a live process that is not an inspector refused and left running; `SessionDeletionTest` passed
+unchanged across the extraction.
+
+**`config.json` is written by merging into what is there and renaming over it, and flags still
+win.** `PUT /api/config` merges the keys it knows into the file's JSON object and keeps any other
+key as it was, because the file is also edited by hand and will carry the findings rules. It writes a
+temporary file in the same directory and moves it over the old one atomically, so a crash leaves the
+old file or the new one, never half of each. A malformed file is refused with 409 and left untouched:
+a save must never overwrite settings it could not read. An unknown key in the request is a 400 that
+names it, since a misspelt key silently dropped is a setting the user believes they made. Nothing
+applies until the next start — a port cannot move live and `Retention` reads the config it was built
+with — and `GET` reports the flags that override the file so the page can say why a value will not
+change. `ConfigFileTest` pins each rule.
+
 **The daemon's control endpoints require `X-Inspector-Control: 1`.** Not ceremony. The daemon
 listens on loopback with no authentication, so any page the developer has open can POST to
 `127.0.0.1:8099`; a form post or a `no-cors` fetch would otherwise be an off switch for anyone's
@@ -142,9 +165,11 @@ Kotlin's `internal` is module-wide, so to the compiler `archive/`, `service/`, `
 because the bridge goes through the daemon's own `WS /ingest`. The root package holds `Main.kt`
 alone. The adapters read `archive/` directly rather than only through `service/`, because the strict
 version needs a pass-through wrapper for every repository method, which is a second copy of each. "A
-rule both adapters serve lives in `service/` or `archive/`, never in a route or tool body." One
-place breaks that today, recorded here and not fixed: the session delete and clear loops live in
-`http/SessionRoutes.kt`. The signal listing was the other until `item:signals-query-one-rule`.
+rule both adapters serve lives in `service/` or `archive/`, never in a route or tool body." The
+session delete and clear loops were the last such copy in a route body. They moved into
+`service/SessionDeleter` with the bulk delete, its second caller, and not before: with one caller
+the extraction had nothing to prove it right. The signal listing was the other until
+`item:signals-query-one-rule`.
 `GET …/signals` sorted by `mono`, clamped its limit and matched `tag` with `equalsIgnoreCase` in the
 route body and ignored `filter`, while `list_signals` used the grammar through
 `SessionRepository.querySignals`. Both now read `querySignals`, the one place signals are filtered,
