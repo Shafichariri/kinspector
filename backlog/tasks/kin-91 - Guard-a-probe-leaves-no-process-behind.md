@@ -1,9 +1,11 @@
 ---
 id: KIN-91
 title: 'Guard: a probe leaves no process behind'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-21 18:15'
+updated_date: '2026-10-21 18:33'
 labels:
   - 'item:guard-mcp-probe-cleanup'
 dependencies: []
@@ -27,3 +29,21 @@ Batch 1 of the order decided 2026-10-21. Acceptance criteria are the roadmap ite
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Plan (bob, branch shafic/guard-mcp-probe-cleanup).
+
+Criteria, copied from docs/ROADMAP.md §3 → Guards, item:guard-mcp-probe-cleanup:
+1. The child the probe started is not alive once probe returns: on the success path, on the timeout path (the child never answers tools/list), and when writing to the child throws.
+2. The stub child ignores EOF (keeps running after its stdin closes), so only a probe that kills it passes.
+3. Deleting destroyForcibly() turns the test red, naming the surviving pid.
+4. The existing 'the real control either answers or explains why it cannot' test stays.
+
+Seam: an internal constructor on ProcessMcpControl taking a launch function (() -> Process). The public one-argument constructor is unchanged, so InspectorDaemon's constructor and phase C's parameter-count tripwire are untouched. A launch function rather than a bare command because the write-throws path needs the child to have closed its stdin BEFORE the probe writes (otherwise the write lands in the pipe buffer and nothing throws); the test's launch waits for the child to say so, which a command alone cannot.
+
+Stub: a test-only main class run in a child JVM (java.home + java.class.path), modes answer / chatter / close-stdin; every mode keeps running after EOF. Test: new file inspector-daemon/src/test/kotlin/dev/inspector/daemon/service/McpProbeCleanupTest.kt; teardown force-kills every stub it started so a red run leaks nothing.
+
+Files: service/McpControl.kt, the new test, and the one sentence in docs/decisions/daemon-and-mcp.md that says the property is not pinned by a test.
+<!-- SECTION:NOTES:END -->

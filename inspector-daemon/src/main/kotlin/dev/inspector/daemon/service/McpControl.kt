@@ -43,7 +43,21 @@ interface McpControl {
     fun probe(timeoutMs: Long = 15_000): McpProbeResult
 }
 
-class ProcessMcpControl(private val config: DaemonConfig) : McpControl {
+class ProcessMcpControl internal constructor(
+    private val config: DaemonConfig,
+    /**
+     * Starts the child in place of [commandLine], for tests only.
+     *
+     * Under Gradle the argv carries no `MainKt`, so without this the probe never spawns anything
+     * and nothing can show that it stops what it spawns. It takes a launch rather than a command
+     * because a test of the write failing needs the child to have closed its stdin before the
+     * probe writes, and only the launch can wait for that. Kept off the public constructor, and so
+     * off `InspectorDaemon`'s, which builds this from the config alone.
+     */
+    private val launch: (() -> Process)?,
+) : McpControl {
+
+    constructor(config: DaemonConfig) : this(config, launch = null)
 
     /**
      * This process's own launch, with the subcommand swapped for `mcp`.
@@ -88,11 +102,12 @@ class ProcessMcpControl(private val config: DaemonConfig) : McpControl {
     }
 
     override fun probe(timeoutMs: Long): McpProbeResult {
-        val line = commandLine()
+        val start: () -> Process = launch ?: commandLine()
+            ?.let { line -> { ProcessBuilder(line).redirectErrorStream(false).start() } }
             ?: return McpProbeResult(false, error = "this process cannot report its own command line")
 
         val process = try {
-            ProcessBuilder(line).redirectErrorStream(false).start()
+            start()
         } catch (cause: Exception) {
             return McpProbeResult(false, error = "could not start it: ${cause.message}")
         }
@@ -135,6 +150,9 @@ class ProcessMcpControl(private val config: DaemonConfig) : McpControl {
         } catch (cause: Exception) {
             McpProbeResult(false, error = "${cause::class.simpleName}: ${cause.message}")
         } finally {
+            // The only thing that stops the child. Closing its stdin is a request, and a wedged
+            // server ignores it; one left running shows in the peer list as an `mcp` the user is
+            // told not to kill. McpProbeCleanupTest holds this with a child that ignores EOF.
             process.destroyForcibly()
         }
     }
