@@ -28,7 +28,7 @@ was wrong. Name the decision files in your design note, so the engineer reads th
 :inspector-core       KMP  Ktor plugin, OkHttp interceptor, recorder, ring buffer, redaction
 :inspector-noop       KMP  identical public API, does nothing     (golden: api/inspector-public-api.txt)
 :inspector-ui         KMP  Compose overlay
-:inspector-noop-ui    KMP  passthrough                            (NO golden file yet — known gap)
+:inspector-noop-ui    KMP  passthrough                            (golden: api/inspector-ui-public-api.txt)
 :inspector-stream     KMP  sink to the daemon (WS, or USB listener on iPhone)
 :inspector-noop-stream KMP no-op sink                             (golden: api/inspector-stream-public-api.txt)
 :inspector-daemon     JVM  archive, REST, live WS, web UI, CLI, MCP, exports
