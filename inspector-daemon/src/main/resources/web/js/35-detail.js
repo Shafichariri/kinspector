@@ -49,7 +49,7 @@ async function showTxnFull(id) {
   }
   if (ticket !== state.txnRead) return;
   if (!txn) {
-    state.selectedId = null;
+    markSelected(null);
     $('detail').hidden = true;
     $('detail-empty').className = 'empty muted';
     $('detail-empty').textContent = why;
@@ -57,7 +57,8 @@ async function showTxnFull(id) {
     paintDetailTools();
     return;
   }
-  state.selectedId = txn.id;
+  // Marked on the list too, so Back lands on the row this page showed.
+  markSelected(txn.id);
   await renderDetail(txn);
 }
 

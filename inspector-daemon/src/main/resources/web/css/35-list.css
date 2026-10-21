@@ -16,6 +16,8 @@
    the column, or close the drawer. The close control and the scrim exist only in drawer mode; as a
    column there is nothing to close and nothing to dim. */
 .detail-tools { display: flex; justify-content: flex-end; gap: 4px; padding: 8px 10px 0; }
+/* Glyphs, so a size up from `.btn-sm`'s 11px: at 11 the `⤢` read as a speck. */
+.detail-tools .btn { font-size: 13px; line-height: 1.2; padding: 1px 7px; }
 /* `⤢` is offered only while a call is shown; `hidden` alone loses to `.btn`'s own display. */
 .detail-full { text-decoration: none; }
 .detail-full[hidden] { display: none; }

@@ -505,12 +505,17 @@ function rowFor(txn) {
 // --- interaction --------------------------------------------------------
 
 function select(id) {
+  markSelected(id);
+  const txn = state.transactions.find((t) => t.id === id);
+  if (txn) renderDetail(txn);
+}
+
+/** The selected call, in state and on every row that draws it, in each view. */
+function markSelected(id) {
   state.selectedId = id;
   for (const row of document.querySelectorAll('.row, .wf-row, .pv-call, .pv-chip-call')) {
     row.classList.toggle('selected', row.dataset.id === id);
   }
-  const txn = state.transactions.find((t) => t.id === id);
-  if (txn) renderDetail(txn);
 }
 
 function move(delta) {
