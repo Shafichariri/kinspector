@@ -1047,6 +1047,95 @@ Android only looked right because 120px clears a status bar at that density.
   the same argument that made KIN-51 its own item. 1a carries one criterion instead: the probes
   this item adds stay green through its rebuild.
 
+- ~~**A live call reaches the list but not the timeline, the glance or the picker.**~~ *Ticket label:*
+  `item:web-live-calls-reach-every-pane`. **Proposed 2026-10-19 by the product owner: straight after
+  `item:web-now-strip-follows-session`**, with the other web defects. **Placed 2026-10-21 by the
+  maintainer after 1a and before 1b**, unsplit, because 1a reworks the session picker in the same
+  files (§5 → "Order from here").
+
+  **Done, 2026-10-21.** PR #113 merged as `952b6c6` and its fix round, PR #117, as `433f30d`; KIN-58 is Done
+  on QA's pass over detached copies, in two rounds. A live call arms one trailing redraw of the timeline and
+  the glance per 250 ms (`LIVE_DRAW_MS`, `drawLive` in `web/js/05-network.js`): a burst of 100 calls over about
+  1.2 s cost 5 timeline redraws and no `/api/sessions` read, against a stated bound of ceil(T/250)+1. The
+  selected picker option and its face follow the header's own total through `followLiveCount`, which ends in
+  `paintPickerFace`, with no request; paused, or for another session, nothing moves. Static checks 96 to 99, live
+  probe 219 to 225, archive probe 40; no Kotlin change.
+
+  **What was learned.**
+  - **Round 1 failed one criterion, the picker.** Pause, two calls while paused, resume: the header and the glance read
+    120 and the option and face stayed at 118 until the next live call. The count was written only in the
+    live-call branch, and the resume's load set `sessionTotal` without telling the picker. The fix is in
+    `setLiveTail` alone: once its load lands, for the same session and with `sessionTotal` known, it calls
+    `followLiveCount()`. The existing `live paused still` line was strengthened rather than a new one added, and QA
+    made it red against `952b6c6`'s `setLiveTail` (`header total 18 (was 16), option "... 23 calls"`; the stale
+    option read 23, not the pre-pause 16, because earlier probe steps had pushed it up through the live branch).
+  - **The picker face's single writer paid off.** 1a's `paintPickerFace` is the one place the face is written, so
+    this item called it instead of adding a second writer.
+  - **A red proof can guard the wrong thing.** With the redraw removed, `socket run stays open` stays green, because
+    with no redraw a run trivially stays open: it guards the follow rule, not the redraw. An open run staying open
+    was checked in jsdom only.
+  - **The glance counts the session, not the filter**, as `web-ui.md` records: under `status>=500` the header read
+    `4 of 16 calls` and the glance `calls 16`.
+  - **Not verified.** Safari, Firefox and a phone-width browser (headless Chrome 131 only, at 1440, 1000 and 400 px).
+    The full `./gradlew build` on the QA and builder machines (no Android SDK; CI ran it on the PRs).
+  - **Left open, outside this item.** A live signal or marker still redraws the timeline once per message, so a
+    signal burst is unbounded the way calls were; the builder proposed routing both through `drawLive`, unplaced.
+    At 400 px the timeline's path column is cut, which is 1b's (b).
+
+  cost: not recorded — built in the 2026-10-20/21 coordinated run, one builder session plus a fix-round session, no QA before merge; QA after merge, 2 rounds
+
+  Since KIN-54 a live call moves the header and the traffic tab. Three other things on the page still
+  describe the session as of the last load:
+
+  - **The timeline, with no filter set.** The `txn` branch of `ws.onmessage` pushes the call and
+    redraws the list, the waterfall and the path, and never calls `renderTimeline`. A marker and a
+    signal both do. So a call appears on the timeline only at the next redraw for some other reason.
+    Under a filter the re-read redraws it, which is why only the no-filter case shows.
+  - **The session glance** (the detail pane with no call selected) reads `calls 27` while the
+    header says 29, and its hosts and slowest calls are as stale.
+  - **The session picker's label**, `6 calls`, is the daemon's `txnCount` from the last
+    `loadSessions`, and nothing re-reads it while the session records.
+
+  **The user and the problem.** A web UI user on a Mac watching a session record, which is what live
+  tail is for. One screen states two different call counts for one session, and the timeline, the
+  view that exists to show calls beside screens and signals, leaves out the newest ones. Each is a
+  false fact, and each corrects itself only when the reader does something unrelated.
+
+  **Why now.** It is the last of what a live call owes the page, in the handler KIN-52 to KIN-55 just
+  rewrote, while its probes (`live header plain`, `live header filter`) are fresh and can be extended
+  rather than rebuilt. Small, and it shows a user something false today.
+
+  **Acceptance criteria.**
+
+  - With no filter and live on, a call arriving while the timeline is shown is drawn on the timeline
+    without any other action. The follow rule in `docs/decisions/web-ui.md` still holds: a timeline
+    at its end follows the new call, a timeline scrolled back does not move, and an open run stays
+    open. The existing `socket …` follow checks stay green, and a new check fails with the redraw
+    removed.
+  - A burst does not redraw the timeline once per call without bound. The architect chooses the
+    shape (throttle, or the frame the list already draws in); the bound is measured the way
+    `reread burst of 100` measured the re-read, and stated in the change.
+  - With live on, the glance's `calls` row equals the session count the header states, after any
+    number of live calls, with or without a filter, and its hosts and slowest calls include those
+    calls. A probe sends calls with the glance shown and fails with the redraw removed.
+  - The selected session's picker label states the same call count as the header after live calls,
+    without a reload and without opening the picker. A probe fails with the old behaviour put back.
+  - With live paused, none of the three moves, as the header does not. A live call for another session
+    changes none of them.
+  - No filter is evaluated in `web/js`, and no new route is added. If the picker label is kept
+    current by re-reading `/api/sessions`, the re-read is throttled as the filtered re-read is.
+
+  **Out of scope.** The labels of sessions other than the selected one; 1a moves the session list to
+  a Sessions page, which is where every session's count being live belongs, if it does. The glance's
+  signal side after a switch, which is `item:web-now-strip-follows-session`. The count clipped at
+  400px, which is 1a's (e). The overlay, which redraws from one `StateFlow`. Surfaces: web UI only.
+  No public API, no `:inspector-model` change, no daemon change. Size S, to be confirmed by the
+  architect. Release-notes line, because a user could have read the stale count.
+
+  **Not a decision overturned.** `docs/decisions/web-ui.md` records that the glance reads the
+  whole-session copy so a filter never shrinks it; this keeps that copy's readers current, which is
+  what that rule assumes.
+
 
 ---
 
@@ -1113,6 +1202,7 @@ tag cut before any of this existed.
 | ~~Phase H — split the two large overlay files~~ **Done, 2026-10-21** (KIN-61, PR #103, merge `4dc21d2`) | §5 | `item:structure-phase-h` | S |
 | ~~Phase I — `noop-ui` golden file~~ **Done, 2026-10-21** (KIN-62, PR #106, merge `1479c30`) | §5 | `item:structure-phase-i` | M |
 | ~~1a — Web UI foundation: the shell~~ **Done, 2026-10-21** (KIN-63 to KIN-71; PRs #108, #112, #114, merges `e9f7131`, `a7e3946`, `cc9dbce`; two rounds of QA) *(was row 9; the later rows keep their numbers)* | §6 | `item:web-foundation-shell` | L |
+| ~~A live call reaches the list but not the timeline, the glance or the picker~~ **Done, 2026-10-21** (KIN-58; PRs #113 and #117, merges `952b6c6` and `433f30d`; two rounds of QA, round 1 failed the picker after a resume) *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b; was row 10, the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 

@@ -90,3 +90,10 @@ v60 (2026-10-21) carries the web UI change: §6c (the rail, restart and stop on 
 Settings editor) and a changelog entry, "Nothing to do. The web UI's session list moved from the settings dialog to a Sessions
 page." The release's own entry points back to v60 as it does to v59, and names the version v60 calls "the next daemon release
 after 1.3.0".
+`item:web-live-calls-reach-every-pane` (done 2026-10-21, with its fix round) owes a thirteenth, in the same daemon-only entry, and
+a user could have read the stale count: *"Web UI: with live on, a new call now appears on the timeline without any other action,
+and the session glance and the selected session's picker label count it as the header does. They used to show the count as of
+the last load (`calls 27` under a header of 29, `6 calls` in the picker)."* The glance counts the whole session, not the filter,
+so under a filter it reads `calls 16` beside a header of `4 of 16 calls`; the line does not say the two are equal then. No
+`INTEGRATION.md` bump of its own: the change is in the web files the daemon serves, and no consumer code, coordinates or
+release build is touched.

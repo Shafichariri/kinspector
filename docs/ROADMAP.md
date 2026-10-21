@@ -220,6 +220,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   sense that nothing moves. It predates this item and is not in KIN-42; it needs placing in the order.
   **Placed 2026-10-19 by the product owner** in `item:web-live-calls-reach-every-pane`, §3 → Bugs
   found, not fixed, after QA on `item:web-live-rows-filtered` found it again with two siblings.
+  **Done 2026-10-21** in that item.
 
 - **A check that finds nothing to check passes.** *Ticket label:* `item:guard-probe-finds-nothing-fails`.
   Found in the retrospective of `item:web-live-rows-filtered` (PR #98, 2026-10-19), from KIN-55. The
@@ -272,7 +273,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   `item:web-live-rows-filtered`. It did not.
 
   **For whom.** The web UI user on a Mac who watches a session live, under a filter. Also whoever next
-  changes the live socket or the re-read, which `item:web-live-calls-reach-every-pane` is about to do.
+  changes the live socket or the re-read, as `item:web-live-calls-reach-every-pane` did (done 2026-10-21).
 
   **Why it is unguarded.** `docs/STATUS.md` lists the following as verified in headless Chrome: the
   live re-read burst bound, a filter edit, a session switch and a dropped socket during a re-read.
@@ -455,63 +456,7 @@ Placed by the product owner the same day. Two make one new item; the third was a
 | 2. A live call with no filter set does not redraw the timeline | **new item**, with 1 | the same `txn` branch of `ws.onmessage` (`web/js/05-network.js`), and the same probe. It was recorded in §3 → Guards as unplaced since KIN-41, and in `docs/STATUS.md` → Not verified; this places it |
 | ~~3. At 400 px the header count is clipped, `5 of 31 call`~~ **Done 2026-10-21** (KIN-70; `ROADMAP-DONE.md` → §6 → "Web UI foundation — 1a, the shell") | 1a, `item:web-foundation-shell`, under (e), "The call count is on screen at 400px" | already owned: that criterion asks for the whole count text inside the window at 400px. Noted there as seen again, under a filter |
 
-- **A live call reaches the list but not the timeline, the glance or the picker.** *Ticket label:*
-  `item:web-live-calls-reach-every-pane`. **Proposed 2026-10-19 by the product owner: straight after
-  `item:web-now-strip-follows-session`**, with the other web defects. **Placed 2026-10-21 by the
-  maintainer after 1a and before 1b**, unsplit, because 1a reworks the session picker in the same
-  files (§5 → "Order from here").
-
-  Since KIN-54 a live call moves the header and the traffic tab. Three other things on the page still
-  describe the session as of the last load:
-
-  - **The timeline, with no filter set.** The `txn` branch of `ws.onmessage` pushes the call and
-    redraws the list, the waterfall and the path, and never calls `renderTimeline`. A marker and a
-    signal both do. So a call appears on the timeline only at the next redraw for some other reason.
-    Under a filter the re-read redraws it, which is why only the no-filter case shows.
-  - **The session glance** (the detail pane with no call selected) reads `calls 27` while the
-    header says 29, and its hosts and slowest calls are as stale.
-  - **The session picker's label**, `6 calls`, is the daemon's `txnCount` from the last
-    `loadSessions`, and nothing re-reads it while the session records.
-
-  **The user and the problem.** A web UI user on a Mac watching a session record, which is what live
-  tail is for. One screen states two different call counts for one session, and the timeline, the
-  view that exists to show calls beside screens and signals, leaves out the newest ones. Each is a
-  false fact, and each corrects itself only when the reader does something unrelated.
-
-  **Why now.** It is the last of what a live call owes the page, in the handler KIN-52 to KIN-55 just
-  rewrote, while its probes (`live header plain`, `live header filter`) are fresh and can be extended
-  rather than rebuilt. Small, and it shows a user something false today.
-
-  **Acceptance criteria.**
-
-  - With no filter and live on, a call arriving while the timeline is shown is drawn on the timeline
-    without any other action. The follow rule in `docs/decisions/web-ui.md` still holds: a timeline
-    at its end follows the new call, a timeline scrolled back does not move, and an open run stays
-    open. The existing `socket …` follow checks stay green, and a new check fails with the redraw
-    removed.
-  - A burst does not redraw the timeline once per call without bound. The architect chooses the
-    shape (throttle, or the frame the list already draws in); the bound is measured the way
-    `reread burst of 100` measured the re-read, and stated in the change.
-  - With live on, the glance's `calls` row equals the session count the header states, after any
-    number of live calls, with or without a filter, and its hosts and slowest calls include those
-    calls. A probe sends calls with the glance shown and fails with the redraw removed.
-  - The selected session's picker label states the same call count as the header after live calls,
-    without a reload and without opening the picker. A probe fails with the old behaviour put back.
-  - With live paused, none of the three moves, as the header does not. A live call for another session
-    changes none of them.
-  - No filter is evaluated in `web/js`, and no new route is added. If the picker label is kept
-    current by re-reading `/api/sessions`, the re-read is throttled as the filtered re-read is.
-
-  **Out of scope.** The labels of sessions other than the selected one; 1a moves the session list to
-  a Sessions page, which is where every session's count being live belongs, if it does. The glance's
-  signal side after a switch, which is `item:web-now-strip-follows-session`. The count clipped at
-  400px, which is 1a's (e). The overlay, which redraws from one `StateFlow`. Surfaces: web UI only.
-  No public API, no `:inspector-model` change, no daemon change. Size S, to be confirmed by the
-  architect. Release-notes line, because a user could have read the stale count.
-
-  **Not a decision overturned.** `docs/decisions/web-ui.md` records that the glance reads the
-  whole-session copy so a filter never shrinks it; this keeps that copy's readers current, which is
-  what that rule assumes.
+- ~~**A live call reaches the list but not the timeline, the glance or the picker.**~~ Done 2026-10-21, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-live-calls-reach-every-pane`.
 
 ### Open questions
 
@@ -656,7 +601,6 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 
 | Order | Item | Where | Ticket label | Size |
 |---|---|---|---|---|
-| 10 | A live call reaches the list but not the timeline, the glance or the picker *(added 2026-10-19; placed 2026-10-21 by the maintainer: after 1a, before 1b)* | §3 → Bugs found | `item:web-live-calls-reach-every-pane` | S, to be confirmed |
 | 11 | 1b — Web UI foundation: room for the list | §6 | `item:web-foundation-list-room` | M |
 | 12 | 2 — Endpoint latency stats | §6 | `item:endpoint-latency-stats` | M |
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized |
