@@ -1,5 +1,6 @@
 package dev.inspector.repochecks
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.fail
 
@@ -12,18 +13,26 @@ import kotlin.test.fail
  * So the published set must be exactly the pairs in `structure/twins.txt` plus its exemptions, and
  * each exemption has to say why. A module that starts publishing without a twin fails here, which
  * is the `-Pinspector=off` break the twins exist to prevent.
+ *
+ * A twin is only as good as the golden file holding it to its pair, so each `pair` line also names
+ * that file and it must exist. Before this, nothing failed a pair that had none, and the ui pair had
+ * none for eleven releases while its real module grew public theme types the noop lacked.
  */
 class NoopTwinTest {
 
     private sealed interface Entry
-    private data class Twin(val real: String, val noop: String) : Entry
+    /** [golden] is null when the line names none, so the test below can say which pair lacks one. */
+    private data class Twin(val real: String, val noop: String, val golden: String?) : Entry
     private data class Exempt(val module: String, val reason: String) : Entry
 
     private fun entries(): List<Entry> = RepoFiles.golden("twins.txt").map { line ->
         val parts = line.split(Regex("\\s+"), limit = 3)
         when (parts[0]) {
-            "pair" -> if (parts.size == 3 && !parts[2].contains(' ')) Twin(parts[1], parts[2])
-            else fail("twins.txt: a pair is `pair <real> <noop>`: $line")
+            "pair" -> {
+                val fields = line.split(Regex("\\s+")).drop(1)
+                if (fields.size !in 2..3) fail("twins.txt: a pair is `pair <real> <noop> <golden file>`: $line")
+                Twin(fields[0], fields[1], fields.getOrNull(2))
+            }
             "exempt" -> Exempt(parts.getOrElse(1) { fail("twins.txt: exempt names no module: $line") }, parts.getOrElse(2) { "" }.trim())
             else -> fail("twins.txt: unknown entry: $line")
         }
@@ -40,6 +49,31 @@ class NoopTwinTest {
         if (blank.isNotEmpty()) {
             fail("An exemption from the twin rule must say why. No reason given for: ${blank.joinToString { it.module }}")
         }
+    }
+
+    @Test
+    fun every_pair_names_a_golden_file_that_exists() {
+        val pairs = entries().filterIsInstance<Twin>()
+        // An empty loop passes; a twins.txt that lost its pairs must not read as all of them named.
+        if (pairs.isEmpty()) fail("structure/twins.txt lists no pairs; refusing to check nothing")
+        val unnamed = pairs.filter { it.golden == null }
+        val missing = pairs.filter { it.golden != null && !File(RepoFiles.root, it.golden).isFile }
+        if (unnamed.isEmpty() && missing.isEmpty()) return
+        fail(
+            buildString {
+                if (unnamed.isNotEmpty()) {
+                    appendLine("These pairs name no golden file in structure/twins.txt:")
+                    unnamed.forEach { appendLine("  ${it.real} ${it.noop}") }
+                }
+                if (missing.isNotEmpty()) {
+                    appendLine("These pairs name a golden file that does not exist:")
+                    missing.forEach { appendLine("  ${it.real} ${it.noop} ${it.golden}") }
+                }
+                appendLine("Without a golden file both modules assert, a twin drifts unseen and -Pinspector=off changes what")
+                appendLine("compiles. Give the pair a parity test in api-parity/ (api-parity/AGENTS.md), generate its file from")
+                append("the real module, and name it on the pair's line.")
+            }
+        )
     }
 
     @Test

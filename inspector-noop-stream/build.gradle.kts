@@ -35,6 +35,14 @@ kotlin {
     }
 }
 
+tasks.named<Test>("jvmTest") {
+    // Read at run time from outside this module, so nothing else tells Gradle it matters: a
+    // hand-edited golden file would leave jvmTest UP-TO-DATE, or a build-cache hit, and green.
+    // `files`, not `file`: an input file must exist, and the first regeneration runs before it does.
+    inputs.files(rootProject.layout.projectDirectory.file("api/inspector-stream-public-api.txt"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 // Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly.
 private val regenerateApi = providers.systemProperty("inspector.api.regenerate").orElse("false")
 

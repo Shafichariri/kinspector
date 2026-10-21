@@ -4,6 +4,10 @@ The reflection and golden-file machinery (`shared/`) and one parity test per twi
 `stream/`, `ui/`). Each directory is compiled into the `jvmTest` of the two modules it guards, so both
 halves of a pair assert the same golden file.
 
+Every pair runs two tests in both of its modules: its golden file, and a completeness test that fails
+when a class outside the pair's contract list holds public API. Each module declares the golden file
+as a `jvmTest` input, and `structure/twins.txt` names it on the pair's line.
+
 Read before changing anything here: `docs/decisions/twins-and-api.md`.
 
 @../docs/decisions/twins-and-api.md
@@ -28,8 +32,7 @@ The stream pair has its own golden file, and the same friction:
 ./gradlew :inspector-stream:jvmTest :inspector-noop-stream:jvmTest
 ```
 
-The ui pair has its own golden file, and a second test that fails when any other class in the
-module holds public API:
+The ui pair has its own golden file, and the same friction:
 
 ```bash
 # 1. change BOTH :inspector-ui and :inspector-noop-ui
