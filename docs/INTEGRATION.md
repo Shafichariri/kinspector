@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v58 — 2026-10-18.**
+**Document version: v59 — 2026-10-21.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -1300,7 +1300,43 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v58 — 2026-10-18 (this document)
+### v59 — 2026-10-21 (this document)
+
+**If your code names `InspectorTheme`, `InspectorColors` or `LocalInspectorColors`, replace those
+uses with your own code before you upgrade past 1.3.0 — the steps are below. Otherwise there is
+nothing to do.**
+
+From the next release after 1.3.0, those three are `internal` to `inspector-ui`, and the module's
+only public API is `InspectorOverlay`. That release is a minor version, not a major one, by
+decision. This entry is the notice a major version would have given you.
+
+**Why they went.** They were public in every release up to and including 1.3.0, but
+`inspector-noop-ui` never had them. So an app that named one compiled in debug and failed to compile
+in a release build under the §3 swap (`-Pinspector=off`). No version of this guide ever told you to
+use them, which is likely why the gap went unreported. Mirroring them into the no-op would have put
+the inspector's palette into your release build as dead data, so they were made internal instead.
+The two overlay modules now expose the same API, which is what §3 has always promised, and a check
+in the build keeps it that way.
+
+**Am I affected?** Search your code for `InspectorTheme`, `InspectorColors` and
+`LocalInspectorColors`. No match, nothing to do: `InspectorOverlay { App() }` and
+`InspectorOverlay(enabled = …) { App() }` are unchanged, in source and in the compiled call.
+
+**If you do use them,** your build fails after the upgrade with an error saying the declaration is
+internal. Before upgrading:
+
+- **A colour** (`LocalInspectorColors.current.accent`, or an `InspectorColors` you built or
+  copied): declare your own `Color` constant with the same value. The values are in `DarkColors`
+  and `LightColors` in
+  [`InspectorTheme.kt` at 1.3.0](https://github.com/Shafichariri/kinspector/blob/v1.3.0/inspector-ui/src/commonMain/kotlin/dev/inspector/ui/InspectorTheme.kt).
+  For example, `accent` is `Color(0xFF6AA9FF)` dark and `Color(0xFF2563EB)` light.
+- **`InspectorTheme { … }` around your own content:** remove it. If that content read
+  `LocalInspectorColors`, provide your own colours with your own `CompositionLocalProvider`. The
+  overlay applies its colours to itself, and nothing outside it needs the wrapper.
+- **`InspectorColors.forStatus` or `forMethod`:** copy the function. Each is a short `when` over a
+  status code or a method name, in the same file.
+
+### v58 — 2026-10-18
 
 **Nothing to do. One cross-reference, moved.**
 

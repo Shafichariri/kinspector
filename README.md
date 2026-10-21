@@ -318,8 +318,8 @@ filter you type in the app is a string you can hand an agent.
 
 Two layers, because a convention is not a guarantee.
 
-**1. Artifact swap.** `-Pinspector=off` substitutes the `:inspector-noop*` modules. Both sides are
-verified against `api/inspector-public-api.txt` by `ApiParityTest`, which runs in *both* modules —
+**1. Artifact swap.** `-Pinspector=off` substitutes the `:inspector-noop*` modules. Each pair is
+verified against its own golden file in `api/` by a parity test that runs in *both* of its modules —
 neither can drift without failing its own build.
 
 ```bash

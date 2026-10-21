@@ -23,5 +23,32 @@ kotlin {
             api(project(":inspector-noop"))
             implementation(compose.runtime)
         }
+        // The only tests this module has are the parity guard: a release stand-in has no
+        // behaviour of its own to assert, only a surface it must keep matching.
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(kotlin("reflect"))
+        }
     }
+
+    // Shared with :inspector-ui so both modules assert against the same golden surface.
+    sourceSets.named("jvmTest") {
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/shared/src"))
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/ui/src"))
+    }
+}
+
+tasks.named<Test>("jvmTest") {
+    // Read at run time from outside this module, so nothing else tells Gradle it matters: a
+    // hand-edited golden file would leave jvmTest UP-TO-DATE, or a build-cache hit, and green.
+    // `files`, not `file`: an input file must exist, and the first regeneration runs before it does.
+    inputs.files(rootProject.layout.projectDirectory.file("api/inspector-ui-public-api.txt"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly.
+private val regenerateApi = providers.systemProperty("inspector.api.regenerate").orElse("false")
+
+tasks.withType<Test>().configureEach {
+    systemProperty("inspector.api.regenerate", regenerateApi.get())
 }

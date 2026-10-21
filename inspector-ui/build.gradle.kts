@@ -43,12 +43,20 @@ kotlin {
             // photograph one state and never the transition between two.
             @OptIn(ExperimentalComposeLibrary::class)
             implementation(compose.uiTest)
+            // For the parity guard: ApiSurface asks Kotlin metadata what is public.
+            implementation(kotlin("reflect"))
         }
         androidMain.dependencies {
             // Only for InspectorBackHandler. Every Compose Android app already has this — it is
             // what provides ComponentActivity.setContent.
             implementation(libs.androidx.activity.compose)
         }
+    }
+
+    // Shared with :inspector-noop-ui so both modules assert against the same golden surface.
+    sourceSets.named("jvmTest") {
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/shared/src"))
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/ui/src"))
     }
 }
 
@@ -73,4 +81,17 @@ class WebCssArgument(
 
 tasks.named<Test>("jvmTest") {
     jvmArgumentProviders += WebCssArgument(rootProject.file("inspector-daemon/src/main/resources/web/css"))
+    // Read at run time from outside this module, like the stylesheets above, so nothing else
+    // tells Gradle it matters: a hand-edited golden file would leave jvmTest UP-TO-DATE, or a
+    // build-cache hit, and green. `files`, not `file`: an input file must exist, and the first
+    // regeneration runs before it does.
+    inputs.files(rootProject.layout.projectDirectory.file("api/inspector-ui-public-api.txt"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly.
+private val regenerateApi = providers.systemProperty("inspector.api.regenerate").orElse("false")
+
+tasks.withType<Test>().configureEach {
+    systemProperty("inspector.api.regenerate", regenerateApi.get())
 }

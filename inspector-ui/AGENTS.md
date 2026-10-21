@@ -5,8 +5,9 @@ Android, iOS and desktop from one codebase. Its render and interaction tests are
 
 Read before changing anything here: `docs/decisions/overlay.md`, `docs/decisions/signals.md`, `docs/decisions/shared-rules.md`.
 
-Also: `docs/decisions/twins-and-api.md` — this module's twin, `:inspector-noop-ui`, has no golden
-file yet (phase I).
+Also: `docs/decisions/twins-and-api.md` — this module's public API is `InspectorOverlay` alone,
+held by `api/inspector-ui-public-api.txt` and `UiApiParityTest`, which runs here and in
+`:inspector-noop-ui`. Commands are in `api-parity/AGENTS.md`.
 
 @../docs/decisions/overlay.md
 @../docs/decisions/signals.md

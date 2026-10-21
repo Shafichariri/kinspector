@@ -19,8 +19,9 @@ either build and there is nothing to swap, and it holds no capture code. `:inspe
 `:inspector-noop-stream`, so an app that surfaced the reason its daemon connection failed compiled
 in debug and failed to compile under `-Pinspector=off` — the one failure the twins exist to
 prevent, shipped by the module that prevents it. Nothing caught it because the golden file
-covered the `core` pair only. There are now two:
-`api/inspector-public-api.txt` and `api/inspector-stream-public-api.txt`.
+covered the `core` pair only. There are now three:
+`api/inspector-public-api.txt`, `api/inspector-stream-public-api.txt` and
+`api/inspector-ui-public-api.txt`.
 
 The stream pair needs a rule the core pair does not, because the two are **not** identical: the
 real module exposes Ktor types the noop must never name, or a release build would carry a Ktor
@@ -28,7 +29,7 @@ dependency. So the contract is every public member whose signature names no Ktor
 modules assert **equality** against it — the real one with Ktor-typed members filtered out. Equality
 is the load-bearing word. A subset check on the real module would let it grow a member the noop
 lacks and say nothing, which is the hole that was already open. `StreamApiParityTest` carries the
-reasoning; `:inspector-noop-ui` still has no golden file and is the remaining gap of this shape.
+reasoning. The `ui` pair, the last gap of this shape, has had its own since phase I; see below.
 
 **A matching public API is not a matching ABI: the JVM file facade is named for the *file*.**
 A twin pair can declare byte-identical Kotlin signatures and still be binary-incompatible.
@@ -146,3 +147,50 @@ all of them found by reading the generated golden file rather than by a failing 
 
 None of these changed the `core` golden file by a byte, which is how they were confirmed to be
 fixes to the reflection rather than to the surface.
+
+**`:inspector-ui`'s public API is `InspectorOverlay` and nothing else; the palette and the theme
+are `internal`.** `InspectorTheme`, `InspectorColors` and `LocalInspectorColors` were public in
+every release up to 1.3.0 and never existed in `:inspector-noop-ui`, so an app theming against them
+compiled in debug and failed under `-Pinspector=off` — the `lastError` failure again, latent only
+because no document had told anyone to use them. Mirroring them was rejected: a release artifact
+would carry the inspector's palette as dead data. They became `internal` by the maintainer's
+decision of 2026-10-18, allowed in a minor release, with `INTEGRATION.md` v59 telling consumers to
+copy the colours they need. Do not make any of them public again so an app can theme against the
+overlay: that reopens the divergence, and `UiApiParityTest` fails if it happens.
+
+**A `@Composable` function's golden entry is its declaration plus its full JVM descriptor, with
+Compose's parameters left in the descriptor.** The Compose compiler appends `$composer`,
+`$changed` and, when there are defaults, `$default` to the JVM method, so `InspectorOverlay` is
+`(ZLkotlin/jvm/functions/Function2;Landroidx/compose/runtime/Composer;II)V`. That descriptor is
+what a consumer's compiled call binds to, so stripping the added parameters would hide real breaks:
+a twin that lost the default on `enabled` loses the trailing `I`. Both twins are built by the same
+Compose compiler, so equal declarations give equal text, which is all a parity check needs. The
+`fun` line comes from the Kotlin declaration instead, by one rule with no names in it: a facade
+method whose JVM parameter list is longer than its declaration's had parameters added by the
+compiler, so it is rendered from the declaration, with the names and defaults a named-argument call
+site depends on and the Java form cannot show. Methods whose lists agree keep the Java form, which
+is why the `core` and `stream` golden files did not change by a byte. A suspend function on a
+facade takes the same path, for its `Continuation`. Proven by renaming `enabled` in the noop: only
+the `fun` line failed.
+
+**The `ui` pair also checks that every public declaration is in its contract, and that is not the
+rejected class-set diff.** `ApiSurface` only sees classes it is named, so the theme types could go
+public again, or a public composable land in a new file, with the golden test green.
+`UiApiParityTest` therefore lists every class in the module's own JVM output that holds a
+declaration Kotlin calls public — a class when it and every enclosing class are public, a file
+facade when one of its package members is — and requires that set to equal `UI_CONTRACT_CLASSES`.
+The class-set diff asked the JVM, where `internal` is public, and compared twin with twin; this asks
+Kotlin metadata and compares one module with its own list. Measured on the ui pair before the theme
+types went internal, it named exactly them and `InspectorOverlayKt`: no spurious entries, the
+generated `Res` classes included, which are public classes nested in an `internal` one.
+`Method.kotlinFunction` cannot do this job. One `internal` composable with a value-class parameter,
+`inspectorScreen`, makes it throw for every method of its facade, so the facade's members are read
+through `getOrCreateKotlinPackage` instead. The check is not yet applied to the `core` and `stream`
+pairs.
+
+**Both `InspectorOverlay.kt` files are load-bearing, and only their file name holds the facade.**
+Consumers' compiled code calls `dev.inspector.ui.InspectorOverlayKt`. Neither module can pin it:
+`InspectorOverlay` is in `commonMain` in both, where `@file:JvmName` fails `compileKotlinIosArm64`
+as it does for `StreamSink.kt`. So renaming either file is a breaking change. `UI_CONTRACT_CLASSES`
+names the facade and the golden file records it, and renaming either file fails that module's
+`UiApiParityTest`. Proven by renaming each in turn.

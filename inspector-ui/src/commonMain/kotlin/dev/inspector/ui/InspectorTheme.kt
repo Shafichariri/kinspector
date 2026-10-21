@@ -20,9 +20,13 @@ import dev.inspector.model.SignalTags
  * Deliberately self-contained rather than inheriting the host app's MaterialTheme: the inspector
  * draws on top of arbitrary apps, and a debugger that restyles itself to match whatever screen it
  * is floating over becomes hard to read exactly when you need it.
+ *
+ * Internal, with [InspectorTheme] and [LocalInspectorColors]: the palette is the overlay's own, and
+ * the release twin has none to match it. They were public until 1.3.0; see
+ * docs/decisions/twins-and-api.md.
  */
 @Immutable
-data class InspectorColors(
+internal data class InspectorColors(
     val surface: Color,
     val surfaceElevated: Color,
     val onSurface: Color,
@@ -44,7 +48,7 @@ data class InspectorColors(
      *
      * The PUT hue, used at a low alpha as a *background* rather than as text. It was amber, and an
      * amber-tinted row beside amber 4xx statuses read as "this row failed" — the one thing the
-     * list must not get wrong. Added last, so an app constructing its own palette is unaffected.
+     * list must not get wrong.
      */
     val duplicate: Color = Color(0xFFD99BFF),
 ) {
@@ -83,9 +87,6 @@ data class InspectorColors(
      *
      * Unknown tags get the muted colour and a generic lane, which is the whole point of `tag`
      * being an open string — an app emitting `featureflags` renders, it does not fall through.
-     *
-     * Internal: this module's colour set is already public without a `:inspector-noop-ui` twin,
-     * and there is no reason to widen that.
      */
     internal fun forTag(tag: String): Color = when (tag.lowercase()) {
         SignalTags.SCREEN -> accent
@@ -148,10 +149,10 @@ internal val LightColors = InspectorColors(
     duplicate = Color(0xFF7C3AED),
 )
 
-val LocalInspectorColors = staticCompositionLocalOf { DarkColors }
+internal val LocalInspectorColors = staticCompositionLocalOf { DarkColors }
 
 @Composable
-fun InspectorTheme(
+internal fun InspectorTheme(
     dark: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

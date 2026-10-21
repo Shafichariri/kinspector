@@ -69,7 +69,7 @@ claiming anything is verified.
 :inspector-core        KMP  Ktor plugin, OkHttp interceptor, recorder, ring buffer, redaction, signals.
 :inspector-noop        KMP  Release twin of core. Golden: api/inspector-public-api.txt.
 :inspector-ui          KMP  Compose overlay pill + inspector screens.
-:inspector-noop-ui     KMP  Release twin of ui. Golden: none yet (phase I).
+:inspector-noop-ui     KMP  Release twin of ui. Golden: api/inspector-ui-public-api.txt.
 :inspector-stream      KMP  Sink to the daemon: dials /ingest, or on an iPhone listens for the bridge.
 :inspector-noop-stream KMP  Release twin of stream. Golden: api/inspector-stream-public-api.txt.
 :inspector-daemon      JVM  Archive, REST, live WS, web UI, CLI, MCP server, USB bridge.
@@ -134,8 +134,8 @@ completeness is not.**
 1. **Artifact swap.** `-Pinspector=off` substitutes `:inspector-noop` / `:inspector-noop-ui` /
    `:inspector-noop-stream`. Each pair is verified against a golden file by a parity test running
    in *both* modules of the pair, so neither can drift silently: `api/inspector-public-api.txt`
-   for `core`, and `api/inspector-stream-public-api.txt` for `stream`. The `ui` pair has no golden
-   file yet.
+   for `core`, `api/inspector-ui-public-api.txt` for `ui`, and
+   `api/inspector-stream-public-api.txt` for `stream`.
 2. **Canary guard.** `:inspector-core` carries `INSPECTOR_CANARY_…`;
    `scripts/check-release-clean.sh` fails if it appears in a release artifact. The script reads
    the canary from the Kotlin source rather than hardcoding it, and scans Kotlin/Native klib
