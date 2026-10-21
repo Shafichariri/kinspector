@@ -79,6 +79,7 @@ function filtered(filter, rows) {
     arriving: { transactions: null, signals: null },
     reread: { transactions: false, signals: false, timer: null, busy: false },
     readSent: { transactions: 0, signals: 0 }, readWritten: { transactions: 0, signals: 0 },
+    currentSessionId: 'S', currentRead: { sent: 0, written: 0 }, signalSessionId: 'S',
   };
 }
 

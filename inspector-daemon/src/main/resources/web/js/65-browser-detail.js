@@ -41,6 +41,12 @@ function renderSessionGlance() {
    */
   const txns = (state.allTransactions.length ? state.allTransactions : state.transactions)
     .filter((txn) => inRange(txn.mono));
+  // From a switch until the new session's signals land, every number here would be the old one's.
+  if (state.sessionId && state.signalSessionId !== state.sessionId) {
+    pane.className = 'empty muted';
+    pane.textContent = 'loading this session…';
+    return;
+  }
   if (!txns.length && !state.allSignals.length) {
     pane.className = 'empty muted';
     pane.textContent = 'select a transaction';

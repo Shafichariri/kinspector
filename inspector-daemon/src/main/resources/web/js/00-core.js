@@ -83,6 +83,14 @@ const state = {
   // read `signals`; they are the two places a filter is meant to thin signals.
   signals: [],
   current: [],
+  // Whose values `current` holds, and the `/current` reads sent and the newest one written. A
+  // failed read keeps the values only when they are the selected session's (`readCurrent`), and of
+  // two reads the later-started decides, whatever order the daemon answers them in.
+  currentSessionId: null,
+  currentRead: { sent: 0, written: 0 },
+  // The session the last signal load finished drawing, or null from a switch until it lands. Until
+  // it is the selected one, the glance says it is loading rather than describing the session left.
+  signalSessionId: null,
   // Every signal in the session, ignoring the filter, and the session it belongs to — the same
   // split as `allTransactions`, for the same reason: tabs, their counts, the tag browsers, the
   // glance and the axis describe the session, and a filter that emptied a tab would make the tab

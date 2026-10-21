@@ -74,7 +74,7 @@ fun writeProbeFixture(dataDir: Path): Path {
             Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
         }
     }
-    writeSession(config, LONG_SESSION_ID, LONG_STARTED_AT, transactions = longSessionCalls())
+    writeSession(config, LONG_SESSION_ID, LONG_STARTED_AT, transactions = longSessionCalls(), signals = longSessionSignals())
     val fixture = probeFixture()
     val dir = writeSession(
         config, PROBE_SESSION_ID, PROBE_STARTED_AT,
@@ -265,4 +265,26 @@ fun longSessionCalls(): List<NetworkTransaction> {
             resContentType = "application/json",
         )
     }
+}
+
+/**
+ * The long session's own current values: two `state` keys the probe session never records.
+ *
+ * The now-strip probes switch between the two sessions, and "the strip lists the new session's
+ * values" can only fail apart from "the strip is empty" when the new session has values, different
+ * from the old one's. Both are before the first call, so no stretch, filter or count the long
+ * session's probes read reaches them, and neither is a `screen`, so the long session has no path
+ * of its own and no waterfall tab.
+ */
+fun longSessionSignals(): List<Pair<Signal, ByteArray?>> {
+    val start = Instant.parse(LONG_STARTED_AT)
+    return listOf("BulkListViewModel" to """{"page":12}""", "SyncViewModel" to """{"pending":0}""")
+        .mapIndexed { i, (name, payload) ->
+            val mono = 500L + i * 10L
+            val data = payload.toByteArray()
+            Signal(
+                id = "6" + (i + 1).toString(16).padStart(7, '0'), ts = start.plusMillis(mono).toString(), mono = mono,
+                tag = SignalTags.STATE, name = name, bytes = data.size.toLong(),
+            ) to data
+        }
 }

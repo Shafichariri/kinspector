@@ -103,6 +103,21 @@ class ProbeFixtureTest {
     }
 
     /**
+     * The now-strip probes switch from the probe session to the long one, and assert the strip lists
+     * the long session's own values: with none, or the same ones, "dropped" and "blanked" read alike.
+     */
+    @Test
+    fun the_long_session_has_current_values_of_its_own() {
+        val long = assertNotNull(repo.resolve(LONG_SESSION_ID), "no long session")
+        val keys = { d: java.nio.file.Path -> repo.currentSignals(d).map { it.tag to it.name }.toSet() }
+        val probe = keys(dir)
+        val own = keys(long)
+        assertTrue(own.isNotEmpty(), "the long session holds no current values")
+        assertTrue(probe.isNotEmpty(), "the probe session holds no current values")
+        assertTrue(own.intersect(probe).isEmpty(), "the two sessions share current keys: ${own.intersect(probe)}")
+    }
+
+    /**
      * The model's duplicate key, which is `internal` there: method, URL, status and both byte counts,
      * the same five fields the web UI's `duplicateKey` joins.
      */

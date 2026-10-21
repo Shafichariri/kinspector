@@ -89,6 +89,8 @@ async function afterSessionChange() {
   state.payloads.clear();
   state.browserKey = null;
   state.browserObservation = null;
+  // The session on screen may just have been deleted; its values must not stand while the list loads.
+  followSession();
   await loadSessions();
   renderSessionRows();
   if (state.sessionId) {
