@@ -76,6 +76,23 @@ and each is named in `auditMinTextSize` rather than matched by pattern, so a new
 the audit until someone decides it belongs on the list. The design pass named four selectors to
 raise; nine more were at 10px, and fixing only the four would have left the rule false on day one.
 
+**An icon-only control is an SVG in a box at least `--target-min` (24px) square, never a text
+glyph.** A glyph is drawn by whichever font has it: `⤢` fell back to a symbol font and drew well
+under its 13px em, a 23×20 target. `⋮`'s own 13px rule lost the cascade to `.btn-sm` declared
+later and rendered at 11px, which nobody noticed because the rule was there. `.btn.btn-icon` is the
+one rule that sizes them: two classes outrank `.btn-sm` and `.btn-quiet` wherever either loads, and
+`icon target css` refuses any other rule that sizes an icon control by name, whichever of the two
+would win. Its centring is set under `:where()`, at no specificity, because what decides whether each
+control is drawn at all is a single class or `[hidden]` (`.drawer-close`, `.detail-hide`), and a
+`display` with two classes would outrank them. 24px is WCAG 2.2's minimum target. A control whose
+text changes, such as the Sessions row's `✕` that arms as `sure?`, keeps its text in the same box.
+**Every `.btn` on a page document is at least that tall, and the traffic toolbar is exempt**,
+because its height is the band budget 1b measured (`room 1440 bands list`). Prose on a page document
+stops at `--prose-max` (72ch). At 1440 a Sessions note had run 1232px, about 190 characters a line.
+`icon target css`, `icon controls svg`, `page targets css` and `prose width css` read the rules;
+`measure-web-ui.js`'s `polish <w> …` readings are the behaviour (the icons at 1440, 1000 and 400,
+served and exported, dark and light), each red with its rule removed.
+
 **The tab bar is always drawn.** It used to hide when a session had only the traffic view, which
 made the bar appear and disappear between sessions and moved everything under it. The order control
 is a segmented pair rather than two more chips, because it arranges the list where the chips beside
@@ -693,7 +710,10 @@ a drawn face.** Since KIN-49 the picker gives way first when the bar runs short,
 one part that tells two sessions of one app apart. A `<select>` cannot ellipsize. So the select keeps
 the focus, the keyboard, the native list and every probe's `change` event, and `.picker-face`
 beneath it shows the time first and whole, the rest ellipsized, the full label as its tooltip
-(`picker face`; `shell <width> picker time` in `measure-web-ui.js`).
+(`picker face`; `shell <width> picker time` in `measure-web-ui.js`). The Sessions page's row does
+the same. Its label was the app then the time, and at 400px both of the probe fixture's rows read
+`com.example.pr…` with no time at all (`session row time`; `polish <w> session time whole` in
+Chrome).
 
 **Below 700px the tab bar draws the active tab and a `views ▾` menu of every view.** "The tab bar is
 always drawn" still holds: the band never comes and goes. Which tabs it draws inline is a width

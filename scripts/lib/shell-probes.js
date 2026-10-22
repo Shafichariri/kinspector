@@ -14,6 +14,7 @@
 
 const { choose, waitFor } = require('./long-session-probes');
 const { probeSwitchWindowByRoute } = require('./current-guard-probes');
+const { probeSessionRowTime } = require('./polish-probes');
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const press = async (ctx, node, ms = 80) => {
@@ -106,6 +107,7 @@ async function probeSessionsPage(ctx) {
   await waitFor(() => doc.querySelector('#session-rows .session-row'), 3000);
   const rows = () => [...doc.querySelectorAll('#session-rows .session-row')];
   lines.push(['session rows', rows().length, 'note']);
+  lines.push(...probeSessionRowTime(ctx)); // lib/polish-probes.js; reads the rows, moves nothing
 
   // The folder the daemon archives to is `<data>/sessions`, as `config.json` is `<data>/config.json`,
   // so the truth is the config route's path and not the route the page reads. CI's fixture runs with

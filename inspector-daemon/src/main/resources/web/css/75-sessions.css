@@ -1,7 +1,11 @@
 /* sessions: the Sessions page's rows, quiet buttons and armed buttons */
 /* --- sessions ------------------------------------------------------------ */
 
-.session-row-label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-row-label { display: flex; gap: 6px; min-width: 0; font-size: 12px; white-space: nowrap; }
+/* The start time first and whole, as on the picker's face: it is what tells two runs of one app
+   apart, and at 400px the app's id had pushed it out of the row. The app gives way instead. */
+.session-row-time { flex: none; }
+.session-row-app { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .session-row-id { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .btn-quiet {

@@ -161,7 +161,6 @@
 
 /* `⋮`: exports, the shortcut legend and compact rows. */
 .more-host { flex: none; }
-.more-button { font-size: 13px; line-height: 1.2; padding: 1px 9px; }
 
 /* Popovers for the two things that were reference material taking up permanent space. */
 .pop {

@@ -37,7 +37,9 @@
  *     row keeping its path's last segment and its repeat mark;
  *   - the Stats page's live refresh: a burst of rows costing at most two requests, one out at a time,
  *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed;
- *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed.
+ *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed;
+ *   - the polish rules: an icon-only control is an SVG in a box sized by one rule from `--target-min`,
+ *     a page document's buttons are as tall and its prose stops at `--prose-max`.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -65,6 +67,7 @@ const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = requi
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
 const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
+const { checkPolish } = require('./lib/polish-checks');
 const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow } = require('./lib/layout-audits');
 
 const results = [];
@@ -150,6 +153,9 @@ async function main() {
 
   console.error('--- stats ---');
   for (const [label, value] of await checkStatsRefresh(scripts)) report(label, value);
+
+  console.error('--- polish ---');
+  for (const [label, value] of checkPolish(scripts, styles)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);
