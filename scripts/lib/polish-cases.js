@@ -9,7 +9,7 @@
  * a box at least 24x24, its SVG at least 14x14 (the row `✕`, which is text, at least 14px), and is
  * what `elementFromPoint` finds at its centre (`polish <w> icon targets <where> <scheme>`).
  *
- * Served, at 1440 and 400, on the Stats, Sessions, Processes and Settings pages: every drawn `.btn` is
+ * Served, at 1440 and 400, on the Stats, Findings, Sessions, Processes and Settings pages: every drawn `.btn` is
  * at least 24px tall (`polish <w> page targets`); the density select is at least its longest
  * option's text plus 20px for the chevron, measured in the select's own font (`polish <w> density
  * whole`); and every Sessions row starts with its start time, whole and inside its cell (`polish <w>
@@ -120,7 +120,7 @@ async function iconTargets(page, url, rows) {
   }
 }
 
-const PAGES = ['stats', 'sessions', 'processes', 'settings'];
+const PAGES = ['stats', 'findings', 'sessions', 'processes', 'settings'];
 
 // The shown page's drawn buttons and notes, measured; the density select and the Sessions rows' times
 // when the page has them. Widths of text are a canvas's `measureText` in the element's own font.
@@ -161,7 +161,7 @@ async function pageDocs(page, url, rows) {
     const buttons = all.flatMap((r) => r.buttons.map((b) => ({ ...b, page: r.id })));
     const low = buttons.filter((b) => b.h < 24 - 0.01);
     rows.push({ key: `polish ${width} page targets`, ok: !errors.length && buttons.length > 0 && !low.length,
-      value: errors.length ? 'not measured' : !buttons.length ? 'NO - found no button on the four pages, so this checked nothing'
+      value: errors.length ? 'not measured' : !buttons.length ? 'NO - found no button on the pages, so this checked nothing'
         : low.length ? 'short' : 'at least 24px',
       detail: errors.length ? errors.join(' | ') : `${buttons.length} buttons on ${all.length} pages${low.length
         ? `; short: ${low.slice(0, 6).map((b) => `${b.page} ${b.name} ${Math.round(b.h * 10) / 10}px`).join(', ')}` : ''}` });
@@ -169,7 +169,7 @@ async function pageDocs(page, url, rows) {
       const notes = all.flatMap((r) => r.notes);
       const wide = notes.filter((n) => n.w > n.cap + 0.5);
       rows.push({ key: `polish ${width} prose width`, ok: !errors.length && notes.length > 0 && !wide.length,
-        value: !notes.length ? 'NO - found no note on the four pages, so this checked nothing' : wide.length ? 'wider than 72ch' : 'at most 72ch',
+        value: !notes.length ? 'NO - found no note on the pages, so this checked nothing' : wide.length ? 'wider than 72ch' : 'at most 72ch',
         detail: `${notes.length} notes, widest ${Math.round(Math.max(0, ...notes.map((n) => n.w)))}px against a 72ch of ${Math.round(notes[0] ? notes[0].cap : 0)}px` });
     }
     const d = reads.settings && reads.settings.density;

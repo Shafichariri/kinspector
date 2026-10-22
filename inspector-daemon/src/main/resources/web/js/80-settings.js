@@ -151,6 +151,128 @@ function renderConfig(reply) {
       box.lastChild.appendChild(input);
     }
   }
+  findingsConfigRender(reply);
+}
+
+// --- settings: the findings rules, the one key read live --------------------------------------
+
+/** The five `findings.payment` fields, in the order the fieldset draws them; a list is one entry per line. */
+const FINDINGS_PAYMENT_FIELDS = [
+  { key: 'idempotencyHeaders', label: 'idempotency headers', list: true },
+  { key: 'paymentPaths', label: 'payment paths', list: true },
+  { key: 'ignorePaths', label: 'ignore paths', list: true },
+  { key: 'duplicateWindowMs', label: 'duplicate window', unit: 'ms' },
+  { key: 'resubmitWindowMs', label: 'resubmit window', unit: 'ms' },
+];
+
+/**
+ * The Findings fieldset, generated from `effective.findings`, which the daemon read live: a row per
+ * rule it ships, so a family that adds rules adds rows with no change here, and the payment settings.
+ * Inputs hold what the daemon runs on, which for this key is the file as last read.
+ */
+function findingsConfigRender(reply) {
+  const box = $('findings-config');
+  const findings = reply.effective && reply.effective.findings;
+  box.hidden = !findings;
+  box.replaceChildren();
+  if (!findings) return;
+  box.appendChild(el('legend', null, 'Findings'));
+  box.appendChild(el('p', 'settings-note muted',
+    'Which rules the Findings page and list_findings run, and what they look for. These apply on the next findings read, with no restart.'));
+  if (reply.findingsConfigError) {
+    box.appendChild(el('p', 'config-error', `${reply.findingsConfigError} — the last settings that could be read are in use.`));
+  }
+  const table = el('table', 'page-table findings-rules');
+  table.appendChild(el('thead')).appendChild(el('tr')).append(el('th', null, 'rule'), el('th', 'col-secondary', 'family'),
+    el('th', null, 'on'), el('th', null, 'severity'));
+  const rows = table.appendChild(el('tbody'));
+  for (const rule of findings.rules) {
+    const tr = rows.appendChild(el('tr'));
+    tr.dataset.rule = rule.id;
+    const on = el('input');
+    on.type = 'checkbox';
+    on.checked = rule.enabled;
+    on.dataset.ruleEnabled = rule.id;
+    on.setAttribute('aria-label', `${rule.title} on`);
+    const severity = el('select');
+    severity.dataset.ruleSeverity = rule.id;
+    severity.setAttribute('aria-label', `${rule.title} severity`);
+    for (const level of ['high', 'medium', 'info']) {
+      const option = el('option', null, level === rule.defaultSeverity ? `${level} (default)` : level);
+      option.value = level;
+      severity.appendChild(option);
+    }
+    severity.value = rule.severity;
+    tr.append(el('td', null, rule.title), el('td', 'col-secondary muted', rule.categoryTitle), el('td'), el('td'));
+    tr.children[2].appendChild(on);
+    tr.children[3].appendChild(severity);
+  }
+  box.appendChild(table);
+  for (const field of FINDINGS_PAYMENT_FIELDS) {
+    const value = findings.payment[field.key];
+    const input = el(field.list ? 'textarea' : 'input');
+    input.dataset.payment = field.key;
+    if (field.list) {
+      input.rows = Math.min(8, Math.max(3, (value || []).length + 1));   // every default shown whole
+      input.spellcheck = false;
+      input.value = (value || []).join('\n');
+    } else {
+      Object.assign(input, { type: 'number', min: '1', step: '1' });
+      input.value = String(value);
+    }
+    const line = el('label', 'config-row');
+    line.append(el('span', 'config-label', field.label), input,
+      el('span', 'config-now muted', field.list ? 'one per line' : field.unit));
+    box.appendChild(line);
+  }
+}
+
+/** Two JSON values equal whatever their keys' order, so a save that changed nothing sends nothing. */
+function sameJson(a, b) {
+  const canon = (v) => (Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.keys(v).sort().reduce((o, k) => ({ ...o, [k]: canon(v[k]) }), {}) : v);
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+}
+
+/**
+ * The whole `findings` key to send, or `undefined` when the inputs say what the file says: a
+ * top-level key is replaced whole, so it starts from the file's and carries every sub-object it does
+ * not draw (`sensitive`, once added) as the file holds it. `rules` keeps only a rule whose inputs
+ * differ from its defaults, and drops one put back to them; `payment` gains only a field whose input
+ * differs from the file's value, or the daemon's where the file has none. `null` removes the key.
+ */
+function findingsConfigPatch() {
+  const effective = configReply && configReply.effective && configReply.effective.findings;
+  if (!effective) return undefined;
+  const was = (configReply.file && configReply.file.findings) || null;
+  const next = { ...(was || {}) };
+  const rules = { ...(next.rules || {}) };
+  for (const rule of effective.rules) {
+    const on = document.querySelector(`#findings-config [data-rule-enabled="${rule.id}"]`);
+    const severity = document.querySelector(`#findings-config [data-rule-severity="${rule.id}"]`);
+    if (!on || !severity) continue;
+    const entry = {};
+    if (!on.checked) entry.enabled = false;
+    if (severity.value !== rule.defaultSeverity) entry.severity = severity.value;
+    if (Object.keys(entry).length) rules[rule.id] = entry;
+    else delete rules[rule.id];
+  }
+  if (Object.keys(rules).length) next.rules = rules;
+  else delete next.rules;
+  const payment = { ...(next.payment || {}) };
+  const lines = (text) => text.split('\n').map((line) => line.trim()).filter(Boolean);
+  for (const field of FINDINGS_PAYMENT_FIELDS) {
+    const input = document.querySelector(`#findings-config [data-payment="${field.key}"]`);
+    if (!input || (!field.list && input.value === '')) continue;
+    const before = was && was.payment && field.key in was.payment ? was.payment[field.key] : effective.payment[field.key];
+    const value = field.list ? lines(input.value) : Number(input.value);
+    const changed = field.list ? lines((before || []).join('\n')).join('\n') !== value.join('\n') : value !== before;
+    if (changed) payment[field.key] = value;
+  }
+  if (Object.keys(payment).length) next.payment = payment;
+  else delete next.payment;
+  const out = Object.keys(next).length ? next : null;
+  return sameJson(out, was) ? undefined : out;
 }
 
 /** The keys whose inputs differ from what the file holds now, as a `PUT /api/config` body. */
@@ -174,6 +296,8 @@ function configPatch() {
   const before = { ...effective.signalCaps, ...(file.signalCaps || {}) };
   const changed = Object.keys(caps).some((tag) => (before[tag] ?? null) !== caps[tag]);
   if (changed) patch.signalCaps = { ...(file.signalCaps || {}), ...caps };
+  const findings = findingsConfigPatch();
+  if (findings !== undefined) patch.findings = findings;
   return patch;
 }
 
@@ -197,7 +321,10 @@ async function saveConfig() {
     if (!res.ok) throw new Error(reply.error || String(res.status));
     configReply = reply;
     renderConfig(reply);
-    status.textContent = 'saved — applies when the daemon restarts';
+    // Only the findings key applies at once (the daemon reads it on every findings read).
+    const others = Object.keys(patch).some((key) => key !== 'findings');
+    status.textContent = !('findings' in patch) ? 'saved — applies when the daemon restarts'
+      : others ? 'saved — findings use it now; the rest applies when the daemon restarts' : 'saved — findings use it now';
   } catch (e) {
     status.textContent = e.message;
     status.classList.add('error');

@@ -57,7 +57,11 @@ document.addEventListener('keydown', (e) => {
 
 $('filter').addEventListener('input', applyFilter);
 $('session-picker').addEventListener('change', (e) => switchSession(e.target.value));
-$('live-btn').addEventListener('click', () => setLiveTail(!state.liveTail));
+$('live-btn').addEventListener('click', () => {
+  setLiveTail(!state.liveTail);
+  // Resuming reads the findings again, as `setLiveTail` reads Stats: the calls missed while paused count.
+  if (state.liveTail) findingsReload();
+});
 // Scoped to the filter rail, not every `.chip` on the page. Order chips and facet chips are
 // chips too, and they carry no `data-filter` — a blanket handler set the filter box to
 // `undefined`, which parses as a bad filter and empties the whole list.
@@ -134,9 +138,11 @@ wireStatsPage();
   // Not in an export: opened from disk, `location.host` is empty and the socket URL is malformed, so
   // the constructor throws and takes the rest of init with it.
   if (!ARCHIVE) connectLive();
-  // Opened on `#/stats`, it had no session to ask about until now. Asked before the calls are read,
-  // not after: on a 160,000-call session that read takes half a minute, and the table needs none of it.
+  // Opened on `#/stats` or `#/findings`, it had no session to ask about until now. Asked before the
+  // calls are read, not after: on a 160,000-call session that read takes half a minute, and neither
+  // page needs any of it.
   statsReload();
+  findingsReload();
   await loadTransactions();
   // Then the view, which a session must have loaded to offer.
   await applyRoute();

@@ -188,12 +188,15 @@ async function probePageKeys(ctx) {
 }
 
 /**
- * The export's page keys: `g s` opens Stats, `g a` and `g p` (live pages, which an export does not
- * offer) leave the page where it was, and the legend lists Traffic and Stats only. Back on Traffic.
+ * The export's page keys: `g s` opens Stats and `g f` Findings, `g a` and `g p` (live pages, which an
+ * export does not offer) leave the page where it was, and the legend lists Traffic, Stats and Findings
+ * only. Back on Traffic.
  */
 async function probeKeysInExport(window, doc) {
   const ctx = { window, doc };
   const bad = [];
+  await keys(ctx, ['g', 'f']);
+  if (!await waitFor(() => shown(doc).join() === 'findings')) bad.push(`g f left ${shown(doc).join()} shown`);
   await keys(ctx, ['g', 's']);
   if (!await waitFor(() => shown(doc).join() === 'stats')) bad.push(`g s left ${shown(doc).join()} shown`);
   for (const letter of ['a', 'p']) {
@@ -208,8 +211,8 @@ async function probeKeysInExport(window, doc) {
   await keys(ctx, ['g', 't']);
   await waitFor(() => shown(doc).join() === 'traffic');
   if (!open) bad.push('? opened no legend');
-  else if (listed.join() !== 'traffic,stats') bad.push(`the legend lists ${listed.join(', ') || 'nothing'}, not traffic, stats`);
-  return bad.length ? `NO - ${bad.join('; ')}` : 'yes (g s opened Stats; g a and g p left it there; the legend lists Traffic and Stats)';
+  else if (listed.join() !== 'traffic,stats,findings') bad.push(`the legend lists ${listed.join(', ') || 'nothing'}, not traffic, stats, findings`);
+  return bad.length ? `NO - ${bad.join('; ')}` : 'yes (g f opened Findings, g s Stats; g a and g p left it there; the legend lists Traffic, Stats and Findings)';
 }
 
 module.exports = { probeSessionRowTime, probePageKeys, probeKeysInExport };

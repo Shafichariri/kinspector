@@ -74,6 +74,10 @@
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3 16.5h14M5.5 14V9.5M9 14V4.5M12.5 14v-3M16 14V7.5"/></svg>
       <span class="rail-text">Stats</span>
     </a>
+    <a class="rail-item" data-page="findings">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 17.5V3M5 3.5h10l-2.5 3.5 2.5 3.5H5"/></svg>
+      <span class="rail-text">Findings</span>
+    </a>
     <a class="rail-item" data-page="sessions">
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="3.5" width="14" height="5" rx="1"/><rect x="3" y="11.5" width="14" height="5" rx="1"/></svg>
       <span class="rail-text">Sessions</span>
@@ -375,6 +379,14 @@
     </p>
   </section>
 
+  <!-- What the daemon's rules flag in the selected session, drawn as it answers: the page counts, ranks and masks nothing. -->
+  <section id="page-findings" class="page page-doc" aria-labelledby="findings-title" hidden>
+    <h1 id="findings-title" class="page-title" tabindex="-1">Findings</h1>
+    <p id="findings-count" class="findings-count" role="status"></p>
+    <div id="findings-body"></div>
+    <p id="findings-note" class="settings-note muted"></p>
+  </section>
+
   <!--
     Archive management: every session, with what decides whether it can go. Deleting is permanent —
     there is no trash — and a session the app is still writing to is never removed, so its row can
@@ -553,19 +565,21 @@
     </section>
 
     <!--
-      The daemon's config.json. Nothing here changes the running daemon: a port cannot move under a
-      listening socket and retention holds the config it started with, so every key applies at the
-      next start — one rule, said once, rather than a list of which keys apply live.
+      The daemon's config.json. A port cannot move under a listening socket and retention holds the
+      config it started with, so every key applies at the next start, but one: the findings rules,
+      which the daemon reads on every findings read, so the Findings page beside this one agrees.
     -->
     <section class="settings-section">
       <h2 class="settings-title">The daemon's config.json</h2>
       <p class="settings-note muted">
         Saved to <code id="config-path">config.json</code>. A saved value applies when the daemon next
-        starts — <a href="#/processes">restart it from Processes</a>. A command-line flag wins over the
-        file, and a key a flag sets cannot be edited here.
+        starts — <a href="#/processes">restart it from Processes</a> — except the findings settings,
+        which apply on the next read. A command-line flag wins over the file, and a key a flag sets
+        cannot be edited here.
       </p>
       <form id="config-form" class="config-form">
         <div id="config-fields" class="config-fields"></div>
+        <fieldset id="findings-config" class="findings-config" hidden></fieldset>
         <div class="settings-actions">
           <button id="config-save" class="btn btn-sm" type="submit">save</button>
           <span id="config-status" class="muted" role="status"></span>

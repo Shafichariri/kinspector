@@ -103,6 +103,17 @@ function archiveSource(archive) {
         const limit = Math.min(5000, Math.max(1, /^-?\d+$/.test(asked || '') ? Number(asked) : 1000));
         return reply(200, { ...archive.routeStats, routes: archive.routeStats.routes.slice(0, limit) });
       }
+      // The findings the daemon computed when it exported: every category, cut as the daemon cuts,
+      // `findingCount` kept the session's. Narrowing them needs the daemon. An export from before
+      // findings existed falls through to the 404, which the page words for what it is.
+      if (/^\/api\/sessions\/[^/]+\/findings$/.test(p) && archive.findings) {
+        if (url.searchParams.get('category') || url.searchParams.has('includeDismissed')) {
+          return refuse(400, 'filtering findings needs the daemon, and an exported session has none');
+        }
+        const asked = url.searchParams.get('limit');
+        const limit = Math.min(5000, Math.max(1, /^-?\d+$/.test(asked || '') ? Number(asked) : 1000));
+        return reply(200, { ...archive.findings, findings: archive.findings.findings.slice(0, limit) });
+      }
       return refuse(404, `not in this export: ${p}`);
     },
   };
@@ -298,8 +309,9 @@ function connectLive() {
       // header of 29, and the timeline left out every call that arrived with no filter set.
       followLiveCount();
       drawLive();
-      // The Stats page asks again at most once a second, and only while it is shown.
+      // The Stats and Findings pages ask again at most once a second, and only while shown.
       oweStats();
+      oweFindings();
     } else if (message.type === 'marker') {
       state.markers.push(message.marker);
       renderMarkers();
@@ -360,7 +372,10 @@ function connectLive() {
     if (wasAway) {
       forgetWholeSession();
       loadServerInfo();
-      loadSessions().then(loadTransactions).then(statsSessionChanged);
+      loadSessions().then(loadTransactions).then(() => {
+        statsSessionChanged();
+        findingsSessionChanged();
+      });
     }
   };
 }

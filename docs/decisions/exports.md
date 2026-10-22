@@ -91,7 +91,10 @@ calls it unedited and is what pins a no-finding HAR, and `HarFindingsTest` pins 
 passes the whole session's findings, filter or not, and that an entry with nothing to say still
 has no comment. `ExportTest`, `HarTest` and `HarFindingsTest` pin it; `ExportTest` was shown red
 with the findings computed from `queryTransactions` and with unfound rules left out, and
-`HarFindingsTest` with the route passing no findings and with a note added to every entry.
+`HarFindingsTest` with the route passing no findings and with a note added to every entry. The
+HTML page answers `/findings` from the embedded report in `archiveSource`, cut by `limit` as the
+daemon cuts with `findingCount` kept, and refuses a category, which needs the daemon; an export from
+before findings existed falls through to the 404, and the page says so in those words.
 
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the

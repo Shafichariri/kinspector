@@ -38,6 +38,8 @@
  *   - the Stats page's live refresh: a burst of rows costing at most two requests, one out at a time,
  *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed;
  *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed;
+ *   - the Findings page's live refresh, by the same rule: at most two requests a burst, one out at a
+ *     time, none while paused or not shown, and no answer drawn for a session since changed;
  *   - the polish rules: an icon-only control is an SVG in a box sized by one rule from `--target-min`,
  *     a page document's buttons are as tall and its prose stops at `--prose-max`; and the page keys,
  *     `g` and a letter for each page `PAGES` offers, `g g` the top, and no key while typing.
@@ -68,6 +70,7 @@ const { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread } = requi
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
 const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
+const { checkFindingsRefresh } = require('./lib/findings-refresh-checks');
 const { checkPolish } = require('./lib/polish-checks');
 const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow, auditOverviewBand } = require('./lib/layout-audits');
 
@@ -155,6 +158,9 @@ async function main() {
 
   console.error('--- stats ---');
   for (const [label, value] of await checkStatsRefresh(scripts)) report(label, value);
+
+  console.error('--- findings ---');
+  for (const [label, value] of await checkFindingsRefresh(scripts)) report(label, value);
 
   console.error('--- polish ---');
   for (const [label, value] of checkPolish(scripts, styles)) report(label, value);

@@ -1,7 +1,10 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.SessionRepository
+import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsService
 import dev.inspector.model.SignalTags
 import dev.inspector.model.DEFAULT_DUPLICATE_WINDOW_MS
 import dev.inspector.model.NetworkTransaction
@@ -50,7 +53,7 @@ class ProbeFixtureTest {
     @Test
     fun the_daemon_reads_back_everything_the_fixture_wrote() {
         val fixture = probeFixture()
-        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID), repo.listSessions().map { it.sessionId })
+        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID), repo.listSessions().map { it.sessionId })
         assertEquals(fixture.transactions.size, repo.readTransactions(dir).size)
         assertEquals(fixture.markers.size, repo.readMarkers(dir).size)
         assertEquals(fixture.signals.size, repo.readSignals(dir).size)
@@ -64,12 +67,36 @@ class ProbeFixtureTest {
     fun writing_twice_replaces_the_session_rather_than_doubling_it() {
         writeProbeFixture(tmp)
         val fixture = probeFixture()
-        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID), repo.listSessions().map { it.sessionId })
+        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID), repo.listSessions().map { it.sessionId })
         assertEquals(fixture.transactions.size, repo.readTransactions(dir).size)
         assertEquals(fixture.markers.size, repo.readMarkers(dir).size)
         assertEquals(fixture.signals.size, repo.readSignals(dir).size)
         val long = assertNotNull(repo.resolve(LONG_SESSION_ID), "no long session")
         assertEquals(LONG_SESSION_CALLS, repo.readTransactions(long).size)
+        val payments = assertNotNull(repo.resolve(PAYMENTS_SESSION_ID), "no payments session")
+        assertEquals(paymentsSessionCalls().size, repo.readTransactions(payments).size)
+    }
+
+    /**
+     * The payments session, which the Findings probes read: older than the other two, so `latest` and
+     * the picker stay put, and holding exactly the counts the probes print, under the default rules.
+     * The probe session has none, which `findings none` reads as checked and clean.
+     */
+    @Test
+    fun the_payments_session_holds_each_finding_the_probes_count() {
+        assertEquals(dir, repo.resolve(PROBE_SESSION_ID), "latest moved off the probe session")
+        val payments = assertNotNull(repo.resolve(PAYMENTS_SESSION_ID), "no payments session")
+        val service = FindingsService(repo, FindingsEngine(FindingSettingsSource(tmp), DaemonConfig(dataDir = tmp).routeTemplates))
+        val report = service.report(payments, null, 5000)
+        assertEquals(listOf(18, 10, 3, 6, 1), listOf(report.total, report.findingCount, report.high, report.medium, report.info))
+        assertEquals(listOf(1, 1, 1, 1, 5, 1), report.rules.map { it.count }, "per rule, in catalogue order")
+        assertEquals(12, report.findings.flatMap { it.txnIds }.toSet().size, "flagged rows")
+        assertTrue(report.coverage.toString().contains("13 mutation calls looked at; 6 request bodies compared, 2 unknown (2 truncated)."))
+        val probe = service.report(dir, null, 5000)
+        assertEquals(listOf(16, 0), listOf(probe.total, probe.findingCount), "the probe session has findings")
+        assertEquals(6, probe.rules.size)
+        val rows = repo.readTransactions(payments)
+        assertTrue(rows.all { it.host.endsWith(".example.invalid") }, "a host outside example.invalid")
     }
 
     /**
