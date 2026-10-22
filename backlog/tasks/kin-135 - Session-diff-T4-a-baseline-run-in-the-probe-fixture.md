@@ -1,9 +1,11 @@
 ---
 id: KIN-135
 title: 'Session diff T4: a baseline run in the probe fixture'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 19:44'
 labels:
   - 'item:session-diff'
 dependencies: []

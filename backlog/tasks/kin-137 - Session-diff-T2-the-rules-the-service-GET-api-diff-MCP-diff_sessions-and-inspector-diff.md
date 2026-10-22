@@ -3,9 +3,11 @@ id: KIN-137
 title: >-
   Session diff T2: the rules, the service, GET /api/diff, MCP diff_sessions and
   inspector diff
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 19:44'
 labels:
   - 'item:session-diff'
 dependencies:

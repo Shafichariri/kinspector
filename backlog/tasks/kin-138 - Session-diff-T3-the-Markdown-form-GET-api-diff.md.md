@@ -1,9 +1,11 @@
 ---
 id: KIN-138
 title: 'Session diff T3: the Markdown form, GET /api/diff.md'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 19:44'
 labels:
   - 'item:session-diff'
 dependencies:

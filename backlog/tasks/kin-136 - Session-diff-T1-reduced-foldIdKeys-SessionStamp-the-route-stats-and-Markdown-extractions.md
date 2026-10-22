@@ -3,9 +3,11 @@ id: KIN-136
 title: >-
   Session diff T1 (reduced): foldIdKeys, SessionStamp, the route-stats and
   Markdown extractions
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 19:44'
 labels:
   - 'item:session-diff'
 dependencies:
