@@ -65,17 +65,24 @@ object Har {
     /** Reserved by the HAR spec for "this information is not available". */
     private const val UNKNOWN = -1L
 
+    /**
+     * [findingsByTxn] adds one `finding <severity> <ruleId>: <message>` note to each entry a finding
+     * names, as attempts and redactions are noted: HAR has no field for it. Its default is the empty
+     * map only so a HAR of a session with no findings is the call `HarTest` pins, byte for byte; the
+     * route always passes the whole session's findings, and `HarFindingsTest` holds that.
+     */
     fun export(
         meta: SessionMeta?,
         transactions: List<NetworkTransaction>,
         bodyOf: (txnId: String, side: String) -> ByteArray?,
         creatorVersion: String,
+        findingsByTxn: Map<String, List<Finding>> = emptyMap(),
     ): String {
         val entries = transactions
             // Chronological, by the device's monotonic clock — the same ordering authority the
             // rest of the archive uses, and the order a HAR viewer expects to be handed.
             .sortedBy { it.mono }
-            .map { entryFor(it, bodyOf) }
+            .map { entryFor(it, bodyOf, findingsByTxn[it.id].orEmpty()) }
 
         return json.encodeToString(
             HarFile.serializer(),
@@ -97,6 +104,7 @@ object Har {
     private fun entryFor(
         txn: NetworkTransaction,
         bodyOf: (txnId: String, side: String) -> ByteArray?,
+        findings: List<Finding>,
     ): HarEntry {
         val reqBody = bodyOf(txn.id, "req")
         val resBody = bodyOf(txn.id, "res")
@@ -109,6 +117,7 @@ object Har {
             txn.reqBodyOmitted?.let { add("request body not captured: $it") }
             txn.resBodyOmitted?.let { add("response body not captured: $it") }
             if (txn.redacted.isNotEmpty()) add("redacted at capture: ${txn.redacted.joinToString(", ")}")
+            findings.forEach { add("finding ${it.severity} ${it.ruleId}: ${it.message}") }
         }
 
         return HarEntry(

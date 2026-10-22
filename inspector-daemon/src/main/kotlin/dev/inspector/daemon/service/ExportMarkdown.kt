@@ -9,6 +9,8 @@ import dev.inspector.model.timeline
 import dev.inspector.model.timelineRuns
 import java.util.Base64
 import java.util.Locale
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * A session as a document a person reads top to bottom: what the app did, in order, and then every
@@ -32,6 +34,9 @@ object ExportMarkdown {
 
     /** Adjacent identical observations collapse from this many, as in the web UI's timeline. */
     private const val RUN_THRESHOLD = 3
+
+    /** A finding's rows listed by id before "and N more". */
+    private const val MAX_FINDING_ROWS = 20
 
     fun render(document: SessionExportDocument): String = buildString {
         val meta = document.meta
@@ -77,6 +82,7 @@ object ExportMarkdown {
         appendLine()
 
         renderRoutes(document.routeStats)
+        renderFindings(document.findings)
         renderTimeline(document, origin)
         renderCalls(document, origin)
         renderCurrent(document)
@@ -132,6 +138,67 @@ object ExportMarkdown {
         )
         appendLine()
     }
+
+    // --- findings ------------------------------------------------------------------------------
+
+    /**
+     * The daemon's findings, as the report holds them: a section per rule that found something, in
+     * the report's rule order, then the rules that found nothing or were off, then what each family
+     * could not judge, so a short section never reads as a clean bill of health.
+     */
+    private fun StringBuilder.renderFindings(report: FindingsReport) {
+        appendLine("## Findings")
+        appendLine()
+        if (report.findingCount == 0) {
+            appendLine("No findings: ${count(report.rules.size, "rule")} checked.")
+        } else {
+            appendLine(
+                "${report.high} high, ${report.medium} medium, ${report.info} info from ${count(report.rules.size, "rule")} " +
+                    "(rule version ${report.ruleVersion}). Evidence never shows a captured value.",
+            )
+        }
+        appendLine()
+        val byRule = report.findings.groupBy { it.ruleId }
+        for (rule in report.rules) {
+            val found = byRule[rule.id] ?: continue
+            appendLine("### ${heading("${rule.title} — ${rule.severity} (${rule.count})")}")
+            appendLine()
+            for (finding in found) {
+                appendLine("- ${line(finding.message)}")
+                val shown = finding.txnIds.take(MAX_FINDING_ROWS).joinToString(", ") { inlineCode(it) }
+                val more = finding.txnCount - minOf(finding.txnIds.size, MAX_FINDING_ROWS)
+                appendLine("  rows: $shown${if (more > 0) " and $more more" else ""}")
+                for (ev in finding.evidence) {
+                    val parts = listOfNotNull(
+                        ev.note?.let(::line),
+                        ev.path?.let(::inlineCode),
+                        ev.masked?.let(::inlineCode),
+                    )
+                    appendLine("  - ${parts.joinToString(" ")} (${inlineCode(ev.txnId)})")
+                }
+            }
+            appendLine()
+        }
+        val checked = report.rules.filter { it.enabled && it.count == 0 }
+        if (checked.isNotEmpty()) {
+            appendLine("Checked, nothing found: ${checked.joinToString("; ") { rule -> line(rule.title + (rule.note?.let { " ($it)" } ?: "")) }}.")
+            appendLine()
+        }
+        val disabled = report.rules.filter { !it.enabled }
+        if (disabled.isNotEmpty()) {
+            appendLine("Disabled in config.json: ${disabled.joinToString("; ") { line(it.title) }}.")
+            appendLine()
+        }
+        report.coverage?.values?.forEach { cover ->
+            ((cover as? JsonObject)?.get("line") as? JsonPrimitive)?.content?.let {
+                appendLine(line(it))
+                appendLine()
+            }
+        }
+    }
+
+    /** One line of daemon-built text in a list item: no line break may end the item early. */
+    private fun line(text: String): String = text.replace("\r", "").replace("\n", " ")
 
     /** `3 (75%)`, or `0`: a share of attempts with an outcome, to at most one decimal. */
     /**

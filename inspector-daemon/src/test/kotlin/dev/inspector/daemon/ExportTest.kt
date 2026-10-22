@@ -1,11 +1,15 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.SessionLayout
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionWriter
 import dev.inspector.daemon.service.ExportMarkdown
 import dev.inspector.daemon.service.ExportedBody
+import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsReport
+import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.HtmlExport
 import dev.inspector.daemon.service.RouteStatsReport
 import dev.inspector.daemon.service.RouteStatsService
@@ -69,8 +73,10 @@ class ExportTest {
         return dir
     }
 
+    private fun engine() = FindingsEngine(FindingSettingsSource(tmp), config.routeTemplates)
+
     private fun build(dir: Path) =
-        SessionExport.build(dir, repository, config.routeTemplates, "9.9.9", Instant.parse("2026-10-10T12:00:00Z"))
+        SessionExport.build(dir, repository, config.routeTemplates, engine(), "9.9.9", Instant.parse("2026-10-10T12:00:00Z"))
 
     // --- the document --------------------------------------------------------------------------
 
@@ -152,6 +158,55 @@ class ExportTest {
         val users = md.lines().single { it.startsWith("| GET | api.example.com | /users/{id} |") }
         assertEquals("| GET | api.example.com | /users/{id} | 1 | 2 (1 retry) | 0 | 1 (50%) | 0 | 143 ms | 143 ms | n<20 | n<20 | 143 ms | 0 B | 0 B |", users)
         assertContains(md, "| GET | api.example.com | /a\\|b |")
+    }
+
+    // --- findings ------------------------------------------------------------------------------
+
+    @Test
+    fun `findings are the whole session's report, past every page cap, in the JSON too`() {
+        // The finding is on the oldest row, which the transactions route's newest 1000 never reach.
+        val dir = session { writer ->
+            val first = mutation("0fffffff", 0, "c-pay")
+            writer.append(first.row, first.body, null)
+            (1 until 2001).forEach { writer.append(txn("%08x".format(it), mono = it.toLong()), null, null) }
+        }
+        val document = build(dir)
+        val expected = FindingsService(repository, engine()).report(dir, null, 5000)
+        assertEquals(expected, document.findings)
+        assertEquals(2001, document.findings.total)
+        assertEquals(listOf("0fffffff"), document.findings.findings.single().txnIds)
+        val root = json.parseToJsonElement(SessionExport.toJson(document)).jsonObject
+        assertEquals(expected, json.decodeFromJsonElement(FindingsReport.serializer(), root.getValue("findings")))
+    }
+
+    @Test
+    fun `a session with no calls exports no findings and every rule it checked`() {
+        val findings = json.parseToJsonElement(SessionExport.toJson(build(session { }))).jsonObject.getValue("findings").jsonObject
+        assertEquals(0, findings["findings"]?.jsonArray?.size, findings.toString())
+        assertEquals(6, findings["rules"]?.jsonArray?.size, findings.toString())
+        assertContains(
+            ExportMarkdown.render(build(session("2026-08-16T10-14-03_app_dev_debug") { })),
+            "## Findings\n\nNo findings: 6 rules checked.",
+        )
+    }
+
+    @Test
+    fun `the Markdown has a findings section between the routes and the timeline`() {
+        val dir = session { writer ->
+            listOf(mutation("aaaa1111", 1_000, "c-a"), mutation("bbbb2222", 2_200, "c-b")).forEach { writer.append(it.row, it.body, null) }
+        }
+        val md = ExportMarkdown.render(build(dir))
+        val routes = md.indexOf("## Routes")
+        val findings = md.indexOf("## Findings")
+        assertTrue(findings in (routes + 1) until md.indexOf("## Timeline"), md)
+        val section = md.substring(findings, md.indexOf("## Timeline"))
+        assertContains(section, "1 high, 2 medium, 0 info from 6 rules (rule version ")
+        assertContains(section, "### Duplicate mutation — high (1)")
+        assertContains(section, "  rows: `aaaa1111`, `bbbb2222`")
+        assertContains(section, "  - call 2: attempt 1, 201, +1200 ms; same request body as call 1, 32 B (`bbbb2222`)")
+        assertContains(section, "### Key missing on a payment path — medium (2)")
+        assertContains(section, "Checked, nothing found: Key reused, body changed; Automatic retry without a key; Ambiguous resubmit; Retry with a key.")
+        assertContains(section, "2 mutation calls looked at; 2 request bodies compared.")
     }
 
     @Test

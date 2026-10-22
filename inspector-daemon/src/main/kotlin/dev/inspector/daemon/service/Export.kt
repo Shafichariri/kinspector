@@ -108,6 +108,12 @@ data class SessionExportDocument(
      * like the collections above, so a session with no calls says `"routes": []`.
      */
     val routeStats: RouteStatsReport,
+    /**
+     * The whole session's findings: no category, no limit, computed from the rows this document
+     * holds under the same rules and settings a findings read would use. No default, so a session
+     * with no calls says `"findings": []` and still lists every rule it checked.
+     */
+    val findings: FindingsReport,
 )
 
 /**
@@ -126,17 +132,19 @@ object SessionExport {
     val json: Json = Json(InspectorJson) { prettyPrint = true }
 
     /**
-     * [templates] is required, not defaulted, so no caller can export heuristic-only routes while
-     * the daemon's Stats page groups by the config's.
+     * [templates] and [findings] are required, not defaulted, so no caller can export heuristic-only
+     * routes, or findings on default rules, while the daemon runs on the config's.
      */
     fun build(
         sessionDir: Path,
         repository: SessionRepository,
         templates: RouteTemplates,
+        findings: FindingsEngine,
         exporterVersion: String,
         exportedAt: Instant = Instant.now(),
     ): SessionExportDocument {
-        val transactions = repository.readTransactions(sessionDir).sortedBy { it.mono }
+        val archived = repository.readTransactions(sessionDir)
+        val transactions = archived.sortedBy { it.mono }
         val signals = repository.readSignals(sessionDir).sortedBy { it.mono }
         val markers = repository.readMarkers(sessionDir).sortedBy { it.mono }
 
@@ -173,6 +181,10 @@ object SessionExport {
             routeStats = RouteStatsAccumulator(templates, Filter.MatchAll, FilterContext.EMPTY)
                 .apply { transactions.forEach(::add) }
                 .snapshot(sessionDir.fileName.toString(), "", StatsSort.ATTEMPTS, Int.MAX_VALUE),
+            // In file order, as a findings read folds them, so the two cannot differ.
+            findings = findings.compute(sessionDir.fileName.toString(), sessionDir, archived) { id, side ->
+                repository.readBody(sessionDir, id, side)
+            },
         )
     }
 

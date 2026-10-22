@@ -45,18 +45,17 @@ class McpTools(
      * The one list [descriptors] and [call] both read, so a tool cannot be listed without being
      * callable, or callable without being listed.
      */
+    /** One engine for `list_findings` and the exports, reading the `findings` key live. */
+    private val findingsEngine = FindingsEngine(FindingSettingsSource(config.dataDir), config.routeTemplates)
+
     private val tools: List<Tool> = listOf(
         SessionTools(config, repository),
         TransactionTools(config, repository),
         RouteStatsTool(config, repository, RouteStatsService(repository, config.routeTemplates)),
-        FindingsTool(
-            config,
-            repository,
-            FindingsService(repository, FindingsEngine(FindingSettingsSource(config.dataDir), config.routeTemplates)),
-        ),
+        FindingsTool(config, repository, FindingsService(repository, findingsEngine)),
         SignalTools(config, repository, signalPuller),
         MarkerTools(markerPoster),
-        ExportTools(config, repository),
+        ExportTools(config, repository, findingsEngine),
     ).flatMap { it.tools }
 
     private val byName: Map<String, Tool> =

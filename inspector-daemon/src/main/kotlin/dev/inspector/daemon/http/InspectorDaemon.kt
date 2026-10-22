@@ -81,7 +81,8 @@ class InspectorDaemon(
 
     /** The live read of `config.json`'s `findings` key: the findings and the Settings page share it. */
     private val findingSettings = FindingSettingsSource(config.dataDir)
-    private val findings = FindingsService(repository, FindingsEngine(findingSettings, config.routeTemplates))
+    private val findingsEngine = FindingsEngine(findingSettings, config.routeTemplates)
+    private val findings = FindingsService(repository, findingsEngine)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var server: EmbeddedServer<*, *>? = null
@@ -165,7 +166,7 @@ class InspectorDaemon(
             ingestRoutes(manager, liveApps)
             liveRoutes(manager)
             sessionRoutes(repository, manager, deleter)
-            exportRoutes(repository, config)
+            exportRoutes(repository, config, findingsEngine)
             statsRoutes(repository, stats)
             findingsRoutes(repository, findings)
             signalRoutes(repository, liveApps)

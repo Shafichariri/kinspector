@@ -284,6 +284,18 @@ second family adds a source and one line in `FindingSources.all`, never a second
 page, because a second copy of the order or the masking check is the one that would drift.
 `FindingsEngineTest` pins the engine's half.
 
+**A finding carries no captured value: evidence names where, and masks what.** Location and path use
+the Redactor's syntax, so whether a location was redacted is answered by the same `redacted[]`
+reader the diff uses. A masked hint is masked (`•••• 4242`), and the engine replaces any hint with
+more than ten unmasked characters, so a source that forgets to mask leaks a few characters, not a
+card. Request bodies are compared by digest in memory and never shown, not even as a hash, because a
+hash of a short body — a PIN, an amount — is one guess from it, and no finding id hashes one.
+Idempotency keys are held as digests. A transport failure is evidence by its exception class only,
+because the message can carry a URL with its query. `FindingsLeakTest` plants secrets in headers,
+query, bodies and an error message and finds none in the REST reply, the MCP text, any export's
+findings or the accumulators' fields; it was shown red with the raw key put in a hint and the error
+message put in a note, and it fails if nothing was planted.
+
 **Payment rules compare whole request bodies byte for byte, and claim nothing about a body capture
 did not keep.** Whole is the diff's `BodyEvidence` answer, and a body with a redacted path counts as
 unknown, because equal after redaction is not equal. Byte equality rather than parsed equality,
