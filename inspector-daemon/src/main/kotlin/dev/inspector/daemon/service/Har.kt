@@ -117,7 +117,10 @@ object Har {
             txn.reqBodyOmitted?.let { add("request body not captured: $it") }
             txn.resBodyOmitted?.let { add("response body not captured: $it") }
             if (txn.redacted.isNotEmpty()) add("redacted at capture: ${txn.redacted.joinToString(", ")}")
-            findings.forEach { add("finding ${it.severity} ${it.ruleId}: ${it.message}") }
+            findings.forEach { finding ->
+                val dismissed = finding.dismissed?.let { " (dismissed: ${it.reason})" }.orEmpty()
+                add("finding ${finding.severity} ${finding.ruleId}: ${finding.message}$dismissed")
+            }
         }
 
         return HarEntry(
