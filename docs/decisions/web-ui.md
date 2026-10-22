@@ -645,7 +645,15 @@ up in the whole-session copy, then the rows the list holds, and only then read; 
 route and embeds every call, so there a missing id says `not in this export`. `route parse` holds
 the address, the live probe's `txn route` and `txn route past ceiling` the page, Back and Escape,
 and the archive probe's `txn route in export` the export, the last two red with the lookup made in
-the list's rows alone and with the page's class not set.
+the list's rows alone and with the page's class not set. **The page says how to leave it**: `←
+traffic` at the start of the tools row, drawn on `#/txn` alone, is Escape's own `leaveTxnFull`
+rather than a copy of it, so Back when `⤢` pushed the page and the session's list in its place
+otherwise. Back and Escape were the only ways off, nothing on the page said so, and a call opened in
+a new tab has no Back at all. It is a word and an arrow rather than an icon, because it names where
+it goes, and a `.btn` at least `--target-min` tall. `txn back` presses it in both cases (a new or a
+replaced entry where Back is due fails it, through Forward), `txn back in export` from an export's
+address, and Chrome's `polish <w> txn back <where>` at 1440 and 400, served and exported, finds it
+inside the window and hit at its centre and clicks it; each is red with the control removed.
 
 **A page's counts are drawn again when the session's calls land, not only when the page is
 opened.** Settings drew its repeat and endpoint counts on entry. A first load straight to

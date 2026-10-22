@@ -273,6 +273,17 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   const left = await waitFor(() => !panes.classList.contains('txn-full'), 3000);
   check('txn route in export', opened && missing && left && attempts.length === 0,
     `${embedded.method} ${embedded.path} drawn ${opened}; an unknown id: "${said}" ${missing}; left ${left}; ${attempts.length} requests`);
+  // `← traffic` on an embedded call's page opened by its address, as a new tab opens one: no Back to
+  // press, so it is the page's only way off, and it puts the session's list in the page's place.
+  const txnBack = doc.getElementById('txn-back');
+  window.location.hash = `#/txn/${encodeURIComponent(embedded.id)}?session=${sid}`;
+  const reopened = await waitFor(() => panes.classList.contains('txn-full') && headPath() === embedded.path, 3000);
+  const backDrawn = !hiddenByCss(txnBack);
+  click(txnBack);
+  const backLeft = await waitFor(() => !panes.classList.contains('txn-full') && window.location.hash === `#/traffic?session=${sid}`, 3000);
+  check('txn back in export', Boolean(txnBack) && reopened && backDrawn && backLeft && attempts.length === 0, !txnBack
+    ? 'found no #txn-back, so this checked nothing'
+    : `drawn ${backDrawn} on ${embedded.path}'s page (${reopened}); pressed, left for the session's list ${backLeft} (now ${window.location.hash}); ${attempts.length} requests`);
 
   // The page keys offline, live pages' letters doing nothing; see lib/polish-probes.js. Back on Traffic after.
   const keysInExport = await probeKeysInExport(window, doc);
