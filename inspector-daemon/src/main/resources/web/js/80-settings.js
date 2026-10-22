@@ -225,6 +225,26 @@ function findingsConfigRender(reply) {
       el('span', 'config-now muted', field.list ? 'one per line' : field.unit));
     box.appendChild(line);
   }
+  box.appendChild(findingsHostsRow(reply));
+}
+
+/**
+ * `findings.sensitive.firstPartyHosts`, one host per line. `effective.findings` carries no sensitive
+ * settings, so the box holds the file's list, which is what the next findings read applies unless the
+ * key could not be read, which the fieldset already says above.
+ */
+function findingsHostsRow(reply) {
+  const sensitive = reply.file && reply.file.findings && reply.file.findings.sensitive;
+  const hosts = sensitive && Array.isArray(sensitive.firstPartyHosts) ? sensitive.firstPartyHosts : [];
+  const area = el('textarea');
+  area.dataset.sensitive = 'firstPartyHosts';
+  Object.assign(area, { rows: 4, spellcheck: false, placeholder: 'api.example.invalid\n*.example.invalid', value: hosts.join('\n') });
+  const now = !hosts.length ? 'none set: nothing is raised for where data was sent'
+    : `${hosts.length} set: data sent to any other host is raised one step`;
+  const line = el('label', 'config-row findings-hosts');
+  line.append(el('span', 'config-label', 'first-party hosts'), area,
+    el('span', 'config-now muted', `one per line, a leading *. for subdomains; ${now}`));
+  return line;
 }
 
 /** Two JSON values equal whatever their keys' order, so a save that changed nothing sends nothing. */
@@ -237,7 +257,7 @@ function sameJson(a, b) {
 /**
  * The whole `findings` key to send, or `undefined` when the inputs say what the file says: a
  * top-level key is replaced whole, so it starts from the file's and carries every sub-object it does
- * not draw (`sensitive`, once added) as the file holds it. `rules` keeps only a rule whose inputs
+ * not draw as the file holds it, `sensitive` beside its `firstPartyHosts`. `rules` keeps only a rule whose inputs
  * differ from its defaults, and drops one put back to them; `payment` gains only a field whose input
  * differs from the file's value, or the daemon's where the file has none. `null` removes the key.
  */
@@ -272,6 +292,16 @@ function findingsConfigPatch() {
   }
   if (Object.keys(payment).length) next.payment = payment;
   else delete next.payment;
+  // Only `firstPartyHosts` is drawn, so it alone is replaced, and only when the box differs.
+  const hostsBox = document.querySelector('#findings-config [data-sensitive="firstPartyHosts"]');
+  const held = next.sensitive && typeof next.sensitive === 'object' && !Array.isArray(next.sensitive) ? next.sensitive : null;
+  const hostsWere = held && Array.isArray(held.firstPartyHosts) ? held.firstPartyHosts : [];
+  if (hostsBox && lines(hostsBox.value).join('\n') !== lines(hostsWere.join('\n')).join('\n')) {
+    const sensitive = { ...(held || {}), firstPartyHosts: lines(hostsBox.value) };
+    if (!sensitive.firstPartyHosts.length) delete sensitive.firstPartyHosts;
+    if (Object.keys(sensitive).length) next.sensitive = sensitive;
+    else delete next.sensitive;
+  }
   const out = Object.keys(next).length ? next : null;
   return sameJson(out, was) ? undefined : out;
 }

@@ -547,7 +547,9 @@ and tells the payment rules what an idempotency key and a payment path look like
 - **`firstPartyHosts`**: your app's own hosts, an exact name or a leading `*.` for its subdomains
   (which does not match the bare domain), at most 200. A request carrying sensitive data to any
   other host is raised one step. **Empty, the default, raises nothing for where data was sent**, and
-  the sensitive coverage line says so: no rule can tell your backend from an analytics host.
+  the sensitive coverage line says so: no rule can tell your backend from an analytics host. The
+  Settings page's Findings fieldset edits this list, one host per line, and nothing else under
+  `findings.sensitive`.
 - **`fieldNames`**: `add` puts a name in the identity class; `remove` drops a shipped one. Names are
   compared lowercased with `_`, `-`, `.` and spaces removed.
 - **`valueRules`**: up to 50 of your own value rules, each reported as `sensitive.custom.<id>`.
@@ -575,6 +577,12 @@ and tells the payment rules what an idempotency key and a payment path look like
 - **A dismissed finding is not deleted.** `findingCount` and the `high`/`medium`/`info` counts leave
   it out, `dismissedCount` says how many were set aside, and the findings list shows them, each with
   `dismissed.reason`, when asked with `includeDismissed=true`. A rule's `count` still includes them.
+- **The Findings page writes it.** `dismiss…` on a finding says first that the dismissal hides every
+  finding of that rule, on that route, at that location and path, in every session, then asks for a
+  reason, reads this key afresh
+  and sends it alone, with the finding's four parts added; the finding moves to the rule's
+  `dismissed (n)` fold once the daemon's next reply marks it, and `restore` there takes the entry out.
+  An export draws the fold and offers neither.
 - **A route renamed by a `routeTemplates` edit stops matching**, and the finding comes back. That is
   the safe direction: a dismissal never silences a finding it was not written for.
 - `PUT /api/config` refuses a bad list whole with a 400 naming the entry; a bad entry written by

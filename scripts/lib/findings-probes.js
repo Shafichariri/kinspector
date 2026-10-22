@@ -7,14 +7,15 @@
  * in 18 calls on 12 rows: 3 high, 6 medium, 1 info), and drives the parts that are the page's own: the
  * rail link, a call link opening `#/txn/{id}` with Back returning, `?id=` marking one finding, and a
  * live call asking again at most once. The fixture's idempotency keys hold `PLANTED`, which no page
- * may print. The probe session has no findings under the default rules.
+ * may print. The probe session holds planted sensitive values (`sensitive-probes.js`), so `findings
+ * none` reads the long session, which has no findings under the default rules.
  *
  * `probeFindingsPage` leaves the page on Traffic, on the session it found, live, and checks that it
  * did (`findings restored`), so the probe after it does not pass vacuously. Each returns
  * `[label, verdict]` pairs, one per line the caller prints.
  */
 
-const { choose, waitFor } = require('./long-session-probes');
+const { LONG_SESSION_ID, choose, waitFor } = require('./long-session-probes');
 
 /** The fixture's payments session, as `ProbeFixture.kt` names it. */
 const PAYMENTS_SESSION_ID = '2025-12-31T08-00-00_probe-payments_ci_debug';
@@ -90,19 +91,26 @@ async function probeFindingsPage(ctx) {
       ? `yes (after Stats, ${link.getAttribute('href')}; opened ${window.location.hash})`
       : `NO - rail order ${order.join(', ')}, href ${link.getAttribute('href')}, opened ${opened} at ${window.location.hash}`);
 
-    // The session shown has no findings under the default rules, and the page says so rule by rule.
-    const own = await daemon(sessionId);
+    // A session with no findings under the default rules says so rule by rule: the one shown, or the
+    // long session when the shown one has findings, as the probe session's planted values are.
+    let quiet = sessionId;
+    let own = await daemon(sessionId);
+    if (own.findingCount > 0 && [...picker.options].some((o) => o.value === LONG_SESSION_ID)) {
+      quiet = LONG_SESSION_ID;
+      choose(ctx, quiet);
+      own = await daemon(quiet);
+    }
     const ownDue = countDue(own);
     await waitFor(() => drawn(doc).count === ownDue, 5000);
     let page = drawn(doc);
     if (own.findingCount > 0) {
-      out.set('findings none', `n/a (${sessionId} has ${own.findingCount} findings)`);
+      out.set('findings none', `n/a (${quiet} has ${own.findingCount} findings)`);
     } else {
       // Rules that ship off (sensitive email and phone) say so instead; every rule that ran reads checked.
       const checked = page.rules.filter((s) => text(s).includes('— checked, none found'));
       const ran = own.rules.filter((rule) => rule.enabled);
       out.set('findings none', page.count === ownDue && ran.length > 0 && checked.length === ran.length && page.articles.length === 0
-        ? `yes ("${page.count}"; ${checked.length} rules read "checked, none found", as the daemon ran ${ran.length} of ${own.rules.length})`
+        ? `yes (${quiet}: "${page.count}"; ${checked.length} rules read "checked, none found", as the daemon ran ${ran.length} of ${own.rules.length})`
         : !page.rules.length ? `NO - found no rule section, so this checked nothing; "${page.count}"`
           : `NO - "${page.count}" where "${ownDue}" was due; ${checked.length} of ${ran.length} rules that ran read checked; ${page.articles.length} findings drawn`);
     }
@@ -110,6 +118,7 @@ async function probeFindingsPage(ctx) {
     const hasPayments = [...picker.options].some((o) => o.value === PAYMENTS_SESSION_ID);
     if (!hasPayments) {
       for (const label of FINDINGS_LABELS.slice(2, 8)) out.set(label, `n/a (no session ${PAYMENTS_SESSION_ID})`);
+      if (quiet !== sessionId) choose(ctx, sessionId);
     } else {
       const report = await daemon(PAYMENTS_SESSION_ID);
       choose(ctx, PAYMENTS_SESSION_ID);
@@ -411,13 +420,14 @@ async function probeFindingsExport(window, doc, archive, attempts) {
 }
 
 /**
- * The live probes, the page, the Settings fieldset, then Traffic (`findings-traffic-probes.js`, which
- * reads this file's fixture counts, so it is required here once this file has loaded), for
- * `render-web-ui.js`'s one call.
+ * The live probes, the page, the Settings fieldset, Traffic (`findings-traffic-probes.js`, which reads
+ * this file's fixture counts, so it is required here once this file has loaded), then the sensitive
+ * findings' own (`sensitive-probes.js`), for `render-web-ui.js`'s one call.
  */
 async function probeFindings(ctx) {
   const { probeFindingsTraffic } = require('./findings-traffic-probes');
-  return [...await probeFindingsPage(ctx), ...await probeFindingsSettings(ctx), ...await probeFindingsTraffic(ctx)];
+  const { probeSensitive } = require('./sensitive-probes');
+  return [...await probeFindingsPage(ctx), ...await probeFindingsSettings(ctx), ...await probeFindingsTraffic(ctx), ...await probeSensitive(ctx)];
 }
 
 module.exports = {

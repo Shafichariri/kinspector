@@ -22,3 +22,4 @@ css/75-sessions.css
 css/80-json-tree.css
 css/85-stats.css
 css/90-findings.css
+css/92-findings-dismiss.css

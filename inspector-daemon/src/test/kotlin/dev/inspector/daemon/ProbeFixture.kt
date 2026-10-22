@@ -28,6 +28,13 @@ import java.time.Instant
  * rows and calls differ), JSON, binary and empty bodies, a marker at exactly a call's `mono`, and
  * screen, cache and state signals with a run of identical observations and a repeated screen.
  * Every host is under `example.invalid`, so a replay probe that escaped its stub reaches nothing.
+ *
+ * Three sensitive values are planted in rows it already had, so the sensitive-data findings have
+ * something to draw and every count the other probes assert holds: [PLANTED_CARD] in the checkout
+ * POST's body beside a `cvc`, [PLANTED_KEY] as an `api_key` query parameter on the product GET, and
+ * [PLANTED_IBAN] in a list in the wallet balance's response, so its finding's grouped path
+ * (`$.accounts[*].iban`) differs from the call's own and a dismissal can be told to key on the first.
+ * Each is a published test value, never a real one.
  */
 
 const val PROBE_SESSION_ID = "2026-01-01T09-00-00_probe_ci_debug"
@@ -54,6 +61,12 @@ const val PAYMENTS_SESSION_ID = "2025-12-31T08-00-00_probe-payments_ci_debug"
 
 /** The call that repeats call #0: the oldest of the newest 1000, so it is on the first page and #0 is not. */
 const val LONG_REPEAT_INDEX = LONG_SESSION_CALLS - 1000
+/** A widely published test card number, Luhn-valid and not on the daemon's list of eleven, so it is raised medium. */
+const val PLANTED_CARD = "4000056655665556"
+/** The IBAN registry's own example for GB, which passes mod-97. */
+const val PLANTED_IBAN = "GB82WEST12345698765432"
+/** An API key in a URL, which `sensitive.secret-in-url` names by its parameter. */
+const val PLANTED_KEY = "probe-key-not-real"
 private const val API = "api.example.invalid"
 private const val AUTH = "auth.example.invalid"
 
@@ -166,7 +179,7 @@ fun probeFixture(): ProbeFixtureContents {
     call("a0000003", 1_300, "/v3/shop/feed", resBody = json("""{"items":[{"id":1234567890123456789,"title":"one"},{"id":2,"title":"two"}]}"""))
 
     // --- Product ---
-    call("a0000004", 1_650, "/v3/shop/products/42", resBody = json("""{"id":42,"price":"9.99"}"""))
+    call("a0000004", 1_650, "/v3/shop/products/42", query = "api_key=$PLANTED_KEY", resBody = json("""{"id":42,"price":"9.99"}"""))
 
     // --- Cart ---
     call("a0000005", 1_820, "/v3/shop/cart", resBody = json("""{"items":[{"sku":"k1","qty":1}]}"""))
@@ -182,7 +195,7 @@ fun probeFixture(): ProbeFixtureContents {
     // --- Checkout: a marker dropped at exactly the millisecond of the call it marks ---
     call(
         "a0000008", 2_400, "/v3/shop/orders/submit", method = "POST", status = 500,
-        reqBody = json("""{"cart":"k1","pay":"card"}"""), reqContentType = "application/json",
+        reqBody = json("""{"cart":"k1","pay":"card","card_number":"$PLANTED_CARD","cvc":"123"}"""), reqContentType = "application/json",
         resBody = json("""{"error":"internal"}"""),
     )
     // A redirect chain: two attempts of one call.
@@ -191,7 +204,7 @@ fun probeFixture(): ProbeFixtureContents {
 
     // Two endpoints tied on count and recency. The model breaks that tie by char code, which puts
     // `Balance` before `accounts`; a locale-aware compare puts them the other way round.
-    call("a000000b", 2_600, "/v3/shop/wallet/Balance", resBody = json("""{"amount":"12.00"}"""))
+    call("a000000b", 2_600, "/v3/shop/wallet/Balance", resBody = json("""{"amount":"12.00","accounts":[{"iban":"$PLANTED_IBAN"}]}"""))
     call("a000000c", 2_600, "/v3/shop/accounts", resBody = json("""{"accounts":[]}"""))
 
     // A repeat that swept up a retry: call A once, call B twice (attempts 1 and 2), all 503 with

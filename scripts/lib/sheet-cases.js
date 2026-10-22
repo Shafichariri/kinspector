@@ -11,9 +11,10 @@
  *
  * On the probe session: its 500 is the row opened, since its header draws the most actions. The
  * pages an export does not offer (Sessions, Processes, Settings) are taken served only. Findings is
- * taken on the payments session, served and from that session's own export, since the probe session
- * has none to draw, and so are the payments session's list with its findings badges and the detail of
- * its first flagged row.
+ * taken on the payments session, served and from that session's own export, and so are the payments
+ * session's list with its findings badges and the detail of its first flagged row. The probe session's
+ * own Findings page, its planted sensitive values masked, is taken served and exported, and with a
+ * dismiss form open served only, since an export offers none.
  */
 const fs = require('fs');
 const os = require('os');
@@ -30,6 +31,10 @@ const OPEN_ROW = `(() => { const rows = [...document.querySelectorAll('#list .ro
 const OPEN_FLAGGED = `new Promise((done) => { const at = Date.now(); const tick = () => {
   const row = document.querySelector('#list .row .finding-badge')?.closest('.row');
   if (row || Date.now() - at > 5000) { if (row) row.click(); done(Boolean(row)); } else setTimeout(tick, 100); }; tick(); })`;
+// The first finding's dismiss form, once the Findings page has drawn its control.
+const OPEN_DISMISS = `new Promise((done) => { const at = Date.now(); const tick = () => {
+  const open = document.querySelector('#findings-body .finding-dismiss');
+  if (open || Date.now() - at > 5000) { if (open) open.click(); done(Boolean(open)); } else setTimeout(tick, 100); }; tick(); })`;
 const PAYMENTS_LIST = `#/traffic/network?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`;
 const SHOTS = [
   { name: 'list', hash: '#/traffic/network', exported: true },
@@ -41,6 +46,9 @@ const SHOTS = [
   { name: 'stats', hash: '#/stats', exported: true, ready: `document.querySelector('#page-stats tbody tr')` },
   { name: 'findings', hash: `#/findings?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`, exported: true, payments: true,
     ready: `document.querySelector('#findings-body article.finding')` },
+  { name: 'sensitive', hash: '#/findings', exported: true, ready: `document.querySelector('#findings-body .ev-masked')` },
+  { name: 'dismiss form', hash: '#/findings', exported: false, open: OPEN_DISMISS,
+    ready: `document.querySelector('#findings-body form.dismiss-form')` },
   { name: 'flagged list', hash: PAYMENTS_LIST, exported: true, payments: true, ready: `document.querySelector('#list .finding-badge')` },
   { name: 'flagged detail', hash: PAYMENTS_LIST, exported: true, payments: true, open: OPEN_FLAGGED,
     ready: `document.querySelector('#detail .detail-findings:not([hidden])')` },

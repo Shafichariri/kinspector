@@ -14,6 +14,9 @@
  * only in Chrome: layout (KIN-33), a run toggle throwing the pane (KIN-38), a live row throwing it
  * (KIN-41), and a huge session drawing nothing (KIN-37, KIN-42).
  */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { sleep } = require('./measure-cdp');
 
 const WIDTHS = [1440, 400];
@@ -327,4 +330,94 @@ async function firstRows(page, url, session, limitMs) {
   ];
 }
 
-module.exports = { layout, runToggle, liveArrival, firstRows };
+// --- the sensitive findings on the probe session's Findings page (item:sensitive-data-detection) ---
+
+const SENSITIVE_WIDTHS = [1440, 1000, 600, 400];
+const SENSITIVE_DRAWN = `document.querySelectorAll('#findings-body .ev-masked').length > 0`;
+
+// Every masked hint whole: one line, not clipped, inside its evidence line. The fixture's paths are
+// short enough that nothing presses on a hint, so the first evidence path is made 200 characters long
+// first: that path must give way from its start instead, and below 520px take a line under the hint.
+const MASKED_WHOLE = `(() => {
+  const bdi = document.querySelector('#findings-body .ev-path bdi');
+  if (bdi) bdi.textContent = '$.' + 'nested.'.repeat(28) + 'card_number';
+  const masks = [...document.querySelectorAll('#findings-body .ev-masked')];
+  const bad = masks.filter((m) => {
+    const r = m.getBoundingClientRect();
+    const li = m.closest('li').getBoundingClientRect();
+    const lines = new Set([...m.getClientRects()].map((x) => Math.round(x.top))).size;
+    return lines !== 1 || m.scrollWidth > m.clientWidth + 0.5 || r.left < li.left - 0.5 || r.right > li.right + 0.5 || r.height > 20;
+  }).map((m) => m.textContent);
+  const path = bdi && bdi.parentElement;
+  const hint = path && path.parentElement.querySelector('.ev-masked');
+  const p = path && path.getBoundingClientRect();
+  const h = hint && hint.getBoundingClientRect();
+  return { masks: masks.length, bad, cut: path ? path.scrollWidth > path.clientWidth : null,
+    below: p && h ? p.top >= h.bottom - 1 : null, doc: document.documentElement.scrollWidth, width: innerWidth };
+})()`;
+
+// The open reason form inside its finding and the page: one line from 600px up; below 520px the input
+// on its own line and the two buttons under it, at its right edge.
+const FORM_FITS = `(() => {
+  const form = document.querySelector('#findings-body form.dismiss-form');
+  if (!form) return null;
+  const box = form.closest('article').getBoundingClientRect();
+  const f = form.getBoundingClientRect();
+  const input = form.querySelector('.dismiss-reason').getBoundingClientRect();
+  const actions = form.querySelector('.dismiss-actions').getBoundingClientRect();
+  return { inside: f.left >= box.left - 0.5 && f.right <= box.right + 0.5 && actions.right <= f.right + 0.5,
+    oneLine: Math.abs(input.top - actions.top) < 6, stacked: actions.top >= input.bottom - 1 && Math.abs(actions.right - f.right) <= 1,
+    input: Math.round(input.width), form: Math.round(f.width), doc: document.documentElement.scrollWidth, width: innerWidth };
+})()`;
+
+function maskedRow(key, r) {
+  if (!r || r.evalError || !r.masks) {
+    return { key, value: r && r.evalError ? 'threw' : 'NO - found no masked hint, so this checked nothing', ok: false, detail: String(r && r.evalError || '') };
+  }
+  const narrow = r.width < 520;
+  const ok = !r.bad.length && r.cut === true && (!narrow || r.below === true) && r.doc <= r.width;
+  return { key, value: ok ? 'whole' : 'cut', ok,
+    detail: `${r.masks} hints${r.bad.length ? `, not whole: ${r.bad.join(', ')}` : ''}; long path cut from its start ${r.cut}${narrow ? `, under the hint ${r.below}` : ''}; document ${r.doc} of ${r.width}` };
+}
+
+/**
+ * The per-width spec of the sensitive findings: `findings <w> masked whole` served and exported, and
+ * `findings <w> dismiss form fits` served (an export has no form). On [url]'s latest session, which is
+ * the probe session and holds the planted values.
+ */
+async function findingsSensitive(page, url) {
+  const rows = [];
+  for (const width of SENSITIVE_WIDTHS) {
+    await page.setWidth(width);
+    await page.navigate('about:blank');
+    await page.navigate(`${url}#/findings`);
+    const drawn = await page.waitFor(SENSITIVE_DRAWN, 20000);
+    await sleep(300);
+    rows.push(maskedRow(`findings ${width} masked whole`, drawn === null ? null : await page.ev(MASKED_WHOLE)));
+    await page.ev(`document.querySelector('#findings-body .finding-dismiss')?.click()`);
+    await sleep(200);
+    const r = await page.ev(FORM_FITS);
+    const ok = Boolean(r) && !r.evalError && r.inside && r.doc <= r.width && (width < 520 ? r.stacked : r.oneLine);
+    rows.push({ key: `findings ${width} dismiss form fits`, ok,
+      value: !r ? 'NO - found no dismiss form, so this checked nothing' : r.evalError ? 'threw' : ok ? 'fits' : 'overflows',
+      detail: !r || r.evalError ? String(r && r.evalError || '') : `input ${r.input} of ${r.form}; ${width < 520 ? `stacked ${r.stacked}` : `one line ${r.oneLine}`}; inside ${r.inside}; document ${r.doc} of ${r.width}` });
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sensitive-export-'));
+  try {
+    const file = path.join(dir, 'export.html');
+    fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
+    for (const width of SENSITIVE_WIDTHS) {
+      await page.setWidth(width);
+      await page.navigate('about:blank');
+      await page.navigate(`file://${file}#/findings`);
+      const drawn = await page.waitFor(SENSITIVE_DRAWN, 20000);
+      await sleep(300);
+      rows.push(maskedRow(`findings ${width} masked whole export`, drawn === null ? null : await page.ev(MASKED_WHOLE)));
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return rows;
+}
+
+module.exports = { layout, runToggle, liveArrival, firstRows, findingsSensitive };

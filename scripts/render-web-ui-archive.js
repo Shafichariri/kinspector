@@ -26,6 +26,7 @@ const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { probeStatsOffline } = require('./lib/stats-probes');
 const { probeKeysInExport } = require('./lib/polish-probes');
 const { probeFindingsRailOffline, probeFindingsExport } = require('./lib/findings-probes');
+const { probeSensitiveOffline } = require('./lib/sensitive-probes');
 
 let JSDOM, VirtualConsole;
 try {
@@ -278,7 +279,9 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   check('keys in export', keysInExport.startsWith('yes'), keysInExport.replace(/^(yes|NO)\s*(- )?/, ''));
 
   // The Stats page from the route table the export embeds; see lib/stats-probes.js. Back on Traffic after.
-  for (const [label, value] of [...await probeStatsOffline(window, doc, archive, attempts), ...probeFindingsRailOffline(window, doc)]) {
+  // The Stats page, the Findings rail link, then the probe session's sensitive findings offline (lib/sensitive-probes.js).
+  for (const [label, value] of [...await probeStatsOffline(window, doc, archive, attempts), ...probeFindingsRailOffline(window, doc),
+    ...await probeSensitiveOffline(window, doc, archive, attempts)]) {
     check(label, value.startsWith('yes'), value.replace(/^(yes|NO)\s*(- )?/, ''));
   }
 

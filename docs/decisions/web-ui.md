@@ -194,7 +194,10 @@ sampled, because a probe with nothing to look at says `n/a`: a shared prefix and
 500, a retry chain, a redirect chain, a repeat that swept up a retry, a marker at exactly a call's
 `mono`, a full tie on chip count and recency, both cache payload shapes and a run of five identical
 observations; and beside it, older so the picker still opens on it, a 1203-call session past the
-route's clamp and a payments session on which each payment-safety rule fires. A second run replaces the probe session rather than appending to it — `SessionWriter`
+route's clamp and a payments session on which each payment-safety rule fires. Three published test
+values are planted in rows the probe session already had, a card number in a request body, an API key
+in a query and an IBAN in a list in a response, so the sensitive findings have something to draw and
+no other probe's count moves; a probe that needs a session with no findings reads the long one. A second run replaces the probe session rather than appending to it — `SessionWriter`
 appends, and doubled rows would make every count depend on how often the task had run — and leaves
 anything else in the directory alone. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
 is there, so a fixture edit that loses one fails a unit test rather than turning a CI check into a
@@ -807,6 +810,31 @@ differs from the file, and every sub-object the form does not draw as the file h
 `findings offline drawn`, `findings txn in export`, `findings category refused`, `findings badge in
 export` and `findings detail in export`, and `findings <w> payments fits` in Chrome hold it,
 each shown red with its rule removed; the payments session they read is `ProbeFixture.kt`'s third.
+
+**A dismissal on the Findings page reads the config afresh, needs a reason and sends one key.**
+The dismiss control asks `GET /api/config` immediately before it writes, then sends only
+`findingDismissals` through `controlFetch`, so a list read minutes ago never overwrites a newer one
+and a rule edit in `findings` is never resent. Two tabs dismissing in the same moment can still lose
+one, which is accepted rather than adding a control route. The key is the finding's rule, route,
+location and grouped path, never the path of the one call its evidence names. The daemon matches it in
+every session, so a dismissal hides every finding with that key, now and later, and not only the one on
+screen; the form says so above the reason, before anything is saved, and the control's tooltip says it
+too (decided by the product owner, PR #167). Nothing is drawn as
+dismissed until the daemon's next findings reply says so: the page asks with `includeDismissed=true`
+and folds those findings under a closed `dismissed (n)` at the end of their rule, each with its reason
+and `restore`, which takes every entry with that key out of a fresh read of the list. An export draws
+the fold from the report it embeds and hides dismiss and restore by `body.archive`. While the reason
+form is open a live refresh does not redraw the page, so a reason being typed is never thrown away,
+and Escape in the form closes it without bubbling, as the replay menu's does. The masked hint never
+clips (`flex: none`, `nowrap`; either alone holds it, since a no-wrap flex item's minimum is its whole
+text), and the evidence path gives way from its start. With no first-party hosts set, a line under the
+sensitive coverage line links Settings, where a box edits `findings.sensitive.firstPartyHosts` alone and
+carries the rest of that sub-object as the file holds it. `sensitive dismiss` stubs both requests and
+was red with the reason check removed and with the key built from a concrete path; `sensitive dismiss
+reach` was red with the reach line taken out of the form; `sensitive dismissed
+fold`, `sensitive escape`, `sensitive no hosts hint`, `sensitive hosts patch` and the archive probe's
+`dismiss hidden in export` were each red with their rule removed, and `findings <w> masked whole`
+holds the hint at four widths, served and exported, with one evidence path made long enough to press on it.
 
 **Under 700px a route cell breaks only between whole pieces: a server after a `.`, `:` or `/`, a
 path after a `/`.** The held column wraps inside a 150px cap, and `overflow-wrap: anywhere` broke

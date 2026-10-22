@@ -87,14 +87,15 @@ class HarFindingsTest {
     @Test
     fun `a session with no findings exports the HAR it did before findings, byte for byte`() = runBlocking {
         val repository = SessionRepository(config)
-        val dir = repository.resolve(PROBE_SESSION_ID)!!
+        // The long session: the probe session holds planted sensitive values, which are findings.
+        val dir = repository.resolve(LONG_SESSION_ID)!!
         val base = Har.export(
             meta = repository.readMeta(dir),
             transactions = repository.filterTransactions(dir),
             bodyOf = { id, side -> repository.readBody(dir, id, side) },
             creatorVersion = daemonVersion(),
         )
-        assertEquals(base, har(PROBE_SESSION_ID))
+        assertEquals(base, har(LONG_SESSION_ID))
 
         // And that call itself adds nothing: an entry whose row has nothing to say has no comment,
         // as before findings existed. The equality above cannot see a change both sides share.
@@ -103,7 +104,7 @@ class HarFindingsTest {
                 txn.reqBodyOmitted == null && txn.resBodyOmitted == null && txn.redacted.isEmpty()
         }
         val comments = entries(base).map { it.comment() }
-        assertTrue(plain.count { it } > 0, "the probe session has plain rows to check")
+        assertTrue(plain.count { it } > 0, "the long session has plain rows to check")
         assertEquals(emptyList(), comments.filterIndexed { i, comment -> plain[i] && comment != null })
     }
 
