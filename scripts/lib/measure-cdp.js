@@ -33,13 +33,16 @@ function findChrome() {
 // A fresh profile per run, so a pref one run saves (order, view) cannot leak into the next.
 // Background throttling is off because the suite drives several tabs at once, and a throttled
 // background tab runs its timers once a second, which turns every wait into a measurement error.
-async function launchChrome(profileDir) {
+// `onSpawn` gets the process before Chrome is up, so a run interrupted while Chrome starts can still
+// stop it: `chrome.close` exists only once the DevTools port is read.
+async function launchChrome(profileDir, onSpawn = () => {}) {
   const proc = spawn(findChrome(), [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profileDir}`,
     '--no-first-run', '--no-default-browser-check', '--disable-gpu',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  onSpawn(proc);
   // Every open page, so Chrome exiting after start-up fails each one's pending commands. Without
   // this a killed Chrome left every `send` waiting on a reply that could never come: the run hung,
   // read as a slow case, and was killed by hand with its daemons still running.
