@@ -319,6 +319,16 @@ class ExportTest {
         assertEquals(setOf("[::1]:8080", "127.0.0.1:9090", "api.example.com"), hosts)
     }
 
+    // One server, whichever client stored its host: before the key normalised it, OkHttp's `::1` and
+    // Ktor's `[::1]` drew two identical `[::1]:8080` rows, each with half the attempts.
+    @Test
+    fun `the routes table draws one IPv6 server reached by both clients as one row`() {
+        val dir = session { writer -> ipv6BothClients().forEach { writer.append(it, null, null) } }
+        val rows = ExportMarkdown.render(build(dir)).lines().filter { it.startsWith("| GET | ") }
+        assertEquals(listOf("[::1]:8080", "[::1]:9090"), rows.map { it.removePrefix("| GET | ").substringBefore(" |") }, rows.joinToString("\n"))
+        assertTrue(rows.first().startsWith("| GET | [::1]:8080 | /v6 | 6 |"), rows.first())
+    }
+
     // `NetworkTransaction.url` already carries the query, so the URL line is that and nothing more.
     // Appending `query` again printed it twice on every call that had one.
     private fun urlLine(md: String): String = md.lines().single { it.startsWith("- **URL:** ") }

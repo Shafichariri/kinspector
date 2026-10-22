@@ -195,6 +195,12 @@ because one name for both made two different numbers read as a bug (ROADMAP §6,
 no web mirror: the daemon returns each row's route and filter term and the page draws them. It is
 in `archive/` so `ConfigFile`, the config's validator, can reach its override syntax. The host is part of the key
 because one template on two servers is two routes, and the diff and the findings reuse the key.
+One server is one host in the key, though: an IPv6 literal is keyed bare, because OkHttp stores
+`::1` and Ktor `[::1]` and capture keeps both (`capture.md`), which made one server two rows with
+half the calls each. Bare and not bracketed, because the row's `host:` term is a substring match
+and only `::1` finds both stored forms; the page and the Markdown export bracket it again on read.
+A host that is not a bracketed literal holding a `:` is keyed as stored, lowercased. `keyOf` is the
+one place a key is built, so the stats, exports and MCP agree, and the diff and findings inherit it.
 Trailing slashes and path case are kept, and the query never takes part. The segment rule is a
 heuristic; among what it misses: a long camelCase name with a digit reads as `{id}`, and slugs,
 short tokens and ids with an extension stay literal. `routeTemplates` in `config.json` overrides

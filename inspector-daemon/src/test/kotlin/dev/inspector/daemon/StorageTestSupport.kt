@@ -94,3 +94,16 @@ fun signal(
     id = id, ts = ts, mono = mono, tag = tag, name = name, bytes = bytes,
     trigger = trigger, requestId = requestId,
 )
+
+/**
+ * One IPv6 server reached by both clients: three calls with the host as OkHttp stores it (`::1`) and
+ * three as Ktor does (`[::1]`), all to `http://[::1]:8080/v6`, then one to the same literal on
+ * `:9090`, which is another server. The route stats read the first six as one route.
+ */
+fun ipv6BothClients(): List<NetworkTransaction> =
+    (0 until 7).map { i ->
+        txn(
+            "1e6a%04x".format(i), path = "/v6", mono = 100L * (i + 1), ms = 10L + i,
+            host = if (i % 2 == 0) "::1" else "[::1]",
+        ).copy(scheme = "http", port = if (i < 6) 8080 else 9090)
+    }

@@ -87,6 +87,17 @@ class RouteFilterTermTest {
         assertEquals("method:POST host:$host path:/*/*", term(call("/a b/1", method = "POST")))
     }
 
+    // The key's host is the bare literal, and `host:` is a substring match, so the one term finds
+    // both stored forms of the server. Keyed bracketed, the term would miss OkHttp's three.
+    @Test
+    fun `an IPv6 route's term opens the calls of both stored forms`() {
+        val calls = ipv6BothClients().filter { it.port == 8080 }
+        val terms = calls.map { term(it) }.toSet()
+        assertEquals(setOf("method:GET host:::1 path:*/v6"), terms)
+        val filter = FilterParser.parseOrThrow(terms.single())
+        assertEquals(calls, calls.filter { filter.matches(it) })
+    }
+
     @Test
     fun `the known superset cases match, which is what the caveat says`() {
         val profile = FilterParser.parseOrThrow(term(call("/users/1/profile")))
