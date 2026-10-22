@@ -155,7 +155,13 @@ failed one unless the page holds no scope. With KIN-55's leak put back, `failure
 failed. `expanded unfolded`, `every bar visible`, `now rows show age`, `self has kill btn`, the two
 audits, the archive's three lines and the scope bar readings were shown red with their shape taken
 out of the page, the export or the stylesheet text, and the live probe's other verdicts on stub
-pages (KIN-87's notes list which); the others rest on review.
+pages (KIN-87's notes list which); the others rest on review. PR #133 put the Chrome cases under the
+rule too: `shell <w> rail` (`lib/shell-cases.js`), `room 400 rows`' repeat marks, `room <w> toolbar
+fits` and `one row`, and `room 1000 tab never enters closed` (`lib/list-room-cases.js`), `traffic
+reaches` (`lib/live-traffic-cases.js`) and the top bar's `count` wording, `NO - found no word in
+#counts` (`lib/topbar-cases.js`). Each was shown red with its shape taken out of the page, except
+the socket half of `traffic reaches`, which rests on review: the case needs the live socket open
+before it can start.
 
 **The CI probe session is written by the daemon's own writer at CI time, and never committed.**
 `ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
@@ -716,7 +722,8 @@ numbers. Above 700px the `<wbr>`s are `display: none`, because Chrome breaks at 
 line, per character, on the `routes` session (a port, `[::1]`, a hyphenated label, a long segment):
 `stats 400 route breaks served` and `… export`, `stats 400 routes whole …` (nothing cut, document
 no wider than the window) and `stats 1440 routes one line served`. Each found-nothing branch fails
-and was shown failing with the servers drawn under another class. The breaks were red on main
-(29 breaks, `http://127.0.0.1:808|0`), with main's stylesheet and with the hold removed; `whole`
-was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
+and was shown failing with the servers drawn under another class. The breaks were red on main,
+with main's stylesheet and with the hold removed. How many breaks main makes depends on the fonts
+Chrome finds (29 on one machine, 30 on another); the break that reproduces is
+`http://127.0.0.1:808|0`. `whole` was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
 route pieces` holds the cut itself, red with brackets ignored and with the leading `/` cut.
