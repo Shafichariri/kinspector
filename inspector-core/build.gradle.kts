@@ -76,6 +76,9 @@ kotlin {
         dependencies {
             implementation(kotlin("test"))
             implementation(kotlin("reflect"))
+            // OkHttp is compileOnly for consumers, but the parity tests load OkHttpCaptureKt, which
+            // names okhttp3.Interceptor, and every class of the module, the interceptor's included.
+            implementation(libs.okhttp)
         }
     }
 }
