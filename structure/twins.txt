@@ -4,14 +4,16 @@
 # The published set must be exactly the modules below: both members of each pair, plus each
 # exemption. An exemption must give its reason on the same line.
 #
-# A pair names the golden file both of its modules assert, relative to the repository root, and
-# the file must exist. A twin without one drifts unseen: the ui pair had none for eleven releases.
+# A pair names the golden files both of its modules assert, relative to the repository root, and
+# both must exist. A twin without one drifts unseen: the ui pair had none for eleven releases. The
+# first is read from JVM output by jvmTest, the second from the iOS klibs by iosApiTest, which the
+# root build.gradle.kts registers for every module named here.
 #
-#   pair   <real module> <noop module> <golden file>
+#   pair   <real module> <noop module> <golden file> <iOS golden file>
 #   exempt <module> <reason>
 
-pair :inspector-core :inspector-noop api/inspector-public-api.txt
-pair :inspector-ui :inspector-noop-ui api/inspector-ui-public-api.txt
-pair :inspector-stream :inspector-noop-stream api/inspector-stream-public-api.txt
+pair :inspector-core :inspector-noop api/inspector-public-api.txt api/inspector-public-api.ios.txt
+pair :inspector-ui :inspector-noop-ui api/inspector-ui-public-api.txt api/inspector-ui-public-api.ios.txt
+pair :inspector-stream :inspector-noop-stream api/inspector-stream-public-api.txt api/inspector-stream-public-api.ios.txt
 
 exempt :inspector-model both members of the core pair `api` it, so it ships in either build and there is nothing to swap; it holds no capture code

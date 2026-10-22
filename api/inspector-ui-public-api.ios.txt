@@ -1,0 +1,6 @@
+# Generated. Public iOS API shared by :inspector-ui and :inspector-noop-ui, read from both
+# iOS targets' klibs by `klib dump-abi`. IR signatures are dropped, and so are the Compose
+# compiler's $stableprop markers, which it makes public for internal classes. See UiIosApiParityTest.
+# Regenerate: ./gradlew :inspector-ui:iosApiTest -Dinspector.api.regenerate=true
+
+final fun dev.inspector.ui/InspectorOverlay(kotlin/Boolean, kotlin/Function2<androidx.compose.runtime/Composer, kotlin/Int, kotlin/Unit>, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int)

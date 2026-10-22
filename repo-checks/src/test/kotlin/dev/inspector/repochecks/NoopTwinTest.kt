@@ -16,13 +16,17 @@ import kotlin.test.fail
  *
  * A twin is only as good as the golden file holding it to its pair, so each `pair` line also names
  * that file and it must exist. Before this, nothing failed a pair that had none, and the ui pair had
- * none for eleven releases while its real module grew public theme types the noop lacked.
+ * none for eleven releases while its real module grew public theme types the noop lacked. The fourth
+ * field is the pair's iOS golden file, which the root build's `iosApiTest` asserts from the klibs;
+ * it is held to the same rule, or a pair could drop its iOS guard by dropping a column.
  */
 class NoopTwinTest {
 
     private sealed interface Entry
-    /** [golden] is null when the line names none, so the test below can say which pair lacks one. */
-    private data class Twin(val real: String, val noop: String, val golden: String?) : Entry
+    /** A golden file is null when the line names none, so the test below can say which pair lacks one. */
+    private data class Twin(val real: String, val noop: String, val golden: String?, val iosGolden: String?) : Entry {
+        val goldens get() = listOf(golden, iosGolden)
+    }
     private data class Exempt(val module: String, val reason: String) : Entry
 
     private fun entries(): List<Entry> = RepoFiles.golden("twins.txt").map { line ->
@@ -30,8 +34,8 @@ class NoopTwinTest {
         when (parts[0]) {
             "pair" -> {
                 val fields = line.split(Regex("\\s+")).drop(1)
-                if (fields.size !in 2..3) fail("twins.txt: a pair is `pair <real> <noop> <golden file>`: $line")
-                Twin(fields[0], fields[1], fields.getOrNull(2))
+                if (fields.size !in 2..4) fail("twins.txt: a pair is `pair <real> <noop> <golden file> <iOS golden file>`: $line")
+                Twin(fields[0], fields[1], fields.getOrNull(2), fields.getOrNull(3))
             }
             "exempt" -> Exempt(parts.getOrElse(1) { fail("twins.txt: exempt names no module: $line") }, parts.getOrElse(2) { "" }.trim())
             else -> fail("twins.txt: unknown entry: $line")
@@ -56,22 +60,22 @@ class NoopTwinTest {
         val pairs = entries().filterIsInstance<Twin>()
         // An empty loop passes; a twins.txt that lost its pairs must not read as all of them named.
         if (pairs.isEmpty()) fail("structure/twins.txt lists no pairs; refusing to check nothing")
-        val unnamed = pairs.filter { it.golden == null }
-        val missing = pairs.filter { it.golden != null && !File(RepoFiles.root, it.golden).isFile }
+        val unnamed = pairs.filter { null in it.goldens }
+        val missing = pairs.filter { pair -> pair.goldens.any { it != null && !File(RepoFiles.root, it).isFile } }
         if (unnamed.isEmpty() && missing.isEmpty()) return
         fail(
             buildString {
                 if (unnamed.isNotEmpty()) {
-                    appendLine("These pairs name no golden file in structure/twins.txt:")
+                    appendLine("These pairs do not name both golden files, JVM and iOS, in structure/twins.txt:")
                     unnamed.forEach { appendLine("  ${it.real} ${it.noop}") }
                 }
                 if (missing.isNotEmpty()) {
                     appendLine("These pairs name a golden file that does not exist:")
-                    missing.forEach { appendLine("  ${it.real} ${it.noop} ${it.golden}") }
+                    missing.forEach { appendLine("  ${it.real} ${it.noop} ${it.golden} ${it.iosGolden}") }
                 }
                 appendLine("Without a golden file both modules assert, a twin drifts unseen and -Pinspector=off changes what")
-                appendLine("compiles. Give the pair a parity test in api-parity/ (api-parity/AGENTS.md), generate its file from")
-                append("the real module, and name it on the pair's line.")
+                appendLine("compiles. Give the pair a parity test in api-parity/ (api-parity/AGENTS.md), generate its files from")
+                append("the real module (jvmTest and iosApiTest), and name both on the pair's line.")
             }
         )
     }
