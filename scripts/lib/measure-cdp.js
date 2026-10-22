@@ -229,6 +229,12 @@ async function openPage(chrome, label) {
     async colorScheme(value) {
       await send('Emulation.setEmulatedMedia', { features: value ? [{ name: 'prefers-color-scheme', value }] : [] });
     },
+    // The window as painted, PNG bytes; the contact sheet's one use (`lib/sheet-cases.js`).
+    async screenshot() {
+      const reply = await send('Page.captureScreenshot', { format: 'png' });
+      if (!reply.result || !reply.result.data) throw new Error(`${label}: no screenshot (${JSON.stringify(reply.error || reply.result)})`);
+      return Buffer.from(reply.result.data, 'base64');
+    },
     async navigate(url) {
       exceptions.length = 0;
       await send('Page.navigate', { url });
