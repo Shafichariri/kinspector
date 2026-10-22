@@ -3,11 +3,11 @@ id: KIN-128
 title: >-
   Sample: a scripted double submit and a token in a query string, caught by both
   rule families
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 12:18'
-updated_date: '2026-10-22 12:29'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:sample-demo-flow'
 dependencies: []
@@ -23,22 +23,30 @@ ROADMAP §6 → 'A sample demo flow that both rule families catch' (order row 30
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The sample server gains a payment-shaped mutation route, and the desktop sample's scripted run (-Dinspector.sample.autofire=true) sends one request body to it twice within the duplicate window with no idempotency key, and makes one call with a token in its query string.
-- [ ] #2 On a fresh sample session with the daemon's default config, GET /api/sessions/{id}/findings and MCP list_findings each return at least one Duplicate mutation finding at high citing both calls, and at least one query-string token finding from detection whose evidence is masked: the token's value appears nowhere in the response.
-- [ ] #3 The Findings page shows both on that session.
-- [ ] #4 sample/README.md says how to run the flow and what each finding should show, in steps a newcomer can follow from a clean clone.
-- [ ] #5 -Pinspector=off still builds the sample, and the release guard's check and self-test are unchanged.
+- [x] #1 The sample server gains a payment-shaped mutation route, and the desktop sample's scripted run (-Dinspector.sample.autofire=true) sends one request body to it twice within the duplicate window with no idempotency key, and makes one call with a token in its query string.
+- [x] #2 On a fresh sample session with the daemon's default config, GET /api/sessions/{id}/findings and MCP list_findings each return at least one Duplicate mutation finding at high citing both calls, and at least one query-string token finding from detection whose evidence is masked: the token's value appears nowhere in the response.
+- [x] #3 The Findings page shows both on that session.
+- [x] #4 sample/README.md says how to run the flow and what each finding should show, in steps a newcomer can follow from a clean clone.
+- [x] #5 -Pinspector=off still builds the sample, and the release guard's check and self-test are unchanged.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 PR #162. Shown locally on a fresh daemon (port 8112, temp --data, no config.json) + desktop autofire: 7 findings / 2 high. payment.duplicate-mutation high citing both /checkout/payments calls; sensitive.jwt-in-url high, evidence query access_token '•••• HS256'; key-missing-payment-path x2 medium; card-number info (test card), credentials-over-http info (loopback), field.secret info (old /secret). No JWT segment or card number in REST, MCP list_findings, CLI or the Findings page DOM. Disabling the three rules via PUT /api/config turned the check red; removing config.json restored green. Not run here: Android compile (no SDK), iOS framework link (no Xcode; Kotlin compile passed); CI covers both. Button not pressed by hand; autofire calls the same DemoFlow.run. Ready for QA.
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/sample-demo-flow-report.md (verdict: close yes, no blocking findings), PR #162, merge b34ea8b. Not verified by QA: the pay twice + token button pressed by hand; the Android and iOS samples running the flow (only desktop CIO ran; CI compiled the others). The item has no automated guard in the repo.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA from a clean clone following sample/README.md with JDK 21: one session, 50 calls, 7 findings (2 high, 2 medium, 3 info): Duplicate mutation high citing 2 calls and JWT in a URL high masked as •••• HS256; REST, MCP, CLI and the Findings page agree; the JWT segments and the card appear 0 times in the page, the REST reply, CLI JSON, export findings, Markdown section and HAR notes; PUT /api/config turning both rules off makes check_demo.py FAIL.
+<!-- SECTION:FINAL_SUMMARY:END -->

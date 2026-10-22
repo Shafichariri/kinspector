@@ -146,8 +146,8 @@ phone of either kind.
 sample over USB on 2026-09-24, with the overlay running and nobody looking at it, and an Android
 device ran the overlay once on 2026-08-17, a month before the Android sample existed (commit
 `ef9058e`, which fixed the four defects it found). The sample's Android
-build has run on a physical phone. `item:public-claims-true` carries the same correction to the
-README.)*
+build has not run on a physical phone. `item:public-claims-true` carried the same correction to the
+README, done 2026-10-22; which build ran on the 2026-08-17 phone is still the maintainer's to say.)*
 
 ---
 
@@ -188,7 +188,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   stub groups for screens older than the list's page say `no calls`, before and after the copy lands (predates
   KIN-42); (5) the overview band's `min-height` rule is unguarded: with `.axis-hint.axis-reading { min-height:
   24px }` removed, `copy lands huge` still passes at 44 px, under its 48 px bound. *(2026-10-22: (5) is
-  placed by the product owner as `item:guard-overview-band-reserved`, §3 → Guards; (1) to (4) stay unplaced.)*
+  placed by the product owner as `item:guard-overview-band-reserved`, §3 → Guards; (1) to (4) stay unplaced. **(5) is done**: guarded by KIN-110, `overview band css` in CI and `copy lands huge` bounded at the scope bar's height.)*
   **For the product-owner, unplaced:** a live call never redraws the timeline. The `txn` branch of the
   socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
   appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
@@ -239,36 +239,7 @@ against the code at `5b21593`. **Both ordered 2026-10-22 by the maintainer**: se
 product owner placed them here on 2026-10-22. **Both were ordered 2026-10-22 by the maintainer's
 proxy**: see "Order from here".*
 
-- **The overview band's reserved height is a promise nothing holds.** *Ticket label:*
-  `item:guard-overview-band-reserved`. This is the fifth of KIN-42's follow-ups, listed under the
-  signals guard above. The other four are behaviour, not guards, so it does not fold into them.
-
-  **For whom.** Whoever next changes the bands above the list, and trusts the checks to tell them
-  they broke the read. Behind them, the web UI user on a Mac reading a large session. They have
-  scrolled to a row while the copy is read, and the row should not jump when the copy lands.
-
-  **Why.** `web-ui.md` says the overview line keeps its band through the read "as tall as the axis",
-  so rows move only by the scope bar's 33 px when the copy lands. One CSS rule holds that:
-  `.axis-hint.axis-reading { min-height: 24px }`. QA removed only that rule and `copy lands huge`
-  stayed green, with rows moving 44 px, under its 48 px bound. That reading lives in
-  `measure-web-ui.js`, which CI does not run, so in CI nothing goes red at all. Web UI polish restyles
-  these bands next, and KIN-33's list-pane guard set the precedent: the guard comes before the work
-  that moves what it guards.
-
-  **Acceptance criteria.**
-  - With only the `min-height` rule removed, `copy lands huge` fails. It does so by comparing the
-    band's height during the read with its height after landing, or by bounding the move at the
-    scope bar's measured height rather than a fixed 48 px. The architect chooses which.
-  - A check that CI runs also fails with that rule removed, for example a static reading of the rule
-    in `check-web-static.js`, as `closed drawer css` already does for the drawer. If no CI check can
-    see it without a browser, the item says so, and `web-ui.md` says the rule is held only by the
-    measure run.
-  - Each check is proven red with the rule removed and green with it restored. If
-    `INSPECTOR_UI_EXPECT_CHECKS` or the static count moves, the change says why.
-
-  **Out of scope.** Changing the band, the rule or the 33 px. KIN-42's other four follow-ups. Running
-  `measure-web-ui.js` in CI. Surfaces: none a user sees; scripts, plus one sentence in
-  `web-ui.md` if needed. No public API. **Size:** XS.
+- ~~**The overview band's reserved height is a promise nothing holds.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-overview-band-reserved`.
 
 - ~~**Interrupting a measure run leaves its daemons running.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-measure-interrupt-cleans-up`.
 
@@ -474,64 +445,7 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 - ~~**Housekeeping after the 2026-10-22 batch.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:docs-housekeeping-2026-10-22`.
 
-*The entry below was found on 2026-10-22 outside any item, while the maintainer's proxy reviewed
-what the repository says about itself in public. Placed by the product owner the same day and
-checked against `docs/STATUS.md` and `ROADMAP-DONE.md` at `e34542e`. **Ordered 2026-10-22 by the
-maintainer's proxy**, first in lane S: see "Order from here".*
-
-- **The README and the landing page say things that are not true.** *Ticket label:*
-  `item:public-claims-true`.
-
-  **For whom.** A developer on a Mac deciding whether to try Inspector, who reads the README or
-  `site/index.html` before the code, and a consuming team that quotes either to justify adopting it.
-  Each of them takes the page's word for what has been tested and what is coming. A claim the record
-  contradicts costs more than the gap it hides.
-
-  **Why now.** Findings and detection are next, and they will draw readers to these two pages. The
-  three claims below are each false today, each is a sentence or two, and none needs code.
-
-  1. **The README's "Honest gaps" paragraph** says the overlay "has been run on one Android device,
-     the iOS simulator and desktop, never on iOS hardware". `docs/STATUS.md` → Verified records a
-     physical iPhone streaming to the daemon over USB on 2026-09-24, with the overlay running the
-     whole time. `docs/STATUS.md` → Not verified says nobody *looked* at the overlay there, and that
-     no Android build has run on a physical phone. So "never on iOS hardware" is false, and the
-     Android half needs the record settled first (see the open question below).
-  2. **The README's test count** reads `779 tests`. `docs/STATUS.md` gives the last full count as
-     886, 0 failures, and says it is old and that no full run has been counted since.
-  3. **The landing page's sponsor box** says sponsoring "pays for what's next: proxy capture for
-     WebViews and native iOS networking". Proxy capture (4c) is not started and starts only if the
-     maintainer explicitly chooses it (§3's carried-over table, and "What this document does not
-     overturn"). A page that sells it as next promises something nobody has chosen.
-
-  **Acceptance criteria.**
-  - The README's phone sentences say what `docs/STATUS.md` says, no more: the overlay ran on one
-    iPhone over USB and nobody looked at it there, and the Android claim says whatever the record
-    settles (below). The rest of the paragraph (the signals work never touched by a thumb, the Auth0
-    adapter, nothing non-Ktor on iOS) is re-read against `docs/STATUS.md` and kept only where it
-    still holds.
-  - The README's count is `docs/STATUS.md`'s last full count, re-read on the day of the change, with
-    STATUS's own caveat that it is old. If no full run is counted by then, the README says "886 at the
-    last full count" or links to `docs/STATUS.md`. It never states a total made by adding per-module
-    counts.
-  - The sponsor box says sponsoring pays for maintenance and what is on the roadmap, and links the
-    roadmap. It names no unstarted item, and no phrase on the page reads as a promise of proxy capture.
-  - Every other place the README or `site/index.html` claims hardware, a count or a future feature is
-    read against `docs/STATUS.md` and this roadmap, and the change lists each one it checked. The
-    landing page's Android row ("no Android build has run on a physical phone yet") is one of them.
-
-  **Open question for the maintainer, which the first criterion waits on.** The record disagrees
-  with itself about Android. Commit `ef9058e`, "Fix four overlay defects found on a real phone",
-  says "First run on an Android device", and `docs/STATUS.md` → Not verified opens with "The overlay
-  has now been seen on a phone once". The same section ends "No Android build has run on a physical
-  phone", and the proxy's note says no Android phone has run the overlay. Both can be true if that
-  first outing was a consuming app's build and not the sample's. The maintainer, who held that phone,
-  says which. The README then says "once, on one Android phone, before 0.7.0" or "never on an Android
-  phone", and `docs/STATUS.md` is corrected by the delivery tracker to match.
-
-  **Out of scope.** The README's hero and any rewrite of the pitch, which wait until findings ship in
-  a release: a claim about something unbuilt is a false fact. The sponsor link's target, which is
-  still the carried-over row in §3. `docs/INTEGRATION.md`, whose version line this does not touch.
-  Surfaces: docs and the landing page only. No public API. **Size:** XS.
+- ~~**The README and the landing page say things that are not true.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:public-claims-true`.
 
 ### Open questions
 
@@ -690,15 +604,11 @@ ends at findings and sensitive-data detection.
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 13b | The README and the landing page say only what is true | §3 → Bugs found, not fixed, below the 2026-10-22 housekeeping | `item:public-claims-true` | XS | S, first in the lane; its Android sentence waits on the maintainer's answer in the item |
-| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA |
-| 13d | The release page and `ACCESS.md` name the same place to get the library | §6 → Release 1.4.0 | `item:release-notes-boilerplate` | XS | S; independent of 13c, so it does not wait for 13c's last commit |
+| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). |
 | 13e | Rehearse the release locally before the tag | §6 → Release 1.4.0 | `item:release-rehearsal` | S | S; run once findings and detection are merged, before 13c's last commit, so a fault it finds still has time to be fixed |
-| 16e | The overview band's reserved height is a promise nothing holds | §3 → Guards | `item:guard-overview-band-reserved` | XS | S; lands before `item:web-ui-polish` PR A, which restyles the bands it guards |
-| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **PR A part done 2026-10-22: T1, Shared body evidence, T2 and T3 (PRs #151, #152); T4 open.** PR B and C in W |
+| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **Done 2026-10-22, all eight tickets: PR A (T1 to T4, KIN-111 to KIN-115; PRs #151 to #153), PR B (T5, T6; #160) and PR C (T7, T8; #164), each Done on QA's evidence.** PR B and C in W. The row stays open with row 30 until detection T5 (KIN-124) lands |
 | 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. **Ticket KIN-112 done 2026-10-22 (PR #151, `428745a`).** Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
-| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C |
-| 30a | A sample demo flow that both rule families catch | §6 → A sample demo flow | `item:sample-demo-flow` | S | S, after detection T5, so QA runs both rule families on it |
+| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C. **T1 to T4 done 2026-10-22 (KIN-120 to KIN-123, and KIN-127 carved out of the diff; PRs #156, #158, #161); T5 (KIN-124, the page) open** |
 
 **After 1.4.0**, decided 2026-10-22 by the maintainer. Row labels are kept. Why they wait: 1.4.0 ships the two
 features that catch a defect in the app under test, and none of these is needed to show them.
@@ -707,7 +617,7 @@ features that catch a defect in the app under test, and none of these is needed 
 |---|---|---|---|---|---|
 | 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after detection T4: T4, then T1 reduced by Shared body evidence, then T2 and T3. PR B in W, after detection T5 and polish PR A |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; the rest of PR A (A3 to A6) before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150)** |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; the rest of PR A (A3 to A6) before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 (A4 to A6, KIN-105 to KIN-107) is parked on `shafic/web-ui-polish-a456` for after 1.4.0, with PR B** |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
 
@@ -767,8 +677,8 @@ rows for `item:mcp-probe-deadline-holds`, `item:docs-housekeeping-2026-10-21`,
 On 2026-10-22, later the same day and after QA, the rows for `item:docs-housekeeping-2026-10-22` (16a),
 `item:guard-expanded-unfolded-has-failures` (16b), `item:guard-measure-interrupt-cleans-up` (16d),
 `item:route-key-one-ipv6-host` (21a) and `item:web-live-signal-burst-bounded` (23) moved to `ROADMAP-DONE.md` too.
-`item:guard-overview-band-reserved` (16e) stays: its PR #149 is not merged, so row 16e's "lands before
-`item:web-ui-polish` PR A" did not hold; PR A part 1 (#150) merged first.
+`item:guard-overview-band-reserved` (16e) merged later the same day as PR #149 and moved to `ROADMAP-DONE.md` at the batch-4 close; its row's "lands before
+`item:web-ui-polish` PR A" did not hold, because PR A part 1 (#150) merged first.
 
 **Two rows added 2026-10-22, ordered by the maintainer's proxy on the product owner's proposal.**
 16d is the measure run's interrupt cleanup: every W-lane fix round runs that script, and it is the same
@@ -1035,6 +945,7 @@ export menu, density and `#/txn/{id}`. Each lands with the probes it moves.
   this adds validation and an atomic write, and keeps flags winning. Findings
   rules have to live where MCP can read them, and an agent and the page disagreeing about what
   counts as a finding is a worse bug than either alone. View preferences stay in `prefs`.
+  The `findings` key is the one exception to "applies at the next start" (decided 2026-10-22, `item:findings-payment-safety`).
 
 What must still hold: the export still works offline (new pages either read the embedded archive
 or hide under `body.archive`); `fetch` is still called once across every file `web/scripts.txt`
@@ -1106,6 +1017,8 @@ Endpoint identity here is the **route** — the template decided under Endpoint 
 
 The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
 
+**T1 shrinks, 2026-10-22:** `JsonPaths.walk`, `group` and `isAtOrUnder` were carved out as KIN-127 (`item:sensitive-data-detection`) and are on main.
+
 **Shared body evidence moved to findings, 2026-10-22** (the maintainer's proxy, confirmed by the
 architect). `RouteKey.mutation` and the contract half of `service/BodyShape.kt` (`BodySide`,
 `BodyState`, `BodyEvidence.state`, `BodyEvidence.read` and `JsonPaths.redactedPaths`) are built as
@@ -1142,21 +1055,20 @@ in `redacted[]` are not compared for type.
 
 ### Findings, and the payment-safety rules
 
-**Progress, 2026-10-22: PR A part done.** T1 (KIN-111, the shared fold cursor and retry rule) and
+**Progress, 2026-10-22: all eight tickets Done.** T1 (KIN-111, the shared fold cursor and retry rule) and
 Shared body evidence (KIN-112) merged in PR #151 (`428745a`); T2 (KIN-113, the framework, live
 findings settings, engine, cache, REST, MCP `list_findings` and CLI) and T3 (KIN-114, the six
-payment-safety rules) in PR #152 (`66ab63c`). Each ticket is Done on QA's pass over detached copies
-(one round, no blocking findings; 453 daemon tests, 0 failed). **Open:** T4 (KIN-115, the exports and
-the leak guard) and everything after it. PR A is not finished, PR B and C have not started, and the
-item is not Done. **Correction for T5 to T8: the design note's payments-fixture counts are wrong and
-the code is right.** The fixture holds 13 mutation calls and 12 flagged rows. The design's own §8.3
-table lists 15 distinct calls, 2 of them GETs, so 13 mutation calls; the flagged rows are b1 to b10
-less the offline pair, the GETs and the redirect, which is 12. KIN-114's sixth criterion (15 mutation
-calls) and the note's 14 flagged rows are arithmetic errors, no code changes; KIN-118 and KIN-119
-repeat "14 flagged rows" and the Findings page of T5 counts from the same fixture, so those figures
-are to be read against the code's 12 before they are built. QA's wording nit: `daemon-and-mcp.md`
-line 72 ("Nothing but the `findings` key applies until the next start") can be read the wrong way
-round; "Nothing except the `findings` key applies before the next start" would not be.
+payment-safety rules) in PR #152 (`66ab63c`); T4 (KIN-115, the exports and the leak guard) in PR #153
+(`e751a25`); T5 and T6 (KIN-116, the Findings page; KIN-117, the Settings fieldset) in PR #160 (`f661683`);
+T7 and T8 (KIN-118, badges and the detail section; KIN-119, flagged rows only) in PR #164 (`f4bbfbf`).
+Each ticket is Done on QA's pass over detached copies (one round each, no blocking findings). The item
+stays open in "Order from here" together with row 30 until detection T5 (KIN-124) lands. **Correction,
+applied 2026-10-22: the design note's payments-fixture counts were wrong and the code is right.** The fixture
+holds 13 mutation calls and 12 flagged rows. The design's own §8.3 table lists 15 distinct calls, 2 of
+them GETs, so 13 mutation calls; the flagged rows are b1 to b10 less the offline pair, the GETs and the
+redirect, which is 12. KIN-114's sixth criterion said 15 mutation calls and the note said 14 flagged rows;
+both were arithmetic errors, the tickets are restated to 13 and 12, and `PaymentRulesTest` asserts 13 and
+12. QA's wording nit on `daemon-and-mcp.md` line 72 is a candidate under "Candidates, not ordered".
 
 **The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
 message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
@@ -1275,6 +1187,8 @@ counts.
 
 ### Sensitive-data detection — detect, never redact
 
+**Progress, 2026-10-22: T1 to T4 done.** KIN-120 (T1, rules, masks and config; PR #156, `f0c53a2`), KIN-122 (T3, dismissals; PR #158, `d5554a9`), and KIN-121 (T2, the sensitive source), KIN-123 (T4, exports) and KIN-127 (the `JsonPaths` walker carved out of the diff's T1) in PR #161 (`5cce7ab`), each Done on QA's evidence. **Open:** T5 (KIN-124, the page: dismiss, dismissed fold, no-hosts hint, first-party hosts in Settings); the item is not Done. *The sensitive-data scan was measured in `item:sensitive-data-detection`: 2.7 s cold on 10,000 calls with 4 KB bodies each side; 41 ms after 100 appended rows. The cache stays in memory.*
+
 Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
 addable like the payment rules, in two kinds:
 
@@ -1327,47 +1241,13 @@ the IBAN rule needs no pack once it reads the whole table, and a national-ID rul
 kind of thing user-editable rules exist for, so a pack would be shipped maintenance for a case the
 config already covers.
 
-### A sample demo flow that both rule families catch
-
-*Ticket label:* `item:sample-demo-flow`. Added 2026-10-22 by the product owner, at the maintainer's
-proxy's request; placed in "Order from here".
-
-**The user and the problem.** A developer on a Mac trying Inspector from a clean clone, and the QA
-agent verifying findings and detection. The sample's server (`sample/shared/kotlin`'s `DemoServer`)
-answers GETs, one echo POST and a body with a token in it. Nothing in it sends a mutation twice or
-puts a credential in a URL, so neither the payment-safety rules nor the query-string rule has
-anything to find in a sample session. To watch them fire today you write your own app, which is what
-a newcomer will not do and what QA should not have to.
-
-**Why now.** Findings and detection come first in the order, and they are only worth as much as
-someone can see them do. A demo that reproduces from a clean clone also gives QA the fresh session
-its verification needs, without a hand-built fixture.
-
-**Acceptance criteria.**
-- The sample server gains a payment-shaped mutation route, and the sample's scripted run (the
-  desktop sample's `-Dinspector.sample.autofire=true` today) sends one request body to it twice
-  within the duplicate window with no idempotency key: a double submit. The same run makes one call
-  with a token in its query string.
-- On a fresh sample session, with the daemon's default config, `GET /api/sessions/{id}/findings`
-  and MCP `list_findings` each return at least one Duplicate mutation finding at `high` that cites
-  both calls, and at least one query-string token finding from detection. Its evidence is masked:
-  the token's value appears nowhere in the response.
-- The Findings page shows both on that session.
-- A sample README (none exists; `sample/AGENTS.md` is the agent guide) says how to run the flow
-  and what each finding should show, in steps a newcomer can follow from a clean clone.
-- `-Pinspector=off` still builds the sample, and the release guard's check and self-test are unchanged.
-
-**Out of scope.** Any change to the rules, their defaults or the daemon. The overlay, which has no
-findings. The Android and iOS samples, unless the architect finds the scripted run is shared at no
-cost. Whatever the demo route is called, Inspector learns nothing from it: the payment shape lives in
-the sample app, as it would in a consuming one, and the rules match it through their generic
-defaults.
-
-**Surfaces.** The sample app and its docs. No library API, no noop twin, no golden file. **Size:** S.
+### ~~A sample demo flow that both rule families catch~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
 ### Web UI polish
 
-**Progress, 2026-10-22: PR A part 1 done.** A1 (KIN-102, icon controls), A2 (KIN-103, page
+**Progress, 2026-10-22: PR A parts 1 and 2 done.** Part 2: A3 (KIN-104, page keys) merged in PR #155 (`fc7b205`) and is Done on QA's pass with real keystrokes at 1440 and 400 px (`g` plus a letter, `g g`, `?` on every page, nothing fires while typing, which also fixes the replay textarea defect). Part 3 (A4 to A6, KIN-105 to KIN-107) is parked for after 1.4.0.
+
+**Part 1:** A1 (KIN-102, icon controls), A2 (KIN-103, page
 documents) and A7 (KIN-108, the contact sheet harness) merged in PR #150 (`4343823`), each Done on
 QA's pass over detached copies (one round, no blocking findings; `check-web-static.js` 120 to 124,
 the live probe 263 to 264, `measure-web-ui.js --only polish,room,shell` 19 failing readings at base
@@ -1398,6 +1278,8 @@ text and `docs/STATUS.md`. No public API, no noop twin, no golden file.
 #### The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships
 
 *Ticket label:* `item:release-1-4-docs`
+
+**Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). Ticket KIN-129.
 
 **The user and the problem.** A consuming team upgrading from 1.3.0, and the developer on a Mac who
 downloads the 1.4.0 daemon. They read the release page and `INTEGRATION.md` §14, not the commits.
@@ -1430,29 +1312,7 @@ the end.
 page's boilerplate, which is `item:release-notes-boilerplate`'s. Rewriting old changelog entries for
 style. **Size:** S.
 
-#### The release page and `ACCESS.md` name the same place to get the library
-
-*Ticket label:* `item:release-notes-boilerplate`
-
-**The user and the problem.** A consuming team reading a release page to add the dependency. The notes
-`.github/workflows/release.yml` writes say the library comes "from GitHub Packages", that the registry
-wants a token, and that `docs/ACCESS.md` leads with that. `docs/ACCESS.md` leads with Maven Central,
-anonymous from 1.0.1, and keeps GitHub Packages as the older path. A reader who follows the release page
-sets up a token they do not need.
-
-**Why now.** Every release page from now on repeats it, and 1.4.0 is the next one. It is a few lines.
-
-**Acceptance criteria.**
-- The release page's library section names Maven Central first, with `mavenCentral()` and no token, and
-  GitHub Packages as the alternative that needs one, in the same order and words as `docs/ACCESS.md`.
-- It does not claim the version is on Central when the page is created. The Central job only stages the
-  bundle and a person publishes it (`docs/decisions/release.md`), so the page says the version reaches
-  Central once the maintainer publishes it, or the workflow's order makes the claim true. The architect
-  picks which.
-- No other sentence in the boilerplate contradicts `docs/ACCESS.md`, and the change lists each one checked.
-
-**Out of scope.** Publishing automatically to Central, which `docs/decisions/release.md` rejects.
-**Size:** XS.
+#### ~~The release page and `ACCESS.md` name the same place to get the library~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6 → Release 1.4.0
 
 #### Rehearse the release locally before the tag
 
@@ -1485,6 +1345,16 @@ for `item:session-diff` and `item:findings-payment-safety`. Each is kept out of 
 purpose. Neither is in "Order from here", and neither gets tickets until it is placed there. Each
 names what would decide it. If that evidence says no, it moves to a "Not worth doing" entry with the
 reason.
+
+#### Follow-ups left by the batch-4 close, 2026-10-22
+
+Unplaced, no tickets, each checked against the code at `f4bbfbf` before it was written. One line each; the product owner places or drops them.
+
+- **The payment source's route memo holds raw URL paths.** `PaymentLedger.add` asks `FindingSession.routeOf`, whose memo is keyed by the raw method, scheme, host, port and path (`service/Findings.kt`), so a card number in a URL path sits in the cache; the sensitive source avoids the memo for that reason. Found by detection's leak test, outside its item.
+- **The call branch redraws the waterfall and the path on every call.** `web/js/05-network.js`'s `txn` branch calls `renderWaterfall()` and `renderPath()` per message, while the timeline and the glance go through `drawLive` (250 ms); the burst bound `web-live-signal-burst-bounded` set holds for those two only.
+- **A lone signal takes about 280 ms to reach the timeline.** `LIVE_DRAW_MS` is 250, and QA read 277 to 281 ms with the render, so "within 250 ms" is true of calls and not of a signal on its own.
+- **`docs/decisions/daemon-and-mcp.md` line 72 can be read the wrong way round.** "Nothing but `findings` and `findingDismissals` applies until the next start" can be taken as "only these wait"; "Only `findings` and `findingDismissals` apply live; every other key waits for the next start" cannot. QA's nit from `item:findings-payment-safety`.
+- **`shell`, `room`, `polish` and `sheet` leave their export temp directories behind on an interrupt.** Each makes `stats-export-`, `room-export-`, `polish-export-` or `sheet-export-` under the OS temp directory and removes it in a `finally`, which a signal skips; `measure-web-ui.js`'s `cleanUp` removes only the run's own directory (KIN-109 named `stats-export-` and `room-export-` as left open).
 
 #### Match routes across origins in the diff
 

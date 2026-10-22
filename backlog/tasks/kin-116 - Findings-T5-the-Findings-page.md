@@ -1,11 +1,11 @@
 ---
 id: KIN-116
 title: 'Findings T5: the Findings page'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 08:24'
-updated_date: '2026-10-22 11:21'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -26,22 +26,22 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A Findings rail entry after Stats opens #/findings
-- [ ] #2 The probe session reads "No findings in 16 calls in this session" and lists six rules as checked
-- [ ] #3 The payments session shows the fixture counts under "Payment safety" (3 high, 6 medium, 1 info; 10 findings in 18 calls; 12 flagged rows; coverage 13 mutation calls, 2 bodies unknown — corrected from the design, which said 14 and 15; PaymentRulesTest asserts 13 and 12), with its coverage line
-- [ ] #4 A call link opens #/txn/<id> and Back returns; #/findings?id=<id> scrolls to and marks that finding
-- [ ] #5 The page text holds no planted key
-- [ ] #6 Live, it asks at most once a second, never twice at once, only while Traffic or Findings is shown with live tail on (static findings refresh lines, each red with its line removed)
-- [ ] #7 In an export it draws from the embedded report, refuses a category, and keeps the rail link
-- [ ] #8 No sideways scroll at 400, 600, 1000 or 1440 px
-- [ ] #9 Counts are stated before → after, and the ci.yml numbers raised to them
+- [x] #1 A Findings rail entry after Stats opens #/findings
+- [x] #2 The probe session reads "No findings in 16 calls in this session" and lists six rules as checked
+- [x] #3 The payments session shows the fixture counts under "Payment safety" (3 high, 6 medium, 1 info; 10 findings in 18 calls; 12 flagged rows; coverage 13 mutation calls, 2 bodies unknown — corrected from the design, which said 14 and 15; PaymentRulesTest asserts 13 and 12), with its coverage line
+- [x] #4 A call link opens #/txn/<id> and Back returns; #/findings?id=<id> scrolls to and marks that finding
+- [x] #5 The page text holds no planted key
+- [x] #6 Live, it asks at most once a second, never twice at once, only while Traffic or Findings is shown with live tail on (static findings refresh lines, each red with its line removed)
+- [x] #7 In an export it draws from the embedded report, refuses a category, and keeps the rail link
+- [x] #8 No sideways scroll at 400, 600, 1000 or 1440 px
+- [x] #9 Counts are stated before → after, and the ci.yml numbers raised to them
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -88,4 +88,12 @@ Red proofs (each restored after):
 Deviations: findingsWanted is the Findings page only (AC #6 is an upper bound); T7 widens it to Traffic when badges need the report, and adds byTxn, the renderList call after a reply and findingsPaintDetail. Resume reload is in 99-init's live button handler, not setLiveTail, to keep 25-traffic-list.js at 591 for T7. Call-link labels fall back to the id when the session's rows are not held yet (design's fallback; nothing redraws the page when the whole copy lands). PaymentRulesTest edited to read ProbeFixture's list (one copy of the fixture).
 
 Not verified: iOS; render-web-ui on a CI runner (counts measured locally on the CI fixture, port 8102).
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/findings-pr-b-report.md (verdict: close yes, no blocking findings), PR #160, merge f661683. Not verified by QA: the row badges and the detail section (T7) and flagged rows only (T8) were not built at that merge; both were verified later under KIN-118 and KIN-119.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA in headless Chrome and against REST: 'findings none' (No findings in 16 calls, six rules checked), 'findings payments' (10 findings in 18 calls, 3 high, 6 medium, 1 info, 12 rows) and 'findings coverage' (13 mutation calls looked at; 6 request bodies compared, 2 unknown (2 truncated)), the corrected counts, not the design's 15 and 14; 'findings no value' (none of 6 planted values); 'findings refresh burst' red with the timer bypassed (100 owed calls cost 100 requests); export draws from the embedded report and refuses a category. Static 127 to 132, live probe 268 to 281, archive probe 49 to 54, ci.yml raised to 281 and 54.
+<!-- SECTION:FINAL_SUMMARY:END -->

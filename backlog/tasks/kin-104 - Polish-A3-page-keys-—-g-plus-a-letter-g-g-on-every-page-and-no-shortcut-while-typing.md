@@ -3,11 +3,11 @@ id: KIN-104
 title: >-
   Polish A3: page keys — g plus a letter, g g, ? on every page, and no shortcut
   while typing
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 09:41'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:web-ui-polish'
 dependencies: []
@@ -22,15 +22,15 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A3 criteria hold, each guard shown red; g g is top of list (decision 2026-10-22), with the legend and an UNRELEASED line
-- [ ] #2 The replay textarea no longer fires list shortcuts (folded defect)
+- [x] #1 The note's §9 A3 criteria hold, each guard shown red; g g is top of list (decision 2026-10-22), with the legend and an UNRELEASED line
+- [x] #2 The replay textarea no longer fires list shortcuts (folded defect)
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -61,4 +61,12 @@ Red, archive: export check removed from pageKeyAvailable (export and tree copy a
 Chrome: polish 1440/400 legend inside 'inside, on top (1237,48 to 1430,295 in 1440x900; 5 page keys; hit true; Escape shut it true)'; red with the legend placed 900px lower: 'FAIL polish 1440 legend inside: outside or covered (1237,944 to 1430,1191 ...)'. --only polish,shell,room,layout against d41f617: base 206 readings 2 failed, head 206 readings 0 failed; moved against base: only the two legend inside readings.
 txn route still: 'yes (... j moves nothing; ...)'. g d and g f: nothing and not in the legend now; diff and findings over stub PAGES rows in 'page keys' (live and exported).
 Not done: no 'polish restored' line (the §6.2 table lists it without a ticket; the key probes leave Traffic, legend shut, no prefix and no selection themselves). docs/UNRELEASED.md line added at the coordinator's instruction (RUN-RULES 7 otherwise reserves the file).
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/web-ui-polish-part2-report.md (verdict: close yes, no blocking findings), PR #155, merge fc7b205. Not verified by QA: g d and g f (no Diff or Findings page in that build; covered over stub rows by the static check). Polish part 3 (A4 to A6) is parked and not judged.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA, real keystrokes at 1440 and 400 px, 36 of 36 ok on head, 14 of 36 on base: g then s/a/p/, and g t open their pages, g g selects the first of orderedRows(), ? opens the legend on every page, typing gsgafo? into the filter, a Settings number input, a select and the replay textarea fires nothing. Red: 'TEXTAREA' removed from typingTarget gives 'keys skip textarea : NO' (267/1); g g routed to nothing gives 'page keys live : NO' (267/1). Static 127 checks, live probe 268, archive probe 49, 0 failed.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -996,6 +996,47 @@ Android only looked right because 120px clears a status bar at that density.
   unless the architect finds they share the cleanup. If one has the same gap, that is a new entry,
   not scope creep. Windows signals. Surfaces: scripts only. No public API. **Size:** XS.
 
+- ~~**The overview band's reserved height is a promise nothing holds.**~~ **Done, 2026-10-22.** PR #149 merged as `6aff923`; `build`, `release-swap`, `repo` and `web` passed on the PR. KIN-110 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `scripts/lib/layout-audits.js` gains `auditOverviewBand`, which `check-web-static.js` reports as `overview band css`: `.axis-hint.axis-reading` in `css/25-axis.css` sets a `min-height` in px equal to `.axis-svg`'s height, so CI now goes red when the rule is removed. `scripts/lib/measure-cases.js`'s `copyLandsRow` bounds the first visible row's move at `#scope-bar`'s measured height plus 1 px in place of the fixed 48 px, and its detail names the bar's height. `web-ui.md` gains one sentence naming both checks. No `web/` file changed.
+
+  **What was learned.** The bound was chosen over comparing the band during and after the read because the decision says rows move only by the scope bar's height, so a bound that follows the bar keeps holding if polish restyles it. QA re-broke the rule and saw both checks red (`overview band css : NO`, and `FAIL copy lands huge … moved 44 px, over the scope bar's 33 px`), and saw base's 48 px bound pass the same 44 px, which is the gap KIN-42's QA found. Polish part 1 merged first and restyled nothing the check reads, so the order the item asked for (guard before polish) did not hold and nothing broke. `check-web-static.js` read 120 to 121 at the first push and 125 once polish's four landed under it; `ci.yml` does not pin it, so it did not move.
+
+  **Left open.** The main push run on `6aff923` was still running when QA looked.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-overview-band-reserved`. This is the fifth of KIN-42's follow-ups, listed under the
+  signals guard above. The other four are behaviour, not guards, so it does not fold into them.
+
+  **For whom.** Whoever next changes the bands above the list, and trusts the checks to tell them
+  they broke the read. Behind them, the web UI user on a Mac reading a large session. They have
+  scrolled to a row while the copy is read, and the row should not jump when the copy lands.
+
+  **Why.** `web-ui.md` says the overview line keeps its band through the read "as tall as the axis",
+  so rows move only by the scope bar's 33 px when the copy lands. One CSS rule holds that:
+  `.axis-hint.axis-reading { min-height: 24px }`. QA removed only that rule and `copy lands huge`
+  stayed green, with rows moving 44 px, under its 48 px bound. That reading lives in
+  `measure-web-ui.js`, which CI does not run, so in CI nothing goes red at all. Web UI polish restyles
+  these bands next, and KIN-33's list-pane guard set the precedent: the guard comes before the work
+  that moves what it guards.
+
+  **Acceptance criteria.**
+  - With only the `min-height` rule removed, `copy lands huge` fails. It does so by comparing the
+    band's height during the read with its height after landing, or by bounding the move at the
+    scope bar's measured height rather than a fixed 48 px. The architect chooses which.
+  - A check that CI runs also fails with that rule removed, for example a static reading of the rule
+    in `check-web-static.js`, as `closed drawer css` already does for the drawer. If no CI check can
+    see it without a browser, the item says so, and `web-ui.md` says the rule is held only by the
+    measure run.
+  - Each check is proven red with the rule removed and green with it restored. If
+    `INSPECTOR_UI_EXPECT_CHECKS` or the static count moves, the change says why.
+
+  **Out of scope.** Changing the band, the rule or the 33 px. KIN-42's other four follow-ups. Running
+  `measure-web-ui.js` in CI. Surfaces: none a user sees; scripts, plus one sentence in
+  `web-ui.md` if needed. No public API. **Size:** XS.
+
 ### Bugs found, not fixed
 
 - ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
@@ -2071,6 +2112,73 @@ Android only looked right because 120px clears a status bar at that density.
 
   **Out of scope.** Any other rewording of `web-ui.md`. Surfaces: docs only. **Size:** XS.
 
+- ~~**The README and the landing page say things that are not true.**~~ **Done, 2026-10-22.** PR #159 merged as `82887c1` (with row 13d); `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded. KIN-125 is Done on QA's pass, one round, no blocking findings. The entry below is moved verbatim.
+
+  **What was built and learned.** The README's count became 886 at the last full count with STATUS's caveat that it is old; "used daily against a real app, on an Android emulator and the iOS simulator" was removed because no record supports "daily" or a real app on the simulator, and replaced by the one thing the record does show (the first real-app session found four defects, all fixed). The phone sentences now say the overlay ran once on an Android phone on 2026-08-17 in a build that predates the Android sample, that the sample has not run on a physical phone, and that one iPhone ran the iOS sample over USB with nobody looking at the overlay. The sponsor box says it pays for maintenance and the roadmap, and links it; `grep -i proxy site/index.html` finds nothing. The Android sentences hold whichever answer the maintainer gives to the open question below, so the item closed without waiting for it; **the question itself stays open** (whose build ran on that phone on 2026-08-17). QA checked each changed claim against STATUS, `git log` and Maven Central's own metadata (1.0.1 to 1.3.0), and the landing page in Chrome at 1440 and 400.
+
+  **Left open.** At 400 px the landing page is 605 px wide (the architecture SVG) and a feature card's last bullet is cut; the base commit gives the identical overflow, so it predates this item. Commit identity and the name scan were not re-run by QA for this copy-only PR.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
+
+  *The entry below was found on 2026-10-22 outside any item, while the maintainer's proxy reviewed
+  what the repository says about itself in public. Placed by the product owner the same day and
+  checked against `docs/STATUS.md` and `ROADMAP-DONE.md` at `e34542e`. **Ordered 2026-10-22 by the
+  maintainer's proxy**, first in lane S: see "Order from here".*
+
+  - **The README and the landing page say things that are not true.** *Ticket label:*
+  `item:public-claims-true`.
+
+  **For whom.** A developer on a Mac deciding whether to try Inspector, who reads the README or
+  `site/index.html` before the code, and a consuming team that quotes either to justify adopting it.
+  Each of them takes the page's word for what has been tested and what is coming. A claim the record
+  contradicts costs more than the gap it hides.
+
+  **Why now.** Findings and detection are next, and they will draw readers to these two pages. The
+  three claims below are each false today, each is a sentence or two, and none needs code.
+
+  1. **The README's "Honest gaps" paragraph** says the overlay "has been run on one Android device,
+     the iOS simulator and desktop, never on iOS hardware". `docs/STATUS.md` → Verified records a
+     physical iPhone streaming to the daemon over USB on 2026-09-24, with the overlay running the
+     whole time. `docs/STATUS.md` → Not verified says nobody *looked* at the overlay there, and that
+     no Android build has run on a physical phone. So "never on iOS hardware" is false, and the
+     Android half needs the record settled first (see the open question below).
+  2. **The README's test count** reads `779 tests`. `docs/STATUS.md` gives the last full count as
+     886, 0 failures, and says it is old and that no full run has been counted since.
+  3. **The landing page's sponsor box** says sponsoring "pays for what's next: proxy capture for
+     WebViews and native iOS networking". Proxy capture (4c) is not started and starts only if the
+     maintainer explicitly chooses it (§3's carried-over table, and "What this document does not
+     overturn"). A page that sells it as next promises something nobody has chosen.
+
+  **Acceptance criteria.**
+  - The README's phone sentences say what `docs/STATUS.md` says, no more: the overlay ran on one
+    iPhone over USB and nobody looked at it there, and the Android claim says whatever the record
+    settles (below). The rest of the paragraph (the signals work never touched by a thumb, the Auth0
+    adapter, nothing non-Ktor on iOS) is re-read against `docs/STATUS.md` and kept only where it
+    still holds.
+  - The README's count is `docs/STATUS.md`'s last full count, re-read on the day of the change, with
+    STATUS's own caveat that it is old. If no full run is counted by then, the README says "886 at the
+    last full count" or links to `docs/STATUS.md`. It never states a total made by adding per-module
+    counts.
+  - The sponsor box says sponsoring pays for maintenance and what is on the roadmap, and links the
+    roadmap. It names no unstarted item, and no phrase on the page reads as a promise of proxy capture.
+  - Every other place the README or `site/index.html` claims hardware, a count or a future feature is
+    read against `docs/STATUS.md` and this roadmap, and the change lists each one it checked. The
+    landing page's Android row ("no Android build has run on a physical phone yet") is one of them.
+
+  **Open question for the maintainer, which the first criterion waits on.** The record disagrees
+  with itself about Android. Commit `ef9058e`, "Fix four overlay defects found on a real phone",
+  says "First run on an Android device", and `docs/STATUS.md` → Not verified opens with "The overlay
+  has now been seen on a phone once". The same section ends "No Android build has run on a physical
+  phone", and the proxy's note says no Android phone has run the overlay. Both can be true if that
+  first outing was a consuming app's build and not the sample's. The maintainer, who held that phone,
+  says which. The README then says "once, on one Android phone, before 0.7.0" or "never on an Android
+  phone", and `docs/STATUS.md` is corrected by the delivery tracker to match.
+
+  **Out of scope.** The README's hero and any rewrite of the pitch, which wait until findings ship in
+  a release: a claim about something unbuilt is a false fact. The sponsor link's target, which is
+  still the carried-over row in §3. `docs/INTEGRATION.md`, whose version line this does not touch.
+  Surfaces: docs and the landing page only. No public API. **Size:** XS.
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -2155,6 +2263,10 @@ tag cut before any of this existed.
 | ~~Interrupting a measure run leaves its daemons running~~ **Done, 2026-10-22** (KIN-109, PR #148, merge `1796b96`; one round of QA) *(was row 16d; the later rows keep their numbers)* | §3 → Guards | `item:guard-measure-interrupt-cleans-up` | XS |
 | ~~One IPv6 server reached by both clients is two route rows~~ **Done, 2026-10-22** (KIN-100, PR #142, merge `1ed50c1`; one round of QA) *(was row 21a; the later rows keep their numbers)* | §3 → Bugs found | `item:route-key-one-ipv6-host` | S |
 | ~~A burst of live signals redraws once, not per message~~ **Done, 2026-10-22** (KIN-101, PR #144, merge `e34542e`; one round of QA) *(was row 23; the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-signal-burst-bounded` | S |
+| ~~The overview band's reserved height is a promise nothing holds~~ **Done, 2026-10-22** (KIN-110, PR #149, merge `6aff923`; one round of QA) *(was row 16e; the later rows keep their numbers)* | §3 → Guards | `item:guard-overview-band-reserved` | XS |
+| ~~The README and the landing page say only what is true~~ **Done, 2026-10-22** (KIN-125, PR #159, merge `82887c1`; one round of QA; the maintainer's Android question stays open) *(was row 13b)* | §3 → Bugs found | `item:public-claims-true` | XS |
+| ~~The release page and `ACCESS.md` name the same place to get the library~~ **Done, 2026-10-22** (KIN-126, PR #159, merge `82887c1`; one round of QA) *(was row 13d)* | §6 → Release 1.4.0 | `item:release-notes-boilerplate` | XS |
+| ~~A sample demo flow that both rule families catch~~ **Done, 2026-10-22** (KIN-128, PR #162, merge `b34ea8b`; one round of QA) *(was row 30a)* | §6 | `item:sample-demo-flow` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -3294,3 +3406,83 @@ head (`first rows huge`, `connected huge`, KIN-42's, on both sides), 6 at base.
   refreshing per row.
 
 cost: not recorded — built in the 2026-10-20/21 coordinated run, architect note then a developer session with engineer subagents in two PRs, no QA before merge; QA after merge, 1 round each
+
+### A sample demo flow that both rule families catch
+
+**Done, 2026-10-22.** PR #162 merged as `b34ea8b`; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded, including CI's Android and iOS compiles and the `-Pinspector=off` swap. KIN-128 is Done on QA's pass from a clean clone, one round, no blocking findings. The section's text is moved verbatim below; what was built and learned follows it.
+
+*Ticket label:* `item:sample-demo-flow`. Added 2026-10-22 by the product owner, at the maintainer's
+proxy's request; placed in "Order from here".
+
+**The user and the problem.** A developer on a Mac trying Inspector from a clean clone, and the QA
+agent verifying findings and detection. The sample's server (`sample/shared/kotlin`'s `DemoServer`)
+answers GETs, one echo POST and a body with a token in it. Nothing in it sends a mutation twice or
+puts a credential in a URL, so neither the payment-safety rules nor the query-string rule has
+anything to find in a sample session. To watch them fire today you write your own app, which is what
+a newcomer will not do and what QA should not have to.
+
+**Why now.** Findings and detection come first in the order, and they are only worth as much as
+someone can see them do. A demo that reproduces from a clean clone also gives QA the fresh session
+its verification needs, without a hand-built fixture.
+
+**Acceptance criteria.**
+- The sample server gains a payment-shaped mutation route, and the sample's scripted run (the
+  desktop sample's `-Dinspector.sample.autofire=true` today) sends one request body to it twice
+  within the duplicate window with no idempotency key: a double submit. The same run makes one call
+  with a token in its query string.
+- On a fresh sample session, with the daemon's default config, `GET /api/sessions/{id}/findings`
+  and MCP `list_findings` each return at least one Duplicate mutation finding at `high` that cites
+  both calls, and at least one query-string token finding from detection. Its evidence is masked:
+  the token's value appears nowhere in the response.
+- The Findings page shows both on that session.
+- A sample README (none exists; `sample/AGENTS.md` is the agent guide) says how to run the flow
+  and what each finding should show, in steps a newcomer can follow from a clean clone.
+- `-Pinspector=off` still builds the sample, and the release guard's check and self-test are unchanged.
+
+**Out of scope.** Any change to the rules, their defaults or the daemon. The overlay, which has no
+findings. The Android and iOS samples, unless the architect finds the scripted run is shared at no
+cost. Whatever the demo route is called, Inspector learns nothing from it: the payment shape lives in
+the sample app, as it would in a consuming one, and the rules match it through their generic
+defaults.
+
+**Surfaces.** The sample app and its docs. No library API, no noop twin, no golden file. **Size:** S.
+
+**What was built and learned.** The sample server gains a payment-shaped `POST /checkout/payments` and a fake JWT in `/profile`'s query; the scripted run (`-Dinspector.sample.autofire=true`) and a "pay twice + token" button send the keyless double submit and the token call. QA followed `sample/README.md` verbatim on a clean clone with a second daemon on its own port and no `config.json`: one session of 50 calls, 7 findings (2 high, 2 medium, 3 info), exactly the README's table. Duplicate mutation (high, citing both calls) and JWT in a URL (high, masked `•••• HS256`) appear in REST, MCP, the CLI and the Findings page, and neither the token's segments nor the test card appear anywhere in the page, the replies or the exports (the archive's call rows hold them by design). Turning both token rules off through `PUT /api/config` makes the builder's check fail on the next read, with no restart; **with only `sensitive.jwt-in-url` off the check still passes**, because `sensitive.secret-in-url` reports the same `access_token` parameter, so a red proof has to turn off both. Nothing outside `sample/` changed: no rule, API, golden or `INTEGRATION.md` change.
+
+**Left open.** The "pay twice + token" button pressed by hand on any platform; the Android and iOS samples running the flow (only desktop CIO ran it; CI compiled the others); and the flow has no automated guard in the repo (the builder's three check scripts would be the start of one).
+
+cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
+
+### Release 1.4.0
+
+#### The release page and `ACCESS.md` name the same place to get the library
+
+**Done, 2026-10-22.** PR #159 merged as `82887c1` (with row 13b). KIN-126 is Done on QA's pass, one round, no blocking findings. The text is moved verbatim below.
+
+*Ticket label:* `item:release-notes-boilerplate`
+
+**The user and the problem.** A consuming team reading a release page to add the dependency. The notes
+`.github/workflows/release.yml` writes say the library comes "from GitHub Packages", that the registry
+wants a token, and that `docs/ACCESS.md` leads with that. `docs/ACCESS.md` leads with Maven Central,
+anonymous from 1.0.1, and keeps GitHub Packages as the older path. A reader who follows the release page
+sets up a token they do not need.
+
+**Why now.** Every release page from now on repeats it, and 1.4.0 is the next one. It is a few lines.
+
+**Acceptance criteria.**
+- The release page's library section names Maven Central first, with `mavenCentral()` and no token, and
+  GitHub Packages as the alternative that needs one, in the same order and words as `docs/ACCESS.md`.
+- It does not claim the version is on Central when the page is created. The Central job only stages the
+  bundle and a person publishes it (`docs/decisions/release.md`), so the page says the version reaches
+  Central once the maintainer publishes it, or the workflow's order makes the claim true. The architect
+  picks which.
+- No other sentence in the boilerplate contradicts `docs/ACCESS.md`, and the change lists each one checked.
+
+**Out of scope.** Publishing automatically to Central, which `docs/decisions/release.md` rejects.
+**Size:** XS.
+
+**What was built and learned.** The decision was wording, not the workflow's order: the notes `release.yml` writes now open with "published to GitHub Packages and staged on Maven Central by the jobs beside this one", name Maven Central first with `repositories { mavenCentral() }` and no token, say that this version reaches Central once the maintainer publishes it (the tag only stages the bundle), and keep GitHub Packages as the older path with its token, pointing at `docs/ACCESS.md`. The daemon job creates the page without waiting for the library jobs, which is why the claim could not be made true by ordering. QA rendered the "Publish the release" step's heredoc at head and base with `VERSION=1.4.0` and compared the two workflow files as parsed YAML: every key, job and step is identical except that step's `run` text.
+
+**Left open.** The hand-over's main push run and `pages` deploy were read by QA only as reported.
+
+cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round

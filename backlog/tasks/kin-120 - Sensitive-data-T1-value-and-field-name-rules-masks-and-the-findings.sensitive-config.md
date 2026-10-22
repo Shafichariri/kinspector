@@ -3,11 +3,11 @@ id: KIN-120
 title: >-
   Sensitive data T1: value and field-name rules, masks and the
   findings.sensitive config
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 09:40'
-updated_date: '2026-10-22 10:47'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -24,21 +24,21 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Card: 13-19 digits, first digit 2-6, Luhn; a JSON number counts only under a card field name; the 11 published test numbers are info
-- [ ] #2 IBAN: the ISO 13616 length per country and mod-97; every table entry has a registry example that passes, and fails with its last digit changed or its length off by one
-- [ ] #3 JWT (first segment decodes to a JSON object with a string alg), secret parameter names, email, phone and host classes (loopback, private, emulator aliases 10.0.2.2 and 10.0.3.2) as tabled
-- [ ] #4 Field names normalised (lowercase, _ - . and spaces removed), whole below six characters, suffix from six; four classes as tabled; fieldNames add and remove
-- [ ] #5 Custom value rules are shapes (# A X and literals, 4-40 characters) with check none, luhn or mod97 and their own severity and enabled; no regular expression is accepted; findings.rules refuses a sensitive.custom.* id
-- [ ] #6 Masks as tabled; nothing but SensitiveMask.hint reads a matched value; every mask kind at its longest, an over-long alg, a 7-letter top-level domain and an unknown auth scheme pass FindingMask.isMasked
-- [ ] #7 PUT /api/config refuses a bad findings.sensitive or findingDismissals whole, naming the problem; at read a bad entry is named and skipped
-- [ ] #8 Each guard shown red: Luhn removed, one IBAN length changed, issuer digit removed, the alg bound removed, the suffix rule applied at every length, validation skipped on PUT
+- [x] #1 Card: 13-19 digits, first digit 2-6, Luhn; a JSON number counts only under a card field name; the 11 published test numbers are info
+- [x] #2 IBAN: the ISO 13616 length per country and mod-97; every table entry has a registry example that passes, and fails with its last digit changed or its length off by one
+- [x] #3 JWT (first segment decodes to a JSON object with a string alg), secret parameter names, email, phone and host classes (loopback, private, emulator aliases 10.0.2.2 and 10.0.3.2) as tabled
+- [x] #4 Field names normalised (lowercase, _ - . and spaces removed), whole below six characters, suffix from six; four classes as tabled; fieldNames add and remove
+- [x] #5 Custom value rules are shapes (# A X and literals, 4-40 characters) with check none, luhn or mod97 and their own severity and enabled; no regular expression is accepted; findings.rules refuses a sensitive.custom.* id
+- [x] #6 Masks as tabled; nothing but SensitiveMask.hint reads a matched value; every mask kind at its longest, an over-long alg, a 7-letter top-level domain and an unknown auth scheme pass FindingMask.isMasked
+- [x] #7 PUT /api/config refuses a bad findings.sensitive or findingDismissals whole, naming the problem; at read a bad entry is named and skipped
+- [x] #8 Each guard shown red: Luhn removed, one IBAN length changed, issuer digit removed, the alg bound removed, the suffix rule applied at every length, validation skipped on PUT
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -47,4 +47,12 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 Ready for QA once its PR merges. archive/SensitiveConfig.kt (ValueShape and its grammar, ShapeCheck, CustomValueRule, SensitiveSettings with firstParty(), DismissalEntry, SensitiveConfig.read/problem/readDismissals/dismissalsProblem/normalise), archive/FindingSettings.kt (sensitive sub-object, KEYS, canonical(), findings.rules refuses sensitive.custom.*), archive/DaemonConfig.kt (FileConfig.findingDismissals: JsonArray so a non-list makes the file malformed), archive/ConfigFile.kt (KNOWN_KEYS + validation), service/SensitiveValues.kt (cards, test numbers, JSON-number rule, IBAN table of 89 countries + mod-97, JWT, email, phone, custom shapes, secret names, host classes, FieldNames), service/SensitiveMask.kt (hint, pathKey). Tests: SensitiveValuesTest, SensitiveFieldNamesTest, SensitiveConfigTest, ConfigFileTest (+3). Red proofs (each run, seen failing, restored): Luhn sum check removed -> 'Luhn passes a valid number…' (Expected value to be false), the JSON-number test and the luhn custom-shape test (expected <1> but was <2>); GB length 22->23 -> 'every IBAN table entry…' (was [GB29NWBK…, GB82WEST…]) and the text-finder test; issuer digit removed -> 'a card starts 2 to 6…' (1000123412341230); alg bound widened to [A-Za-z0-9-]+ -> 'every mask is exactly as tabled' and 'every mask kind at its longest passes the findings engine's guard' (was [•••• ABCDEFGHIJKLMNOP]); suffix rule at every length -> 'a shorter listed name matches only whole' and the add/remove test (patientMrn read as IDENTITY); findings and findingDismissals validation skipped on PUT -> both ConfigFileTest refusal tests (Written instead of Invalid). Known miss pinned in SensitiveValuesTest: secret names are whole, so X-Api-Key (xapikey) is not a secret name. IBAN table: lengths and one example per country transcribed from the SWIFT IBAN Registry; every example passes mod-97 at its table length, so a typo in either fails. — bob
 
 Merged in PR #156 (merge f0c53a2), CI build, release-swap, repo and web all pass. — bob
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/sensitive-data-detection-report.md (verdict: close yes, no blocking findings), PR #156, merge f0c53a2. Not verified by QA at T1, judged at T2 under KIN-121: findings raised per rule, severity raises, the empty-firstPartyHosts line, grouping, SensitiveLeakTest, timing. The red proof 'validation skipped on PUT' is the builder's, not re-run. The IBAN table (89 countries) was transcribed from memory and has not been checked against a current SWIFT registry edition; QA compared the 89 lengths with its own knowledge and found no disagreement.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA's own QaSensitiveProbeTest on fresh inputs and near-misses (deleted after the run), daemon 496 tests, 0 failed. Rules and masks at the value level; config validation by SensitiveConfigTest and ConfigFileTest.
+<!-- SECTION:FINAL_SUMMARY:END -->

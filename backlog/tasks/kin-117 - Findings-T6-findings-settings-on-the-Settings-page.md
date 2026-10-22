@@ -1,11 +1,11 @@
 ---
 id: KIN-117
 title: 'Findings T6: findings settings on the Settings page'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 08:24'
-updated_date: '2026-10-22 11:21'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -23,18 +23,18 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Settings lists every rule of effective.findings.rules with an enabled box and a severity select, and the five payment settings
-- [ ] #2 A save sends one findings object holding only non-default rule entries and changed payment fields, carrying other sub-objects through untouched; a rule back at its defaults is removed
-- [ ] #3 The daemon's 400 text is shown
-- [ ] #4 Success reads "saved — findings use it now"
-- [ ] #5 A probe stubs the PUT and checks the bodies (red with the whole effective object sent)
+- [x] #1 Settings lists every rule of effective.findings.rules with an enabled box and a severity select, and the five payment settings
+- [x] #2 A save sends one findings object holding only non-default rule entries and changed payment fields, carrying other sub-objects through untouched; a rule back at its defaults is removed
+- [x] #3 The daemon's 400 text is shown
+- [x] #4 Success reads "saved — findings use it now"
+- [x] #5 A probe stubs the PUT and checks the bodies (red with the whole effective object sent)
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -67,4 +67,12 @@ Red proofs (each restored):
 Looked at: Settings at 1440 and 400, dark and light, fieldset scrolled into view (scratch look/ shots): rows aligned after a label min-width and list boxes sized to their defaults.
 
 Not verified: a save against the real daemon's file from the page (the probe stubs PUT by rule; ConfigFileTest/ConfigRoutesTest hold the daemon side).
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/findings-pr-b-report.md (verdict: close yes, no blocking findings), PR #160, merge f661683. Not verified: the default-off case cannot arise at f661683 alone; QA checked it at 5cce7ab, where email and phone ship off.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA with real clicks and the real PUT and config.json: save untouched writes nothing; email on writes only {findings:{rules:{sensitive.email:{enabled:true}}}}; off again writes {} (entry removed); payment.retry-with-key severity medium writes only that entry; probe 'findings settings patch' red with the whole effective object sent (280/1); the daemon's 400 text shown ('findings settings refused'); success reads 'saved — findings use it now'.
+<!-- SECTION:FINAL_SUMMARY:END -->

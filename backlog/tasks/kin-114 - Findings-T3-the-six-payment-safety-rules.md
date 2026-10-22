@@ -27,7 +27,7 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 - [x] #3 A 3xx predecessor is never a retry
 - [x] #4 NEVER_SENT classes never trigger Ambiguous resubmit
 - [x] #5 No evidence line or id carries a header value, body, error message or digest
-- [x] #6 The payments fixture gives R1 1, R2 1, R3 1, R4 1, R5 5, R6 1, and coverage.payment counts 15 mutation calls and 2 truncated bodies
+- [x] #6 The payments fixture gives R1 1, R2 1, R3 1, R4 1, R5 5, R6 1, and coverage.payment counts 13 mutation calls and 2 truncated bodies, with 12 flagged rows (restated 2026-10-22 from 15 and 14, which were arithmetic errors in the design; PaymentRulesTest asserts 13 and 12)
 <!-- AC:END -->
 
 ## Definition of Done
