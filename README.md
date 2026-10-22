@@ -59,6 +59,15 @@ publishing is irreversible, so it stops short: the Portal validates the bundle a
 human to press Publish. That means the Maven Central badge legitimately sits a version behind the
 release badge until somebody does. If it stays behind, that button has not been pressed.
 
+**1.4.0 flags what your traffic gets wrong.** The web UI gains a Findings page: payment-safety
+problems in POST, PUT, PATCH and DELETE calls (a double submit with no idempotency key, a key reused
+with a changed body, a retry without one), and sensitive data in what you send (card numbers,
+IBANs, JWTs and secrets in URLs, credentials over plain `http`), always masked and never redacted.
+The same findings are in the CLI, the MCP server and every export, and a Stats page shows per-route
+rates and latency. Bump the version; your code changes only if it names the overlay's theme types,
+which are no longer public, or parses the URL of a call to an IPv6 address. `INTEGRATION.md` v66
+says what to do.
+
 **1.3.0 shows the path a user took through your app, and changes no code of yours.** The web UI's
 new `path` tab draws each screen visit as a station and, under it, everything that happened while
 that screen was up — calls, cache writes, analytics, taps — counted by kind and updating live. It
@@ -198,9 +207,9 @@ repositories { mavenCentral() }
 Then depend on it, and add `inspector-stream` only if you want the web UI and the on-disk archive:
 
 ```kotlin
-implementation("io.github.shafichariri:inspector-core:1.3.0")
-implementation("io.github.shafichariri:inspector-ui:1.3.0")
-implementation("io.github.shafichariri:inspector-stream:1.3.0")
+implementation("io.github.shafichariri:inspector-core:1.4.0")
+implementation("io.github.shafichariri:inspector-ui:1.4.0")
+implementation("io.github.shafichariri:inspector-stream:1.4.0")
 ```
 
 Three lines of code:
