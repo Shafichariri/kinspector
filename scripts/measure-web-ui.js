@@ -8,6 +8,8 @@
  * a daemon of its own through `/ingest` and judges the page's filtered re-read
  * (`lib/live-traffic-cases.js`). `polish` reads the icon controls' targets and the page documents' buttons, prose, density select
  * and Sessions rows, and the key legend `?` opens on Settings (`lib/polish-cases.js`).
+ * `site` opens the landing page, `site/index.html`, from disk and judges that it fits a 400 px window
+ * (`lib/site-cases.js`); the one group with no daemon, so `--only site` needs no build and no JDK.
  * `sheet`, opt-in, judges nothing: it writes a PNG of every page and view at four widths, dark and
  * light, served and exported, and an `index.html` grid of them to `--out` (`lib/sheet-cases.js`),
  * for a person to look at.
@@ -26,7 +28,7 @@
  * a base whose routes differ is measured against today's routes, which the output says.
  *
  * Options: --head <dir> (default: this repository), --base <dir>, --install <dir>,
- * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,polish,shell,traffic,first,sheet,
+ * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,polish,shell,traffic,first,site,sheet,
  * --first-rows-ms <n> (default 3000), --keep (keep the temp directory), --out <dir> (where `--only sheet`
  * writes; with --base, each tree in a folder of its own).
  * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run, 130 or 143
@@ -47,14 +49,18 @@ const { room } = require('./lib/list-room-cases');
 const { liveTraffic } = require('./lib/live-traffic-cases');
 const { polish } = require('./lib/polish-cases');
 const { sheet } = require('./lib/sheet-cases');
+const { landingFits } = require('./lib/site-cases');
 
 const REPO = path.resolve(__dirname, '..');
 const WEB = 'inspector-daemon/src/main/resources';
+// Groups that read only files from the tree. A run of these alone starts no daemon.
+const NO_DAEMON = ['site'];
+const needsDaemon = (opts) => opts.only.some((group) => !NO_DAEMON.includes(group));
 
 function parseArgs(argv) {
   const opts = {
     head: REPO, base: null, install: path.join(REPO, 'inspector-daemon/build/install/inspector'),
-    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'polish', 'shell', 'traffic', 'first'], firstRowsMs: 3000, keep: false, out: null,
+    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'polish', 'shell', 'traffic', 'first', 'site'], firstRowsMs: 3000, keep: false, out: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -73,7 +79,7 @@ function parseArgs(argv) {
   for (const side of [opts.head, opts.base].filter(Boolean)) {
     if (!fs.existsSync(path.join(side, WEB, 'web/scripts.txt'))) throw new Error(`${side} has no ${WEB}/web/scripts.txt`);
   }
-  if (!fs.existsSync(path.join(opts.install, 'lib'))) {
+  if (needsDaemon(opts) && !fs.existsSync(path.join(opts.install, 'lib'))) {
     throw new Error(`no daemon at ${opts.install}; run ./gradlew :inspector-daemon:installDist`);
   }
   return opts;
@@ -206,9 +212,13 @@ async function main() {
   run.tmp = tmp;
   run.keep = opts.keep;
   try {
-    const probe = probeFixture(opts, tmp);
-    const sides = [await prepareSide(opts, 'head', opts.head, probe, tmp)];
-    if (opts.base) sides.push(await prepareSide(opts, 'base', opts.base, probe, tmp));
+    const trees = [['head', opts.head], ...(opts.base ? [['base', opts.base]] : [])];
+    let sides = trees.map(([name, tree]) => ({ name, tree, urls: {} }));
+    if (needsDaemon(opts)) {
+      const probe = probeFixture(opts, tmp);
+      sides = [];
+      for (const [name, tree] of trees) sides.push(await prepareSide(opts, name, tree, probe, tmp));
+    }
     const chrome = await launchChrome(path.join(tmp, 'chrome-profile'), (proc) => children.push(proc));
     run.chrome = chrome;
 
@@ -257,6 +267,11 @@ async function main() {
           if (session === 'huge') results[side.name].push(...await onPage(chrome, `${side.name} stats first draw ${session}`, (p) => statsFirstDraw(p, side.urls.huge, session)));
         }
       }
+    }
+
+    if (opts.only.includes('site')) {
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} site`, (p) => landingFits(p, side.tree))
+        .then((rows) => results[side.name].push(...rows))));
     }
 
     // Readings cut short by a signal are not a result, whatever they say.

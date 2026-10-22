@@ -830,3 +830,20 @@ Chrome finds (29 on one machine, 30 on another); the break that reproduces is
 route pieces` holds the cut itself, red with brackets ignored and with the leading `/` cut.
 
 **Every DevTools command in `scripts/lib/measure-cdp.js` fails after 30 s (`SEND_DEADLINE_MS`), about 40x the slowest single command measured in a full run (718 ms, `head run`, 287 readings, 160k-call cases included, macOS, 2026-10-22), so a wedged renderer fails the run instead of hanging it. Long loads wait in `waitFor`'s polls, never in one command.** (Decided 2026-10-22: kept on the architect's recommendation.)
+
+**The landing page's grid items shrink below their content: `.step`'s at every width, `.grid2`'s
+only where it is one column.** A grid item keeps `min-width: auto`, so a child meant to scroll in
+its own box sets its column's width instead: at 400 px a 531 px `pre` in "Get started" made the page
+605 px wide, and a 454 px `.term` in "Four surfaces" made a card 558 px wide and cut its 12 bullets.
+The architecture diagram was blamed and is not the cause: its 640 px SVG scrolls inside
+`.diagram-box`. `.grid2 > * { min-width: 0 }` sits inside the 820 px query on purpose. In the two
+columns above it, the same `.term` widens its column today (478 and 538 px at 1440), and the rule
+there evens them and narrows that card by 30 px, which this fix was not to change. `.step`'s rule
+moves nothing at 1440. `measure-web-ui.js --only site` (`lib/site-cases.js`) opens
+`site/index.html` from disk with no daemon: `site 400 document width`, `site 400 past the edge`
+(anything outside a scroll container) and `site 400 card bullets` fail with either rule removed
+(605 px with both gone, 558 with `.grid2`'s, 605 with `.step`'s), and `site 1440 layout`, a digest
+of every box outside an SVG, reads the same as at `638119e`. CI's `web` job runs it on the
+runner's preinstalled Chrome, found by `measure-cdp.js` at `/usr/bin/google-chrome`, with nothing
+installed. At 821 to 885 px the page is still wider than the window, in two columns, at `638119e`
+too, which this item did not take on.

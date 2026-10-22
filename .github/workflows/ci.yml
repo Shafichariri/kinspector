@@ -99,6 +99,12 @@ jobs:
       - name: Static web checks — network call sites, stylesheet audits, parser, mirror cases
         run: node scripts/check-web-static.js
 
+      # The landing page in a 400 px window. Chrome is the runner image's own (/usr/bin/google-chrome,
+      # found by scripts/lib/measure-cdp.js): nothing is installed for it, and `site` starts no daemon,
+      # so it runs before Gradle. See docs/decisions/web-ui.md on the landing page's grid items.
+      - name: Landing page fits a 400 px window
+        run: node scripts/measure-web-ui.js --only site
+
       - name: Build the daemon and write the probe session
         run: >-
           ./gradlew :inspector-daemon:installDist :inspector-daemon:writeProbeFixture
