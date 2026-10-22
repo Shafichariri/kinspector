@@ -8,6 +8,13 @@ const fs = require('fs');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// How long one DevTools command may go unanswered while Chrome is alive. Polling is done by
+// `waitFor` in short commands, so no single command waits on the page for long: the slowest in a
+// whole run, first rows on 160,000 calls included, took 718 ms on 2026-10-22 (KIN-99). Without a
+// deadline a wedged renderer holds the run for ever, as a dead Chrome did before its exit was
+// listened for.
+const SEND_DEADLINE_MS = 30000;
+
 function findChrome() {
   if (process.env.CHROME) return process.env.CHROME;
   const candidates = [
@@ -33,6 +40,16 @@ async function launchChrome(profileDir) {
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Every open page, so Chrome exiting after start-up fails each one's pending commands. Without
+  // this a killed Chrome left every `send` waiting on a reply that could never come: the run hung,
+  // read as a slow case, and was killed by hand with its daemons still running.
+  const pages = new Set();
+  let exited = null;
+  let closing = false;
+  proc.on('exit', (code, signal) => {
+    exited = `Chrome exited (${signal ? `signal ${signal}` : `code ${code}`})`;
+    if (!closing) for (const page of pages) page.lose(exited);
+  });
   const port = await new Promise((resolve, reject) => {
     let seen = '';
     const timer = setTimeout(() => reject(new Error(`Chrome did not start:\n${seen}`)), 20000);
@@ -43,53 +60,112 @@ async function launchChrome(profileDir) {
     });
     proc.on('exit', (code) => reject(new Error(`Chrome exited with ${code}:\n${seen}`)));
   });
-  return {
+  const chrome = {
     port,
-    openPage: () => openPage(port),
-    close: () => { proc.kill(); },
+    exited: () => exited,
+    // `label` names the case in every error the page raises, so a failed run says where it was.
+    openPage: async (label) => {
+      if (exited) throw new Error(`${label}: ${exited} before its page opened`);
+      const page = await openPage(chrome, label);
+      pages.add(page);
+      page.closed.then(() => pages.delete(page));
+      return page;
+    },
+    close: () => { closing = true; proc.kill(); },
   };
+  return chrome;
 }
 
 // Each page gets a window of its own. Tabs in one window share it, and only the front tab paints:
 // the others get no animation frames, so a follow that waits for a frame never runs, and a
 // regression measured in a background tab reads as "stays". That hid KIN-38 in a first draft.
 async function newWindowTarget(port) {
-  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+  const deadline = () => AbortSignal.timeout(SEND_DEADLINE_MS);
+  const version = await (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: deadline() })).json();
   const browser = new WebSocket(version.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => { browser.onopen = resolve; browser.onerror = reject; });
+  await new Promise((resolve, reject) => {
+    browser.onopen = resolve;
+    browser.onerror = () => reject(new Error('the browser\'s DevTools socket did not open'));
+  });
   const targetId = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Target.createTarget had no answer within ${SEND_DEADLINE_MS / 1000} s`)), SEND_DEADLINE_MS);
+    browser.onclose = () => { clearTimeout(timer); reject(new Error('the browser\'s DevTools socket closed before a window opened')); };
     browser.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.id !== 1) return;
+      clearTimeout(timer);
       if (data.error) reject(new Error(data.error.message)); else resolve(data.result.targetId);
     };
     browser.send(JSON.stringify({ id: 1, method: 'Target.createTarget', params: { url: 'about:blank', newWindow: true } }));
   });
+  browser.onclose = null;
   browser.close();
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: deadline() })).json();
   const target = targets.find((t) => t.id === targetId);
   if (!target) throw new Error(`Chrome lists no target ${targetId}`);
   return target;
 }
 
-async function openPage(port) {
-  const target = await newWindowTarget(port);
-  const ws = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
+async function openPage(chrome, label) {
+  const { port } = chrome;
+  let target;
+  let ws;
+  try {
+    target = await newWindowTarget(port);
+    ws = new WebSocket(target.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      ws.onopen = resolve;
+      ws.onerror = () => reject(new Error('the page\'s DevTools socket did not open'));
+    });
+  } catch (e) {
+    const cause = chrome.exited() ? ` (${chrome.exited()})` : '';
+    throw new Error(`${label}: could not open a window${cause}: ${e.message}`);
+  }
   let nextId = 0;
-  const pending = new Map();
+  const pending = new Map(); // id -> { resolve, reject, method, timer }
   const exceptions = [];
+  let lost = null;
+  let closing = false;
+  let markClosed;
+  const closed = new Promise((resolve) => { markClosed = resolve; });
+  // Fails every pending command, and every later one at once. Chrome's exit and the socket's close
+  // both arrive when Chrome dies; the first names the cause and the second changes nothing.
+  const lose = (cause) => {
+    if (lost || closing) return;
+    lost = new Error(`${label}: ${cause}`);
+    for (const call of pending.values()) {
+      clearTimeout(call.timer);
+      call.reject(new Error(`${label}: ${cause} while ${call.method} waited for its answer`));
+    }
+    pending.clear();
+    markClosed();
+  };
+  // The socket closes a moment before Chrome's exit is reaped, so a close waits briefly for the
+  // exit: "Chrome exited (signal SIGKILL)" says more than "its DevTools socket closed".
+  ws.onclose = (event) => {
+    if (closing) return;
+    setTimeout(() => lose(chrome.exited() || `its DevTools socket closed (code ${event.code})`), 250);
+  };
+  ws.onerror = () => { /* the close that follows says what happened */ };
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.method === 'Runtime.exceptionThrown') {
       const details = data.params.exceptionDetails;
       exceptions.push(String((details.exception && details.exception.description) || details.text).split('\n')[0]);
     }
-    if (data.id && pending.has(data.id)) { pending.get(data.id)(data); pending.delete(data.id); }
+    const call = data.id && pending.get(data.id);
+    if (call) { clearTimeout(call.timer); pending.delete(data.id); call.resolve(data); }
   };
-  const send = (method, params = {}) => new Promise((resolve) => {
+  // A command sent once the page is lost fails at once: a closed socket silently drops what it is
+  // sent, so it would otherwise wait out its deadline, once for every poll of a `waitFor`.
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    if (lost) { reject(new Error(`${lost.message} before ${method} was sent`)); return; }
     const id = ++nextId;
-    pending.set(id, resolve);
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`${label}: ${method} had no answer from Chrome within ${SEND_DEADLINE_MS / 1000} s`));
+    }, SEND_DEADLINE_MS);
+    pending.set(id, { resolve, reject, method, timer });
     ws.send(JSON.stringify({ id, method, params }));
   });
   // Evaluates in the page and returns the value. An exception in the expression comes back as
@@ -116,6 +192,11 @@ async function openPage(port) {
   const page = {
     exceptions,
     ev,
+    lose,
+    closed,
+    // Set once Chrome or this page's socket went away. The runner refuses the case's readings when
+    // it is set, so a case that caught the failure still cannot have a reading printed as passed.
+    get lost() { return lost; },
     // Runs `source` in every document this page loads from now on, before any page script, as the
     // socket wrapper above does. A case that records or holds the page's requests installs its
     // wrapper here (`lib/live-traffic-cases.js`), so this stays the one way a page is opened.
@@ -160,8 +241,12 @@ async function openPage(port) {
       return null;
     },
     async close() {
-      try { await fetch(`http://127.0.0.1:${port}/json/close/${target.id}`); } catch (e) { /* Chrome already gone */ }
+      closing = true;
+      if (!lost) {
+        try { await fetch(`http://127.0.0.1:${port}/json/close/${target.id}`, { signal: AbortSignal.timeout(5000) }); } catch (e) { /* Chrome already gone */ }
+      }
       ws.close();
+      markClosed();
     },
   };
   return page;
