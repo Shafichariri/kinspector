@@ -143,8 +143,13 @@ checked nothing`. It says `n/a (why)` instead only where the shape cannot exist,
 from a source the scan's emptiness cannot have caused: the daemon's rows, its `/current`, or the
 page's whole-session state, never the elements scanned. `failures unfolded` is the one decided from
 the page: with no summarised line it is `n/a` only when no line is open either, because a line left
-open is the only way a long visit stops being summarised. A count compared with an independent truth
-(`route matches`, `signal tabs count`, the archive's `marker dividers`) is not an empty scan: at
+open is the only way a long visit stops being summarised. `expanded unfolded` opened the second
+station, which on the CI fixture is Home with no failed call, so it compared 0 failures with 0. It
+now opens the first visit holding a failure by the daemon's rows, split into visits by the probe
+itself as `route matches` is, and also fails when that line draws fewer failures than the daemon
+holds there; with no failure in the session it reads `n/a (no visit holds a failure)`. A count
+compared with an independent truth (`route matches`, `signal tabs count`, the archive's `marker
+dividers`) is not an empty scan: at
 zero it still asserts that nothing spurious was drawn. The live probe's verdicts are in
 `lib/scan-verdicts.js`; the stylesheet audits `min text size` and `hidden panes hide`, the shell's
 `self has kill btn`, `rail is navigation` and `route pages`, the archive probe's `daemon controls
@@ -155,7 +160,13 @@ failed one unless the page holds no scope. With KIN-55's leak put back, `failure
 failed. `expanded unfolded`, `every bar visible`, `now rows show age`, `self has kill btn`, the two
 audits, the archive's three lines and the scope bar readings were shown red with their shape taken
 out of the page, the export or the stylesheet text, and the live probe's other verdicts on stub
-pages (KIN-87's notes list which); the others rest on review.
+pages (KIN-87's notes list which); the others rest on review. PR #133 put the Chrome cases under the
+rule too: `shell <w> rail` (`lib/shell-cases.js`), `room 400 rows`' repeat marks, `room <w> toolbar
+fits` and `one row`, and `room 1000 tab never enters closed` (`lib/list-room-cases.js`), `traffic
+reaches` (`lib/live-traffic-cases.js`) and the top bar's `count` wording, `NO - found no word in
+#counts` (`lib/topbar-cases.js`). Each was shown red with its shape taken out of the page, except
+the socket half of `traffic reaches`, which rests on review: the case needs the live socket open
+before it can start.
 
 **The CI probe session is written by the daemon's own writer at CI time, and never committed.**
 `ProbeFixture.kt` builds it on the daemon's test classpath and `writeProbeFixture` runs it, through
@@ -716,7 +727,8 @@ numbers. Above 700px the `<wbr>`s are `display: none`, because Chrome breaks at 
 line, per character, on the `routes` session (a port, `[::1]`, a hyphenated label, a long segment):
 `stats 400 route breaks served` and `… export`, `stats 400 routes whole …` (nothing cut, document
 no wider than the window) and `stats 1440 routes one line served`. Each found-nothing branch fails
-and was shown failing with the servers drawn under another class. The breaks were red on main
-(29 breaks, `http://127.0.0.1:808|0`), with main's stylesheet and with the hold removed; `whole`
-was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
+and was shown failing with the servers drawn under another class. The breaks were red on main,
+with main's stylesheet and with the hold removed. How many breaks main makes depends on the fonts
+Chrome finds (29 on one machine, 30 on another); the break that reproduces is
+`http://127.0.0.1:808|0`. `whole` was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
 route pieces` holds the cut itself, red with brackets ignored and with the leading `/` cut.
