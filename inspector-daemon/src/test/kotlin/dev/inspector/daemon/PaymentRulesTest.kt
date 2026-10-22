@@ -336,7 +336,7 @@ class PaymentRulesTest {
         val report = report(*paymentsSession().toTypedArray())
         assertEquals(
             listOf(r1 to 1, r2 to 1, r3 to 1, r4 to 1, r5 to 5, r6 to 1),
-            report.rules.map { it.id to it.count },
+            report.rules.filter { it.category == "payment" }.map { it.id to it.count },
         )
         assertEquals(listOf(10, 3, 6, 1), listOf(report.findingCount, report.high, report.medium, report.info))
         assertEquals(18, report.total)

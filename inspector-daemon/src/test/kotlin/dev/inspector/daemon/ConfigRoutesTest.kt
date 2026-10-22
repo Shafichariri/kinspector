@@ -197,7 +197,7 @@ class ConfigRoutesTest {
                 "payment.duplicate-mutation", "payment.key-reused-body-changed", "payment.retry-without-key",
                 "payment.ambiguous-resubmit", "payment.key-missing-payment-path", "payment.retry-with-key",
             ),
-            rules.map { it.getValue("id").jsonPrimitive.content },
+            rules.map { it.getValue("id").jsonPrimitive.content }.filter { it.startsWith("payment.") },
         )
         assertEquals(
             json(

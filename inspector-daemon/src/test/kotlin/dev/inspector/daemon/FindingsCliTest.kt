@@ -89,6 +89,6 @@ class FindingsCliTest {
         ).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
         val stderr = process.errorStream.bufferedReader().readText()
         assertEquals(1, process.waitFor())
-        assertEquals("inspector: unknown category 'pay'. Use one of: payment.", stderr.trim())
+        assertEquals("inspector: unknown category 'pay'. Use one of: payment, sensitive.", stderr.trim())
     }
 }

@@ -101,7 +101,7 @@ class FindingsToolTest {
 
     @Test
     fun `an unknown category, an unknown argument and an unknown session are results, not errors`() {
-        assertEquals("unknown category 'pay'. Use one of: payment.", failure("""{"session":"payments","category":"pay"}"""))
+        assertEquals("unknown category 'pay'. Use one of: payment, sensitive.", failure("""{"session":"payments","category":"pay"}"""))
         assertContains(failure("""{"session":"payments","filter":"status:200"}"""), "unknown argument for 'list_findings': filter")
         assertContains(failure("""{"session":"nope"}"""), "no session 'nope'")
     }

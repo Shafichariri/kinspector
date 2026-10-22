@@ -195,8 +195,9 @@ object SensitiveValues {
             custom.any { it.enabled && shapes(text, it).isNotEmpty() }
 
     /**
-     * A query or form parameter whose name says it carries a secret, compared normalised and whole,
-     * so `api_key` and `X-Api-Key` are `apikey` while `monkey` is not.
+     * A parameter or header name that says it carries a secret, compared normalised and whole, so
+     * `api_key` and `Api-Key` are `apikey` while `monkey` is not. `xapikey` is listed on its own
+     * because `X-Api-Key` is the usual header for an API key; no other prefix is stripped.
      */
     fun isSecretName(name: String): Boolean = SensitiveConfig.normalise(name) in SECRET_NAMES
 
@@ -372,7 +373,7 @@ object SensitiveValues {
 
     private val SECRET_NAMES = setOf(
         "token", "accesstoken", "idtoken", "refreshtoken", "auth", "authorization", "password", "passwd",
-        "pwd", "secret", "clientsecret", "apikey", "accesskey", "secretkey", "privatekey", "sessionid",
+        "pwd", "secret", "clientsecret", "apikey", "xapikey", "accesskey", "secretkey", "privatekey", "sessionid",
     )
 
     /** Widely published test card numbers: real-looking, Luhn-valid, and never anybody's card. */

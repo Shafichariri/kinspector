@@ -534,6 +534,29 @@ and tells the payment rules what an idempotency key and a payment path look like
   reply's `configError`. A `findings` that is not an object also makes the file malformed for every
   other key, as any wrong-typed key does.
 
+#### `findings.sensitive` — first-party hosts, field names and your own value rules
+
+```json
+{ "findings": { "sensitive": {
+    "firstPartyHosts": ["api.example.invalid", "*.example.invalid"],
+    "fieldNames": { "add": ["staffNumber"], "remove": ["firstName"] },
+    "valueRules": [ { "id": "member-id", "label": "Member number", "shape": "AA-######-#",
+                      "check": "luhn", "severity": "medium", "enabled": true, "fields": ["memberId"] } ] } } }
+```
+
+- **`firstPartyHosts`**: your app's own hosts, an exact name or a leading `*.` for its subdomains
+  (which does not match the bare domain), at most 200. A request carrying sensitive data to any
+  other host is raised one step. **Empty, the default, raises nothing for where data was sent**, and
+  the sensitive coverage line says so: no rule can tell your backend from an analytics host.
+- **`fieldNames`**: `add` puts a name in the identity class; `remove` drops a shipped one. Names are
+  compared lowercased with `_`, `-`, `.` and spaces removed.
+- **`valueRules`**: up to 50 of your own value rules, each reported as `sensitive.custom.<id>`.
+  `shape` is 4 to 40 characters: `#` a digit, `A` a letter, `X` either, anything else itself; it is
+  never a regular expression, and `\^$*+?()[]{}|` are refused. `check` is `none`, `luhn` or
+  `mod97` (ISO 7064 over the match's letters and digits). `fields` limits the rule to values under
+  those names. A custom rule takes its own `severity` (default `medium`) and `enabled` (default
+  `true`); `findings.rules` refuses a `sensitive.custom.*` id.
+
 #### `findingDismissals` — findings set aside on purpose, with the reason
 
 ```json
@@ -801,7 +824,7 @@ inspector findings --session latest --category payment
 ```
 
 What the daemon's rules flag in a session, worked out from every call when you ask and never
-stored. `category` narrows to one family (`payment` for now); an unknown one is a 400 naming those
+stored. `category` narrows to one family (`payment` or `sensitive`); an unknown one is a 400 naming those
 there are. `limit` defaults to 1000, at most 5000. There is no `filter`: a finding is about calls
 next to each other, and hiding one of them would make the rest look safe. `includeDismissed=true`
 also lists findings set aside in `findingDismissals` (§6), each with `dismissed.reason`.
@@ -832,9 +855,37 @@ redirect hop is not a retry, and a failure that never reached a server (`Unknown
 `ConnectException` and the like) is not an ambiguous resubmit. Rules and their settings are the
 `findings` key in §6.
 
+The sensitive-data rules **detect, and never change what is captured**. They read the URL path and
+query, request and response bodies (JSON walked by path; form bodies by name; text, XML and
+untyped UTF-8 bodies as text), and request headers only for credentials sent over `http`. **A finding
+never shows the value**: a card shows `•••• 4242`, an IBAN `GB82 •••• 5432`, a JWT `•••• HS256`,
+everything else `••••`; a JSON key or route segment that is itself a value is written `•`.
+
+| Rule id | Fires when | Severity |
+|---|---|---|
+| `sensitive.card-number` | 13–19 digits, first digit 2–6, passing Luhn; a JSON number only under a card field name. The 11 published test numbers are `info` and never raised | medium |
+| `sensitive.iban` | An IBAN of its country's registry length that passes mod-97 | medium |
+| `sensitive.jwt-in-url` | A JWT in the URL path or query | high |
+| `sensitive.secret-in-url` | A query parameter named `token`, `password`, `api_key`, `secret`, `session_id` and the like, with a value | high |
+| `sensitive.credentials-over-http` | Over plain `http`: an `Authorization`, `Cookie` or key header, a `Set-Cookie`, or a secret in the URL or a password field | high; medium to a private address; info to loopback and `10.0.2.2`/`10.0.3.2` |
+| `sensitive.email`, `sensitive.phone` | An email address; a phone number in `+` form. **Off** unless turned on in `findings.rules` | info |
+| `sensitive.field.secret` | A field or parameter named like a password, PIN, OTP or secret | info |
+| `sensitive.field.payment` | Named like a card number, CVV, IBAN or account number | medium |
+| `sensitive.field.identity` | Named like a national id, tax or passport number, or date of birth, or a name in `fieldNames.add` | medium |
+| `sensitive.field.name` | Named like a first, last or full name | info |
+| `sensitive.custom.<id>` | One of your `valueRules` | its own |
+
+A value in the URL is raised one step, and a request to a host outside a non-empty
+`firstPartyHosts` one more, capped at high; a response is never raised for its host. One finding
+covers a rule, route, location and path, with array indices as `[*]`, and shows up to five rows'
+evidence. A value rule beats a secret parameter name, which beats a field name, so
+`"card_number": "4242…"` is one card finding. `coverage.sensitive.line` says how many bodies could
+not be scanned (not captured, truncated, binary, over the 1 MiB scan limit), so an empty list is
+never mistaken for a scanned one.
+
 Every export carries them: the JSON and HTML as `findings`, the whole session's report with no
 category or limit; the Markdown as a Findings section before the timeline; the HAR as a note on
-each entry a finding names.
+each entry a finding names. A dismissed finding is listed in every form with its reason.
 
 ---
 

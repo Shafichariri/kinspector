@@ -45,9 +45,9 @@ class FindingSettingsTest {
                 "payment.retry-without-key" to "high", "payment.ambiguous-resubmit" to "medium",
                 "payment.key-missing-payment-path" to "medium", "payment.retry-with-key" to "info",
             ),
-            FindingRuleCatalog.ALL.map { it.id to it.defaultSeverity.key },
+            FindingRuleCatalog.PAYMENT_RULES.map { it.id to it.defaultSeverity.key },
         )
-        assertEquals(listOf("payment"), FindingRuleCatalog.CATEGORIES)
+        assertEquals(listOf("payment", "sensitive"), FindingRuleCatalog.CATEGORIES)
     }
 
     @Test

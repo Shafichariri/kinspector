@@ -317,6 +317,54 @@ hop of one call. A failure that never reached a server (`UnknownHostException`, 
 and three more, by class) is not an ambiguous resubmit. `PaymentRulesTest` pins each trigger and
 boundary.
 
+**Sensitive data is detected in the daemon when findings are read, and detection never changes
+what capture keeps.** Redaction stays off by default for the reason `capture.md` gives, and the
+detector is a smoke detector beside it, not a sprinkler. It is one `FindingSource`, folded with
+the findings cache from every row through `IndexCursor`; nothing runs on the device or on ingest,
+and the page computes nothing, so there is no web mirror. Value rules are validated, never bare
+patterns: a card number is 13 to 19 digits starting 2 to 6 that pass Luhn, an IBAN has its
+country's ISO 13616 length and passes mod-97, a JWT's first segment decodes to a header with
+`alg`. A JSON number is not a card number unless its key names one, because 13 to 19 digit
+integers in JSON are ids and timestamps and Luhn passes one in ten. Field names match normalised
+(`first-name` is `firstname`), whole below six characters so `pin` never matches `shipping`, as a
+suffix from six. Secret parameter and header names match whole, with `xapikey` listed beside
+`apikey` because `X-Api-Key` is the usual way to send an API key (decided 2026-10-22); no other
+prefix is stripped. A user's own value rule is a shape (`#`, `A`, `X`, literals) with an optional
+checksum, never a regular expression, for the reason `routeTemplates` has none. A truncated or
+unparseable body gets value rules only, because a value found in a prefix is present while a name
+not found there proves nothing, and `coverage.sensitive` counts every body that existed and was
+not scanned, so "no findings" never stands in for "not looked". These are heuristics; among what
+they miss: a card number sent as a JSON number under an unrelated key, field names in a truncated
+body, a key holding `.` or `[`, the first of a duplicated JSON key, a value nested deeper than
+`JsonPaths.walk`'s 32 levels, a second value in a text body that already gave one, and anything in a
+header but the credentials sent over `http`. `SensitiveValuesTest`, `SensitiveFieldNamesTest` and
+`SensitiveSourceTest` pin each rule and each miss.
+
+**No matched value leaves the scanner: a masked hint is the only trace, in the cache, every
+reply, MCP and every export.** The archive already holds unredacted credentials, so the danger is
+not the archive: it is a findings list pasted into a chat, a ticket or an export for another team
+that names a secret in plain text beside the word "secret". `SensitiveMask.hint` is the one place a
+value is read after the match. A card keeps its last four, an IBAN its country, check digits and
+last four, a JWT its `alg`; everything else is `••••` with no length, because a password's length
+is part of it. Every hint is bounded so it passes the findings engine's own guard (at least four
+`•`, at most ten other characters), which is the second line, never the first. A key or parameter
+name that itself matches a value rule is written `•` in the path, and so is a route segment: the
+route heuristic folds digits and long tokens to `{id}`, but a JWT holds dots and an IBAN has no
+lowercase, so either would otherwise print in the finding's `route`. The source asks the route rule
+directly rather than the session's memo, whose key is the raw path.
+`SensitiveLeakTest` plants a unique secret per rule and location and searches every serialised
+surface, the cache's own state included; it was shown red with the mask returning the value, with
+a note that carried it, with key masking removed, with route masking removed and with the memo.
+
+**Severity rises for where data was sent, never for where it came from.** One step for a value in
+a URL or query, one for a request to a host outside a non-empty `firstPartyHosts`, capped at high;
+response evidence is never raised for its host, because that host sent it to the app. An empty
+list raises nothing and the reply's coverage line says so, since no rule can tell the backend from an
+analytics host without guessing. A `findings.rules` severity sets the base and the raises still
+apply; `enabled: false` is the way to silence a rule. Published test card numbers and `http` to
+loopback or an emulator's host alias are `info` and never raised. `SensitiveSourceTest` pins it, red
+with the raise applied to response bodies.
+
 **A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization
 quotes a class's serial name in `MissingFieldException`, and a serial name defaults to the fully
 qualified class name. The replay and signal-pull routes echo that message into their 400 body, and

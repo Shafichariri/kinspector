@@ -78,7 +78,7 @@ private fun configReply(config: DaemonConfig, file: ConfigFile, state: ConfigFil
                             put("category", rule.category)
                             put("categoryTitle", rule.categoryTitle)
                             put("title", rule.title)
-                            put("enabled", override?.enabled ?: true)
+                            put("enabled", override?.enabled ?: rule.defaultEnabled)
                             put("severity", (override?.severity ?: rule.defaultSeverity).key)
                             put("defaultSeverity", rule.defaultSeverity.key)
                         })
