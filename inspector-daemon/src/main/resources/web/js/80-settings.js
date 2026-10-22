@@ -252,7 +252,8 @@ function findingsConfigPatch() {
     const severity = document.querySelector(`#findings-config [data-rule-severity="${rule.id}"]`);
     if (!on || !severity) continue;
     const entry = {};
-    if (!on.checked) entry.enabled = false;
+    // Against the rule's own default: email and phone ship off, so turning one on is the entry.
+    if (on.checked !== (rule.defaultEnabled !== false)) entry.enabled = on.checked;
     if (severity.value !== rule.defaultSeverity) entry.severity = severity.value;
     if (Object.keys(entry).length) rules[rule.id] = entry;
     else delete rules[rule.id];

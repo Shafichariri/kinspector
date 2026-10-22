@@ -202,10 +202,13 @@ class ConfigRoutesTest {
         assertEquals(
             json(
                 """{"id":"payment.duplicate-mutation","category":"payment","categoryTitle":"Payment safety",""" +
-                    """"title":"Duplicate mutation","enabled":true,"severity":"high","defaultSeverity":"high"}""",
+                    """"title":"Duplicate mutation","enabled":true,"defaultEnabled":true,"severity":"high","defaultSeverity":"high"}""",
             ),
             rules.first(),
         )
+        // A rule that ships off says so, so the page writes an entry only when someone turns it on.
+        val email = rules.single { it.getValue("id").jsonPrimitive.content == "sensitive.email" }
+        assertEquals(listOf("false", "false"), listOf(email.getValue("enabled").toString(), email.getValue("defaultEnabled").toString()))
         assertEquals(
             json(
                 """{"idempotencyHeaders":["Idempotency-Key","X-Idempotency-Key"],""" +
