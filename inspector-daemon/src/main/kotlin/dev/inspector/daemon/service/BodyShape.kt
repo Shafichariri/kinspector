@@ -3,6 +3,9 @@ package dev.inspector.daemon.service
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.model.NetworkTransaction
 import java.nio.file.Path
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 /**
  * One direction of a call. [key] is the string `SessionRepository.readBody` takes and the `side` the
@@ -95,8 +98,65 @@ object BodyEvidence {
     }
 }
 
-/** JSON paths in the Redactor's own syntax (`$`, `$.key`, `$.items[2]`). */
+/**
+ * JSON paths in the Redactor's own syntax (`$`, `$.key`, `$.items[2]`).
+ *
+ * The names and signatures here are a contract between the session diff and sensitive-data
+ * detection: both read the same paths the same way, so "skipped because redacted" and "not compared
+ * because redacted" cannot disagree. Do not rename them.
+ */
 object JsonPaths {
+
+    /** How deep [walk] goes by default: deeper elements are not visited. */
+    const val MAX_DEPTH = 32
+
+    /**
+     * Visits [element] and everything under it, each with its concrete path exactly as the Redactor
+     * writes it after `body:<side>:`: `$` for the root, `$.key` for a member (the key as written),
+     * `$.items[2]` for an array element. So a walked path and a `redacted[]` entry compare as strings.
+     *
+     * An element more than [maxDepth] steps below the root is not visited. Returns false when
+     * anything was left out for that reason, so a caller can say it did not see the whole body.
+     */
+    fun walk(element: JsonElement, maxDepth: Int = MAX_DEPTH, visit: (path: String, element: JsonElement) -> Unit): Boolean =
+        walkFrom(element, "$", 0, maxDepth, visit)
+
+    private fun walkFrom(
+        element: JsonElement,
+        path: String,
+        depth: Int,
+        maxDepth: Int,
+        visit: (String, JsonElement) -> Unit,
+    ): Boolean {
+        visit(path, element)
+        val children: List<Pair<String, JsonElement>> = when (element) {
+            is JsonObject -> element.entries.map { (key, value) -> "$path.$key" to value }
+            is JsonArray -> element.mapIndexed { index, value -> "$path[$index]" to value }
+            else -> return true
+        }
+        if (children.isEmpty()) return true
+        if (depth >= maxDepth) return false
+        var whole = true
+        for ((childPath, child) in children) {
+            if (!walkFrom(child, childPath, depth + 1, maxDepth, visit)) whole = false
+        }
+        return whole
+    }
+
+    /** [path] with every array index written `[*]`: `$.items[3].id` is `$.items[*].id`. */
+    fun group(path: String): String = INDEX.replace(path, "[*]")
+
+    /**
+     * True when [path] is one of [prefixes] or lies under one: under means the next character after
+     * the prefix starts a member (`.`) or an index (`[`). A bare `startsWith` would put
+     * `$.cardholder` under `$.card`, and a redacted card would hide its holder's name.
+     */
+    fun isAtOrUnder(path: String, prefixes: Collection<String>): Boolean = prefixes.any { prefix ->
+        path == prefix ||
+            (path.length > prefix.length && path.startsWith(prefix) && (path[prefix.length] == '.' || path[prefix.length] == '['))
+    }
+
+    private val INDEX = Regex("\\[\\d+]")
 
     /**
      * The paths of [side] of [txn] that `redacted[]` says capture replaced, as the Redactor wrote them
