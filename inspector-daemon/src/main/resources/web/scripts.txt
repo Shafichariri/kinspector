@@ -24,6 +24,7 @@ js/80-settings.js
 js/85-processes.js
 js/90-sessions.js
 js/95-stats.js
+js/96-diff.js
 js/97-findings.js
 js/98-findings-dismiss.js
 js/99-init.js

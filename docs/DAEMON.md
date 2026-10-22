@@ -857,7 +857,9 @@ At most 500 bodies per route and side and 256 MB per diff are read; a body past 
 
 `limit` (default 1000, at most 5000) cuts `routes` after the order, and `unchanged=false` drops
 routes with no change; `counts` and `routeCount` count them all. The MCP tool `diff_sessions`
-takes the same arguments, with `unchanged` off and `limit` 50 by default.
+takes the same arguments, with `unchanged` off and `limit` 50 by default. The web UI's Diff page
+is the same table; open it from the rail, from **compare (2)** on the Sessions page with two
+sessions ticked, or from a session row's **diff**.
 
 ### Findings
 

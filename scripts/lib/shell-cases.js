@@ -8,9 +8,9 @@
  * connection controls each inside the window, hit by `elementFromPoint` at their centre
  * and focusable (`controls`); the picker's start time whole and inside its face (`picker time`);
  * every view a visible tab or an item of a visible `views ▾` with the tab bar not overflowing
- * (`tabs reachable`); each rail link inside the window (`rail`); and the Stats, Findings, Sessions,
- * Processes and Settings pages never scrolling the window sideways nor clipping themselves (`page
- * <name> fits`). The Findings page again on the payments session, whose messages, routes and
+ * (`tabs reachable`); each rail link inside the window (`rail`); and the Stats, Findings, Diff,
+ * Sessions, Processes and Settings pages never scrolling the window sideways nor clipping themselves
+ * (`page <name> fits`), Diff once its comparison or the daemon's refusal is drawn. The Findings page again on the payments session, whose messages, routes and
  * evidence are the longest text it draws (`findings <w> payments fits`). Once: rail clicks, then Back (`shell back`). And, in measure-web-ui.js's `first` group,
  * how long the Stats page takes to draw its first row on the 160,000-call session, reported and not
  * judged (`stats huge first draw`): the daemon folds the whole session on a cold read.
@@ -33,7 +33,7 @@ const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 const WIDTHS = [1440, 1000, 600, 400];
 const CONTROLS = ['#session-picker', '#live-btn', '#conn'];
 // Stats draws fifteen columns; its table scrolls in its own box, so the page must still fit.
-const PAGES = ['stats', 'findings', 'sessions', 'processes', 'settings'];
+const PAGES = ['stats', 'findings', 'diff', 'sessions', 'processes', 'settings'];
 
 const READ = `(() => {
   const inside = (r) => r.left >= -0.5 && r.right <= innerWidth + 0.5 && r.top >= -0.5 && r.bottom <= innerHeight + 0.5;
@@ -127,6 +127,8 @@ async function shell(page, url, session) {
     for (const name of PAGES) {
       await page.ev(`location.hash = '#/${name}'`);
       const shown = await page.waitFor(`document.getElementById('page-${name}') && !document.getElementById('page-${name}').hidden`, 3000);
+      // A cold diff reads both sessions' bodies; its table is what can widen the page.
+      if (name === 'diff') await page.waitFor(`document.querySelector('#diff-summary [data-session]') || !document.getElementById('diff-error').hidden`, 15000);
       await sleep(500);
       const p = shown === null ? null : await page.ev(PAGE_FITS(name));
       const ok = Boolean(p) && p.doc <= p.width && p.page <= p.client + 1;

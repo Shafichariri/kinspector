@@ -43,7 +43,10 @@
  *     since changed;
  *   - the polish rules: an icon-only control is an SVG in a box sized by one rule from `--target-min`,
  *     a page document's buttons are as tall and its prose stops at `--prose-max`; and the page keys,
- *     `g` and a letter for each page `PAGES` offers, `g g` the top, and no key while typing.
+ *     `g` and a letter for each page `PAGES` offers, `g g` the top, and no key while typing;
+ *   - the Diff page drawing canned replies as sent: every kind in the reply's order with the loud mark,
+ *     a direction the daemon could not compare as its `why` and never "removed", a latency verdict
+ *     printed rather than recomputed, and of two reads the one sent last drawn.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`
@@ -73,6 +76,7 @@ const { checkShell } = require('./lib/shell-checks');
 const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
 const { checkFindingsRefresh } = require('./lib/findings-refresh-checks');
 const { checkPolish } = require('./lib/polish-checks');
+const { checkDiffRender } = require('./lib/diff-render-checks');
 const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow, auditOverviewBand } = require('./lib/layout-audits');
 
 const results = [];
@@ -165,6 +169,9 @@ async function main() {
 
   console.error('--- polish ---');
   for (const [label, value] of checkPolish(scripts, styles)) report(label, value);
+
+  console.error('--- diff ---');
+  for (const [label, value] of await checkDiffRender(scripts)) report(label, value);
 
   const failed = results.filter((ok) => !ok).length;
   console.error(`${results.length} checks, ${failed} failed`);

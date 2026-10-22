@@ -4,10 +4,8 @@
 /**
  * The pages the rail offers, in rail order. `live` is a page that sends something to the daemon or
  * reads the machine it runs on, so an export, which has neither, offers Traffic, Stats and Findings,
- * and every other route lands on Traffic.
- *
- * Diff gets its row in the item that builds its page, after Findings: a rail entry leading to an
- * empty page is a dead end.
+ * and every other route lands on Traffic. Diff is live because an export holds one session and a
+ * diff needs two.
  *
  * `enter`, where a page has one, runs each time the page becomes shown, in an export too. It is an
  * arrow, never `enter: statsEnter`: this table is built when this file loads, before a later file
@@ -17,14 +15,15 @@ const PAGES = [
   { id: 'traffic', label: 'Traffic', live: false, enter: () => findingsReload() },
   { id: 'stats', label: 'Stats', live: false, enter: () => statsEnter() },
   { id: 'findings', label: 'Findings', live: false, enter: () => findingsEnter() },
+  { id: 'diff', label: 'Diff', live: true },
   { id: 'sessions', label: 'Sessions', live: true },
   { id: 'processes', label: 'Processes', live: true },
   { id: 'settings', label: 'Settings', live: true },
 ];
 
 /**
- * `#/traffic[/<view>]`, `#/stats`, `#/findings`, `#/sessions`, `#/processes` or `#/settings`, each
- * optionally ending `?session=<id>`, as `{ page, view, session, known }`. Pure, and the only reader of
+ * `#/traffic[/<view>]`, `#/stats`, `#/findings`, `#/diff`, `#/sessions`, `#/processes` or `#/settings`,
+ * each optionally ending `?session=<id>`, as `{ page, view, session, known }`. Pure, and the only reader of
  * the hash's shape: nothing else parses `location.hash`.
  *
  * A page this build does not have is Traffic with `known: false`, so the caller rewrites the address
@@ -34,7 +33,8 @@ const PAGES = [
  * `#/txn/<id>` is one call on the whole page, `{ page: 'txn', …, txn }`: the Traffic page with its
  * detail pane given the width (`showTxnFull`), so it is not a rail page and not in `PAGES`. Without
  * an id it names nothing, and is unknown. `#/findings?id=<findingId>` adds `id`, the one finding the
- * page marks; it is absent from every other page's route.
+ * page marks; it is absent from every other page's route. `#/diff?a=<id>&b=<id>` adds `a` and `b`, the
+ * two sessions compared, each null when absent: `#/diff` alone is the latest against its previous run.
  */
 function parseRoute(hash) {
   const text = String(hash || '').replace(/^#/, '');
@@ -49,15 +49,17 @@ function parseRoute(hash) {
   if (page === 'txn' && parts[1]) return { page: 'txn', view: null, session, known: true, txn: parts[1] };
   if (!PAGES.some((p) => p.id === page)) return { page: 'traffic', view: null, session, known: false };
   if (page === 'findings') return { page, view: null, session, known: true, id: query.get('id') || null };
+  if (page === 'diff') return { page, view: null, session, known: true, a: query.get('a') || null, b: query.get('b') || null };
   const view = page === 'traffic' && parts[1] ? parts[1] : null;
   return { page, view, session, known: true };
 }
 
 /** The address of [route]; `parseRoute(routeHash(r))` gives back `r`. Pure. */
-function routeHash({ page = 'traffic', view = null, session = null, txn = null, id = null } = {}) {
+function routeHash({ page = 'traffic', view = null, session = null, txn = null, id = null, a = null, b = null } = {}) {
   const path = page === 'txn' ? `#/txn/${encodeURIComponent(txn)}`
     : page === 'traffic' && view ? `#/traffic/${encodeURIComponent(view)}` : `#/${page}`;
-  const query = [page === 'findings' && id && `id=${encodeURIComponent(id)}`, session && `session=${encodeURIComponent(session)}`];
+  const query = [page === 'findings' && id && `id=${encodeURIComponent(id)}`, page === 'diff' && a && `a=${encodeURIComponent(a)}`,
+    page === 'diff' && b && `b=${encodeURIComponent(b)}`, session && `session=${encodeURIComponent(session)}`];
   return query.some(Boolean) ? `${path}?${query.filter(Boolean).join('&')}` : path;
 }
 
@@ -129,6 +131,8 @@ async function applyRoute() {
   } else if (route.page === 'findings') {
     findingsRender();   // `?id=` changed on the page shown: drawn again from the report held, not read again
   }
+  // Not an `enter`: a picker changes `a` or `b` on the page shown, which enters nothing, and must read.
+  if (route.page === 'diff') diffRoute(route, entering);
 
   if (route.session && route.session !== state.sessionId) {
     if (!state.sessionsLoaded) state.sessionId = route.session;
@@ -184,9 +188,9 @@ function renderRail() {
 // --- page keys ---------------------------------------------------------------
 
 /**
- * `g` then a letter goes to a page; `g g` is the top of the list. Diff holds its letter before its page
- * exists: a letter whose page is not in `PAGES` does nothing and is left out of the legend
- * (`pageKeyAvailable`), so a page that arrives needs no key work of its own, as Findings needed none. `s` is Stats
+ * `g` then a letter goes to a page; `g g` is the top of the list. A letter whose page is not in `PAGES`
+ * does nothing and is left out of the legend (`pageKeyAvailable`), so a page that arrives needs no key
+ * work of its own, as Findings and Diff needed none. `s` is Stats
  * because the roadmap's example is `g s`, Sessions is `a` because that page manages the archive, and
  * Settings is `,` after the platforms' ⌘, for preferences.
  */

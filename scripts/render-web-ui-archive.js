@@ -256,6 +256,17 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     window.location.hash === '#/traffic' && !doc.getElementById('page-traffic').hidden && doc.getElementById('page-processes').hidden,
     `${window.location.hash}, traffic ${doc.getElementById('page-traffic').hidden ? 'hidden' : 'shown'}`,
   );
+  // A diff needs two sessions and an export holds one: the rail does not offer it, and its address,
+  // with a pair named, lands on Traffic like any page the export lacks.
+  window.location.hash = '#/diff?a=x&b=y';
+  await sleep(300);
+  check(
+    'diff hidden in export',
+    Boolean(rail('diff')) && hiddenByCss(rail('diff')) && window.location.hash === '#/traffic'
+      && !doc.getElementById('page-traffic').hidden && doc.getElementById('page-diff').hidden,
+    rail('diff') ? `rail link ${hiddenByCss(rail('diff')) ? 'hidden' : 'shown'}; #/diff?a=x&b=y went to ${window.location.hash}`
+      : 'found no Diff rail link, so this checked nothing',
+  );
   check('filter disabled', doc.getElementById('filter').disabled);
 
   // A call's own page reads the call from the export's data, with no request — every one is

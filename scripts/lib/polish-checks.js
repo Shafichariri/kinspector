@@ -128,19 +128,18 @@ function auditPageDoc(styles, selector, property, name, floor) {
 }
 
 /**
- * The real `js/08-routes.js` with `ARCHIVE` as given and [rows] changed: `'diff'` adds a stub row for
- * Diff, whose page is not built yet, and `'drop'` takes the real Findings row out, so a letter with
- * no row is still tried on a letter the build has a page for.
+ * The real `js/08-routes.js` with `ARCHIVE` as given and [drop], a page id or false, taken out of
+ * `PAGES`: a letter with no row is tried on letters the build has pages for, since every letter in
+ * `PAGE_KEYS` now has one. Diff's letter was tried over a stub row until its page was built.
  */
-function routes(scripts, archive, rows) {
+function routes(scripts, archive, drop) {
   const context = runFile(scripts, 'js/08-routes.js', { ARCHIVE: archive });
   for (const name of ['readPageKey', 'pageKeyAvailable', 'typingTarget']) {
     if (typeof context[name] !== 'function') throw new HarnessError(`${name} is not declared in js/08-routes.js; update polish-checks.js`);
   }
   // `PAGES` is a `const`, in the script scope every file run in this context shares, so a second
-  // script reaches it as the pages' own items will: a row in the table, and nothing else.
-  if (rows === 'diff') new vm.Script(`PAGES.push({ id: 'diff', label: 'Diff', live: true })`).runInContext(context);
-  if (rows === 'drop') new vm.Script(`PAGES.splice(PAGES.findIndex((p) => p.id === 'findings') >>> 0, 1)`).runInContext(context);
+  // script reaches it: a row out of the table, and nothing else.
+  if (drop) new vm.Script(`PAGES.splice(PAGES.findIndex((p) => p.id === ${JSON.stringify(drop)}) >>> 0, 1)`).runInContext(context);
   return context;
 }
 
@@ -158,7 +157,7 @@ function checkPageKeys(scripts) {
   };
   const g = (second, at = 100) => [['g', 0], [second, at]];
   const cases = [
-    // [archive, rows changed, keys, page due, top due, what it shows]
+    // [archive, the page whose row is taken out, keys, page due, top due, what it shows]
     [null, false, g('s'), 'stats', false, 'g s'],
     [null, false, g('g'), null, true, 'g g'],
     [null, false, g('s', 1501), null, false, 'g, 1501 ms, s'],
@@ -169,19 +168,19 @@ function checkPageKeys(scripts) {
     [null, false, g('a'), 'sessions', false, 'g a'],
     [null, false, g('p'), 'processes', false, 'g p'],
     [null, false, g(','), 'settings', false, 'g ,'],
-    [null, false, g('d'), null, false, 'g d with no diff row'],
+    [null, false, g('d'), 'diff', false, 'g d'],
+    [null, 'diff', g('d'), null, false, 'g d with the diff row taken out'],
     [null, false, g('f'), 'findings', false, 'g f'],
-    [null, 'drop', g('f'), null, false, 'g f with the findings row taken out'],
-    [null, 'diff', g('d'), 'diff', false, 'g d over a stub row'],
+    [null, 'findings', g('f'), null, false, 'g f with the findings row taken out'],
     [{}, false, g('a'), null, false, 'g a in an export'],
     [{}, false, g('p'), null, false, 'g p in an export'],
     [{}, false, g('s'), 'stats', false, 'g s in an export'],
     [{}, false, g('f'), 'findings', false, 'g f in an export'],
-    [{}, 'diff', g('d'), null, false, 'g d over a stub row in an export'],
+    [{}, false, g('d'), null, false, 'g d in an export, where Diff is live'],
   ];
   const wrong = [];
-  for (const [archive, rows, keys, page, top, what] of cases) {
-    const got = run(routes(scripts, archive, rows), keys);
+  for (const [archive, drop, keys, page, top, what] of cases) {
+    const got = run(routes(scripts, archive, drop), keys);
     if (got.page !== page || got.top !== top) wrong.push(`${what} gave ${JSON.stringify({ page: got.page, top: got.top })}, not ${JSON.stringify({ page, top })}`);
   }
   // The second key is spent whatever it is, and a lone key with no prefix is the list's.
@@ -190,7 +189,7 @@ function checkPageKeys(scripts) {
   if (!spent.consumed || spent.pending !== null) wrong.push(`g j left ${JSON.stringify(spent)}, where the j is spent and the prefix cleared`);
   const lone = run(plain, [['j', 0]]);
   if (lone.consumed) wrong.push('j with no prefix was taken from the list');
-  return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${cases.length} sequences, live and exported, with a stub Diff row and with the Findings row taken out)`;
+  return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${cases.length} sequences, live and exported, and with the Diff and the Findings rows taken out)`;
 }
 
 /** `typingTarget` is every element that takes typing, and nothing that does not. */
