@@ -9,6 +9,10 @@
  * a box at least 24x24, its SVG at least 14x14 (the row `✕`, which is text, at least 14px), and is
  * what `elementFromPoint` finds at its centre (`polish <w> icon targets <where> <scheme>`).
  *
+ * At 1440 and 400, served and exported, `#/txn/<id>` opened by its address: `← traffic` is inside the
+ * window, at least 24px tall and hit at its centre, and a click there leaves the page (`polish <w> txn
+ * back <where>`).
+ *
  * Served, at 1440 and 400, on the Stats, Findings, Sessions, Processes and Settings pages: every drawn `.btn` is
  * at least 24px tall (`polish <w> page targets`); the density select is at least its longest
  * option's text plus 20px for the chevron, measured in the select's own font (`polish <w> density
@@ -340,9 +344,61 @@ async function settingsFirstLoad(page, url, rows) {
     value: bad.length ? 'not the session\'s' : 'the session\'s', detail: seen.map(said).join('; ') });
 }
 
+// `← traffic` on the call's page as drawn: its box against the window, and what a pointer at its centre finds.
+const TXN_BACK_READ = `(() => {
+  const e = document.getElementById('txn-back');
+  if (!e || !e.getClientRects().length || getComputedStyle(e).visibility === 'hidden') return { drawn: false, page: document.getElementById('panes').classList.contains('txn-full') };
+  const r = e.getBoundingClientRect();
+  const x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2;
+  const at = document.elementFromPoint(x, y);
+  return { drawn: true, l: r.left, t: r.top, r: r.right, b: r.bottom, w: innerWidth, h: innerHeight, x, y,
+    hit: Boolean(at) && (at === e || e.contains(at)), text: e.textContent.trim() };
+})()`;
+
+/**
+ * `#/txn/<id>` opened by its address, as a new tab opens it, at 1440 and 400, served and exported:
+ * `← traffic` is drawn inside the window, at least `--target-min` tall, and what a pointer at its
+ * centre finds; a mouse click there leaves for the session's list (`polish <w> txn back <where>`).
+ * jsdom presses it in both of Escape's cases (`txn back`, `txn back in export`); only a browser can
+ * say it is on screen and on top.
+ */
+async function txnBack(page, url, rows) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polish-txn-'));
+  const file = path.join(dir, 'export.html');
+  try {
+    fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
+    for (const [where, base] of [['served', url], ['export', `file://${file}`]]) {
+      for (const width of [1440, 400]) {
+        const key = `polish ${width} txn back ${where}`;
+        await load(page, `${base}#/traffic/network`, width);
+        await page.ev(`location.hash = routeHash({ page: 'txn', txn: state.transactions[0].id, session: state.sessionId })`);
+        const opened = await page.waitFor(`document.getElementById('panes').classList.contains('txn-full') && !document.getElementById('detail').hidden`, 5000);
+        await sleep(300);
+        const r = await page.ev(TXN_BACK_READ);
+        if (!r || r.evalError || !r.drawn) {
+          rows.push({ key, ok: false, value: !r || r.evalError ? 'not measured' : 'NO - found no way back drawn on #/txn, so this checked nothing',
+            detail: !r || r.evalError ? String(r && r.evalError) : `the page ${opened === null ? 'never opened' : 'opened'}; txn-full ${r.page}` });
+          continue;
+        }
+        await page.drag(r.x, r.y, r.x, 0);   // a press and a release in place: a click, as a mouse makes one
+        const left = await page.waitFor(`!document.getElementById('panes').classList.contains('txn-full') && location.hash.startsWith('#/traffic')`, 5000);
+        const inside = r.l >= -0.5 && r.t >= -0.5 && r.r <= r.w + 0.5 && r.b <= r.h + 0.5;
+        const tall = r.b - r.t >= 24 - 0.01;
+        const ok = inside && tall && r.hit && left !== null;
+        rows.push({ key, ok, value: ok ? 'inside, hit, leaves' : !inside ? 'outside the window' : !tall ? 'short' : !r.hit ? 'covered' : 'stays',
+          detail: `"${r.text}" ${Math.round(r.l)},${Math.round(r.t)} to ${Math.round(r.r)},${Math.round(r.b)} in ${r.w}x${r.h}; hit ${r.hit}; `
+            + `a click ${left === null ? 'stayed on' : 'left for'} ${await page.ev('location.hash')}` });
+      }
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 async function polish(page, urls) {
   const rows = [];
   await iconTargets(page, urls.probe, rows);
+  await txnBack(page, urls.probe, rows);
   await pageDocs(page, urls.probe, rows);
   await legendInside(page, urls.probe, rows);
   await settingsFirstLoad(page, urls.probe, rows);

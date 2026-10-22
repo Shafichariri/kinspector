@@ -322,7 +322,9 @@
         actions. In flow, nothing below it can sit under it.
       -->
       <div id="detail-tools" class="detail-tools">
-        <!-- The shown call on a page of its own, `#/txn/<id>`; Back or Escape returns here. -->
+        <!-- `#/txn` only: the page's own way back, Escape's `leaveTxnFull`, for a tab with no Back. -->
+        <button id="txn-back" class="txn-back btn btn-sm btn-quiet" type="button" title="Back to the traffic list (Esc)" aria-label="Back to the traffic list"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.5 8h-11M6.5 4L2.5 8l4 4"/></svg>traffic</button>
+        <!-- The shown call on a page of its own, `#/txn/<id>`; Back, Escape or `← traffic` returns here. -->
         <a id="detail-full" class="detail-full btn btn-sm btn-quiet btn-icon" hidden
            title="Open this call on its own page" aria-label="Open this call on its own page"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v-4M2.5 13.5L7 9"/></svg></a>
         <!-- Column mode only: the list takes the width, and the tab at the right edge brings it back. -->

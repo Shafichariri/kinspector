@@ -47,6 +47,13 @@
 .txn-page > #toolbar,
 .txn-page > #filter-error,
 .txn-page > #overview { display: none !important; }
+/* The page's own way back, at the start of the tools row and drawn on `#/txn` alone. Back and Escape
+   were the only ways off it, and nothing said so; a call opened in a new tab has no Back at all. A
+   word and an arrow, not an icon alone, because it names where it goes. Shown by the page's class
+   rather than `[hidden]`, as the tools it replaces there are hidden by it. */
+.txn-back { display: none; margin-right: auto; min-height: var(--target-min); align-items: center; gap: 4px; }
+#panes.txn-full .txn-back { display: inline-flex; }
+.txn-back svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The divider: a 6px track that is all handle, drawing a line only where it is held or focused. */
 .pane-divider {

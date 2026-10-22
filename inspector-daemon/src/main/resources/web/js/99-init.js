@@ -117,6 +117,9 @@ wireStatsPage();
     state.txnPushed = true;
     navigate({ page: 'txn', txn: state.selectedId, session: state.sessionId });
   });
+  // Escape's own handler, not a copy of it, so the page's control and its key cannot disagree about
+  // where a call's page returns to.
+  $('txn-back').addEventListener('click', leaveTxnFull);
   // The scrim is the whole point of a scrim: click anywhere off the drawer and it goes away.
   $('drawer-scrim').addEventListener('click', closeDrawer);
 

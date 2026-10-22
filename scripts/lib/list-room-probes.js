@@ -453,6 +453,47 @@ async function probeTxnRoute(ctx) {
 }
 
 /**
+ * `← traffic`, the page's own way back, pressed in both of Escape's cases. Off the page it is not
+ * drawn. After `⤢` it goes Back: the list's address returns and Forward reopens the call's page, which
+ * a new entry or a replaced one would not. That page, reached by Forward, was not pushed by `⤢`, so
+ * pressed again it puts the session's list in its place: `#/traffic?session=…`, no entry added. Left
+ * on the list, which the next probe's tab press puts back on its view.
+ */
+async function probeTxnBack(ctx) {
+  const { window, doc } = ctx;
+  const panes = doc.getElementById('panes');
+  const back = doc.getElementById('txn-back');
+  if (ctx.pageState().transactions.length < 2) return [['txn back', 'n/a (fewer than two calls)']];
+  if (!back) return [['txn back', 'NO - found no #txn-back, so this checked nothing']];
+  await press(ctx, tabOf(doc, 'network'), 400);
+  const drawn = () => window.getComputedStyle(back).display !== 'none';
+  const full = () => panes.classList.contains('txn-full');
+  const listHash = window.location.hash;
+  const session = doc.getElementById('session-picker').value;
+  const offPage = drawn();
+  await press(ctx, doc.querySelectorAll('#list .row')[1], 300);
+  await press(ctx, doc.getElementById('detail-full'), 60);
+  const opened = await until(full);
+  const onPage = { drawn: drawn(), name: back.getAttribute('aria-label'), tab: back.tabIndex };
+  await press(ctx, back, 60);
+  const wentBack = await until(() => !full() && window.location.hash === listHash);
+  window.history.forward();
+  const forward = await until(full);
+  const entries = window.history.length;
+  await press(ctx, back, 60);
+  const due = `#/traffic?session=${encodeURIComponent(session)}`;
+  const toList = await until(() => !full() && window.location.hash === due);
+  const ok = !offPage && opened && onPage.drawn && /traffic/.test(onPage.name || '') && onPage.tab >= 0
+    && wentBack && forward && toList && window.history.length === entries;
+  return [['txn back', ok
+    ? `yes ("${onPage.name}", drawn on #/txn alone; after ⤢ it went Back to ${listHash || 'the list'}, Forward reopened the page; `
+      + `from there it replaced it with ${due})`
+    : `NO - drawn off the page ${offPage}; ⤢ opened ${opened}; on the page drawn ${onPage.drawn}, named "${onPage.name}", tabIndex ${onPage.tab}; `
+      + `after ⤢ Back to ${listHash} ${wentBack}; Forward reopened ${forward}; from there to ${due} ${toList} `
+      + `(now ${window.location.hash}, ${window.history.length - entries} entries added)`]];
+}
+
+/**
  * Each traffic view keeps its own place in the pane they share while live tail is paused. jsdom
  * holds an assigned `scrollTop` though it lays nothing out, so the rule is driven on the real page:
  * the list at 300 opens the timeline at its start, 0; the timeline set to 120 and the list opened
@@ -489,9 +530,10 @@ async function probeViewsKeepPlace(ctx) {
       + `the timeline at ${timelineBack} (120 due), and after a filter at ${afterFilter} (0 due)`]];
 }
 
-/** The detail beside the list: the divider, hiding the column and a call's own page, in report order. */
+/** The detail beside the list: the divider, hiding the column, a call's own page and its way back, in report order. */
 async function probeColumns(ctx) {
-  return [...await probeDivider(ctx), ...await probeDetailHide(ctx), ...await probeTxnRoute(ctx), ...await probeViewsKeepPlace(ctx)];
+  return [...await probeDivider(ctx), ...await probeDetailHide(ctx), ...await probeTxnRoute(ctx), ...await probeTxnBack(ctx),
+    ...await probeViewsKeepPlace(ctx)];
 }
 
 module.exports = {
