@@ -3,9 +3,11 @@ id: KIN-136
 title: >-
   Session diff T1 (reduced): foldIdKeys, SessionStamp, the route-stats and
   Markdown extractions
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 20:01'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -47,3 +49,9 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), after T4. Des
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once PR A merges. Reuses KIN-112 and KIN-127 unrenamed. JsonPaths.foldIdKeys (calls RouteTemplates.isIdLike; red with a digits-only test: UUID key stayed literal); archive/SessionStamp.kt + SessionStampTest (red with the file key dropped: a replaced index read as the same stamp); RouteStatsAccumulator.add returns RouteKey? and rowsByKey(termText, termParsed) returns RouteRows(rows, carried), snapshot calls it, route-stats tests unedited and green; MarkdownText holds cell, inlineCode, heading, count, ms, bytes (moved verbatim, diffed byte for byte) and, in T3, server; ExportTest unedited and green. inspector-daemon/AGENTS.md archive/ row names session stamps. -- bob
+<!-- SECTION:NOTES:END -->

@@ -55,7 +55,7 @@ class ProbeFixtureTest {
     @Test
     fun the_daemon_reads_back_everything_the_fixture_wrote() {
         val fixture = probeFixture()
-        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID), repo.listSessions().map { it.sessionId })
+        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID, BASE_SESSION_ID), repo.listSessions().map { it.sessionId })
         assertEquals(fixture.transactions.size, repo.readTransactions(dir).size)
         assertEquals(fixture.markers.size, repo.readMarkers(dir).size)
         assertEquals(fixture.signals.size, repo.readSignals(dir).size)
@@ -69,7 +69,7 @@ class ProbeFixtureTest {
     fun writing_twice_replaces_the_session_rather_than_doubling_it() {
         writeProbeFixture(tmp)
         val fixture = probeFixture()
-        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID), repo.listSessions().map { it.sessionId })
+        assertEquals(listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID, BASE_SESSION_ID), repo.listSessions().map { it.sessionId })
         assertEquals(fixture.transactions.size, repo.readTransactions(dir).size)
         assertEquals(fixture.markers.size, repo.readMarkers(dir).size)
         assertEquals(fixture.signals.size, repo.readSignals(dir).size)
@@ -77,6 +77,79 @@ class ProbeFixtureTest {
         assertEquals(LONG_SESSION_CALLS, repo.readTransactions(long).size)
         val payments = assertNotNull(repo.resolve(PAYMENTS_SESSION_ID), "no payments session")
         assertEquals(paymentsSessionCalls().size, repo.readTransactions(payments).size)
+        val base = assertNotNull(repo.resolve(BASE_SESSION_ID), "no base session")
+        assertEquals(baseSessionCalls().transactions.size, repo.readTransactions(base).size)
+    }
+
+    /**
+     * The base session, which the diff compares the probe session with: each route shows one rule
+     * against the probe's, and only while every fact below holds. Read through the repository, so a
+     * fixture edit that loses one fails here and not as a diff probe reading `n/a` or a wrong count.
+     */
+    @Test
+    fun the_base_session_holds_each_difference_the_diff_reads() {
+        val base = assertNotNull(repo.resolve(BASE_SESSION_ID), "no base session")
+        assertEquals(BASE_SESSION_ID, repo.listSessions().last().sessionId, "the base session is not the oldest")
+        assertEquals(dir, repo.resolve("latest"), "latest moved off the probe session")
+        val metas = repo.listSessions().associateBy { it.sessionId }
+        assertEquals(1, listOf(PROBE_SESSION_ID, LONG_SESSION_ID, BASE_SESSION_ID).map { metas.getValue(it).appId }.distinct().size, "the diff's sessions are not one app")
+
+        val a = repo.readTransactions(base)
+        val b = repo.readTransactions(dir)
+        fun on(rows: List<NetworkTransaction>, path: String) = rows.filter { it.path == path }
+        fun res(session: Path, row: NetworkTransaction) = String(assertNotNull(repo.readBody(session, row.id, "res"), "no response body on ${row.id}"))
+
+        // Unchanged: the same call, the same body.
+        val config = on(a, "/v3/shop/config").single()
+        assertEquals(res(dir, on(b, "/v3/shop/config").single()), res(base, config))
+
+        // The token: a request header added, and a redacted response that must not read as a type change.
+        val tokenA = on(a, "/oauth/token").single()
+        val tokenB = on(b, "/oauth/token").single()
+        assertTrue(tokenA.reqHeaders.keys.none { it.equals("X-Request-Id", ignoreCase = true) }, "the base token sends X-Request-Id")
+        assertTrue(tokenB.reqHeaders.keys.any { it.equals("X-Request-Id", ignoreCase = true) }, "the probe token lost X-Request-Id")
+        assertEquals(listOf("body:res:\$.access_token", "body:res:\$.expires_in"), tokenA.redacted)
+        assertTrue("\"expires_in\":\"‹redacted›\"" in res(base, tokenA), "the base token's expires_in is not the placeholder")
+        assertTrue("\"expires_in\":3600" in res(dir, tokenB), "the probe token's expires_in is not a number")
+
+        // The feed: a prefix of a far larger response, kept as truncated, which no strict parse reads.
+        val feed = on(a, "/v3/shop/feed").single()
+        assertTrue(feed.resBodyTruncated, "the base feed is not marked truncated")
+        assertEquals(BASE_FEED_BYTES, feed.resBytes)
+        val prefix = assertNotNull(repo.readBody(base, feed.id, "res"), "no prefix on disk")
+        assertEquals(40, prefix.size)
+        assertTrue(runCatching { kotlinx.serialization.json.Json.parseToJsonElement(String(prefix)) }.isFailure, "the prefix parses")
+        assertTrue(!on(b, "/v3/shop/feed").single().resBodyTruncated, "the probe feed is truncated")
+
+        // The product: price a number here, a string in the probe session.
+        assertTrue("\"price\":9.99" in res(base, on(a, "/v3/shop/products/42").single()))
+        assertTrue("\"price\":\"9.99\"" in res(dir, on(b, "/v3/shop/products/42").single()))
+
+        // The order: two calls answered 200 with an order, against one answered 500 with an error.
+        val ordersA = on(a, "/v3/shop/orders/submit")
+        val ordersB = on(b, "/v3/shop/orders/submit")
+        assertEquals(listOf(2, 1), listOf(ordersA, ordersB).map { rows -> rows.map { it.callId }.distinct().size }, "orders calls A, B")
+        assertEquals(listOf(listOf(200, 200), listOf(500)), listOf(ordersA, ordersB).map { rows -> rows.map { it.status } })
+        assertTrue(ordersA.all { "\"orderId\"" in res(base, it) && "\"status\"" in res(base, it) })
+        assertTrue("\"error\"" in res(dir, ordersB.single()))
+        assertEquals(2, ordersA.map { String(repo.readBody(base, it.id, "req")!!) }.distinct().size, "the two orders send one body")
+
+        // The stock: five 80 ms responses against the probe's four attempts, one status new.
+        val stockA = on(a, "/v3/shop/stock")
+        val stockB = on(b, "/v3/shop/stock")
+        assertEquals(listOf(5, 4), listOf(stockA.size, stockB.size), "stock attempts A, B")
+        assertTrue(stockA.all { it.status == 200 && it.ms == 80L })
+        assertTrue(stockB.any { it.status == 503 })
+
+        // Removed: in the base session only.
+        assertEquals(1, on(a, "/v3/shop/legacy-banner").size)
+        assertTrue(on(b, "/v3/shop/legacy-banner").isEmpty())
+
+        // Nothing for the findings and signal probes to read here.
+        assertTrue(repo.readMarkers(base).isEmpty() && repo.readSignals(base).isEmpty(), "the base session holds a marker or a signal")
+        val findings = FindingsService(repo, FindingsEngine(FindingSettingsSource(tmp), DaemonConfig(dataDir = tmp).routeTemplates))
+        assertEquals(0, findings.report(base, null, 5000).findingCount, "the base session has findings")
+        assertTrue(a.all { it.host.endsWith(".example.invalid") }, "a host outside example.invalid")
     }
 
     /**

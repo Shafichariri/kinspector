@@ -1,9 +1,11 @@
 ---
 id: KIN-138
 title: 'Session diff T3: the Markdown form, GET /api/diff.md'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 20:01'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -36,3 +38,9 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), after T2. Des
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once PR A merges. service/DiffMarkdown.kt, GET /api/diff.md (text/markdown; charset=UTF-8, attachment diff-<a>-vs-<b>.md, errors as JSON), inspector diff --md. An unsure key is under 'Unknown — capture did not keep every body', never 'Removed'; a shape not compared reads 'unknown (1 truncated)', and two known non-JSON kinds read as the kinds ('empty', 'json → empty'). Red: unsure keys rendered under 'Removed: only in A'; cells joined without MarkdownText.cell (an unescaped pipe). exports.md paragraph in. -- bob
+<!-- SECTION:NOTES:END -->

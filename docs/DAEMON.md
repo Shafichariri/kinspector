@@ -677,6 +677,7 @@ inspector summary                                   # counts, hosts, error break
 inspector query 'status>=400'                       # filter, same grammar as the UI
 inspector query 'has:error' --limit 10 --offset 0
 inspector stats 'status>=400' --sort p90   # per-route latency and failure rates
+inspector diff --a <id>                             # this run against another, route by route
 inspector body <txnId> --side res                   # raw bytes to stdout
 inspector prune                                     # apply retention now
 inspector --help                                    # usage and the full filter grammar
@@ -822,6 +823,40 @@ a row on the web UI's Stats page opens Traffic on it, and says so above the list
 
 The JSON and HTML exports carry the whole session's table as `routeStats`, and the Markdown
 export as a Routes section. A HAR does not.
+
+### Comparing two sessions
+
+```bash
+curl -s 'http://127.0.0.1:8099/api/diff'                         # latest against its previous run
+curl -s 'http://127.0.0.1:8099/api/diff?a=<id>&b=<id>&filter=host:api&unchanged=false'
+curl -s 'http://127.0.0.1:8099/api/diff?sinceA=checkout&sinceB=checkout'
+curl -s 'http://127.0.0.1:8099/api/diff.md?a=<id>' -o diff.md
+inspector diff --a <id> --md
+```
+
+`b` is the session under test (default `latest`) and `a` the baseline (default the newest earlier
+session of `b`'s app). `filter` applies to both; `sinceA` and `sinceB` cut one side at a marker,
+and a label that side does not have is refused. The diff matches **routes**, as route stats group
+them, never individual calls, and the host is part of a route: a run against another server shows
+every route added and removed.
+
+For each route: whether it was **added** or **removed**; **calls** per side (a POST, PUT, PATCH or
+DELETE called a different number of times is `loud` and listed first); status codes that appear
+on one side only; **p50 latency**, judged `slower` or `faster` only with at least 5 responses on
+each side and a change of at least 50 ms and 25% — otherwise `same`, or `notJudged` with
+`reason: "n<5"`; mean sizes on the same rule with 1 KB; request and response header **names**
+(values are never compared or returned); and JSON **key paths and types** from bodies on disk.
+
+**A body capture did not keep whole is unknown.** Shape is read only from complete bodies that
+parse as JSON. A truncated, omitted, missing or unparsable body is counted, never read, and a key
+is reported removed only when every JSON body on the other side was read whole; otherwise it is
+listed under `unsure`. Keys at or under a path in `redacted[]` are listed under `notCompared`.
+At most 500 bodies per route and side and 256 MB per diff are read; a body past either is
+`unread`, which also only ever makes a key unsure. `shapeBudget` says what was read.
+
+`limit` (default 1000, at most 5000) cuts `routes` after the order, and `unchanged=false` drops
+routes with no change; `counts` and `routeCount` count them all. The MCP tool `diff_sessions`
+takes the same arguments, with `unchanged` off and `limit` 50 by default.
 
 ### Findings
 

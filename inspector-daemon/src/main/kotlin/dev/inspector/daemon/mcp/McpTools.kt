@@ -6,6 +6,7 @@ import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.FindingsEngine
 import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsService
+import dev.inspector.daemon.service.SessionDiffService
 import dev.inspector.model.FilterParseException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -52,6 +53,7 @@ class McpTools(
         SessionTools(config, repository),
         TransactionTools(config, repository),
         RouteStatsTool(config, repository, RouteStatsService(repository, config.routeTemplates)),
+        DiffTool(SessionDiffService(repository, config.routeTemplates)),
         FindingsTool(config, repository, FindingsService(repository, findingsEngine)),
         SignalTools(config, repository, signalPuller),
         MarkerTools(markerPoster),

@@ -59,6 +59,17 @@ const val LONG_SESSION_CALLS = 1203
  */
 const val PAYMENTS_SESSION_ID = "2025-12-31T08-00-00_probe-payments_ci_debug"
 
+/**
+ * A fourth session, the session diff's baseline: one route per diff rule against the probe session,
+ * read as `a=base&b=probe`. The oldest of all, so `latest`, the picker and every probe that takes
+ * "the other session" still find the probe and long sessions first. Its rows are [baseSessionCalls].
+ */
+const val BASE_SESSION_ID = "2025-12-30T09-00-00_probe_ci_debug"
+private const val BASE_STARTED_AT = "2025-12-30T09:00:00.000Z"
+
+/** What the base session's truncated feed says it was: far past any cap, so only a prefix is on disk. */
+const val BASE_FEED_BYTES = 300_000L
+
 /** The call that repeats call #0: the oldest of the newest 1000, so it is on the first page and #0 is not. */
 const val LONG_REPEAT_INDEX = LONG_SESSION_CALLS - 1000
 /** A widely published test card number, Luhn-valid and not on the daemon's list of eleven, so it is raised medium. */
@@ -77,18 +88,18 @@ fun main(args: Array<String>) {
 }
 
 /**
- * Writes the probe session, the long session and the payments session under [dataDir] and points
- * `latest` at the probe session.
+ * Writes the probe session, the long session, the payments session and the base session under
+ * [dataDir] and points `latest` at the probe session.
  *
- * Replaces either session if one is already there. `SessionWriter` appends, so a second run into
+ * Replaces any of them if one is already there. `SessionWriter` appends, so a second run into
  * the same directory used to double every row — and the probes, which count rows against the
- * daemon's own answers, would then pass or fail on how many times the task had run. Only the three
+ * daemon's own answers, would then pass or fail on how many times the task had run. Only the four
  * sessions' own folders are removed; anything else under [dataDir] is left alone.
  */
 fun writeProbeFixture(dataDir: Path): Path {
     val config = DaemonConfig(dataDir = dataDir)
     Files.createDirectories(config.sessionsDir)
-    for (id in listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID)) {
+    for (id in listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID, BASE_SESSION_ID)) {
         val previous = config.sessionsDir.resolve(id)
         if (Files.exists(previous)) {
             Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
@@ -97,6 +108,8 @@ fun writeProbeFixture(dataDir: Path): Path {
     writeSession(config, LONG_SESSION_ID, LONG_STARTED_AT, transactions = longSessionCalls(), signals = longSessionSignals())
     // Started at 2025-12-31T08:00:00Z, the instant `writeFindingsSession` stamps every session with.
     writeFindingsSession(config, PAYMENTS_SESSION_ID, paymentsSessionCalls())
+    val baseline = baseSessionCalls()
+    writeSession(config, BASE_SESSION_ID, BASE_STARTED_AT, transactions = baseline.transactions, bodies = baseline.bodies)
     val fixture = probeFixture()
     val dir = writeSession(
         config, PROBE_SESSION_ID, PROBE_STARTED_AT,
@@ -309,6 +322,92 @@ fun longSessionSignals(): List<Pair<Signal, ByteArray?>> {
                 tag = SignalTags.STATE, name = name, bytes = data.size.toLong(),
             ) to data
         }
+}
+
+/**
+ * The base session's rows and bodies, oldest first: the run before the probe session, for the diff.
+ *
+ * Each route is chosen to show one rule against the probe session, read as `a=base&b=probe`:
+ * - `GET /v3/shop/config` is the probe's call exactly: an unchanged route.
+ * - `POST auth…/oauth/token` sends no `X-Request-Id`, so the probe adds that request header, and its
+ *   response was redacted at capture (`‹redacted›` strings, named in `redacted[]`), so the probe's
+ *   numeric `expires_in` is not compared and is never a type change.
+ * - `GET /v3/shop/feed` kept a 40-byte prefix of a 300,000-byte response, so its shape is unknown on
+ *   this side: nothing in the probe's feed may read as added or removed because of it.
+ * - `GET /v3/shop/products/42` has a numeric `price`, the probe a string: a type change.
+ * - `POST /v3/shop/orders/submit` is called twice and answered 200 with an order; the probe calls it
+ *   once and gets a 500. A mutation called a different number of times is loud, its status mix
+ *   changed, and its response lost `$.orderId` and `$.status` and gained `$.error`. Two request
+ *   bodies that differ, so the payment rules see no repeat.
+ * - `GET /v3/shop/stock` five times at 80 ms against the probe's four attempts: latency is not
+ *   judged below five responses on each side, and the probe's 503 is a status this side never had.
+ * - `GET /v3/shop/legacy-banner` is in this session only: a route removed.
+ *
+ * No marker, no signal and no sensitive value: the findings and the signal probes have nothing to
+ * read here. The wall clock follows `mono`, as in the probe session.
+ */
+fun baseSessionCalls(): ProbeFixtureContents {
+    val start = Instant.parse(BASE_STARTED_AT)
+    val rows = ArrayList<NetworkTransaction>()
+    val bodies = HashMap<String, Pair<ByteArray?, ByteArray?>>()
+
+    fun call(
+        id: String,
+        mono: Long,
+        path: String,
+        method: String = "GET",
+        host: String = API,
+        ms: Long = 120,
+        reqHeaders: Map<String, List<String>> = mapOf("Accept" to listOf("application/json")),
+        reqBody: String? = null,
+        resBody: String,
+        resBytes: Long = resBody.toByteArray().size.toLong(),
+        resBodyTruncated: Boolean = false,
+        redacted: List<String> = emptyList(),
+    ) {
+        val req = reqBody?.toByteArray()
+        val res = resBody.toByteArray()
+        rows += NetworkTransaction(
+            id = id, ts = start.plusMillis(mono).toString(), mono = mono, method = method, scheme = "https",
+            host = host, path = path, status = 200, ms = ms, callId = "c-$id",
+            reqBytes = req?.size?.toLong() ?: 0, resBytes = resBytes,
+            reqHeaders = reqHeaders, resHeaders = mapOf("Content-Type" to listOf("application/json")),
+            reqContentType = req?.let { "application/json" }, resContentType = "application/json",
+            resBodyTruncated = resBodyTruncated, redacted = redacted,
+        )
+        bodies[id] = req to res
+    }
+
+    call("d0000001", 1_000, "/v3/shop/config", resBody = """{"flags":{"newCheckout":true},"region":"eu"}""")
+    call(
+        "d0000002", 1_100, "/oauth/token", method = "POST", host = AUTH,
+        reqHeaders = mapOf(
+            "Host" to listOf(AUTH),
+            "Content-Length" to listOf("38"),
+            "Accept-Encoding" to listOf("gzip"),
+            "Authorization" to listOf("Bearer base"),
+        ),
+        reqBody = """{"grant_type":"refresh_token","r":"0"}""",
+        resBody = """{"access_token":"‹redacted›","expires_in":"‹redacted›"}""",
+        redacted = listOf("body:res:\$.access_token", "body:res:\$.expires_in"),
+    )
+    call(
+        "d0000003", 1_300, "/v3/shop/feed",
+        resBody = """{"items":[{"id":1,"title":"one"},{"id":2""",
+        resBytes = BASE_FEED_BYTES, resBodyTruncated = true,
+    )
+    call("d0000004", 1_650, "/v3/shop/products/42", resBody = """{"id":42,"price":9.99}""")
+    call(
+        "d0000005", 2_400, "/v3/shop/orders/submit", method = "POST",
+        reqBody = """{"cart":"k1","pay":"card"}""", resBody = """{"orderId":"o1","status":"ok"}""",
+    )
+    call(
+        "d0000006", 5_400, "/v3/shop/orders/submit", method = "POST",
+        reqBody = """{"cart":"k2","pay":"card"}""", resBody = """{"orderId":"o2","status":"ok"}""",
+    )
+    for (i in 0 until 5) call("d000001$i", 6_000L + i * 100, "/v3/shop/stock", ms = 80, resBody = """{"stock":4}""")
+    call("d0000020", 7_000, "/v3/shop/legacy-banner", resBody = """{"banner":"none"}""")
+    return ProbeFixtureContents(rows, emptyList(), emptyList(), bodies)
 }
 
 /**

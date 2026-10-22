@@ -1,9 +1,11 @@
 ---
 id: KIN-135
 title: 'Session diff T4: a baseline run in the probe fixture'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 19:25'
+updated_date: '2026-10-22 20:01'
 labels:
   - 'item:session-diff'
 dependencies: []
@@ -33,3 +35,9 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), first of its 
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once PR A merges. ProbeFixture.kt: BASE_SESSION_ID 2025-12-30T09-00-00_probe_ci_debug (baseSessionCalls), the oldest of four sessions; ProbeFixtureTest.the_base_session_holds_each_difference_the_diff_reads asserts each design §11 fact through SessionRepository, and that the base session has no marker, signal or finding. Red: the feed's resBodyTruncated dropped -> 'the base feed is not marked truncated'. Probes against the four-session fixture on port 18310: render-web-ui.js 299 passed, 0 failed, 1 n/a (facet filter, also n/a on main's CI run of PR #178); render-web-ui-archive.js 58 passed, 0 failed; only the note 'session options' moved, 3 -> 4. measure-web-ui.js --base main: see the PR A hand-over. -- bob
+<!-- SECTION:NOTES:END -->

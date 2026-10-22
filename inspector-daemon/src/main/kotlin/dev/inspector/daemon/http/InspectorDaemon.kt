@@ -15,6 +15,7 @@ import dev.inspector.daemon.service.Replayer
 import dev.inspector.daemon.service.FindingsEngine
 import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsService
+import dev.inspector.daemon.service.SessionDiffService
 import dev.inspector.daemon.service.ServerControl
 import dev.inspector.daemon.service.SessionDeleter
 import dev.inspector.daemon.service.SessionManager
@@ -78,6 +79,7 @@ class InspectorDaemon(
     private val manager = SessionManager(config, repository, retention)
     private val deleter = SessionDeleter(repository, config.sessionsDir, manager::activeSessionIds)
     private val stats = RouteStatsService(repository, config.routeTemplates)
+    private val diffs = SessionDiffService(repository, config.routeTemplates)
 
     /** The live read of `config.json`'s `findings` key: the findings and the Settings page share it. */
     private val findingSettings = FindingSettingsSource(config.dataDir)
@@ -168,6 +170,7 @@ class InspectorDaemon(
             sessionRoutes(repository, manager, deleter)
             exportRoutes(repository, config, findingsEngine)
             statsRoutes(repository, stats)
+            diffRoutes(diffs)
             findingsRoutes(repository, findings)
             signalRoutes(repository, liveApps)
             markerRoutes(repository, manager)

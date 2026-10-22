@@ -10,11 +10,16 @@ import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.daemon.http.PortUnavailableException
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
+import dev.inspector.daemon.service.DiffMarkdown
+import dev.inspector.daemon.service.DiffOutcome
+import dev.inspector.daemon.service.DiffReport
+import dev.inspector.daemon.service.DiffRequest
 import dev.inspector.daemon.service.FindingsEngine
 import dev.inspector.daemon.service.FindingsReport
 import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsReport
 import dev.inspector.daemon.service.RouteStatsService
+import dev.inspector.daemon.service.SessionDiffService
 import dev.inspector.daemon.service.StatsSort
 import dev.inspector.daemon.usb.UsbBridge
 import kotlin.io.path.Path
@@ -30,6 +35,7 @@ Usage:
   inspector summary  [--session ID]
   inspector query    '<filter>' [--session ID] [--limit N] [--offset N]
   inspector stats    ['<filter>'] [--session ID] [--sort KEY] [--limit N]
+  inspector diff     ['<filter>'] [--a ID] [--b ID] [--since-a LABEL] [--since-b LABEL] [--limit N] [--unchanged] [--md]
   inspector findings [--session ID] [--category C] [--limit N]
   inspector body     <txnId> --side req|res [--session ID]
   inspector prune
@@ -37,6 +43,9 @@ Usage:
 --session accepts the literal 'latest' (the default).
 stats prints per-route latency and failure rates; --sort is attempts (the default), p50,
 p90, p95, p99, max or errors, and --limit defaults to 1000.
+diff compares --b (the latest by default) with --a (by default the previous session of b's
+app) route by route; --since-a and --since-b cut a side at a marker, --limit defaults to
+1000, --unchanged includes routes that did not change, and --md prints the Markdown form.
 findings prints what the findings rules flag (payment safety); --category narrows to one
 family, and --limit defaults to 1000.
 
@@ -139,6 +148,25 @@ fun main(args: Array<String>) {
                 fail(e.message ?: "invalid filter")
             }
             println(dev.inspector.model.InspectorJsonPretty.encodeToString(RouteStatsReport.serializer(), report))
+        }
+
+        "diff" -> {
+            val request = DiffRequest(
+                a = flags["a"],
+                b = flags["b"],
+                filter = args.getOrNull(1)?.takeUnless { it.startsWith("--") }.orEmpty(),
+                sinceA = flags["since-a"],
+                sinceB = flags["since-b"],
+                limit = (flags["limit"]?.toIntOrNull() ?: 1000).coerceIn(1, 5000),
+                unchanged = flags["unchanged"] != null,
+            )
+            val report = when (val outcome = SessionDiffService(repository, config.routeTemplates).diff(request)) {
+                is DiffOutcome.Ok -> outcome.report
+                is DiffOutcome.NotFound -> fail(outcome.message)
+                is DiffOutcome.Invalid -> fail(outcome.message)
+            }
+            if (flags["md"] != null) print(DiffMarkdown.render(report))
+            else println(dev.inspector.model.InspectorJsonPretty.encodeToString(DiffReport.serializer(), report))
         }
 
         "findings" -> {

@@ -1,5 +1,12 @@
 package dev.inspector.daemon.service
 
+import dev.inspector.daemon.service.MarkdownText.bytes
+import dev.inspector.daemon.service.MarkdownText.cell
+import dev.inspector.daemon.service.MarkdownText.count
+import dev.inspector.daemon.service.MarkdownText.heading
+import dev.inspector.daemon.service.MarkdownText.inlineCode
+import dev.inspector.daemon.service.MarkdownText.ms
+import dev.inspector.daemon.service.MarkdownText.server
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
@@ -205,16 +212,8 @@ object ExportMarkdown {
     private fun line(text: String): String = text.replace("\r", "").replace("\n", " ")
 
     /** `3 (75%)`, or `0`: a share of attempts with an outcome, to at most one decimal. */
-    /**
-     * A route's server as a call label names it, from `NetworkTransaction.hostPort`, so an IPv6 host
-     * is bracketed by the one rule rather than a copy here. Joined by hand it read `::1:8080`. The row
-     * is put in a transaction's shape because the rule is a property of one; a public free function
-     * in `:inspector-model` would be API for the sake of this cell.
-     */
-    private fun serverOf(row: RouteStatsRow): String = NetworkTransaction(
-        id = "", ts = "", mono = 0, method = row.method, scheme = row.scheme,
-        host = row.host, port = row.port, path = "", callId = "",
-    ).hostPort
+    /** A route's server as a call label names it; see [MarkdownText.server]. */
+    private fun serverOf(row: RouteStatsRow): String = server(row.scheme, row.host, row.port)
 
     private fun share(count: Int, rate: Double?): String {
         if (count == 0 || rate == null) return "$count"
@@ -458,20 +457,6 @@ object ExportMarkdown {
         appendLine(fence)
     }
 
-    /** Inline code that survives a value containing backticks, by the same longer-delimiter rule. */
-    private fun inlineCode(text: String): String {
-        val longest = Regex("`+").findAll(text).maxOfOrNull { it.value.length } ?: 0
-        val ticks = "`".repeat(longest + 1)
-        val pad = if (text.startsWith("`") || text.endsWith("`")) " " else ""
-        return "$ticks$pad$text$pad$ticks"
-    }
-
-    /** A table cell cannot hold a pipe or a line break. */
-    private fun cell(text: String): String =
-        text.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ").replace("\r", "")
-
-    private fun heading(text: String): String = text.replace("\n", " ").replace("#", "\\#")
-
     /** `HH:mm:ss.SSS` out of the ISO-8601 `ts`, or the raw value when it is not in that shape. */
     private fun clock(ts: String): String =
         Regex("""T(\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)""").find(ts)?.groupValues?.get(1) ?: ts
@@ -479,18 +464,6 @@ object ExportMarkdown {
     private fun offset(mono: Long, origin: Long): String {
         val delta = mono - origin
         return "+%d.%03d s".format(Locale.ROOT, delta / 1000, delta % 1000)
-    }
-
-    private fun count(n: Int, noun: String): String = if (n == 1) "1 $noun" else "$n ${noun}s"
-
-    private fun ms(value: Long): String =
-        if (value < 1000) "$value ms" else "%.2f s".format(Locale.ROOT, value / 1000.0)
-
-    /** Fixed to [Locale.ROOT]: a document handed between machines must not change its decimal point. */
-    private fun bytes(value: Long): String = when {
-        value < 1024 -> "$value B"
-        value < 1024 * 1024 -> "%.1f KB".format(Locale.ROOT, value / 1024.0)
-        else -> "%.1f MB".format(Locale.ROOT, value / (1024.0 * 1024.0))
     }
 }
 
