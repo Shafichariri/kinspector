@@ -69,8 +69,8 @@ temporary file in the same directory and moves it over the old one atomically, s
 old file or the new one, never half of each. A malformed file is refused with 409 and left untouched:
 a save must never overwrite settings it could not read. An unknown key in the request is a 400 that
 names it, since a misspelt key silently dropped is a setting the user believes they made. Nothing
-but the `findings` key applies until the next start (see "The findings settings are read on the
-next findings read" below) — a port cannot move live and `Retention` reads the config it was built
+but `findings` and `findingDismissals` applies until the next start (see "The findings settings are
+read on the next findings read" below) — a port cannot move live and `Retention` reads the config it was built
 with — and `GET` reports the flags that override the file so the page can say why a value will not
 change. `ConfigFileTest` pins each rule.
 
@@ -270,10 +270,20 @@ agent and the page disagreeing about what counts as a finding is a worse bug tha
 exactly what a read at start produced between a restarted daemon and an MCP server started before
 the edit. A hand edit that does not parse keeps the last good settings and says so in `configError`.
 `routeTemplates` stays read at start, so after a template edit a finding's route still changes only
-on restart. Decided 2026-10-22 by the maintainer's proxy, for `findings` and, when the
-sensitive-data item adds it, `findingDismissals`, and for no other key. `FindingSettingsSourceTest`
-and `FindingsServiceTest` pin it, the latter with a second service instance standing for the MCP
-process; it was shown red with the settings parsed once.
+on restart. Decided 2026-10-22 by the maintainer's proxy, for `findings` and `findingDismissals`,
+and for no other key. `FindingSettingsSourceTest` and `FindingsServiceTest` pin it, the latter with a
+second service instance standing for the MCP process; it was shown red with the settings parsed once.
+
+**`findingDismissals` apply on the next read, through the same live read as `findings`, and stay
+out of the rule version.** A dismissal is a click on the finding somebody is looking at, and one
+that waited for a restart would read as a button that did nothing; the daemon and `inspector mcp`
+are two processes, and both see it on their next read. Dismissals are applied after the cache, so
+one never rescans a body. A dismissal matches a finding's rule, route, location and path exactly,
+so a route renamed by a `routeTemplates` edit stops matching and the finding comes back, which is
+the safe direction. Dismissed findings are still returned, marked, and counted where they are
+hidden. No MCP tool can make one: the page and the file are the only writers.
+`FindingDismissalsTest` pins it with a second service instance standing for the MCP process, red
+with dismissals read at start and with the rule version computed over them.
 
 **A finding family plugs in as a `FindingSource`; the engine owns everything around it.** A source
 folds rows into an accumulator and returns findings under the rule ids it registered in

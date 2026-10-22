@@ -1,5 +1,6 @@
 package dev.inspector.daemon.service
 
+import dev.inspector.daemon.archive.DismissalEntry
 import dev.inspector.daemon.archive.FindingRuleCatalog
 import dev.inspector.daemon.archive.FindingSettings
 import dev.inspector.daemon.archive.FindingSettingsSource
@@ -32,12 +33,17 @@ class FindingsEngine internal constructor(
     constructor(settingsSource: FindingSettingsSource, routes: RouteTemplates) :
         this(settingsSource, routes, FindingSources::all, { System.err.println("inspector: $it") })
 
-    /** The settings as of one read, the sources built from them, and the version they make. */
+    /**
+     * The settings as of one read, the sources built from them, and the version they make. The
+     * [dismissals] of the same read ride along but are not part of [ruleVersion]: they are applied to
+     * the reply, after the cache, so a new one never rescans a body.
+     */
     class Rules internal constructor(
         val settings: FindingSettings,
         val configError: String?,
         val sources: List<FindingSource>,
         val ruleVersion: String,
+        val dismissals: List<DismissalEntry> = emptyList(),
     )
 
     /** One fold: a session, and an accumulator per source over it. */
@@ -62,13 +68,14 @@ class FindingsEngine internal constructor(
     /** The rules to use now. Rebuilds the sources only when the settings changed. */
     @Synchronized
     fun current(): Rules {
-        val (settings, error) = settingsSource.current()
+        val (settings, dismissals, error) = settingsSource.live()
         val last = lastRules
         if (last != null && last.settings == settings) {
-            return if (last.configError == error) last else Rules(settings, error, last.sources, last.ruleVersion)
+            if (last.configError == error && last.dismissals == dismissals) return last
+            return Rules(settings, error, last.sources, last.ruleVersion, dismissals).also { lastRules = it }
         }
         val sources = sourcesFor(settings)
-        return Rules(settings, error, sources, ruleVersion(sources, settings)).also { lastRules = it }
+        return Rules(settings, error, sources, ruleVersion(sources, settings), dismissals).also { lastRules = it }
     }
 
     /** First 8 hex over the sources' versions, the canonical settings and the route templates. */
@@ -124,8 +131,13 @@ class FindingsEngine internal constructor(
     }
 
     /**
-     * The reply: [collected] narrowed to [category] (null is every one) and cut to [limit], with every
-     * registered rule listed and counted in the same scope.
+     * The reply: [collected] narrowed to [category] (null is every one), marked by [Rules.dismissals],
+     * and cut to [limit], with every registered rule listed and counted in the same scope.
+     *
+     * `findingCount` and the severity counts leave dismissed findings out and `dismissedCount` says how
+     * many there were; the findings list holds them only when [includeDismissed]. A rule's `count` is
+     * every finding it made, dismissed or not, so a rule whose findings were all set aside never reads
+     * as "checked, none found".
      */
     fun report(
         sessionId: String,
@@ -134,10 +146,16 @@ class FindingsEngine internal constructor(
         total: Int,
         category: String?,
         limit: Int,
+        includeDismissed: Boolean = false,
     ): FindingsReport {
         val sources = rules.sources.filter { category == null || it.category == category }
-        val inScope = collected.findings.filter { category == null || it.category == category }
-        val counts = inScope.groupingBy { it.ruleId }.eachCount()
+        val marked = FindingDismissals.apply(
+            collected.findings.filter { category == null || it.category == category },
+            rules.dismissals,
+        )
+        val active = marked.filter { it.dismissed == null }
+        val listed = if (includeDismissed) marked else active
+        val counts = marked.groupingBy { it.ruleId }.eachCount()
         val rows = sources.flatMap { source ->
             source.rules.map { rule ->
                 val override = rules.settings.rules[rule.id]
@@ -162,25 +180,27 @@ class FindingsEngine internal constructor(
             configError = rules.configError,
             category = category,
             total = total,
-            findingCount = inScope.size,
-            high = inScope.count { it.severity == FindingSeverity.HIGH.key },
-            medium = inScope.count { it.severity == FindingSeverity.MEDIUM.key },
-            info = inScope.count { it.severity == FindingSeverity.INFO.key },
+            findingCount = active.size,
+            dismissedCount = marked.size - active.size,
+            high = active.count { it.severity == FindingSeverity.HIGH.key },
+            medium = active.count { it.severity == FindingSeverity.MEDIUM.key },
+            info = active.count { it.severity == FindingSeverity.INFO.key },
             rules = rows,
-            findings = if (limit >= inScope.size) inScope else inScope.subList(0, limit),
+            findings = if (limit >= listed.size) listed else listed.subList(0, limit),
             coverage = if (coverage.isEmpty()) null else JsonObject(coverage),
         )
     }
 
     /**
      * The whole session's report from rows a caller already holds, for the exports: no category, no
-     * limit, and the same rules and settings a findings read would use now.
+     * limit, and the same rules and settings a findings read would use now. Dismissed findings are
+     * kept, marked: an export that left them out would tell its reader nothing was found.
      */
     fun compute(sessionId: String, sessionDir: Path, rows: List<NetworkTransaction>, readBody: (String, String) -> ByteArray?): FindingsReport {
         val rules = current()
         val fold = fold(rules, sessionDir, readBody)
         rows.forEach(fold::add)
-        return report(sessionId, rules, collect(fold), rows.size, null, Int.MAX_VALUE)
+        return report(sessionId, rules, collect(fold), rows.size, null, Int.MAX_VALUE, includeDismissed = true)
     }
 
     /** The finding with the caps applied again and every hint that is not masked replaced. */

@@ -3,9 +3,11 @@ id: KIN-122
 title: >-
   Sensitive data T3: dismissals — findingDismissals, live read, list_findings
   parameters
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 09:40'
+updated_date: '2026-10-22 10:02'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -37,3 +39,9 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once its PR merges. BUILT AHEAD OF KIN-121 (T2): dismissals are generic (the design says 'built generic: a payment finding dismisses the same way') and need nothing from T2 or from session diff's JsonPaths, so the criteria are shown on payment findings; T2 is blocked on the JsonPaths walker (see the coordinator report). Files: archive/FindingSettingsSource.kt (live() returns settings, dismissals and error from one read; dismissals kept apart from FindingSettings so never in ruleVersion; a bad findingDismissals keeps the last good list), service/FindingDismissals.kt (exact four-part match, null only null), service/FindingsEngine.kt (Rules.dismissals; report() marks, counts and lists; compute() for exports keeps dismissed findings marked), service/Findings.kt (FindingsReport.dismissedCount, additive), service/FindingsService.kt, http/FindingsRoutes.kt (includeDismissed=true|false, else 400), mcp/FindingsTool.kt (includeDismissed, description), mcp/ToolGroup.kt (booleanProperty, flag), http/ConfigRoutes.kt (effective.findingDismissals), archive/ConfigFile.kt doc, mcp-tools-list.json regenerated, docs/DAEMON.md (§6 findingDismissals, §7, §8), docs/decisions/daemon-and-mcp.md (config sentence, live-read paragraph, the dismissal paragraph). A rule's count still includes dismissed findings, so a rule whose findings were all set aside never reads 'checked, none found'; findingCount and high/medium/info exclude them. The CLI 'inspector findings' takes no new flag: it hides dismissed findings and prints dismissedCount. Tests: FindingDismissalsTest (6), FindingsRouteTest (+1, shape +dismissedCount), ConfigRoutesTest (+1). Red proofs (each run, seen failing, restored): dismissals read at start (live() keeps the first list) -> 4 FindingDismissalsTest cases fail, e.g. 'a dismissal applies on the next read here and in a second service' expected <1> but was <0>; rule version computed over dismissals -> 'dismissals are not part of the rule version ==> expected: <716d5de5> but was: <1f5060e8>'; ConfigFile imported into mcp/FindingsTool.kt -> 'no MCP tool can write a dismissal' was [FindingsTool.kt]; a dismissFinding argument on list_findings alone -> was [list_findings: dismissFinding]. — bob
+<!-- SECTION:NOTES:END -->

@@ -16,8 +16,10 @@ import kotlinx.serialization.json.put
 /**
  * Findings, the report `GET …/findings` serves, from the same [FindingsService] rules.
  *
- * Its own process's cache. Unlike `routeTemplates`, the `findings` key is read on every call, so an
- * MCP server started before an edit agrees with the page without a restart.
+ * Its own process's cache. Unlike `routeTemplates`, the `findings` and `findingDismissals` keys are read
+ * on every call, so an MCP server started before an edit or a dismissal agrees with the page without
+ * a restart. No tool here writes a dismissal: `config.json` is written only by the daemon's config
+ * route or by hand.
  */
 internal class FindingsTool(
     config: DaemonConfig,
@@ -41,7 +43,11 @@ internal class FindingsTool(
                     "not be judged. Payment rules look only at POST, PUT, PATCH and DELETE. The findings " +
                     "settings in config.json are read on every call, so this tool and the web page agree; " +
                     "ruleVersion names the settings an answer was computed under, and configError says when " +
-                    "the file's findings key could not be read and the last good settings were used.",
+                    "the file's findings key could not be read and the last good settings were used. " +
+                    "Values are never returned, only a masked hint. Dismissed findings (set aside with a reason " +
+                    "in config.json's findingDismissals; no tool can dismiss one) " +
+                    "are left out unless includeDismissed, and dismissedCount says how many there are; a " +
+                    "dismissed finding carries dismissed.reason.",
             ) {
                 put("session", sessionProperty())
                 put("category", buildJsonObject {
@@ -50,6 +56,7 @@ internal class FindingsTool(
                     put("description", "Only this category's rules and findings. Absent means every category.")
                 })
                 put("limit", intProperty("Maximum findings to return. Default 50, maximum 200; findingCount says how many there are."))
+                put("includeDismissed", booleanProperty("Also list dismissed findings, each with its reason. Default false."))
             }
         ) { listFindings(it) },
     )
@@ -58,7 +65,9 @@ internal class FindingsTool(
         val dir = resolve(args) ?: return noSuchSession(args)
         val category = FindingsEngine.parseCategory(args.string("category"))
             .getOrElse { return ToolOutcome.Failed(it.message.orEmpty()) }
-        val report = findings.report(dir, category, args.int("limit", default = 50, min = 1, max = 200))
+        val report = findings.report(
+            dir, category, args.int("limit", default = 50, min = 1, max = 200), includeDismissed = args.flag("includeDismissed"),
+        )
         return ToolOutcome.Ok(InspectorJsonPretty.encodeToString(FindingsReport.serializer(), report))
     }
 }

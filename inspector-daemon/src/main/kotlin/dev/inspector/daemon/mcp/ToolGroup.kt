@@ -76,6 +76,17 @@ internal fun JsonObject.string(key: String): String? =
     (this[key] as? JsonPrimitive)?.takeIf { it.isString || it !is kotlinx.serialization.json.JsonNull }
         ?.content?.takeIf { it.isNotBlank() && it != "null" }
 
+internal fun booleanProperty(description: String) = buildJsonObject {
+    put("type", "boolean")
+    put("description", description)
+}
+
+/** `true` or the string `"true"`, as agents send both; anything else is false. */
+internal fun JsonObject.flag(key: String): Boolean {
+    val primitive = this[key] as? JsonPrimitive ?: return false
+    return primitive.content.equals("true", ignoreCase = true)
+}
+
 /** Agents routinely send numbers as strings, so accept both rather than failing the call. */
 internal fun JsonObject.int(key: String, default: Int, min: Int, max: Int): Int {
     val primitive = this[key] as? JsonPrimitive ?: return default

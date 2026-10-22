@@ -34,8 +34,8 @@ sealed interface ConfigMergeResult {
 
 /**
  * `config.json` as a file to edit, for `PUT /api/config`. [DaemonConfig.load] stays the reader the
- * daemon starts from; nothing written here applies before the next start, except the `findings` key,
- * which [FindingSettingsSource] reads on the next findings read.
+ * daemon starts from; nothing written here applies before the next start, except the `findings` and
+ * `findingDismissals` keys, which [FindingSettingsSource] reads on the next findings read.
  *
  * A save merges into the file rather than replacing it. The file is also edited by hand and will
  * carry settings this build does not know, so a key it does not recognise is kept as it was; a
