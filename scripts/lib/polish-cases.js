@@ -20,6 +20,9 @@
  * whole inside the window, lists page keys, is what a pointer at its centre finds, and Escape shuts
  * it (`polish <w> legend inside`). jsdom proves it opens there; only a browser can say where.
  *
+ * Served, at 1440 and 400, a first load straight to `#/settings`: once the calls have landed, the
+ * repeat and endpoint counts are the session's (`polish settings first load counts`).
+ *
  * Served, at 1440 and 400, each page's empty-state sentence is whole in the window, wrapped where it
  * must be (`polish <w> empty whole`): Stats in its three cases, Sessions, and the detail pane at 1440.
  *
@@ -302,11 +305,47 @@ async function emptyWhole(page, url, rows) {
   }
 }
 
+// Settings' two counts as drawn, and what the session's calls hold once the whole copy has landed:
+// the page's own `computeDuplicates` and endpoint segments, in the words the page uses.
+const COUNTS_READ = `(() => {
+  const n = computeDuplicates(state.allTransactions, state.duplicateWindowMs).size;
+  const total = new Set(state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean)).size;
+  return { shown: !document.getElementById('page-settings').hidden, calls: state.allTransactions.length,
+    dup: document.getElementById('dup-summary').textContent, end: document.getElementById('endpoint-summary').textContent,
+    dueDup: n + (n === 1 ? ' row' : ' rows') + ' in this session',
+    dueEnd: 'showing ' + Math.min(state.endpointLimit, total) + ' of ' + total + (total === 1 ? ' endpoint' : ' endpoints') + ' in this session' };
+})()`;
+
+/**
+ * A first load straight to `#/settings`, at 1440 and 400, served: once the dot reads connected and the
+ * whole-session copy has landed, the repeat and endpoint counts are the session's. `init` routes before
+ * it reads the calls, so they were drawn on entry from none and read `0` until the page was entered again.
+ */
+async function settingsFirstLoad(page, url, rows) {
+  const seen = [];
+  for (const width of [1440, 400]) {
+    await page.setWidth(width);
+    await page.navigate('about:blank');
+    await page.navigate(`${url}#/settings`);
+    const landed = await page.waitFor(`typeof state !== 'undefined' && state.sessionId && state.allSessionId === state.sessionId
+      && state.allTransactions.length > 0 && document.getElementById('conn').dataset.state === 'connected'`, 60000);
+    await sleep(500);
+    seen.push({ width, landed: landed !== null, read: await page.ev(COUNTS_READ) });
+  }
+  const bad = seen.filter(({ landed, read: r }) => !landed || !r || r.evalError || !r.shown || r.dup !== r.dueDup || r.end !== r.dueEnd);
+  const said = ({ width, landed, read: r }) => (!landed ? `${width}: the calls never landed`
+    : !r || r.evalError ? `${width}: ${r && r.evalError}` : `${width}: "${r.dup}", "${r.end}"${r.shown ? '' : ' (Settings not shown)'}`
+      + (r.dup !== r.dueDup || r.end !== r.dueEnd ? ` for ${r.calls} calls, due "${r.dueDup}", "${r.dueEnd}"` : ''));
+  rows.push({ key: 'polish settings first load counts', ok: !bad.length,
+    value: bad.length ? 'not the session\'s' : 'the session\'s', detail: seen.map(said).join('; ') });
+}
+
 async function polish(page, urls) {
   const rows = [];
   await iconTargets(page, urls.probe, rows);
   await pageDocs(page, urls.probe, rows);
   await legendInside(page, urls.probe, rows);
+  await settingsFirstLoad(page, urls.probe, rows);
   await emptyWhole(page, urls.probe, rows);
   return rows;
 }

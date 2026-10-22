@@ -647,6 +647,16 @@ the address, the live probe's `txn route` and `txn route past ceiling` the page,
 and the archive probe's `txn route in export` the export, the last two red with the lookup made in
 the list's rows alone and with the page's class not set.
 
+**A page's counts are drawn again when the session's calls land, not only when the page is
+opened.** Settings drew its repeat and endpoint counts on entry. A first load straight to
+`#/settings` enters before the calls are read, so it said `0 row(s)` and `showing 0 of 0` of a
+session with 3 and 13 (`settings counts follow load`, red with the repaint removed). A page that
+reads the calls adds its repaint to `callsLanded` in `js/16-session-load.js` from its own wiring,
+and `loadTransactions` runs them once the load has landed; Stats joins it too, so its empty state
+asks `noCallsWhy` again once `/api/recording` has answered. The counts now say what they count:
+`3 rows in this session` and `showing 10 of 13 endpoints in this session` (`polish settings first
+load counts` in Chrome, at 1440 and 400, red with Settings' repaint taken out of the list).
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to

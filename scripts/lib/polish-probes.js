@@ -250,8 +250,40 @@ function sessionsEmptyWhy(ctx) {
 }
 
 /**
+ * Settings' counts follow a load, not only an entry: on `#/settings`, the whole-session copy emptied
+ * and the counts painted from it (none), then `loadTransactions()` awaited. The counts due are the
+ * calls' as the load left them, in the page's words, and must not be zero: a scan of no calls proves
+ * nothing. On the CI fixture they read `3 rows` and `showing 10 of 13 endpoints`.
+ */
+async function settingsCountsFollowLoad(ctx) {
+  const { window, doc } = ctx;
+  const state = ctx.pageState();
+  if (!state.sessionId) return 'n/a (no session to load)';
+  await window.navigate({ page: 'settings' });
+  const read = () => [doc.getElementById('dup-summary').textContent, doc.getElementById('endpoint-summary').textContent];
+  try {
+    state.allTransactions = [];
+    window.paintSettingsCounts();
+    const emptied = read();
+    await window.loadTransactions();
+    const n = window.computeDuplicates(state.allTransactions, state.duplicateWindowMs).size;
+    const total = new Set(state.allTransactions.map((t) => window.lastSegment(t.path)).filter(Boolean)).size;
+    const due = [`${n} ${n === 1 ? 'row' : 'rows'} in this session`,
+      `showing ${Math.min(state.endpointLimit, total)} of ${total} ${total === 1 ? 'endpoint' : 'endpoints'} in this session`];
+    const got = read();
+    if (!n || !total) return `NO - found ${n} repeated rows and ${total} endpoints after the load, so this checked nothing`;
+    return got[0] === due[0] && got[1] === due[1]
+      ? `yes ("${emptied.join('", "')}" with no calls, then "${got.join('", "')}" once the load landed)`
+      : `NO - after the load "${got.join('", "')}", due "${due.join('", "')}"`;
+  } finally {
+    await window.navigate({ page: 'traffic' });
+    await pause(150);
+  }
+}
+
+/**
  * The page keys on the probe page, from Traffic and back to it, the legend shut, no prefix pending
- * and no row selected, then the empty states. Wired right after the Stats page,
+ * and no row selected, then the empty states and Settings' counts. Wired right after the Stats page,
  * so `chip marks active` is the next guard to read the shared page (the Pace rule: it was shown red
  * with these lines present).
  */
@@ -259,7 +291,8 @@ async function probePageKeys(ctx) {
   const lines = [['page keys live', await pageKeysLive(ctx)], ['keys legend', await keysLegend(ctx)],
     ['keys skip textarea', await keysSkipTextarea(ctx)], ['rail key titles', railKeyTitles(ctx)]];
   ctx.pageState().pageKeyAt = null;
-  lines.push(['stats empty why', await statsEmptyWhy(ctx)], ['sessions empty why', sessionsEmptyWhy(ctx)]);
+  lines.push(['stats empty why', await statsEmptyWhy(ctx)], ['sessions empty why', sessionsEmptyWhy(ctx)],
+    ['settings counts follow load', await settingsCountsFollowLoad(ctx)]);
   return lines;
 }
 
