@@ -1,11 +1,11 @@
 ---
 id: KIN-119
 title: 'Findings T8: flagged rows only view toggle'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 08:24'
-updated_date: '2026-10-22 13:11'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -22,18 +22,18 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ⋮ → flagged rows only leaves the 12 flagged rows with a band saying what it counts and that it is on; off restores 18
-- [ ] #2 It is not remembered across a reload
-- [ ] #3 A no-findings session says "No calls with findings among the calls loaded" with "show all calls"
-- [ ] #4 The band passes sticky top
-- [ ] #5 25-traffic-list.js stays ≤ 600 lines
+- [x] #1 ⋮ → flagged rows only leaves the 12 flagged rows with a band saying what it counts and that it is on; off restores 18
+- [x] #2 It is not remembered across a reload
+- [x] #3 A no-findings session says "No calls with findings among the calls loaded" with "show all calls"
+- [x] #4 The band passes sticky top
+- [x] #5 25-traffic-list.js stays ≤ 600 lines
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -71,4 +71,12 @@ Red proofs (each restored):
 - item removed from ⋮ -> 'flagged only: NO - found no flagged rows only item, so this checked nothing'; 'more menu: NO - 4 exports, then keyboard shortcuts, compact rows'; 'export items hidden: NO - ... offered: keyboard shortcuts, compact rows'
 
 Not verified: a real reload in a browser (the probe reads storage and the address, which is what a reload restores from).
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/findings-pr-c-report.md (verdict: close yes, no blocking findings), PR #164, merge f4bbfbf. Nothing listed as not verified for this ticket.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA clicking the real menu item: 12 rows and the band 'Only calls with findings: 12 of 18 calls in this session…', off restores 18; a real location.reload() gives 18 rows, no storage key; a no-findings session reads 'No calls with findings among the calls loaded' with 'show all calls'; sticky top passes; 25-traffic-list.js is 591 lines. Red with the filter keeping every row: 'flagged only : NO - on: 18 rows (6 unflagged)'.
+<!-- SECTION:FINAL_SUMMARY:END -->

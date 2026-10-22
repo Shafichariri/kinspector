@@ -1,11 +1,11 @@
 ---
 id: KIN-118
 title: 'Findings T7: severity badge on rows and a Findings section in the detail pane'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 08:24'
-updated_date: '2026-10-22 13:11'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -22,17 +22,17 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 On the payments session exactly the 12 flagged rows carry .finding-badge with the severity of their first finding in words, no hue, and never "duplicate" or "repeat"
-- [ ] #2 At 400 px path tails and byte counts stay whole, with the badge short
-- [ ] #3 A flagged row's detail shows a Findings section with title, message, this row's evidence and open in Findings; unflagged rows show none; #/txn/<id> shows it live and in an export
-- [ ] #4 A reply that changes a badge redraws the list without refetching the detail's bodies
+- [x] #1 On the payments session exactly the 12 flagged rows carry .finding-badge with the severity of their first finding in words, no hue, and never "duplicate" or "repeat"
+- [x] #2 At 400 px path tails and byte counts stay whole, with the badge short
+- [x] #3 A flagged row's detail shows a Findings section with title, message, this row's evidence and open in Findings; unflagged rows show none; #/txn/<id> shows it live and in an export
+- [x] #4 A reply that changes a badge redraws the list without refetching the detail's bodies
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -79,4 +79,12 @@ Deviations: (1) 35-list.css narrow block changed: on a session with no scope bar
 Seen (sheet, scratch findings-c/sheet): served and exported, dark and light, 1440/1000/600/400 'flagged list' and 'flagged detail' shots (new in sheet-cases.js). At 1440 with the detail column open, rows that are both repeats and flagged draw no path at all (host 180px, ·repeated 2x and the badge take the row); not covered by any criterion; suggested follow-up: the same host-gives-way rule at every width.
 
 Not verified: CI runners; 'first' group (160k session) not run, although Traffic now asks for findings after its first page.
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/findings-pr-c-report.md (verdict: close yes, no blocking findings), PR #164, merge f4bbfbf. Not verified by QA: the builder's red proofs for criterion 4 were not re-run (the probe was). Builder's observation, not judged: at 1440 with the detail column open a repeat that is also flagged can draw no path.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA on the payments session at 1440, 1000 and 400 px served and 1440 and 400 exported: the 12 of 18 rows that REST flags carry a badge, each its first finding's severity in words, no hue, none says duplicate or repeat (red with the last finding's severity: 'findings badge : NO'); 'room 400 payments rows' whole (cut at base); detail Findings section on b0000001, none on an unflagged row; 'findings reply redraws' 0 body reads. Static 133, live probe 289, archive probe 56, 0 failed.
+<!-- SECTION:FINAL_SUMMARY:END -->

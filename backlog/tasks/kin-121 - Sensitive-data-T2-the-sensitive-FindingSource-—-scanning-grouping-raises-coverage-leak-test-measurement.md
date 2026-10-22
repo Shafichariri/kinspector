@@ -3,11 +3,11 @@ id: KIN-121
 title: >-
   Sensitive data T2: the sensitive FindingSource — scanning, grouping, raises,
   coverage, leak test, measurement
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 09:40'
-updated_date: '2026-10-22 12:03'
+updated_date: '2026-10-22 13:48'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -27,25 +27,25 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Locations url, query, reqBody, resBody (and request headers and response set-cookie for credentials over http only); content types routed as decided; at most 1 MiB scanned; a truncated or unparseable body gets value rules only with the note 'truncated: path unknown'
-- [ ] #2 redacted[] (both body forms, headers, query) and the placeholder are skipped through JsonPaths.isAtOrUnder over JsonPaths.redactedPaths; no second reader exists
-- [ ] #3 One evidence per row, location and path, strongest claim first
-- [ ] #4 One finding per rule, route, location and JsonPaths.group-ed path, built through session.finding; at most 5 evidence; txnIds, callIds and evidence in timeline order; txnCount; at most 1000 groups with groupLimitReached
-- [ ] #5 SensitiveSource.rules lists the shipped rules and each custom rule; a custom rule's finding reaches the reply and the reply's rules lists every sensitive rule
-- [ ] #6 The accumulator retains no NetworkTransaction; the heap per row is in the handover
-- [ ] #7 coverage.sensitive carries rows, bodies, scanned, notCaptured, truncated, binary, overScanLimit, groupLimitReached, firstPartyHosts and a daemon-built line
-- [ ] #8 Raises request-side only; an empty firstPartyHosts raises nothing; a findings.rules severity sets the base and the raises apply
-- [ ] #9 An incremental fold equals a cold scan; SessionWriter.append writes bodies before the row
-- [ ] #10 REST and MCP return the same ids in the same order on a 1203-row session with bodies
-- [ ] #11 SensitiveLeakTest green over REST, MCP and the cache; red with the mask returning the value, a message interpolating it, and key masking removed
-- [ ] #12 The measurement (10,000 calls with 4 KB bodies each side cold and after 100 appended rows; the 160k-row huge fixture cold) is in the handover
+- [x] #1 Locations url, query, reqBody, resBody (and request headers and response set-cookie for credentials over http only); content types routed as decided; at most 1 MiB scanned; a truncated or unparseable body gets value rules only with the note 'truncated: path unknown'
+- [x] #2 redacted[] (both body forms, headers, query) and the placeholder are skipped through JsonPaths.isAtOrUnder over JsonPaths.redactedPaths; no second reader exists
+- [x] #3 One evidence per row, location and path, strongest claim first
+- [x] #4 One finding per rule, route, location and JsonPaths.group-ed path, built through session.finding; at most 5 evidence; txnIds, callIds and evidence in timeline order; txnCount; at most 1000 groups with groupLimitReached
+- [x] #5 SensitiveSource.rules lists the shipped rules and each custom rule; a custom rule's finding reaches the reply and the reply's rules lists every sensitive rule
+- [x] #6 The accumulator retains no NetworkTransaction; the heap per row is in the handover
+- [x] #7 coverage.sensitive carries rows, bodies, scanned, notCaptured, truncated, binary, overScanLimit, groupLimitReached, firstPartyHosts and a daemon-built line
+- [x] #8 Raises request-side only; an empty firstPartyHosts raises nothing; a findings.rules severity sets the base and the raises apply
+- [x] #9 An incremental fold equals a cold scan; SessionWriter.append writes bodies before the row
+- [x] #10 REST and MCP return the same ids in the same order on a 1203-row session with bodies
+- [x] #11 SensitiveLeakTest green over REST, MCP and the cache; red with the mask returning the value, a message interpolating it, and key masking removed
+- [x] #12 The measurement (10,000 calls with 4 KB bodies each side cold and after 100 appended rows; the 160k-row huge fixture cold) is in the handover
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -54,4 +54,12 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 Ready for QA once its PR merges (unblocked by KIN-127, the JsonPaths carve-out). Files: service/SensitiveSource.kt (new), archive/FindingSettings.kt (FindingRuleCatalog.SENSITIVE_RULES appended to ALL; FindingRuleInfo.defaultEnabled so email and phone ship off), service/Findings.kt (FindingSession.enabled reads defaultEnabled), service/FindingsEngine.kt (one line in FindingSources.all; the drop and enabled checks read source.rules, so a custom rule's findings are kept), http/ConfigRoutes.kt (effective enabled from defaultEnabled), service/SensitiveValues.kt (xapikey is a secret name, decided 2026-10-22), mcp-tools-list.json (category enum gains sensitive), DAEMON.md (§6 findings.sensitive, §7 rule table), daemon-and-mcp.md (three paragraphs), inspector-daemon/AGENTS.md. Tests: SensitiveSourceTest (19), SensitiveLeakTest, SensitiveParityTest; the payment tests that pinned a one-family catalogue now name both. DEVIATION, needed by the masked-only invariant: a route segment that matches a value rule is written • in the finding's route (a JWT holds dots and an IBAN has no lowercase, so the route heuristic leaves both literal and the route label would print them), and the source asks RouteTemplates.keyOf directly rather than FindingSession.routeOf, whose memo is keyed by the raw path and so kept a URL card in the cache. FOR FINDINGS: the payment source still uses that memo; its accumulator holds raw paths. Red proofs (each run, seen failing, restored): raise applied to response bodies -> 'a response is never raised for its host' expected <medium> but was <high>; dedupe removed (key per rule) -> fold count expected <6> but was <8>, accumulator expected <3> but was <4>, and the dedupe test; engine checking ids against FindingRuleCatalog.ALL -> the custom rule's count expected 1 but was 0; row written before its body in SessionWriter.append -> 'the row was written before its body'; fold through queryTransactions -> SensitiveParityTest expected <1203> but was <1000>; SensitiveLeakTest: hint returning the value (accumulator: the card and its windows), a note carrying the value (REST: the card), key masking removed (REST: the JWT key's windows), route masking removed (REST: NL91ABNA0417164300), session.routeOf memo (accumulator: the URL card). Measurement (one-off test, deleted): 10,000 POSTs with ~4 KB JSON bodies each side, 83 MB on disk, cold category=sensitive read 2706 ms (budget 5 s), after 100 appended rows 41 ms (budget 100 ms), heap delta of the cache entry ~3.7 MiB (~375 B per row, both sources); 160,000-row huge-shaped session (no body files) cold 316 ms (budget 3 s), 160000 bodies counted not captured. Memory only; no disk cache needed. — bob
 
 Rebased over #160 (the Findings page, KIN-116/117). The second family met that page in three places, fixed here: (1) the Settings page wrote enabled:false overrides for email and phone because it assumed every rule defaults on; effective.findings.rules now carries defaultEnabled and 80-settings.js writes enabled only when the box differs from it (ConfigRoutesTest pins the field); the probe 'findings settings patch' was red on the old page code ('sent ... sensitive.email: {enabled:false} ...'). (2) probe 'findings none' now counts the rules that ran (email and phone ship off and read 'disabled in config.json'); red with disabled rules drawn as checked ('17 of 15 rules that ran read checked'). (3) probe 'findings coverage' now expects one line per family in the daemon's order; red with the page drawing only the payment line. Live probe 281 of 281, archive 54 of 54, against a daemon on port 8317 with the probe fixture under the scratchpad; ProbeFixtureTest updated for 17 rules. — bob
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/sensitive-data-detection-report.md (verdict: close yes, no blocking findings), PR #161, merge 5cce7ab. Not verified by QA: the heap per row and the 10,000-call and 160k-row measurements are the builder's (2706 ms cold, 41 ms warm, 316 ms), not re-measured; the false-positive rate on a real app; Linux.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA live on a seeded session, 18 findings (8 high, 4 medium, 6 info) with one case per rule and near-misses (Luhn failure, shipping, spinner, card-shaped JSON number under order_id raise nothing); email and phone off by default; empty firstPartyHosts says so in coverage.sensitive.line and setting it changes the next read without a restart; grep of planted values over REST, JSON export, Markdown and HAR: none. SensitiveLeakTest red with SensitiveMask.hint returning the value and with route masking removed. Daemon 531 tests, 0 failed.
+<!-- SECTION:FINAL_SUMMARY:END -->
