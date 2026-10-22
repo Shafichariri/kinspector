@@ -24,7 +24,9 @@
  * Options: --head <dir> (default: this repository), --base <dir>, --install <dir>,
  * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,shell,traffic,first,
  * --first-rows-ms <n> (default 3000), --keep (keep the temp directory).
- * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run.
+ * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run, 130 or 143
+ * when SIGINT or SIGTERM stopped it, after it stopped Chrome and its daemons and removed its temp
+ * directory (kept with --keep).
  */
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
@@ -86,7 +88,52 @@ function freePort() {
   });
 }
 
+// Every process the run starts, Chrome included, and what it needs to stop them and remove its
+// temp directory. Module state because a signal handler, not only `main`'s `finally`, must reach it.
 const children = [];
+const run = { tmp: null, keep: false, chrome: null, cleaning: null, interrupted: null };
+
+// Asked to stop, a daemon has this long to exit before it is killed: it may be writing to the temp
+// directory, which is removed next.
+const STOP_MS = 5000;
+
+async function stopChild(child) {
+  const gone = () => child.exitCode !== null || child.signalCode !== null;
+  if (gone()) return;
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  child.kill();
+  if (await Promise.race([exited.then(() => true), sleep(STOP_MS).then(() => false)])) return;
+  child.kill('SIGKILL');
+  await Promise.race([exited, sleep(1000)]);
+}
+
+// Once per run, whichever asks first: the end of `main`, or a signal.
+function cleanUp() {
+  if (!run.cleaning) {
+    run.cleaning = (async () => {
+      if (run.chrome) run.chrome.close();
+      await Promise.all(children.map(stopChild));
+      if (!run.tmp) return;
+      if (run.keep) { console.log(`kept ${run.tmp}`); return; }
+      await sleep(500); // Chrome is still writing its profile as it exits
+      try { fs.rmSync(run.tmp, { recursive: true, force: true }); } catch (e) { console.error(`left ${run.tmp}: ${e.message}`); }
+    })();
+  }
+  return run.cleaning;
+}
+
+// Node ends on SIGINT or SIGTERM without running any `finally`, so Ctrl-C used to leave every daemon
+// serving a copy of the fixtures, the 160,016-call session among them, from a temp directory never
+// removed (KIN-109). A second signal while cleaning waits for the first: the cleanup is bounded by
+// STOP_MS. A signal during the probe fixture's gradle write is handled once gradle returns.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (run.interrupted) return;
+    run.interrupted = signal;
+    console.error(`measure-web-ui: interrupted by ${signal}; stopping the ${children.length} processes it started. Nothing measured is a result.`);
+    cleanUp().finally(() => process.exit(128 + os.constants.signals[signal]));
+  });
+}
 
 async function startDaemon(opts, webRoot, dataDir, logFile) {
   const port = await freePort();
@@ -147,12 +194,14 @@ async function main() {
   let opts;
   try { opts = parseArgs(process.argv.slice(2)); } catch (e) { console.error(`measure-web-ui: ${e.message}`); return 2; }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'measure-web-ui-'));
-  let chrome = null;
+  run.tmp = tmp;
+  run.keep = opts.keep;
   try {
     const probe = probeFixture(opts, tmp);
     const sides = [await prepareSide(opts, 'head', opts.head, probe, tmp)];
     if (opts.base) sides.push(await prepareSide(opts, 'base', opts.base, probe, tmp));
-    chrome = await launchChrome(path.join(tmp, 'chrome-profile'));
+    const chrome = await launchChrome(path.join(tmp, 'chrome-profile'), (proc) => children.push(proc));
+    run.chrome = chrome;
 
     // Layout, run and live cases run in parallel tabs, both trees at once. Timing cases run alone
     // afterwards, one at a time, so a busy CPU does not count against either tree.
@@ -195,6 +244,8 @@ async function main() {
       }
     }
 
+    // Readings cut short by a signal are not a result, whatever they say.
+    if (run.interrupted) return 2;
     const head = results.head;
     console.log(`head: ${opts.head}`);
     for (const row of head) console.log(line(row));
@@ -213,17 +264,13 @@ async function main() {
     console.log(`head: ${head.length} readings, ${failed} failed`);
     return failed ? 1 : 0;
   } catch (e) {
-    console.error(`measure-web-ui: ${e.stack || e.message}`);
+    // Interrupted, a case fails because its Chrome was stopped under it; that is not the news.
+    if (!run.interrupted) console.error(`measure-web-ui: ${e.stack || e.message}`);
     return 2;
   } finally {
-    if (chrome) chrome.close();
-    for (const child of children) child.kill();
-    if (opts.keep) console.log(`kept ${tmp}`);
-    else {
-      await sleep(500); // Chrome is still writing its profile as it exits
-      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { console.error(`left ${tmp}: ${e.message}`); }
-    }
+    await cleanUp();
   }
 }
 
-main().then((code) => process.exit(code));
+// Interrupted, the signal's handler exits, with 128 + the signal's number, once the cleanup is done.
+main().then((code) => { if (!run.interrupted) process.exit(code); });
