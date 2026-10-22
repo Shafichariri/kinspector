@@ -26,7 +26,7 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 <!-- AC:BEGIN -->
 - [ ] #1 A Findings rail entry after Stats opens #/findings
 - [ ] #2 The probe session reads "No findings in 16 calls in this session" and lists six rules as checked
-- [ ] #3 The payments session shows the design's fixture counts under "Payment safety", with its coverage line
+- [ ] #3 The payments session shows the fixture counts under "Payment safety" (3 high, 6 medium, 1 info; 10 findings in 18 calls; 12 flagged rows; coverage 13 mutation calls, 2 bodies unknown — corrected from the design, which said 14 and 15; PaymentRulesTest asserts 13 and 12), with its coverage line
 - [ ] #4 A call link opens #/txn/<id> and Back returns; #/findings?id=<id> scrolls to and marks that finding
 - [ ] #5 The page text holds no planted key
 - [ ] #6 Live, it asks at most once a second, never twice at once, only while Traffic or Findings is shown with live tail on (static findings refresh lines, each red with its line removed)

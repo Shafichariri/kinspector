@@ -20,7 +20,7 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 On the payments session exactly the 14 flagged rows carry .finding-badge with the severity of their first finding in words, no hue, and never "duplicate" or "repeat"
+- [ ] #1 On the payments session exactly the 12 flagged rows carry .finding-badge with the severity of their first finding in words, no hue, and never "duplicate" or "repeat"
 - [ ] #2 At 400 px path tails and byte counts stay whole, with the badge short
 - [ ] #3 A flagged row's detail shows a Findings section with title, message, this row's evidence and open in Findings; unflagged rows show none; #/txn/<id> shows it live and in an export
 - [ ] #4 A reply that changes a badge redraws the list without refetching the detail's bodies

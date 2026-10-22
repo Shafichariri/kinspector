@@ -20,7 +20,7 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ⋮ → flagged rows only leaves the 14 flagged rows with a band saying what it counts and that it is on; off restores 18
+- [ ] #1 ⋮ → flagged rows only leaves the 12 flagged rows with a band saying what it counts and that it is on; off restores 18
 - [ ] #2 It is not remembered across a reload
 - [ ] #3 A no-findings session says "No calls with findings among the calls loaded" with "show all calls"
 - [ ] #4 The band passes sticky top
