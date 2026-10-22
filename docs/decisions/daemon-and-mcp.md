@@ -29,8 +29,10 @@ spawns a throwaway server, handshakes, reports the tool count and stops it, and 
 through the ordinary peer kill so the editor respawns it. `McpControlTest` (in
 `PeerRegistryTest.kt`) asserts that probing requires the header and spawns nothing without it, and
 that a probe reports a tool count or a reason. That a probe leaves no process behind rests on its
-`finally { process.destroyForcibly() }`, and `McpProbeCleanupTest` holds it on the success, timeout
-and failed-write paths. It drives a stub child that **ignores EOF** through `ProcessMcpControl`'s
+`finally { process.destroyForcibly() }`, and `McpProbeCleanupTest` holds it on the success, timeout,
+failed-write and silent-child paths. The probe reads the child's stdout on a thread of its own and polls it
+against its deadline, because a `readLine` on its own thread waits for good on a child that holds stdout
+open and never writes. The test drives a stub child that **ignores EOF** through `ProcessMcpControl`'s
 internal launch seam: the real server exits when the probe closes its stdin, so a test against it
 passes with the kill deleted. The seam stays off `InspectorDaemon`'s constructor.
 

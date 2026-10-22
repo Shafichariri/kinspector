@@ -732,3 +732,5 @@ with main's stylesheet and with the hold removed. How many breaks main makes dep
 Chrome finds (29 on one machine, 30 on another); the break that reproduces is
 `http://127.0.0.1:808|0`. `whole` was red with the cap back on the cell; `one line` was red before the wide rule. `check-web-static.js`'s `stats
 route pieces` holds the cut itself, red with brackets ignored and with the leading `/` cut.
+
+**Every DevTools command in `scripts/lib/measure-cdp.js` fails after 30 s (`SEND_DEADLINE_MS`), about 40x the slowest single command measured in a full run (718 ms, `head run`, 287 readings, 160k-call cases included, macOS, 2026-10-22), so a wedged renderer fails the run instead of hanging it. Long loads wait in `waitFor`'s polls, never in one command.** (Decided 2026-10-22: kept on the architect's recommendation.)

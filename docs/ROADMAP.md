@@ -170,12 +170,18 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - ~~**The signals sort and clamp exist twice, which breaks the layering rule phase D wrote down.**~~
   Done 2026-10-19, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:signals-query-one-rule`.
-  **Open: KIN-42. Deferred by the maintainer on 2026-10-19; undeferred on 2026-10-21 (order row 21).** On a session of about 160,000 calls, the
-  web UI shows a false empty state ("waiting for an app" / "nothing recorded") for about 25 seconds
-  before the first rows appear, and the live socket connects only after. KIN-34 introduced it, when the
-  filter-note counts began reading the whole session. The fix is to draw the first page at once and
-  read the whole-session copy in the background (ACs in the ticket); it is not scheduled. The item is
-  Done without it by that decision, not because the defect is closed.
+  **KIN-42 done 2026-10-22** (PR #136, merge `1888380`; QA one round, no blocking findings), see
+  `ROADMAP-DONE.md` → §3 → Guards. A load draws its first page at once, reads the whole-session copy behind it,
+  and opens the socket before the first page; the panes that read the copy say `this session's N calls are being
+  read…` until it lands. On the 160,016-call session, first rows at 411 to 427 ms against about 24 s at `4645c43`.
+  The read stays uncapped, by KIN-42's decision. **For the product owner, unplaced, from KIN-42's hand-over and QA:**
+  (1) a filter typed during the read restarts it, where one read per session that later loads wait on would not;
+  (2) a row arriving during the first page's own request can miss the list until the next load; (3) an address
+  naming a view other than traffic or path (`#/traffic/all`) still waits for the whole load; (4) the waterfall's
+  stub groups for screens older than the list's page say `no calls`, before and after the copy lands (predates
+  KIN-42); (5) the overview band's `min-height` rule is unguarded: with `.axis-hint.axis-reading { min-height:
+  24px }` removed, `copy lands huge` still passes at 44 px, under its 48 px bound. *(2026-10-22: (5) is
+  placed by the product owner as `item:guard-overview-band-reserved`, §3 → Guards; (1) to (4) stay unplaced.)*
   **For the product-owner, unplaced:** a live call never redraws the timeline. The `txn` branch of the
   socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
   appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
@@ -240,29 +246,70 @@ against the code at `5b21593`. **Both ordered 2026-10-22 by the maintainer**: se
   **Out of scope.** `failures unfolded`, which is read before anything opens. The fixture's content,
   unless no visit in it holds a failure. Surfaces: none a user sees; scripts only. **Size:** XS.
 
-- **A measure run hangs when Chrome dies mid-case.** *Ticket label:*
-  `item:guard-measure-chrome-exit-fails`.
+- ~~**A measure run hangs when Chrome dies mid-case.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-measure-chrome-exit-fails`.
 
-  **For whom.** The engineer or QA running `measure-web-ui.js` once per web fix round, as the
-  roadmap-cycle skill asks. A hang reads as a slow case, so the run is waited on, then killed and
-  rerun, and its readings are lost.
+*The two guards below were left open by the batch closed on 2026-10-22: the first by QA on KIN-42
+(`item:signals-query-one-rule`), the second by the hand-over and QA of
+`item:guard-measure-chrome-exit-fails`. Both are recorded in `docs/STATUS.md` → Not verified. The
+product owner placed them here on 2026-10-22. **Both were ordered 2026-10-22 by the maintainer's
+proxy**: see "Order from here".*
 
-  **Why.** `scripts/lib/measure-cdp.js` resolves each DevTools command from `ws.onmessage` alone.
-  Nothing listens for the socket closing or for Chrome's process exiting after start-up, and no
-  command has a deadline, so every pending `send` waits for ever. It happened once during
-  `item:guard-live-traffic-driver`, and a rerun was clean.
+- **The overview band's reserved height is a promise nothing holds.** *Ticket label:*
+  `item:guard-overview-band-reserved`. This is the fifth of KIN-42's follow-ups, listed under the
+  signals guard above. The other four are behaviour, not guards, so it does not fold into them.
+
+  **For whom.** Whoever next changes the bands above the list, and trusts the checks to tell them
+  they broke the read. Behind them, the web UI user on a Mac reading a large session. They have
+  scrolled to a row while the copy is read, and the row should not jump when the copy lands.
+
+  **Why.** `web-ui.md` says the overview line keeps its band through the read "as tall as the axis",
+  so rows move only by the scope bar's 33 px when the copy lands. One CSS rule holds that:
+  `.axis-hint.axis-reading { min-height: 24px }`. QA removed only that rule and `copy lands huge`
+  stayed green, with rows moving 44 px, under its 48 px bound. That reading lives in
+  `measure-web-ui.js`, which CI does not run, so in CI nothing goes red at all. Web UI polish restyles
+  these bands next, and KIN-33's list-pane guard set the precedent: the guard comes before the work
+  that moves what it guards.
 
   **Acceptance criteria.**
-  - When Chrome exits or its DevTools socket closes during a case, every pending command fails
-    with an error naming the case and the cause, and the run ends with a non-zero exit within
-    seconds. It never prints a reading as passed.
-  - The runner stops the daemons and the Chrome it started on that path, as it does on success.
-  - Proven by killing Chrome during a case: before the fix the run hangs, after it the run exits.
+  - With only the `min-height` rule removed, `copy lands huge` fails. It does so by comparing the
+    band's height during the read with its height after landing, or by bounding the move at the
+    scope bar's measured height rather than a fixed 48 px. The architect chooses which.
+  - A check that CI runs also fails with that rule removed, for example a static reading of the rule
+    in `check-web-static.js`, as `closed drawer css` already does for the drawer. If no CI check can
+    see it without a browser, the item says so, and `web-ui.md` says the rule is held only by the
+    measure run.
+  - Each check is proven red with the rule removed and green with it restored. If
+    `INSPECTOR_UI_EXPECT_CHECKS` or the static count moves, the change says why.
 
-  **Out of scope.** Retrying a case. Putting `measure-web-ui.js` in CI. A deadline on commands
-  while Chrome is alive: if the architect wants one, it comes with a number the slowest case
-  (first rows on 160,000 calls) is shown to meet. Surfaces: none a user sees; scripts only.
-  **Size:** S.
+  **Out of scope.** Changing the band, the rule or the 33 px. KIN-42's other four follow-ups. Running
+  `measure-web-ui.js` in CI. Surfaces: none a user sees; scripts, plus one sentence in
+  `web-ui.md` if needed. No public API. **Size:** XS.
+
+- **Interrupting a measure run leaves its daemons running.** *Ticket label:*
+  `item:guard-measure-interrupt-cleans-up`.
+
+  **For whom.** Every engineer and QA agent who runs `scripts/measure-web-ui.js`, which every W-lane
+  fix round does, and who stops it with Ctrl-C because a case looks wrong or a run takes too long.
+
+  **Why.** The run cleans up in one `finally`: it closes Chrome, kills each daemon it spawned and
+  deletes its temp directory. SIGINT and SIGTERM end Node without running it. Each interrupted run
+  leaves one or two JVM daemons behind, each serving a copy of the fixtures from a temp directory that
+  is never deleted, and the 160,016-call session is one of those fixtures. Ports are picked free, so
+  nothing collides; the cost is that leaked processes and disk pile up unnoticed. KIN-99 fixed the
+  case where Chrome dies on its own, and named this case as out of its scope.
+
+  **Acceptance criteria.**
+  - SIGINT or SIGTERM sent to a measure run mid-case ends it within a few seconds. Afterwards no
+    process whose command line names the run's temp directory is left, and the directory is gone
+    unless `--keep` was given.
+  - The run exits non-zero and says it was interrupted. It prints no readings as if they were a
+    result.
+  - This is proven both ways with KIN-99's harness, signalling the run instead of killing Chrome.
+    At base, the daemons survive. On the change, nothing survives. A `--base` run is included.
+
+  **Out of scope.** SIGKILL, which no handler can catch. `render-web-ui.js` and the other scripts,
+  unless the architect finds they share the cleanup. If one has the same gap, that is a new entry,
+  not scope creep. Windows signals. Surfaces: scripts only. No public API. **Size:** XS.
 
 ### Bugs found, not fixed
 
@@ -385,9 +432,9 @@ from here" yet**: the maintainer reviews the list first.*
 | ~~At 400px the Stats page's route cell breaks hostnames mid-word~~ **Done 2026-10-22** (KIN-93; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
 | ~~IPv6 hosts are not bracketed in `url` or the row label~~ **Done 2026-10-22** (KIN-92; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:host-port-everywhere` | both this and the next row are places where the rule `item:row-label-port` set (a server is its host plus a non-default port) has not reached |
 | ~~The session summary's `byHost` merges `:8080` and `:9090`~~ **Done 2026-10-22**, with the IPv6 row (KIN-92) | `item:host-port-everywhere` | the key becomes `hostPort`, and once `hostPort` brackets IPv6 the key is right for IPv6 as well |
-| During a session switch the timeline's call rows and the endpoint chips show the session just left | **new item**, `item:web-switch-clears-call-panes` | the same class of false fact as `item:web-now-strip-follows-session`, which put calls out of scope. 1a, where QA suggested it go, has shipped without it |
+| ~~During a session switch the timeline's call rows and the endpoint chips show the session just left~~ **Done 2026-10-22** (KIN-94, KIN-95; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:web-switch-clears-call-panes` | the same class of false fact as `item:web-now-strip-follows-session`, which put calls out of scope. 1a, where QA suggested it go, has shipped without it |
 | A brushed stretch with some loaded rows says nothing of older unloaded matches under a filter | **new item**, `item:web-stretch-says-older-matches` | `item:web-list-says-what-it-holds` covered only a stretch the list draws nothing of |
-| Small doc fixes: `architect.md`, two INTEGRATION.md headings, the root `AGENTS.md` table, the Sessions page's path | **new item**, `item:docs-housekeeping-2026-10-21` | four edits, none of them worth an item on its own |
+| ~~Small doc fixes: `architect.md`, two INTEGRATION.md headings, the root `AGENTS.md` table, the Sessions page's path~~ **Done 2026-10-22** (KIN-89; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:docs-housekeeping-2026-10-21` | four edits, none of them worth an item on its own |
 | Phase I's R12 proof command | not an item | `ROADMAP-DONE.md` → §5 → Phase I records that it is quoted nowhere in the repository, and the per-module regenerate commands in `api-parity/AGENTS.md` are correct |
 | `twins-and-api.md` says v59 tells consumers to "copy the colours they need" | not an item | QA called it looser wording, not a false claim. Copying the colours is one of v59's three cases |
 | No item in the run recorded what it cost | not an item | a team rule, in the roadmap-cycle skill ("Record what each item cost"), not a product change. Whether a coordinated run is held to it is a question for the maintainer |
@@ -443,37 +490,8 @@ from here" yet**: the maintainer reviews the list first.*
 
 - ~~**A server is its host and a non-default port, but not yet everywhere.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:host-port-everywhere`.
 
-- **During a session switch the timeline's calls and the endpoint chips are the session just left.**
-  *Ticket label:* `item:web-switch-clears-call-panes`. From QA on
-  `item:web-now-strip-follows-session` (screenshots at base and head) and its hand-over.
-
-  **This overturns a recorded decision.** `docs/decisions/web-ui.md`, "The signal side follows the
-  session the moment it changes", says:
-
-  > The calls themselves are left to the switch's first page.
-
-  `followSession` says the same: "The calls are not cleared: the switch's first page replaces them."
-  On the list that holds. On the timeline it does not: the switch's reads take as long as a
-  whole-session read, 25 s on a large session, and until they land the timeline draws the old
-  session's call rows and the endpoints menu counts its chips, under the new session's name. QA saw
-  `GET api.qa.invalid /b` and the chip `b 1` from Beta while Alpha was selected. The premise was a
-  fact about one pane, and it was recorded as if it held for every pane.
-
-  **For whom.** A web UI user on a Mac who switches sessions, or deletes the one on screen. For the
-  length of the switch, the timeline shows calls the selected session never made.
-
-  **Acceptance criteria.**
-  - With the new session's calls held back, the timeline draws none of the left session's calls,
-    and the endpoints button and its popover show none of its chips.
-  - The path, the waterfall and the tag browsers, which read what `followSession` clears but are not
-    redrawn by it, show none of the left session's rows in that window.
-  - The tab bar keeps its tabs through the window, and so does the timeline tab. A count on a tab
-    either describes the selected session or is not shown.
-  - A live probe line for each pane, holding the switch's reads, proven red with that pane's redraw
-    removed. `now switch shows none` stays green.
-
-  **Out of scope.** Making the switch faster, and KIN-42's whole-session read. The list, which the
-  first page already replaces. Surfaces: web UI only. **Size:** S.
+- ~~**During a session switch the timeline's calls and the endpoint chips are the session just left.**~~
+  Done 2026-10-22 (KIN-94, KIN-95, PR #135): a switch clears the call side with the signal side, and until the new session lands every call pane, the glance and the markers popover say `this session is being read…`; the tab bar keeps its tabs without counts, and a call left open from the previous session closes. Overturns the `web-ui.md` sentence "The calls themselves are left to the switch's first page", by the maintainer's approval of 2026-10-21. See `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-switch-clears-call-panes`.
 
 - **A brushed stretch under a filter does not say that older matches may be in it.** *Ticket label:*
   `item:web-stretch-says-older-matches`. From QA on `item:web-list-says-what-it-holds` (its "mixed
@@ -498,31 +516,7 @@ from here" yet**: the maintainer reviews the list first.*
   the sentence cannot be true without one, the item comes back to the product owner. The header's
   wording. Surfaces: web UI only. **Size:** S.
 
-- **Housekeeping after the 2026-10-20/21 run.** *Ticket label:* `item:docs-housekeeping-2026-10-21`.
-  Four small edits that each leave someone reading something false or something about to break. None
-  is worth an item of its own.
-
-  **For whom.** The agents who read these files, the consuming team reading `INTEGRATION.md`, and a
-  web UI user whose daemon runs with `--data`.
-
-  **Acceptance criteria.**
-  - `.claude/agents/architect.md` no longer says `:inspector-noop-ui` has no golden file. It names
-    `api/inspector-ui-public-api.txt`. That file is the maintainer's to change, so the edit goes to
-    the maintainer for approval.
-  - In `INTEGRATION.md` only the current version's heading says `(this document)`. v49 and v50 lose
-    the label. This changes nothing a consumer has to do. Whether it takes a version is the
-    release-steward's call.
-  - The root `AGENTS.md`'s "Where we are" table has room for the next row. The four structure-pass
-    rows (S-D, S-F, S-H, S-I) become one row naming phases A to I as done, and pointing to
-    `docs/STATUS.md` for the red `repo` pushes. The file is 14,990 bytes of its 15,000 budget, which
-    is why S-D and S-F were cut short, and the next status row would fail `DecisionsTest`.
-  - With `--data` elsewhere, the Sessions page names the real sessions folder, as the Processes page
-    already shows the real data directory. In an export it names none. The page now says
-    `~/.inspector/sessions` whatever the folder is. A probe line is proven red with the fixed path
-    put back.
-
-  **Out of scope.** Any other rewording of these files. Raising the root's byte budget. Surfaces:
-  docs, plus one web UI string. **Size:** S.
+- ~~**Housekeeping after the 2026-10-20/21 run.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:docs-housekeeping-2026-10-21`.
 
 *The follow-ups below were left open by the batch closed on 2026-10-22 (`item:guard-mcp-probe-cleanup`,
 `item:guard-probe-finds-nothing-fails`, `item:host-port-everywhere`,
@@ -534,36 +528,13 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 | Follow-up | Goes to | Why there |
 |---|---|---|
-| A silent MCP child hangs the probe | **new item**, `item:mcp-probe-deadline-holds` | `item:guard-mcp-probe-cleanup` put the timeout out of scope; its test file has the stub this needs |
+| ~~A silent MCP child hangs the probe~~ **Done 2026-10-22** (KIN-96; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:mcp-probe-deadline-holds` | `item:guard-mcp-probe-cleanup` put the timeout out of scope; its test file has the stub this needs |
 | One IPv6 server reached by OkHttp and Ktor is two route rows | **new item**, `item:route-key-one-ipv6-host` | the route key, not the Stats page's drawing; neither IPv6 item owned the key |
-| `web-ui.md` does not name the cases #133 fixed; its "29 breaks" depends on fonts | **new item**, `item:docs-housekeeping-2026-10-22` | `item:docs-housekeeping-2026-10-21` is open with only a web line left, and reopening its docs part would mix lanes |
+| `web-ui.md` does not name the cases #133 fixed; its "29 breaks" depends on fonts | **new item**, `item:docs-housekeeping-2026-10-22` | `item:docs-housekeeping-2026-10-21` was open with only a web line left, and reopening its docs part would mix lanes |
 | `expanded unfolded` opens Home, which has no failure | §3 → Guards, `item:guard-expanded-unfolded-has-failures` | a guard that passes without judging its rule |
-| `measure-cdp.js` hangs when Chrome dies mid-case | §3 → Guards, `item:guard-measure-chrome-exit-fails` | a check that cannot fail when its browser goes away |
+| ~~`measure-cdp.js` hangs when Chrome dies mid-case~~ **Done 2026-10-22** (KIN-99; `ROADMAP-DONE.md` → §3 → Guards) | §3 → Guards, `item:guard-measure-chrome-exit-fails` | a check that cannot fail when its browser goes away |
 
-- **A silent MCP child hangs the probe, and is left running.** *Ticket label:*
-  `item:mcp-probe-deadline-holds`. From the hand-over of `item:guard-mcp-probe-cleanup`, which hit it
-  while proving red: a test hung for ten minutes.
-
-  **For whom.** A web UI user on a Mac who presses the MCP probe in settings while an
-  `inspector mcp` is wedged. `ProcessMcpControl.probe` checks `timeoutMs` only between lines, so a
-  child that keeps stdout open and writes nothing leaves `readLine` blocked for good:
-  `POST /api/mcp/probe` never answers and the button never reports. The `finally` that stops the
-  child runs only after the read returns, so the child also outlives the probe and shows in the peer
-  list as an `mcp` process. That is the leak `item:guard-mcp-probe-cleanup` closed on the success,
-  timeout and failed-write paths, still open on this one.
-
-  **Acceptance criteria.**
-  - With a stub child that keeps stdout open and never writes, `probe` returns within its timeout
-    plus a margin the test states, with an error that says the child did not answer in time.
-  - The child is not alive once `probe` returns, read as `McpProbeCleanupTest` reads it.
-  - A `silent` mode beside the stub's `answer`, `chatter` and `close-stdin`, proven red with the fix
-    removed. The red run fails on the test's own bound and does not hang the suite.
-  - The existing three cleanup tests and "the real control either answers or explains why it
-    cannot" stay green.
-
-  **Out of scope.** The 15 s default, what the probe reports on success, and the route. Surfaces:
-  daemon only. `ProcessMcpControl` is in `:inspector-daemon`, which is not published, so there is
-  no noop twin or golden file. **Size:** S.
+- ~~**A silent MCP child hangs the probe, and is left running.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:mcp-probe-deadline-holds`.
 
 - **One IPv6 server reached by both clients is two route rows.** *Ticket label:*
   `item:route-key-one-ipv6-host`. From QA on `item:host-port-everywhere`, seen again by QA on
@@ -756,13 +727,10 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 13a | A silent MCP child hangs the probe, and is left running | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:mcp-probe-deadline-holds` | S | D, first in the lane after the advisory |
-| 16 | Housekeeping after the 2026-10-20/21 run (waits: maintainer approval of the `architect.md` edit, for that edit only) | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-21` | S | S for the docs, then W for the Sessions page line; the `AGENTS.md` edit merges before any status-row close |
 | 16a | Housekeeping after the 2026-10-22 batch | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:docs-housekeeping-2026-10-22` | XS | S |
 | 16b | `expanded unfolded` judges a line with no failure on it | §3 → Guards | `item:guard-expanded-unfolded-has-failures` | XS | S; may share a PR with `item:docs-housekeeping-2026-10-22` |
-| 16c | A measure run hangs when Chrome dies mid-case | §3 → Guards | `item:guard-measure-chrome-exit-fails` | S | S, before the W lane's next fix round |
-| 20 | A session switch clears the timeline's calls and the endpoint chips *(approved 2026-10-21 by the maintainer: overturns the `web-ui.md` sentence; replacement text comes with the item)* | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
-| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note; merged 2026-10-22 as PR #136, open until QA verifies it)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 16d | Interrupting a measure run leaves its daemons running | §3 → Guards | `item:guard-measure-interrupt-cleans-up` | XS | S |
+| 16e | The overview band's reserved height is a promise nothing holds | §3 → Guards | `item:guard-overview-band-reserved` | XS | S; lands before `item:web-ui-polish` PR A, which restyles the bands it guards |
 | 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:session-diff` PR A and `item:findings-payment-safety` PR A |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
 | 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
@@ -790,8 +758,15 @@ the doc entry, then the `expanded unfolded` guard (same lane and small enough to
 the measure runner, which goes before the W lane's next fix round because every round runs it.
 `item:route-key-one-ipv6-host` goes in lane D before `item:session-diff` and
 `item:findings-payment-safety`, because both reuse the route key; fixed after them, it would change
-three surfaces' answers instead of one. KIN-42 merged on 2026-10-22 as PR #136; its row stays until QA
-verifies it.
+three surfaces' answers instead of one. KIN-42 merged on 2026-10-22 as PR #136 and QA verified it the same day; its row, with the
+rows for `item:mcp-probe-deadline-holds`, `item:docs-housekeeping-2026-10-21`,
+`item:guard-measure-chrome-exit-fails` and `item:web-switch-clears-call-panes`, moved to `ROADMAP-DONE.md`.
+
+**Two rows added 2026-10-22, ordered by the maintainer's proxy on the product owner's proposal.**
+16d is the measure run's interrupt cleanup: every W-lane fix round runs that script, and it is the same
+kind of fix as KIN-99. 16e is the overview band guard, before `item:web-ui-polish` PR A, because the
+guard must exist before the work that moves what it guards. 16c is skipped because KIN-99 used it
+and docs may still name that number.
 
 **The design questions on four rows were answered 2026-10-22 by the maintainer's proxy**, each on the
 architect's recommended default, and are reversible if the maintainer reopens them. Findings and

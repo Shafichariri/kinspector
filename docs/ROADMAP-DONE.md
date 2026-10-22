@@ -374,7 +374,54 @@ Android only looked right because 120px clears a status bar at that density.
   22 failures at the base of KIN-41 and 2 at head; the 20 that moved are all "scrolled back: moves ->
   stays", and the 2 left are KIN-42's. The release-notes line owed (in `UNRELEASED.md`, the fourth) still stands
   and is unchanged.
-  *KIN-42, deferred, and the unplaced live-timeline defect stay open in `ROADMAP.md` → §3 → Guards.*
+  *KIN-42 was closed on 2026-10-22; see the paragraph below. The unplaced live-timeline defect was placed and done in `item:web-live-calls-reach-every-pane`.*
+
+  **KIN-42 Done, 2026-10-22.** PR #136 merged as `1888380` (two commits: `14be66e`, the pure relocation of
+  `loadTransactions` and `syncAllTransactions` into `web/js/16-session-load.js`, then `293e012`); `build`,
+  `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded. Undeferred by the maintainer
+  on 2026-10-21; Done on QA's pass over detached copies, one round, no blocking findings.
+
+  A load draws its first page at once, the live socket opens before it, and the whole-session copy is read behind
+  it; the panes that need the copy (the glance, the path, the endpoint chips, the repeat marks, the overview line)
+  say `this session's N calls are being read…` until it lands, and the copy lands in place, with the scroll kept.
+  On the 160,016-call session in headless Chrome 131, first rows at 411 to 427 ms and connected at 414 to 430 ms
+  (bar 3000), against about 24 s at `4645c43` and 26,378 and 26,482 ms at `623c571`. QA sampled the whole read every
+  400 ms at three widths and found no `waiting for an app` or `nothing recorded` at any of them. The copy landed
+  with 10 chips and `calls in session 160016`, the first row moved 33 px. Counts, base to head: static checks 112 to
+  116, live probe 260 to 262, archive probe 48; Chrome `--only first,traffic,layout,run,live,room`, 220 readings, 0
+  failed on head and 4 on base (only `first rows huge`, `connected huge`, `being read huge` and `copy lands huge`
+  moved). Red by QA: `connectLive()` moved back after the load (`connected huge: over 3000 ms (23748 ms)`), and the
+  overview band not reserved (`the first visible row moved 66 px`).
+
+  **What was learned.** With the axis hidden during the read, the whole overview line was hidden on a huge session,
+  because the axis is the only part of that line drawn there, so when the copy landed two 33 px bands appeared (the
+  scope bar, which the design note allowed for, and the overview line, which it did not) and the first row moved
+  66 px, past the 48 px bound. The coordinator chose option (a) on 2026-10-22: the overview line keeps its band while
+  the copy is read and holds `beingRead(…)` text, never an empty axis, at the axis's height through the reading-only
+  class `.axis-hint.axis-reading { min-height: 24px }`, and `syncOverview` counts the hint. QA found that rule
+  unguarded: with the `min-height` removed, `copy lands huge` still passes at 44 px, under its bound, so the
+  "rows move only by the scope bar" promise is held by the bound and not by an exact reading. The builder's first
+  `copy lands huge` also passed vacuously when `connectLive` was moved back late, so it gained a "found nothing"
+  guard. The read stays uncapped, by KIN-42's decision. A `git commit` with `-c` options failed in the builder's zsh
+  (`$C` was not split) and a chained `git reset --hard` lost the working tree; every KIN-42 file was restored from
+  the blobs `git add -A` had just staged, other worktrees' blobs excluded, and QA re-measured every Chrome reading
+  on the merged tree, which is why those readings are QA's and not the builder's.
+
+  **Left open, unplaced, for the product owner.** A filter typed during the read restarts it (one read per session
+  that later loads wait on would not); a row arriving during the first page's own request can miss the list until the
+  next load; an address naming a view other than traffic or path still waits for the whole load; the waterfall's
+  stub groups for screens older than the list's page say `no calls` (predates KIN-42); the band's `min-height` is
+  unguarded. Safari and Firefox on the huge session, and Chrome `topbar` and `shell` in this round, were not run.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *The original text of the open entry, kept as the record:*
+  **Open: KIN-42. Deferred by the maintainer on 2026-10-19; undeferred on 2026-10-21 (order row 21).** On a session of about 160,000 calls, the
+  web UI shows a false empty state ("waiting for an app" / "nothing recorded") for about 25 seconds
+  before the first rows appear, and the live socket connects only after. KIN-34 introduced it, when the
+  filter-note counts began reading the whole session. The fix is to draw the first page at once and
+  read the whole-session copy in the background (ACs in the ticket); it is not scheduled. The item is
+  Done without it by that decision, not because the defect is closed.
   *Original statement of the defect, kept as the record:*
   **Ordered 2026-10-18** (§5 → "Order from here"), right after the
   Markdown export bug. It is a live web UI defect: a filter a user types does not reach the
@@ -824,6 +871,60 @@ Android only looked right because 120px clears a status bar at that density.
   **Out of scope.** Changing what the probe reports, its timeout, or the `POST /api/mcp/probe`
   route. Surfaces: daemon only. `ProcessMcpControl` is public in `:inspector-daemon`, which is not
   published, so there is no noop twin or golden file to carry.
+
+- ~~**A measure run hangs when Chrome dies mid-case.**~~ **Done, 2026-10-22.** PR #141 merged as `85e9552`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on `main`
+  was in progress when QA looked. KIN-99 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `scripts/lib/measure-cdp.js` now fails every pending command with the case's name and the cause when Chrome
+  exits after start-up (`Chrome exited (signal SIGKILL)`) or a page's DevTools socket closes, and rejects any later
+  send at once. `measure-web-ui.js`'s `onPage` names each case (`head traffic`, `head layout big`) and throws if
+  `page.lost` is set after the case returns, so a case that swallowed the error cannot print a reading as passed.
+  The existing `finally` then stops Chrome and every daemon. QA killed Chrome 8 s into `--only traffic`: `run exited
+  with 2 after 0s`, `head traffic: Chrome exited (signal SIGKILL) before Runtime.evaluate was sent`, nothing left
+  running. At `95b4de4` the same kill left the run alive 60 s later and five daemons running. A socket closed under
+  a pending command was rejected after 258 ms; with the `ws.onclose` handler removed it waited out the deadline.
+  With the `if (page.lost) throw` removed, a case that swallows the error printed `ok SWALLOWED: 1` and exited 0.
+  `--only traffic` (10 readings), `--only layout` (124) and `--only first` on the 160,016-call session (9) stay green.
+
+  **What was learned.** The roadmap allowed a deadline on commands while Chrome is alive only "with a number the
+  slowest case is shown to meet". The builder timed every send in a full run (287 readings, `first` included): the
+  slowest was 718 ms, so 30 s (`SEND_DEADLINE_MS`) is about 40x, and `docs/decisions/web-ui.md` records it, decided
+  2026-10-22 on the architect's recommendation. QA's judgement was that the events carry the item's criteria and the
+  deadline covers the one failure they cannot see, a Chrome that neither exits nor closes its socket. The deadline
+  is also a backstop that hides its own cause: with `onclose` removed the run failed at 30 s saying "no answer"
+  instead of "socket closed". A socket's close can arrive before Chrome's exit is reaped, so the socket handler
+  waits 250 ms and names the exit if there was one.
+
+  **Left open.** Linux (only macOS Chrome was killed), a wedged renderer inside a real case (only the scratch
+  driver's never-resolving command covered the deadline), a kill during a `--base` run, and Ctrl-C or SIGTERM sent to
+  `measure-web-ui.js` itself, which still skips its `finally` so the daemons outlive it. That last one is a
+  candidate guard of its own and is not placed.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-measure-chrome-exit-fails`.
+
+  **For whom.** The engineer or QA running `measure-web-ui.js` once per web fix round, as the
+  roadmap-cycle skill asks. A hang reads as a slow case, so the run is waited on, then killed and
+  rerun, and its readings are lost.
+
+  **Why.** `scripts/lib/measure-cdp.js` resolves each DevTools command from `ws.onmessage` alone.
+  Nothing listens for the socket closing or for Chrome's process exiting after start-up, and no
+  command has a deadline, so every pending `send` waits for ever. It happened once during
+  `item:guard-live-traffic-driver`, and a rerun was clean.
+
+  **Acceptance criteria.**
+  - When Chrome exits or its DevTools socket closes during a case, every pending command fails
+    with an error naming the case and the cause, and the run ends with a non-zero exit within
+    seconds. It never prints a reading as passed.
+  - The runner stops the daemons and the Chrome it started on that path, as it does on success.
+  - Proven by killing Chrome during a case: before the fix the run hangs, after it the run exits.
+
+  **Out of scope.** Retrying a case. Putting `measure-web-ui.js` in CI. A deadline on commands
+  while Chrome is alive: if the architect wants one, it comes with a number the slowest case
+  (first rows on 160,000 calls) is shown to meet. Surfaces: none a user sees; scripts only.
+  **Size:** S.
 
 ### Bugs found, not fixed
 
@@ -1631,6 +1732,171 @@ Android only looked right because 120px clears a status bar at that density.
   **Out of scope.** The table's columns and order, and the term a row links with. Offering
   `sort=errors` on the page. Surfaces: web UI only. **Size:** S.
 
+- ~~**Housekeeping after the 2026-10-20/21 run.**~~ **Done, 2026-10-22.** Three PRs: #124 (merge `6c1cb32`: the `INTEGRATION.md` headings and the `AGENTS.md` table), #130 (`e071594`: the
+  `architect.md` line, approved by the maintainer on 2026-10-21) and #140 (`95b4de4`: the Sessions page). KIN-89 is
+  Done on QA's two passes over detached copies (part 1, then the whole item), no blocking findings.
+
+  Only v62's heading says `(this document)`; no version bump, because nothing a consumer has to do changed. The
+  four structure-pass rows became one `S` row (phases A to I), and `AGENTS.md` went from 14,990 to 14,606 bytes of
+  its 15,000. `AgentGuideTest.the_root_guide_stays_under_its_budget` passed at 14,999 bytes and failed at 15,000 and
+  15,007 (`AGENTS.md is 15000 bytes; the budget is under 15000`). `architect.md` line 31 now names
+  `api/inspector-ui-public-api.txt`. With `--data` elsewhere the Sessions page names the real folder: QA read
+  `<scratch>/custom data/sessions` (a path with a space) at 1440 and 400, `<scratch>/home/.inspector/sessions` by
+  default (an expanded path, not a `~`), and nothing in an export, where the page is hidden. The probe line
+  `sessions folder` reads `yes` on head (263 passed, 0 failed, 1 n/a) and `NO - the note says "Every run of the app
+  is a folder under ~/.inspector/sessions. …"` against `84a1747`'s page (262 passed, 1 failed).
+
+  **What was learned.** The hand-over of part 1 said the root `AGENTS.md` still told readers the ui pair has no
+  golden file, in two places. QA found that false at `6c1cb32`: phase I (PR #106) had already changed both lines, and
+  the only stale wording left was in `architect.md`, which this item already held. The page reads the folder from
+  `GET /api/mcp`'s `dataDir` through `api()`, so no daemon change and no new route; the probe checks it against a
+  different route, `/api/config`'s `path`, so it does not grade the page against its own source. The pace rule's
+  `deletes disabled` reads 0 of 0 on the fixture and so cannot go red there. The builder was not meant to edit the
+  "Where we are" table (run rule 7), and did, because the item's own criterion is that edit.
+
+  **Left open.** A relative `--data` shows a relative path, which is the daemon's own value and what Processes shows.
+  The push runs on `main` for the three merges were not seen finishing.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 2 rounds (part 1 on PR #124, then the whole item with PRs #130 and #140), none failed
+
+  *Ticket label:* `item:docs-housekeeping-2026-10-21`.
+  Four small edits that each leave someone reading something false or something about to break. None
+  is worth an item of its own.
+
+  **For whom.** The agents who read these files, the consuming team reading `INTEGRATION.md`, and a
+  web UI user whose daemon runs with `--data`.
+
+  **Acceptance criteria.**
+  - `.claude/agents/architect.md` no longer says `:inspector-noop-ui` has no golden file. It names
+    `api/inspector-ui-public-api.txt`. That file is the maintainer's to change, so the edit goes to
+    the maintainer for approval.
+  - In `INTEGRATION.md` only the current version's heading says `(this document)`. v49 and v50 lose
+    the label. This changes nothing a consumer has to do. Whether it takes a version is the
+    release-steward's call.
+  - The root `AGENTS.md`'s "Where we are" table has room for the next row. The four structure-pass
+    rows (S-D, S-F, S-H, S-I) become one row naming phases A to I as done, and pointing to
+    `docs/STATUS.md` for the red `repo` pushes. The file is 14,990 bytes of its 15,000 budget, which
+    is why S-D and S-F were cut short, and the next status row would fail `DecisionsTest`.
+  - With `--data` elsewhere, the Sessions page names the real sessions folder, as the Processes page
+    already shows the real data directory. In an export it names none. The page now says
+    `~/.inspector/sessions` whatever the folder is. A probe line is proven red with the fixed path
+    put back.
+
+  **Out of scope.** Any other rewording of these files. Raising the root's byte budget. Surfaces:
+  docs, plus one web UI string. **Size:** S.
+
+- ~~**A silent MCP child hangs the probe, and is left running.**~~ **Done, 2026-10-22.** PR #138 merged as `ffc9278`; `build`, `release-swap`, `repo` and `web` passed on the PR, and the push run on `main`
+  was in progress when QA looked. KIN-96 is Done on QA's pass over a detached copy, one round, no blocking findings.
+
+  `ProcessMcpControl.probe` now reads the child's stdout on a daemon thread (`mcp-probe-reader-<pid>`) into a queue
+  and polls it against the time left until the deadline, so the `finally { destroyForcibly() }` runs on time and
+  killing the child ends the reader. EOF is an empty `Optional`, so EOF still ends the loop early; the 15 s default,
+  the timeout error text and the route are unchanged. `McpProbeStubChild` gained a `silent` mode (stdout held open,
+  nothing written, EOF ignored). `a probe whose child holds its output open and never writes returns within its
+  timeout` passes in 3.514 s (the 1.5 s timeout plus the probe's 2 s `waitFor`), asserts the error `did not answer a
+  tools/list within 1500ms` and, through `assertStopped`, that the child is dead. Red by QA: the blocking `readLine`
+  back (`had not returned after 6500ms: its deadline waits on a read the silent child never ends`, the only failure of
+  9, 14 s, no hang); `poll` replaced by `take`, the same; `destroyForcibly()` replaced by `Unit`, 4 of 4 fail naming
+  a pid. `:inspector-daemon:test --rerun` 362 to 363, 0 failed, and no stub process was left at t+0 to t+3 s.
+
+  **What was learned.** The test runs the probe on a thread of its own and waits with `Future.get(timeout + 5000 ms)`,
+  so a broken probe fails on the test's bound instead of hanging the suite for ten minutes, which is what happened
+  to the builder of `item:guard-mcp-probe-cleanup`. QA's first `pgrep` read "1" after every run; that was QA's own
+  polling shell, whose command line named the class, not a stub. `docs/decisions/daemon-and-mcp.md` named only three
+  paths; the tracker added the silent-child path and why the read has a thread of its own.
+
+  **Left open.** A write to a child that never reads is still unbounded; the probe writes two short lines, far
+  under a pipe buffer, so it cannot happen with today's requests. The 5 s margin covers a JVM start and may need
+  watching on a slow CI runner. Linux and Windows only through CI, and a real wedged `inspector mcp` behind the web
+  UI's button was not tried.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:mcp-probe-deadline-holds`. From the hand-over of `item:guard-mcp-probe-cleanup`, which hit it
+  while proving red: a test hung for ten minutes.
+
+  **For whom.** A web UI user on a Mac who presses the MCP probe in settings while an
+  `inspector mcp` is wedged. `ProcessMcpControl.probe` checks `timeoutMs` only between lines, so a
+  child that keeps stdout open and writes nothing leaves `readLine` blocked for good:
+  `POST /api/mcp/probe` never answers and the button never reports. The `finally` that stops the
+  child runs only after the read returns, so the child also outlives the probe and shows in the peer
+  list as an `mcp` process. That is the leak `item:guard-mcp-probe-cleanup` closed on the success,
+  timeout and failed-write paths, still open on this one.
+
+  **Acceptance criteria.**
+  - With a stub child that keeps stdout open and never writes, `probe` returns within its timeout
+    plus a margin the test states, with an error that says the child did not answer in time.
+  - The child is not alive once `probe` returns, read as `McpProbeCleanupTest` reads it.
+  - A `silent` mode beside the stub's `answer`, `chatter` and `close-stdin`, proven red with the fix
+    removed. The red run fails on the test's own bound and does not hang the suite.
+  - The existing three cleanup tests and "the real control either answers or explains why it
+    cannot" stay green.
+
+  **Out of scope.** The 15 s default, what the probe reports on success, and the route. Surfaces:
+  daemon only. `ProcessMcpControl` is in `:inspector-daemon`, which is not published, so there is
+  no noop twin or golden file. **Size:** S.
+
+- ~~**During a session switch the timeline's calls and the endpoint chips are the session just left.**~~ **Done, 2026-10-22.** PR #135 merged as `4645c43`; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main`
+  succeeded. KIN-94 and KIN-95 are Done on QA's pass over detached copies, one round, no blocking findings.
+
+  A switch now clears the call side along with the signal side: `followSession` (moved to the new
+  `web/js/16-session-load.js`) bumps `callLoad`, empties the whole-session copy and the open call, and every pane
+  that reads them says `this session is being read…` from `beingRead`, the one place that wording lives. This
+  **overturned** the `web-ui.md` sentence "The calls themselves are left to the switch's first page", which the
+  maintainer approved on 2026-10-21; QA compared the replacement paragraph with the design note's block word by word
+  (629 words each, no difference). With the new session's first page held, the nine `switch …` lines of the live
+  probe read `yes` and QA's own Chrome case (two sessions on `/alpha/*` and `/beta/*`) was 15 of 15 clean at 1440,
+  1000 and 400 px, against 0 of 15 on `117aeee`. Counts, base to head: static checks 110 to 112, live probe 251 to
+  260, archive probe 48, and `measure-web-ui.js --only traffic` gained `traffic session switch window`.
+
+  **What was learned.** The premise was a fact about one pane, recorded as if it held for every pane: the list is
+  replaced by the first page, the timeline is not. The design note's second break for `switch path`, removing
+  `|| sessionPending()` from `50-path.js`, stays green: during the window the path is already empty, so its empty
+  branch says `being read` either way, and the clause matters only when a live call arrives in the window. The
+  builder proved the wording by unwrapping `saysBeingRead` instead, and the clause stays unproven. The note's
+  estimates were low: the replacement text is 42 lines for 21 (+21, not about +12), `live-traffic-cases.js` grew
+  by 48 against 40, and the static count had moved from the note's 107 to 110 with #133. The tag browser keeps its
+  old empty-state line as a fallback behind an inline guard, so the wording "no `<tag>` signals" still exists in
+  `60-browser.js`.
+
+  **Left open.** The delete and clear path (`afterSessionChange`) goes through the same `followSession` and has no
+  probe of its own; the `|| sessionPending()` clause is unproven; Safari and Firefox (only headless Chrome and jsdom
+  ran it); Chrome's `topbar`, `room`, `shell` and `first` sections were not run for this item.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:* `item:web-switch-clears-call-panes`. From QA on
+  `item:web-now-strip-follows-session` (screenshots at base and head) and its hand-over.
+
+  **This overturns a recorded decision.** `docs/decisions/web-ui.md`, "The signal side follows the
+  session the moment it changes", says:
+
+  > The calls themselves are left to the switch's first page.
+
+  `followSession` says the same: "The calls are not cleared: the switch's first page replaces them."
+  On the list that holds. On the timeline it does not: the switch's reads take as long as a
+  whole-session read, 25 s on a large session, and until they land the timeline draws the old
+  session's call rows and the endpoints menu counts its chips, under the new session's name. QA saw
+  `GET api.qa.invalid /b` and the chip `b 1` from Beta while Alpha was selected. The premise was a
+  fact about one pane, and it was recorded as if it held for every pane.
+
+  **For whom.** A web UI user on a Mac who switches sessions, or deletes the one on screen. For the
+  length of the switch, the timeline shows calls the selected session never made.
+
+  **Acceptance criteria.**
+  - With the new session's calls held back, the timeline draws none of the left session's calls,
+    and the endpoints button and its popover show none of its chips.
+  - The path, the waterfall and the tag browsers, which read what `followSession` clears but are not
+    redrawn by it, show none of the left session's rows in that window.
+  - The tab bar keeps its tabs through the window, and so does the timeline tab. A count on a tab
+    either describes the selected session or is not shown.
+  - A live probe line for each pane, holding the switch's reads, proven red with that pane's redraw
+    removed. `now switch shows none` stays green.
+
+  **Out of scope.** Making the switch faster, and KIN-42's whole-session read. The list, which the
+  first page already replaces. Surfaces: web UI only. **Size:** S.
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -1705,6 +1971,11 @@ tag cut before any of this existed.
 | ~~"A probe leaves no process behind", tested~~ **Done, 2026-10-22** (KIN-91, PR #126, merge `74f5ca0`; one round of QA) *(was row 18; the later rows keep their numbers)* | §3 → Guards | `item:guard-mcp-probe-cleanup` | not sized |
 | ~~A server is its host and a non-default port, everywhere~~ **Done, 2026-10-22** (KIN-92, PR #129, merge `66c1bad`; one round of QA) *(was row 19; the later rows keep their numbers)* | §3 → Bugs found | `item:host-port-everywhere` | S, or M |
 | ~~At 400px the Stats page keeps a route's host whole~~ **Done, 2026-10-22** (KIN-93, PR #132, merge `7b37d7a`; one round of QA) *(was row 22; the later rows keep their numbers)* | §3 → Bugs found | `item:web-stats-route-breaks-whole` | S |
+| ~~A silent MCP child hangs the probe, and is left running~~ **Done, 2026-10-22** (KIN-96, PR #138, merge `ffc9278`; one round of QA) *(was row 13a; the later rows keep their numbers)* | §3 → Bugs found | `item:mcp-probe-deadline-holds` | S |
+| ~~Housekeeping after the 2026-10-20/21 run~~ **Done, 2026-10-22** (KIN-89; PRs #124, #130 and #140, merges `6c1cb32`, `e071594` and `95b4de4`; QA passed part 1 and then the whole item) *(was row 16; the later rows keep their numbers)* | §3 → Bugs found | `item:docs-housekeeping-2026-10-21` | S |
+| ~~A measure run hangs when Chrome dies mid-case~~ **Done, 2026-10-22** (KIN-99, PR #141, merge `85e9552`; one round of QA) *(was row 16c; the later rows keep their numbers)* | §3 → Guards | `item:guard-measure-chrome-exit-fails` | S |
+| ~~A session switch clears the timeline's calls and the endpoint chips~~ **Done, 2026-10-22** (KIN-94, KIN-95, PR #135, merge `4645c43`; one round of QA; overturned a `web-ui.md` sentence, approved by the maintainer 2026-10-21) *(was row 20; the later rows keep their numbers)* | §3 → Bugs found | `item:web-switch-clears-call-panes` | S |
+| ~~KIN-42: draw the first page at once, read the whole-session copy in the background~~ **Done, 2026-10-22** (PR #136, merge `1888380`; one round of QA; undeferred by the maintainer 2026-10-21) *(was row 21; the later rows keep their numbers)* | §3 → Guards | `item:signals-query-one-rule` | one ticket |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
