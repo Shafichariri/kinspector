@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 20:37'
-updated_date: '2026-10-22 20:37'
+updated_date: '2026-10-22 21:11'
 labels:
   - 'item:guard-twin-native-surface'
 dependencies: []
@@ -35,3 +35,11 @@ Order row 25, docs/ROADMAP.md §3 → Guards (item:guard-twin-native-surface), A
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built per the design note; ready for QA. withHostTest {} added to inspector-ui, inspector-noop-ui and inspector-noop-stream. androidHostTest in all six modules gets the api-parity srcDirs, kotlin("test") and kotlin("reflect"), plus libs.okhttp in inspector-noop as the note said, and in inspector-core too. The note missed core: OkHttp is compileOnly there as well, and CI run 39851887987 failed core's host test on okhttp3.Interceptor and okio.Sink until it was added (811d7c3). The pair's JVM golden file is an input of testAndroidHostTest, matched by name because AGP registers the task after the module script. inspector.api.regenerate now reaches jvmTest only.
+ui's 10 commonTest files compile and pass on the Android host: 70 tests, 0 failed besides the probe.
+Proofs on CI, throwaway branch shafic/throwaway-android-twin-proof, deleted and never merged, its ci.yml reduced to ./gradlew testAndroidHostTest --continue. A1 (run 39852405138): all six host tests red in every_public_declaration_is_in_the_contract, + dev.inspector.probe.AndroidOnlyProbeKt [androidOnlyProbe]. A2 (same run): stream's golden test red, + dev.inspector.stream.StreamSinkKt: fun androidFacadeProbe(): int and jvm androidFacadeProbe()I. A3 (run 39852841927): with @file:JvmName("StreamSinkKt") deleted, only :inspector-stream:testAndroidHostTest is red: Contract class dev.inspector.stream.StreamSinkKt is not on this module's classpath. The other five pass on that commit. A4: PR #182's run 39852394920 is green and executed all six iosApiTest and all six testAndroidHostTest tasks. The A3 run's reports list both pair tests in each of the six host tests, and no IosApiParityTest class.
+<!-- SECTION:NOTES:END -->

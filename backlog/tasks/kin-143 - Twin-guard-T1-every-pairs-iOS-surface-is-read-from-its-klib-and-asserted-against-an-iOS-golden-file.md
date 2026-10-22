@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 20:37'
-updated_date: '2026-10-22 20:37'
+updated_date: '2026-10-22 20:48'
 labels:
   - 'item:guard-twin-native-surface'
 dependencies: []
@@ -38,3 +38,12 @@ Order row 25, docs/ROADMAP.md §3 → Guards (item:guard-twin-native-surface), i
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built per the design note; ready for QA. Six iosApiTest tasks (root build.gradle.kts), KlibSurface.kt, three api/*.ios.txt goldens (104, 25 and 1 entries), fourth column in structure/twins.txt, NoopTwinTest extended.
+Proofs, local macOS, each red then green: I1 iosOnlyProbe in each of the six modules (+ final fun dev.inspector.probe/iosOnlyProbe(): kotlin/Int); I2 a val in stream's iosSimulatorArm64Main only (differs between targets); I3 empty konan home, the stdlib's 2.3.21 version, klib dir pointed at the twin, missing klib dir, empty golden; I4 $stableprop rule removed (26 lines), Function-type rewrite removed (constructor missing), flattening removed (stop() moved into StreamState passes; restored, red); I5 hand-edited golden fails without --rerun, and stays UP-TO-DATE green with the input declaration removed. NoopTwinTest: a missing iOS file fails it; a pair with no fourth column fails configuration with its own message.
+Finding: in inspector-core and inspector-noop, src/iosMain is not compiled. Their explicit dependsOn edges turn the default hierarchy template off, so a file there that is not Kotlin builds clean. I1 for those two used iosArm64Main + iosSimulatorArm64Main. Recorded in twins-and-api.md; not fixed (out of scope).
+Not verified: parameter names (absent from dumps); the stream constructor is a source-level match only (IR signatures differ); no cross-twin partial-linkage coverage.
+<!-- SECTION:NOTES:END -->
