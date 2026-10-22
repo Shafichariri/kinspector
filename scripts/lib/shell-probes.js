@@ -107,6 +107,15 @@ async function probeSessionsPage(ctx) {
   const rows = () => [...doc.querySelectorAll('#session-rows .session-row')];
   lines.push(['session rows', rows().length, 'note']);
 
+  // The folder the daemon archives to is `<data>/sessions`, as `config.json` is `<data>/config.json`,
+  // so the truth is the config route's path and not the route the page reads. CI's fixture runs with
+  // its own `--data`, where a page still saying `~/.inspector/sessions` is wrong.
+  const folder = ((await fetch(`${ORIGIN}/api/config`).then((r) => r.json()).catch(() => ({}))).path || '')
+    .replace(/config\.json$/, 'sessions');
+  const note = () => doc.querySelector('#page-sessions .settings-note').textContent.replace(/\s+/g, ' ').trim();
+  lines.push(['sessions folder', folder && await waitFor(() => note().includes(folder.replace(/\s+/g, ' ')), 3000)
+    ? `yes (${folder})` : `NO - the note says "${note().slice(0, 70)}…", the daemon's folder is "${folder}"`]);
+
   // The daemon refuses to delete a session with no `endedAt`, so that is what must be disabled —
   // read from the daemon's own list, not from the page.
   const unended = (await fetch(`${ORIGIN}/api/sessions`).then((r) => r.json()).catch(() => []))

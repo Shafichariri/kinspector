@@ -139,7 +139,10 @@ async function applyRoute() {
 /** What a page reads when it is opened; Traffic is kept current by the live socket instead. */
 function enterPage(page) {
   if (ARCHIVE) return;
-  if (page === 'sessions') loadSessions().then(renderSessionRows).catch(() => renderSessionRows());
+  if (page === 'sessions') {
+    loadSessions().then(renderSessionRows).catch(() => renderSessionRows());
+    loadSessionsDir();
+  }
   if (page === 'processes') {
     loadPeers();
     loadMcp();

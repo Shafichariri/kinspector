@@ -155,6 +155,25 @@ async function switchSession(id) {
   await loadTransactions();
 }
 
+/**
+ * Names the folder this daemon archives to in the Sessions page's note: `<data>/sessions`, as
+ * `DaemonConfig.sessionsDir` resolves it. The note said `~/.inspector/sessions` whatever `--data`
+ * was. The data directory is read from `/api/mcp`, the route the Processes page already shows it
+ * from, because it is the daemon's own config and not the self peer's argv, which has no `--data`
+ * on a default start. Until it answers, and if it fails, the note keeps `<data dir>/sessions`,
+ * which names no path rather than the wrong one. An export never gets here (`enterPage`), and its
+ * Sessions page is hidden.
+ */
+async function loadSessionsDir() {
+  try {
+    const { dataDir } = await api('/api/mcp');
+    if (!dataDir) return;
+    // A `\`-only path is a Windows daemon's; Java's `resolve` adds no separator after a root.
+    const sep = dataDir.includes('\\') && !dataDir.includes('/') ? '\\' : '/';
+    $('sessions-dir').textContent = `${dataDir.endsWith(sep) ? dataDir : dataDir + sep}sessions`;
+  } catch { /* the placeholder stays: it is true, and a wrong path is not */ }
+}
+
 /** A control request's JSON answer, or its refusal, in the daemon's words, as an error. */
 async function controlJson(path, options) {
   const res = await controlFetch(path, options);
