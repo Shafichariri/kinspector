@@ -2,7 +2,8 @@
 
 The reflection and golden-file machinery (`shared/`) and one parity test per twin pair (`core/`,
 `stream/`, `ui/`). Each directory is compiled into the `jvmTest` of the two modules it guards, so both
-halves of a pair assert the same golden file.
+halves of a pair assert the same golden file. The `*IosApiParityTest` classes compiled there run only in
+the root build's `iosApiTest` task, against the pair's iOS golden file.
 
 Every pair runs two tests in both of its modules: its golden file, and a completeness test that fails
 when a class outside the pair's contract list holds public API. Each module declares the golden file
@@ -42,6 +43,18 @@ The ui pair has its own golden file, and the same friction:
 ./gradlew :inspector-ui:jvmTest :inspector-noop-ui:jvmTest
 ```
 
+Each pair also has an iOS golden file, read from both iOS targets' klibs by `klib dump-abi` in each
+module's `iosApiTest` (macOS only; `check` runs it). Regenerate it from the real module after the same
+change to both twins:
+
+```bash
+./gradlew :inspector-core:iosApiTest -Dinspector.api.regenerate=true
+./gradlew :inspector-stream:iosApiTest -Dinspector.api.regenerate=true
+./gradlew :inspector-ui:iosApiTest -Dinspector.api.regenerate=true
+# confirm the noop twins pass:
+./gradlew :inspector-noop:iosApiTest :inspector-noop-stream:iosApiTest :inspector-noop-ui:iosApiTest
+```
+
 ## Key files
 
 | Path | Why it matters |
@@ -49,4 +62,7 @@ The ui pair has its own golden file, and the same friction:
 | `api/inspector-public-api.txt` | Golden public API surface for the `core` pair, asserted by both modules. |
 | `api/inspector-stream-public-api.txt` | The same for the `stream` pair, minus the Ktor-typed members a release build cannot carry. |
 | `api/inspector-ui-public-api.txt` | The same for the `ui` pair: `InspectorOverlay`'s declaration and its JVM descriptor, Compose's parameters included. |
-| `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/`, `stream/` and `ui/` hold one test class each. Every directory here is compiled into the `jvmTest` of the two modules it guards. |
+| `api/inspector-public-api.ios.txt` | The `core` pair's public iOS surface, read from its klibs and asserted by both modules' `iosApiTest`. |
+| `api/inspector-stream-public-api.ios.txt` | The same for the `stream` pair, with the real module's Ktor rule. |
+| `api/inspector-ui-public-api.ios.txt` | The same for the `ui` pair: `InspectorOverlay` alone, the Compose compiler's `$stableprop` markers dropped. |
+| `api-parity/` | `shared/` is the reflection and golden-file machinery; `core/`, `stream/` and `ui/` hold their pair's JVM and iOS test classes. Every directory here is compiled into the `jvmTest` of the two modules it guards. |

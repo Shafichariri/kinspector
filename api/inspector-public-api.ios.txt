@@ -1,0 +1,109 @@
+# Generated. Public iOS API shared by :inspector-core and :inspector-noop, read from both
+# iOS targets' klibs by `klib dump-abi`. Each member is prefixed with its enclosing declarations,
+# so moving one between classes shows; IR signatures are dropped. See KlibSurface.
+# Regenerate: ./gradlew :inspector-core:iosApiTest -Dinspector.api.regenerate=true
+
+abstract interface dev.inspector/InspectorSink
+dev.inspector/Inspector.canary: final fun <get-canary>(): kotlin/String
+dev.inspector/Inspector.latest: final fun <get-latest>(): kotlinx.coroutines.flow/StateFlow<dev.inspector.model/NetworkTransaction?>
+dev.inspector/Inspector.markers: final fun <get-markers>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<dev.inspector.model/Marker>>
+dev.inspector/Inspector.signals: final fun <get-signals>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<dev.inspector.model/Signal>>
+dev.inspector/Inspector.transactions: final fun <get-transactions>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<dev.inspector.model/NetworkTransaction>>
+dev.inspector/Inspector: final fun addSink(dev.inspector/InspectorSink)
+dev.inspector/Inspector: final fun clear()
+dev.inspector/Inspector: final fun init(dev.inspector/InspectorConfig = ...)
+dev.inspector/Inspector: final fun install(io.ktor.client/HttpClientConfig<*>)
+dev.inspector/Inspector: final fun mark(kotlin/String)
+dev.inspector/Inspector: final fun registerProvider(kotlin/String, kotlin/String, kotlin.coroutines/SuspendFunction0<kotlinx.serialization.json/JsonElement?>)
+dev.inspector/Inspector: final fun requestBody(dev.inspector.model/NetworkTransaction): kotlin/ByteArray?
+dev.inspector/Inspector: final fun responseBody(dev.inspector.model/NetworkTransaction): kotlin/ByteArray?
+dev.inspector/Inspector: final fun signal(kotlin/String, kotlin/String, kotlin/String)
+dev.inspector/Inspector: final fun signal(kotlin/String, kotlin/String, kotlinx.serialization.json/JsonElement? = ...)
+dev.inspector/Inspector: final fun signalProviders(): kotlin.collections/List<dev.inspector.model/SignalKey>
+dev.inspector/Inspector: final fun unregisterProvider(kotlin/String, kotlin/String)
+dev.inspector/Inspector: final suspend fun answerSignalRequest(kotlin/String, kotlin/String, kotlin/String): kotlin/String?
+dev.inspector/Inspector: final suspend fun pullSignal(kotlin/String, kotlin/String): kotlin/String?
+dev.inspector/Inspector: final val latest
+dev.inspector/Inspector: final val markers
+dev.inspector/Inspector: final val signals
+dev.inspector/Inspector: final val transactions
+dev.inspector/Inspector: final var canary
+dev.inspector/InspectorConfig.bodyCaptureMaxBytes: final fun <get-bodyCaptureMaxBytes>(): kotlin/Int
+dev.inspector/InspectorConfig.captureAllBodies: final fun <get-captureAllBodies>(): kotlin/Boolean
+dev.inspector/InspectorConfig.captureContentTypes: final fun <get-captureContentTypes>(): kotlin.collections/List<kotlin/String>
+dev.inspector/InspectorConfig.redaction: final fun <get-redaction>(): dev.inspector/Redaction
+dev.inspector/InspectorConfig.ringBufferMaxBytes: final fun <get-ringBufferMaxBytes>(): kotlin/Long
+dev.inspector/InspectorConfig.signals: final fun <get-signals>(): dev.inspector/SignalPolicy
+dev.inspector/InspectorConfig: constructor <init>(kotlin/Long = ..., kotlin/Int = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., dev.inspector/Redaction = ..., dev.inspector/SignalPolicy = ...)
+dev.inspector/InspectorConfig: final fun component1(): kotlin/Long
+dev.inspector/InspectorConfig: final fun component2(): kotlin/Int
+dev.inspector/InspectorConfig: final fun component3(): kotlin.collections/List<kotlin/String>
+dev.inspector/InspectorConfig: final fun component4(): kotlin/Boolean
+dev.inspector/InspectorConfig: final fun component5(): dev.inspector/Redaction
+dev.inspector/InspectorConfig: final fun component6(): dev.inspector/SignalPolicy
+dev.inspector/InspectorConfig: final fun copy(kotlin/Long = ..., kotlin/Int = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., dev.inspector/Redaction = ..., dev.inspector/SignalPolicy = ...): dev.inspector/InspectorConfig
+dev.inspector/InspectorConfig: final fun equals(kotlin/Any?): kotlin/Boolean
+dev.inspector/InspectorConfig: final fun hashCode(): kotlin/Int
+dev.inspector/InspectorConfig: final fun toString(): kotlin/String
+dev.inspector/InspectorConfig: final val bodyCaptureMaxBytes
+dev.inspector/InspectorConfig: final val captureAllBodies
+dev.inspector/InspectorConfig: final val captureContentTypes
+dev.inspector/InspectorConfig: final val redaction
+dev.inspector/InspectorConfig: final val ringBufferMaxBytes
+dev.inspector/InspectorConfig: final val signals
+dev.inspector/InspectorSink: abstract fun onMarker(dev.inspector.model/Marker)
+dev.inspector/InspectorSink: abstract fun onTransaction(dev.inspector.model/NetworkTransaction, kotlin/ByteArray?, kotlin/ByteArray?)
+dev.inspector/InspectorSink: open fun onSignal(dev.inspector.model/Signal, kotlin/ByteArray?)
+dev.inspector/Redaction.Companion.DEFAULT_BODY_KEY_PATTERN: final fun <get-DEFAULT_BODY_KEY_PATTERN>(): kotlin/String
+dev.inspector/Redaction.Companion.DEFAULT_HEADERS: final fun <get-DEFAULT_HEADERS>(): kotlin.collections/List<kotlin/String>
+dev.inspector/Redaction.Companion.DEFAULT_QUERY_KEY_PATTERN: final fun <get-DEFAULT_QUERY_KEY_PATTERN>(): kotlin/String
+dev.inspector/Redaction.Companion.PLACEHOLDER: final fun <get-PLACEHOLDER>(): kotlin/String
+dev.inspector/Redaction.Companion: final const val DEFAULT_BODY_KEY_PATTERN
+dev.inspector/Redaction.Companion: final const val DEFAULT_QUERY_KEY_PATTERN
+dev.inspector/Redaction.Companion: final const val PLACEHOLDER
+dev.inspector/Redaction.Companion: final val DEFAULT_HEADERS
+dev.inspector/Redaction.Off: final fun equals(kotlin/Any?): kotlin/Boolean
+dev.inspector/Redaction.Off: final fun hashCode(): kotlin/Int
+dev.inspector/Redaction.Off: final fun toString(): kotlin/String
+dev.inspector/Redaction.On.bodyKeyPattern: final fun <get-bodyKeyPattern>(): kotlin/String
+dev.inspector/Redaction.On.bodyKeys: final fun <get-bodyKeys>(): kotlin.text/Regex
+dev.inspector/Redaction.On.headers: final fun <get-headers>(): kotlin.collections/List<kotlin/String>
+dev.inspector/Redaction.On.queryKeyPattern: final fun <get-queryKeyPattern>(): kotlin/String
+dev.inspector/Redaction.On.queryKeys: final fun <get-queryKeys>(): kotlin.text/Regex
+dev.inspector/Redaction.On: constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/String = ..., kotlin/String = ...)
+dev.inspector/Redaction.On: final fun component1(): kotlin.collections/List<kotlin/String>
+dev.inspector/Redaction.On: final fun component2(): kotlin/String
+dev.inspector/Redaction.On: final fun component3(): kotlin/String
+dev.inspector/Redaction.On: final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/String = ..., kotlin/String = ...): dev.inspector/Redaction.On
+dev.inspector/Redaction.On: final fun equals(kotlin/Any?): kotlin/Boolean
+dev.inspector/Redaction.On: final fun hashCode(): kotlin/Int
+dev.inspector/Redaction.On: final fun toString(): kotlin/String
+dev.inspector/Redaction.On: final val bodyKeyPattern
+dev.inspector/Redaction.On: final val bodyKeys
+dev.inspector/Redaction.On: final val headers
+dev.inspector/Redaction.On: final val queryKeyPattern
+dev.inspector/Redaction.On: final val queryKeys
+dev.inspector/Redaction: final class On : dev.inspector/Redaction
+dev.inspector/Redaction: final object Companion
+dev.inspector/Redaction: final object Off : dev.inspector/Redaction
+dev.inspector/SignalPolicy.dropUnchanged: final fun <get-dropUnchanged>(): kotlin/Boolean
+dev.inspector/SignalPolicy.maxPayloadBytes: final fun <get-maxPayloadBytes>(): kotlin/Int
+dev.inspector/SignalPolicy.minIntervalMs: final fun <get-minIntervalMs>(): kotlin/Long
+dev.inspector/SignalPolicy.ringBufferMaxBytes: final fun <get-ringBufferMaxBytes>(): kotlin/Long
+dev.inspector/SignalPolicy: constructor <init>(kotlin/Long = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Long = ...)
+dev.inspector/SignalPolicy: final fun component1(): kotlin/Long
+dev.inspector/SignalPolicy: final fun component2(): kotlin/Boolean
+dev.inspector/SignalPolicy: final fun component3(): kotlin/Int
+dev.inspector/SignalPolicy: final fun component4(): kotlin/Long
+dev.inspector/SignalPolicy: final fun copy(kotlin/Long = ..., kotlin/Boolean = ..., kotlin/Int = ..., kotlin/Long = ...): dev.inspector/SignalPolicy
+dev.inspector/SignalPolicy: final fun equals(kotlin/Any?): kotlin/Boolean
+dev.inspector/SignalPolicy: final fun hashCode(): kotlin/Int
+dev.inspector/SignalPolicy: final fun toString(): kotlin/String
+dev.inspector/SignalPolicy: final val dropUnchanged
+dev.inspector/SignalPolicy: final val maxPayloadBytes
+dev.inspector/SignalPolicy: final val minIntervalMs
+dev.inspector/SignalPolicy: final val ringBufferMaxBytes
+final class dev.inspector/InspectorConfig
+final class dev.inspector/SignalPolicy
+final object dev.inspector/Inspector
+sealed interface dev.inspector/Redaction

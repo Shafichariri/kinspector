@@ -1,0 +1,31 @@
+# Generated. Public iOS API shared by :inspector-stream and :inspector-noop-stream, read from
+# both iOS targets' klibs by `klib dump-abi`. Each member is prefixed with its enclosing declarations;
+# IR signatures are dropped. In the real module a Ktor type inside a function type reads as
+# kotlin/Any?, and every other Ktor-typed line is excluded. See StreamIosApiParityTest.
+# Regenerate: ./gradlew :inspector-stream:iosApiTest -Dinspector.api.regenerate=true
+
+abstract fun interface dev.inspector.stream/ReplaySigner
+dev.inspector.stream/ReplaySigner: abstract suspend fun headersFor(kotlin/String, kotlin/String): kotlin.collections/Map<kotlin/String, kotlin/String>
+dev.inspector.stream/StreamSink.dropped: final fun <get-dropped>(): kotlinx.coroutines.flow/StateFlow<kotlin/Long>
+dev.inspector.stream/StreamSink.lastError: final fun <get-lastError>(): kotlinx.coroutines.flow/StateFlow<kotlin/String?>
+dev.inspector.stream/StreamSink.state: final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<dev.inspector.stream/StreamState>
+dev.inspector.stream/StreamSink: constructor <init>(dev.inspector.model/ClientInfo, kotlin/String = ..., kotlin/Int = ..., kotlin/Function0<kotlin/Any?> = ..., dev.inspector.stream/ReplaySigner? = ...)
+dev.inspector.stream/StreamSink: final fun onMarker(dev.inspector.model/Marker)
+dev.inspector.stream/StreamSink: final fun onSignal(dev.inspector.model/Signal, kotlin/ByteArray?)
+dev.inspector.stream/StreamSink: final fun onTransaction(dev.inspector.model/NetworkTransaction, kotlin/ByteArray?, kotlin/ByteArray?)
+dev.inspector.stream/StreamSink: final fun start()
+dev.inspector.stream/StreamSink: final fun stop()
+dev.inspector.stream/StreamSink: final val dropped
+dev.inspector.stream/StreamSink: final val lastError
+dev.inspector.stream/StreamSink: final val state
+dev.inspector.stream/StreamState.entries: final fun <get-entries>(): kotlin.enums/EnumEntries<dev.inspector.stream/StreamState>
+dev.inspector.stream/StreamState: enum entry Connected
+dev.inspector.stream/StreamState: enum entry Connecting
+dev.inspector.stream/StreamState: enum entry Disconnected
+dev.inspector.stream/StreamState: final fun valueOf(kotlin/String): dev.inspector.stream/StreamState
+dev.inspector.stream/StreamState: final fun values(): kotlin/Array<dev.inspector.stream/StreamState>
+dev.inspector.stream/StreamState: final val entries
+final class dev.inspector.stream/StreamSink : dev.inspector/InspectorSink
+final enum class dev.inspector.stream/StreamState : kotlin/Enum<dev.inspector.stream/StreamState>
+final fun dev.inspector.stream/defaultClientInfo(kotlin/String, kotlin/String, kotlin/String = ...): dev.inspector.model/ClientInfo
+final fun dev.inspector.stream/defaultDaemonHost(): kotlin/String

@@ -214,3 +214,35 @@ Consumers' compiled code calls `dev.inspector.ui.InspectorOverlayKt`. Neither mo
 as it does for `StreamSink.kt`. So renaming either file is a breaking change. `UI_CONTRACT_CLASSES`
 names the facade and the golden file records it, and renaming either file fails that module's
 `UiApiParityTest`. Proven by renaming each in turn.
+
+**The iOS surface is read from the klib by the toolchain's own `klib dump-abi`.** Every parity test
+above reads JVM output, so a public declaration in one module's iOS source alone passed every pair. Each pair's module now runs `iosApiTest`,
+which runs `bin/klib dump-abi` from the Kotlin/Native distribution every iOS compile already provisions
+in `~/.konan`, on both iOS targets' klibs, and asserts the result against the pair's iOS golden file
+(`api/*.ios.txt`, the fourth column of `structure/twins.txt`). The distribution is found by the
+compiler's version from `libs.versions.kotlin`, never `KotlinVersion.CURRENT`, which is the stdlib's
+2.3.21 and names no distribution. KGP's `abiValidation {}` was rejected: it is experimental, it
+resolves `abi-tools`, `kotlin-metadata-jvm`, `kotlin-klib-abi-reader` and the third-party
+`java-diff-utils`, none of them in the Gradle cache, and it checks a module against its own dump, not a
+twin against its twin. The maintainer's proxy decided on 2026-10-22 that the provisioned binary is no
+new tool.
+
+Three normalisation rules, each proven load-bearing by removing it. **Every member is flattened to
+`<enclosing declarations>: <declaration>`,** because the golden file is compared as a set and an
+unqualified `final fun stop()` moved from `StreamSink` into `StreamState` passed without it.
+**`$stableprop` lines are dropped by that name:** the Compose compiler makes a `…$stableprop` and a
+`…$stableprop_getter` public for each class it infers stability for, `internal` ones included, 26 lines
+in `:inspector-ui` and none in the noop; a general `$` rule would swallow the next kind of compiler
+noise instead of failing on it. **In the real stream module only, a Ktor type inside
+`kotlin/FunctionN<…>` reads as `kotlin/Any?`, then every line naming Ktor is dropped.** Native does not
+erase function-type arguments as the JVM does, so the real constructor's `Function0<HttpClient>` meets
+the noop's `Function0<Any?>` only at source level: their IR signatures differ, and a klib compiled
+against one twin and linked against the other is not covered. The proxy accepted that, since an iOS
+release build recompiles from source. The dumps carry no parameter names, so a renamed parameter in
+iOS-only code passes; common code keeps the JVM golden file's names. Both iOS targets must dump the same
+surface, so a declaration in `iosArm64Main` or `iosSimulatorArm64Main` alone fails on its own message. Pinned by the six `iosApiTest` tasks.
+
+**In `:inspector-core` and `:inspector-noop`, `src/iosMain` is not compiled.** Their hand-made
+`jvmAndAndroidMain` turns the default hierarchy template off, so no `iosMain` source set exists and a
+file there, even one that is not Kotlin, builds clean and ships nowhere. Their iOS-only code would go in
+`iosArm64Main` and `iosSimulatorArm64Main`, which is where the red proof put its probe.

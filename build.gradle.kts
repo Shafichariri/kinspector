@@ -340,6 +340,56 @@ subprojects {
 }
 
 /*
+ * The iOS half of the twin guard: `iosApiTest` in every module of every pair in structure/twins.txt.
+ * It runs the `*IosApiParityTest` classes from jvmTest's output, which read both iOS klibs through
+ * the Kotlin/Native toolchain's own `klib dump-abi`; see api-parity/shared/src/dev/inspector/KlibSurface.kt
+ * and docs/decisions/twins-and-api.md. Only here, so no other test task runs them without the klibs.
+ * The Kotlin version is the compiler's, never the stdlib's: the locks raise the stdlib to 2.3.21,
+ * and no 2.3.21 Kotlin/Native distribution exists.
+ */
+val twinPairs = providers.fileContents(layout.projectDirectory.file("structure/twins.txt")).asText.get()
+    .lines().map { it.trim().split(Regex("\\s+")) }.filter { it.first() == "pair" }
+val kotlinCompilerVersion = libs.versions.kotlin.get()
+val konanHome = providers.gradleProperty("kotlin.native.home").orNull
+val regenerateApi = providers.systemProperty("inspector.api.regenerate").orElse("false").get()
+for (pair in twinPairs) {
+    val iosGolden = pair.getOrNull(4)
+        ?: throw GradleException("structure/twins.txt: `${pair.joinToString(" ")}` names no iOS golden file; see NoopTwinTest.")
+    for (modulePath in pair.subList(1, 3)) project(modulePath) {
+        pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
+            val iosTargets = listOf("iosArm64", "iosSimulatorArm64")
+            val iosApiTest = tasks.register<Test>("iosApiTest") {
+                group = "verification"
+                description = "Asserts this module's public iOS API, read from its klibs, against $iosGolden."
+                val jvmTest = tasks.named<Test>("jvmTest").get()
+                testClassesDirs = jvmTest.testClassesDirs
+                classpath = jvmTest.classpath
+                // An include that matches nothing fails the task, so a renamed test cannot pass by running nothing.
+                filter { includeTestsMatching("*IosApiParityTest") }
+                iosTargets.forEach { target ->
+                    inputs.files(tasks.named("compileKotlin${target.replaceFirstChar(Char::uppercase)}"))
+                        .withPropertyName("klib.$target").withPathSensitivity(PathSensitivity.RELATIVE)
+                }
+                // Read at run time from outside the module, so only this tells Gradle a hand edit matters.
+                inputs.files(rootProject.layout.projectDirectory.file(iosGolden))
+                    .withPropertyName("iosGolden").withPathSensitivity(PathSensitivity.RELATIVE)
+                systemProperty("inspector.klib.module", project.name)
+                systemProperty("inspector.klib.dirs", iosTargets.joinToString(",") { target ->
+                    "$target=" + layout.buildDirectory.dir("classes/kotlin/$target/main/klib/${project.name}").get().asFile.path
+                })
+                systemProperty("inspector.kotlin.version", kotlinCompilerVersion)
+                konanHome?.let { systemProperty("inspector.konan.home", it) }
+                systemProperty("inspector.api.regenerate", regenerateApi)
+            }
+            tasks.named("check") { dependsOn(iosApiTest) }
+            tasks.withType<Test>().matching { it.name != "iosApiTest" }.configureEach {
+                filter.excludeTestsMatching("*IosApiParityTest")
+            }
+        }
+    }
+}
+
+/*
  * ---------------------------------------------------------------------------------------------
  * Maven Central, via the Central Portal.
  *
