@@ -36,17 +36,17 @@ CI — see [Production safety](#production-safety).
 **886 tests, 0 failures, at the last full count** across JVM, iOS simulator, Android host and the
 daemon. That count is old: no full run including iOS and Android has been counted since, and
 [`docs/STATUS.md`](docs/STATUS.md) has the newer per-target counts. The first session recorded
-from a real Compose Multiplatform app, on an Android emulator, found four defects, all fixed.
+from a real Compose Multiplatform app, on an Android emulator, found four defects, all fixed. The
+maintainer uses Inspector daily against a real Compose Multiplatform app.
 
 Honest gaps: the overlay has been looked at on an Android emulator, the iOS simulator and desktop.
-On hardware, it ran once on an Android phone on 2026-08-17, in a build that predates the Android
-sample, and the Android sample has not been run on a physical phone. One iPhone has run the iOS
-sample over USB, with the overlay running the whole time, but nobody looked at the overlay there.
-So nothing added to the overlay since that first Android outing has been looked at on a phone,
-including the whole of the signals work: the payload viewer, the per-key history, the **now** panel
-and pulling a provider on demand have between them never been touched by a thumb. The Auth0 adapter
-compiles against the real SDK but has not been run against a live tenant, and nothing non-Ktor is
-captured on iOS.
+On hardware, the maintainer reports that it has run on a physical Android phone and works. That is
+their report, not a check anyone repeated, and which build ran on which phone is not recorded, so
+it says nothing about the Android sample or any one overlay feature on a phone: the signals work —
+the payload viewer, the per-key history, the **now** panel and pulling a provider on demand — has
+no recorded look on hardware. One iPhone has run the iOS sample over USB, with the overlay running
+the whole time, but nobody looked at the overlay there. The Auth0 adapter compiles against the
+real SDK but has not been run against a live tenant, and nothing non-Ktor is captured on iOS.
 
 ### One tag, two halves
 
