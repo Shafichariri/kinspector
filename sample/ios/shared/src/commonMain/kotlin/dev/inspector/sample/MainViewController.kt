@@ -124,6 +124,9 @@ private fun SampleScreen(client: HttpClient) {
                 }
             }) { Text("POST echo") }
 
+            // What the Findings page is for: see sample/README.md.
+            Button(onClick = { scope.launch { DemoFlow.run(client) } }) { Text("pay twice + token") }
+
             Button(onClick = {
                 scope.launch {
                     repeat(50) { runCatching { client.get(DemoServer.url("/json")).bodyAsBytes() } }

@@ -37,6 +37,7 @@ import kotlin.concurrent.atomics.incrementAndFetch
 object DemoServer {
     const val PORT = 9090
     private val flakyAttempts = AtomicInt(0)
+    private val paymentCount = AtomicInt(0)
 
     fun url(path: String) = "http://127.0.0.1:$PORT$path"
 
@@ -86,6 +87,20 @@ object DemoServer {
                 }
                 post("/echo") {
                     call.respondText(call.receiveText(), ContentType.Application.Json)
+                }
+                // DemoFlow's two routes. The server accepts every payment it is sent, as a server
+                // without idempotency keys does, which is exactly why a double submit is a charge
+                // twice; the id makes each answer look like a separate payment.
+                post("/checkout/payments") {
+                    call.receiveText()
+                    call.respondText(
+                        """{"id":"pay_demo_${paymentCount.incrementAndFetch()}","status":"accepted"}""",
+                        ContentType.Application.Json,
+                        HttpStatusCode.Created,
+                    )
+                }
+                get("/profile") {
+                    call.respondText("""{"plan":"demo"}""", ContentType.Application.Json)
                 }
                 get("/secret") {
                     call.respondText(
