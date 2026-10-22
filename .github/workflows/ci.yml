@@ -46,6 +46,32 @@ jobs:
       - name: Release guard — noop must be clean
         run: ./scripts/check-release-clean.sh
 
+      # --paths over what a consumer downloads, which neither step above scans. A published klib
+      # is a zip: core's own read as clean until the guard unpacked klibs. A deep path once made a
+      # temp name too long, and the mkdir error exited 1, "canary found". Each case pins its exit
+      # code, so a regression either way fails here and not at a consumer's release.
+      - name: Release guard — packed klibs, deep paths, internal errors
+        run: |
+          ./gradlew :inspector-core:iosArm64Klib :inspector-noop:iosArm64Klib
+          expect() {
+            want="$1"; shift
+            got=0; ./scripts/check-release-clean.sh "$@" || got=$?
+            [ "$got" = "$want" ] || { echo "::error::expected exit $want, got $got: $*"; exit 1; }
+          }
+          deep="$RUNNER_TEMP/$(printf 'd%.0s' $(seq 200))/$(printf 'e%.0s' $(seq 200))"
+          mkdir -p "$deep/core" "$deep/noop" "$RUNNER_TEMP/stub"
+          cp inspector-core/build/libs/inspector-core-iosArm64Main-*.klib "$deep/core/"
+          cp inspector-noop/build/libs/inspector-noop-iosArm64Main-*.klib inspector-noop/build/libs/inspector-noop-jvm-*.jar "$deep/noop/"
+          cp -R inspector-core/build/classes/kotlin/iosArm64/main/klib "$deep/unpacked.klib"
+          expect 1 --paths inspector-core/build/libs/inspector-core-iosArm64Main-*.klib
+          expect 0 --paths inspector-noop/build/libs/inspector-noop-iosArm64Main-*.klib
+          expect 1 --paths "$deep/core"
+          expect 0 --paths "$deep/noop"
+          expect 1 --paths "$deep/unpacked.klib"
+          printf '#!/bin/sh\nexit 1\n' > "$RUNNER_TEMP/stub/mktemp"
+          chmod +x "$RUNNER_TEMP/stub/mktemp"
+          PATH="$RUNNER_TEMP/stub:$PATH" expect 2 --paths "$deep/noop"
+
       # A CI-only failure is diagnosed from CI or not at all. The console log carries the assertion
       # message; these reports carry the full per-test output and stack traces.
       - name: Keep test reports on failure

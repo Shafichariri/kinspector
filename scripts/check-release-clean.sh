@@ -16,7 +16,15 @@
 #
 # Exit codes: 0 expected result, 1 unexpected canary state, 2 usage or internal error.
 
-set -euo pipefail
+set -Eeuo pipefail
+
+# Exit 1 is a verdict: "the canary is where it must not be". Under plain `set -e` a failing command
+# exits with *its* status instead, and most commands fail with 1, so a `mkdir` that hit NAME_MAX
+# told the caller the release build carried capture code. Every failure the script did not decide
+# on is an internal error, exit 2. `-E` carries the trap into functions and command substitutions,
+# and into process substitutions too, which is why each `find` feeding a loop ends `|| true`: a
+# search that matches nothing is an answer, and there the trap would print a false error.
+trap 'echo "ERROR: internal error at line $LINENO (exit $?); nothing was proven." >&2; exit 2' ERR
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -54,14 +62,14 @@ collect_artifacts() {
   # JVM and Android outputs.
   while IFS= read -r line; do
     [[ -n "$line" ]] && TARGETS+=("$line")
-  done < <(find "$module_build" \( -name "*.jar" -o -name "*.aar" \) 2>/dev/null | grep -v sources | sort)
+  done < <(find "$module_build" \( -name "*.jar" -o -name "*.aar" \) 2>/dev/null | grep -v sources | sort || true)
 
   # Kotlin/Native klib output, which is an unpacked directory rather than an archive. Without
   # this the guard would scan only JVM/Android artifacts and report an iOS build clean purely
   # because it never looked — and iOS is where the Gradle swap is the only protection.
   while IFS= read -r line; do
     [[ -n "$line" ]] && TARGETS+=("$line")
-  done < <(find "$module_build/classes/kotlin" -maxdepth 3 -type d -name klib 2>/dev/null | sort)
+  done < <(find "$module_build/classes/kotlin" -maxdepth 3 -type d -name klib 2>/dev/null | sort || true)
 }
 
 case "${1:-}" in
@@ -101,6 +109,10 @@ trap 'rm -rf "$WORK"' EXIT
 
 hits=()
 
+# Unpack folders are numbered, never named after the target. A name derived from an absolute path
+# outgrew NAME_MAX on any deep build directory, which is where release artifacts live.
+unpacked=0
+
 missing=()
 
 # Targets the canary cannot prove anything about. Separate from `missing` because the path was
@@ -114,16 +126,23 @@ scan_target() {
   # saying PASSED there is the single most dangerous thing this script could do.
   [[ -e "$target" ]] || { missing+=("$target"); echo "  MISSING: $target"; return; }
 
+  # Directories first, whatever their name: an unpacked klib can be a folder called `x.klib`, and
+  # handing a folder to `unzip` fails quietly and reads as clean.
+  [[ -d "$target" ]] && { scan_directory "$target"; return; }
+
   case "$target" in
-    *.jar|*.aar|*.apk|*.aab|*.zip)
+    # A published klib is a deflate zip. Its strings are plain ASCII only once unpacked, in
+    # default/ir/strings.knt, so a raw grep of the file finds nothing in inspector-core's own klib.
+    *.jar|*.aar|*.apk|*.aab|*.zip|*.klib)
       local dest
-      dest="$WORK/$(echo "$target" | tr '/' '_')"
+      unpacked=$((unpacked + 1))
+      dest="$WORK/$unpacked"
       mkdir -p "$dest"
       unzip -qo "$target" -d "$dest" >/dev/null 2>&1 || true
       # .aar wraps classes.jar; unpack one level of nested archives too.
       while IFS= read -r nested; do
         unzip -qo "$nested" -d "${nested}.unpacked" >/dev/null 2>&1 || true
-      done < <(find "$dest" -name "*.jar" 2>/dev/null)
+      done < <(find "$dest" -name "*.jar" 2>/dev/null || true)
       if grep -rlaF -- "$CANARY" "$dest" >/dev/null 2>&1; then
         hits+=("$target")
         echo "  CANARY FOUND: $target"
@@ -146,25 +165,6 @@ scan_target() {
       fi
       ;;
     *)
-      # A directory may hold archives, and grepping a compressed archive for a plaintext canary
-      # finds nothing however much capture code is inside it. Unpack each one first — without
-      # this, `--paths some/build/outputs/apk/debug` reported clean on an APK built from capture
-      # code, which is the false pass this script exists to make impossible.
-      if [[ -d "$target" ]]; then
-        local archive found_archive=0
-        while IFS= read -r archive; do
-          found_archive=1
-          scan_target "$archive"
-        done < <(find "$target" \( -name "*.jar" -o -name "*.aar" -o -name "*.apk" -o -name "*.aab" \) 2>/dev/null | grep -v sources | sort)
-        # Still grep the directory itself: klib output is an unpacked tree, not an archive.
-        if grep -rlaF -- "$CANARY" "$target" >/dev/null 2>&1; then
-          hits+=("$target")
-          echo "  CANARY FOUND: $target"
-        elif [[ $found_archive -eq 0 ]]; then
-          echo "  clean: $target"
-        fi
-        return
-      fi
       if grep -laF -- "$CANARY" "$target" >/dev/null 2>&1; then
         hits+=("$target")
         echo "  CANARY FOUND: $target"
@@ -173,6 +173,26 @@ scan_target() {
       fi
       ;;
   esac
+}
+
+# A directory may hold archives, and grepping a compressed archive for a plaintext canary finds
+# nothing however much capture code is inside it. Unpack each one first — without this,
+# `--paths some/build/outputs/apk/debug` reported clean on an APK built from capture code, and a
+# published iOS folder (`inspector-core-iosarm64/<version>/`) reported clean on core's own klib,
+# which is the false pass this script exists to make impossible.
+scan_directory() {
+  local target="$1" archive found_archive=0
+  while IFS= read -r archive; do
+    found_archive=1
+    scan_target "$archive"
+  done < <(find "$target" -type f \( -name "*.jar" -o -name "*.aar" -o -name "*.apk" -o -name "*.aab" -o -name "*.klib" \) 2>/dev/null | grep -v sources | sort || true)
+  # Still grep the directory itself: klib build output is an unpacked tree, not an archive.
+  if grep -rlaF -- "$CANARY" "$target" >/dev/null 2>&1; then
+    hits+=("$target")
+    echo "  CANARY FOUND: $target"
+  elif [[ $found_archive -eq 0 ]]; then
+    echo "  clean: $target"
+  fi
 }
 
 echo "Canary:  $CANARY"
