@@ -3,11 +3,11 @@ id: KIN-42
 title: >-
   Web: draw the first page at once and read the whole-session copy in the
   background
-status: To Do
+status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-19 05:04'
-updated_date: '2026-10-19 11:32'
+updated_date: '2026-10-22 00:44'
 labels:
   - 'item:signals-query-one-rule'
   - deferred
@@ -45,10 +45,14 @@ Found by the fourth verify panel (head 8082e02), blocking. Regression from KIN-3
 - [ ] #6 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Per designs/kin-42-first-page-at-once.md (charles, 623c571), against base 4645c43. 1) Pure relocation of loadTransactions + syncAllTransactions from js/15-session-data.js to js/16-session-load.js (static/live/archive unchanged). 2) Behaviour: wholePending, saysBeingRead(node, whole), loadTransactions steps 4-7 with drawWhole, overtaken-page getter and true/false returns in syncAllTransactions; connectLive after loadSessions in 99-init; one-line flags in 20/25/45/50/55/65/70; settle() in render-web-ui.js. 3) Checks: 4 static (being-read-checks.js), 2 live (long-session-probes.js), 2 Chrome (measure-cases.js), UI_EXPECT_CHECKS 260->262, web-ui.md texts word for word. Axis hidden until the copy lands (maintainer accepted default).
+<!-- SECTION:PLAN:END -->
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Deferred by the maintainer on 2026-10-19, after KIN-41. A ~160k-call session shows a false empty state for about 25 s before the first rows; KIN-34 introduced it. Fix later: draw the first page at once and read the whole-session copy in the background, per the ACs.
-
-2026-10-19, tracker: AC#4 (the mid-read live-row merge) is struck. KIN-46 (admitLive and the buffer-and-merge, 0fbced1) and KIN-47 (a marked but empty copy, f0b8e74) built it for the blocking read and closed the web-ui.md open sentence; QA close at 68315b4. AC#6 still asks for a mid-read merge check 'red at 8082e02' on the progressive read; the existing checks 'mid-read calls/signals kept/once/empty' now cover the merge, so only the in-progress empty-state text and the post-read redraw remain to check here. Status unchanged: deferred, To Do. KIN-42 owns whether the whole-session read is capped.
+2026-10-22, bob: built against 4645c43 and not committed, on instruction. The relocation patch is at /private/tmp/claude-501/-Users-shafichariri-development-tools-kinspector--claude-worktrees-structure-phase-i-6f380a/710e8438-ad27-4248-b44c-2f978f86e31c/scratchpad/kin42/commit1-relocation.patch. Coordinator's decision on the copy-lands conflict: option (a). While the whole-session copy is read on a time view, the overview line keeps its band: the axis is hidden (the Q1 default holds), and the axis hint holds beingRead(sessionTotal) at the axis's 24 px height (.axis-reading). syncOverview counts the hint. It never shows an empty axis. Without the band the rows dropped 66 px when the copy landed: the overview line 33 plus the scope bar 33. With it they drop 33, the scope bar alone. Proofs: copy lands huge is red at 66 px with the band not reserved and green at 33 px. being read huge is red with the overview line hidden and with the axis drawn during the read. reading notes is red on each of: hint not reserved, syncOverview ignoring the hint, axis drawn. Counts: static 112 -> 116, live 260 -> 262, archive 48. Chrome --base 4645c43 (first,traffic,layout,run,live,room): 220 readings a side, head 0 failed, base 4. Only first rows huge, connected huge, being read huge and copy lands huge moved; room bands unchanged. Huge, head against base: first rows 427 vs 24007 ms, connected 430 vs 24009 ms. web-ui.md: the note's texts are kept word for word, plus one sentence on the reserved band and an exception added to the overview-line paragraph. Ready for QA.
 <!-- SECTION:NOTES:END -->

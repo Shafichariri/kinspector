@@ -110,13 +110,16 @@ wireStatsPage();
   // The page first, and a `?session=` before the list is read, so the first load is that session's.
   await applyRoute();
   await loadSessions();
+  // The socket opens before the first page, not after the load: a row is matched against the selected
+  // session when it arrives and needs nothing a load reads. Opened after the load, on a 160,000-call
+  // session the dot read "connecting…" for 26 s and every row that arrived meanwhile was dropped.
+  // Not in an export: opened from disk, `location.host` is empty and the socket URL is malformed, so
+  // the constructor throws and takes the rest of init with it.
+  if (!ARCHIVE) connectLive();
   // Opened on `#/stats`, it had no session to ask about until now. Asked before the calls are read,
   // not after: on a 160,000-call session that read takes half a minute, and the table needs none of it.
   statsReload();
   await loadTransactions();
   // Then the view, which a session must have loaded to offer.
   await applyRoute();
-  // Not merely pointless in an export: opened from disk, `location.host` is empty and the
-  // socket URL is malformed, so the constructor throws and takes the rest of init with it.
-  if (!ARCHIVE) connectLive();
 })();

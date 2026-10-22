@@ -226,6 +226,61 @@ async function probeTxnPastCeiling(ctx, calls) {
     : `NO - drawn ${drawn} ("${shown()}", "${oldest.path}" due), single-call route read ${read}, Back returned ${back} (${window.location.hash})`]];
 }
 
+/** The lines read while the whole-session read is held, and once it lands (KIN-42). */
+const FIRST_DRAW_LABELS = ['long first draw', 'long copy lands'];
+
+/**
+ * Picks the long session with its whole-session read's `offset=1000` page held: with no filter the
+ * first page is the newest 1000 and the copy needs two pages. While it is held the list, the header
+ * and the glance are drawn from the first page, the endpoints, which read the copy, are not, and the
+ * glance says the session's calls are being read. Released, the copy lands and `drawWhole` draws
+ * the endpoints and the glance's count again. The page's `fetch` is wrapped for the hold, as
+ * `probeTxnPastCeiling` watches it, and put back whatever happens.
+ */
+async function probeFirstDraw(ctx, calls) {
+  const { window, doc } = ctx;
+  const fetch = window.fetch;
+  let release;
+  const held = new Promise((r) => { release = r; });
+  let asked = false;
+  const whole = `/sessions/${encodeURIComponent(LONG_SESSION_ID)}/transactions?`;
+  window.fetch = (path, init) => {
+    if (asked || !String(path).includes(whole) || !/[?&]offset=1000(&|$)/.test(String(path))) return fetch(path, init);
+    asked = true;
+    return held.then(() => fetch(path, init));
+  };
+  const rows = () => doc.querySelectorAll('#list .row').length;
+  const glance = () => doc.getElementById('detail-empty').textContent.replace(/\s+/g, ' ').trim();
+  const endpoints = doc.getElementById('endpoints-button');
+  try {
+    choose(ctx, LONG_SESSION_ID);
+    await waitFor(() => asked && rows() === 1000 && ctx.pageState().signalSessionId === LONG_SESSION_ID, 5000);
+    const counts = doc.getElementById('counts').textContent;
+    const due = { counts: `newest 1000 of ${calls.length} shown`, glance: window.beingRead(calls.length) };
+    const first = !asked ? 'NO - the read never asked offset=1000, so this checked nothing'
+      : !rows() ? 'NO - nothing drawn while offset=1000 was held'
+        : rows() === 1000 && counts === due.counts && endpoints.hidden && glance() === due.glance
+          ? `yes (1000 rows, "${counts}", the endpoints hidden and the glance "${glance()}" while offset=1000 was held)`
+          : `NO - ${rows()} rows, "${counts}", endpoints ${endpoints.hidden ? 'hidden' : 'shown'}, glance "${glance()}", ` +
+            `where 1000, "${due.counts}", hidden and "${due.glance}" were due`;
+    release();
+    await waitFor(() => ctx.pageState().allSessionId === LONG_SESSION_ID, 10000);
+    await ctx.settle();
+    const chips = doc.querySelectorAll('#endpoint-chips .chip').length;
+    const count = `calls in session ${calls.length}`;
+    const row = [...doc.querySelectorAll('#detail-empty.glance .glance-row')].find((r) => r.querySelector('.glance-label')?.textContent === 'calls in session');
+    const read = row ? `calls in session ${row.querySelector('.glance-value')?.textContent}` : glance();
+    const lands = !asked ? 'NO - the read never asked offset=1000, so this checked nothing'
+      : endpoints.hidden ? 'NO - endpoints hidden after the copy landed'
+        : chips && read === count ? `yes (${endpoints.textContent.trim()} with ${chips} chips, the glance "${count}")`
+          : `NO - ${chips} chips, the glance "${read.slice(0, 80)}", where "${count}" was due`;
+    return [[FIRST_DRAW_LABELS[0], first], [FIRST_DRAW_LABELS[1], lands]];
+  } finally {
+    release();
+    window.fetch = fetch;
+  }
+}
+
 /** Picks a session through the picker's real `change` event. */
 function choose(ctx, sessionId) {
   const picker = ctx.doc.getElementById('session-picker');
@@ -244,17 +299,19 @@ async function probeLongSession(ctx) {
   const { doc } = ctx;
   const picker = doc.getElementById('session-picker');
   const before = picker.value;
-  const none = (why) => [...every(why), ['txn route past ceiling', why], ...CAPPED_LABELS.map((label) => [label, why])];
+  const none = (why) => [...FIRST_DRAW_LABELS.map((label) => [label, why]), ...every(why), ['txn route past ceiling', why], ...CAPPED_LABELS.map((label) => [label, why])];
   if (![...picker.options].some((o) => o.value === LONG_SESSION_ID)) return none(`n/a (no session ${LONG_SESSION_ID})`);
   const calls = (await ctx.sessionTransactions(encodeURIComponent(LONG_SESSION_ID))).items || [];
   const pair = twicePair(calls);
-  choose(ctx, LONG_SESSION_ID);
+  // Nothing selected, so the pane draws the glance the first draw is read on.
+  doc.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  const firstDraw = await probeFirstDraw(ctx, calls);
   if (pair.length === 2) await waitFor(() => doc.querySelector(`#list .row[data-id="${pair[1].id}"]`));
   await ctx.settle();
   // Nothing selected, so the pane draws the glance, whose count `counts agree` reads; a switch keeps
   // the previous session's call drawn there.
   doc.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  const verdicts = readLongSession(doc, calls);
+  const verdicts = [...firstDraw, ...readLongSession(doc, calls)];
   verdicts.push(...await probeTxnPastCeiling(ctx, calls));
   verdicts.push(...(calls.length > 1150 ? await probeCapped(ctx, calls) : CAPPED_LABELS.map((label) => [label, `n/a (${calls.length} calls)`])));
 

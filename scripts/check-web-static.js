@@ -128,7 +128,7 @@ async function main() {
   console.error('--- session state ---');
   for (const [label, value] of await checkSessionState(scripts)) report(label, value);
   for (const [label, value] of await checkLiveReread(scripts)) report(label, value);
-  for (const [label, value] of checkBeingRead(scripts)) report(label, value);
+  for (const [label, value] of await checkBeingRead(scripts)) report(label, value);
 
   console.error('--- long session ---');
   report('no argument spread', auditNoArgumentSpread(scripts));

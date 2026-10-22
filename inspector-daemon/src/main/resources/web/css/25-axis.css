@@ -61,6 +61,9 @@
 .axis-hint[hidden] { display: none !important; }
 .axis-hint > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .axis-hint > button { flex: none; }
+/* While the whole-session copy is read the hint holds the line alone, as tall as the axis it stands
+   in for (`.axis-svg`), so the rows do not move when the axis takes its place (KIN-42). */
+.axis-hint.axis-reading { min-height: 24px; }
 
 /* At 400px the times go: the bars, the hint and the now strip are what the line is for. */
 @media (max-width: 519px) {

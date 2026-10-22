@@ -140,13 +140,13 @@ async function checkSignalRace(sources) {
  * whole load can run: what is checked is which answers the state is left holding.
  */
 function loadingPage(sources, api, state) {
-  const element = { hidden: false, textContent: '' };
+  const element = { hidden: false, textContent: '', parentElement: { scrollTop: 0 } };
   return runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js'], {
     state, api, ARCHIVE: null, tagOf: (s) => String(s.tag).toLowerCase(),
     availableViews: () => [{ id: 'network' }], visibleTransactions: () => state.transactions,
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, renderListEmpty() {},
     showFilterError() {}, renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {},
-    $: () => element,
+    renderWaterfall() {}, renderPath() {}, $: () => element,
   });
 }
 
@@ -311,7 +311,7 @@ function clampPage(sources) {
     if (pathname.endsWith('/signals')) return signalApi(path);
     return [];
   };
-  const element = { hidden: false, textContent: '' };
+  const element = { hidden: false, textContent: '', parentElement: { scrollTop: 0 } };
   const el = (tag, cls, text) => ({ textContent: text || '', addEventListener() {} });
   const state = { ...sessionState(''), timeRange: null, recording: [] };
   const page = runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js', 'js/25-traffic-list.js', 'js/45-visits.js', 'js/50-path.js'], {
@@ -323,7 +323,7 @@ function clampPage(sources) {
   // The files declare their own renderers over the stubs; drawing is not what is checked here. The
   // real header count and empty text are kept aside for the checks that read them.
   const real = { renderCounts: page.renderCounts, renderListEmpty: page.renderListEmpty };
-  for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState']) {
+  for (const name of ['renderMarkers', 'renderList', 'renderListEmpty', 'renderCounts', 'markerFormState', 'renderWaterfall', 'renderPath']) {
     page[name] = () => {};
   }
   return { state, page, real, element };
@@ -567,4 +567,4 @@ async function checkSessionState(sources) {
   ];
 }
 
-module.exports = { checkSessionState, clampPage, runFile };
+module.exports = { checkSessionState, clampPage, runFile, callRoute };

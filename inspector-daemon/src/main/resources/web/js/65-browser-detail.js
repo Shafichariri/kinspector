@@ -42,7 +42,7 @@ function renderSessionGlance() {
   const txns = (state.allTransactions.length ? state.allTransactions : state.transactions)
     .filter((txn) => inRange(txn.mono));
   // From a switch until the session lands, every number here would be the old one's.
-  if (saysBeingRead(pane)) {
+  if (saysBeingRead(pane, true)) {
     pane.className = 'empty muted';
     return;
   }

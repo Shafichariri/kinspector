@@ -75,9 +75,15 @@ function renderAxis() {
   // Every view built from transactions on a clock, which the waterfall is: brushing already
   // narrows it, so hiding the control that does the brushing would be the odd choice.
   const onTimeView = ['all', 'network', 'waterfall', 'path'].includes(state.view);
-  host.hidden = !onTimeView || !win || state.allTransactions.length + state.allSignals.length < 2;
-  // The hint sits beside the axis rather than inside it, and goes with it.
-  $('axis-hint').hidden = host.hidden;
+  const reading = wholePending() && onTimeView;
+  host.hidden = reading || !onTimeView || !win || state.allTransactions.length + state.allSignals.length < 2;
+  // The hint sits beside the axis rather than inside it, and goes with it, except while the copy is
+  // read: drawn from the newest page the axis would show the session starting where the page does,
+  // so it is hidden, and the hint keeps the line's band saying why. Hidden too, the line came back
+  // when the copy landed and pushed every row down by its height under the reader (KIN-42).
+  const hint = $('axis-hint');
+  hint.hidden = host.hidden && !reading;
+  if (reading) { hint.className = 'axis-hint muted axis-reading'; hint.replaceChildren(el('span', null, beingRead(state.sessionTotal))); }
   syncOverview();
   if (host.hidden) return;
 
@@ -195,8 +201,9 @@ function renderAxisFoot(win) {
 }
 
 /**
- * The overview line holds the axis and, on the timeline, the now strip; it is hidden when both are,
- * so an empty band never takes a row's height. A now strip hidden — another view, or a session that
+ * The overview line holds the axis and, on the timeline, the now strip; it is hidden when both are
+ * and the hint is too, so an empty band never takes a row's height. The hint alone keeps it while the
+ * whole-session copy is read, saying so (`renderAxis`). A now strip hidden — another view, or a session that
  * holds nothing now — closes its list, which would otherwise come back open over other rows.
  */
 function syncOverview() {
@@ -204,7 +211,7 @@ function syncOverview() {
     $('current').hidden = true;
     $('now-toggle').setAttribute('aria-expanded', 'false');
   }
-  $('overview').hidden = $('axis').hidden && $('now-strip').hidden;
+  $('overview').hidden = $('axis').hidden && $('axis-hint').hidden && $('now-strip').hidden;
 }
 
 let axisPaintSuspended = false;

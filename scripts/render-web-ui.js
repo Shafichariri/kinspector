@@ -272,7 +272,7 @@ function runScripts() {
    * `renderList` clears the list and re-appends, and a fetch sits in front of it, so a fixed sleep
    * can sample a half-built list — a read taken mid-render reported 6 rows for a 10-row session.
    * That makes a count assertion pass or fail on machine speed. Two identical consecutive samples
-   * mean the render finished.
+   * mean the render finished, unless a whole-session read is still in flight (`wholePending`).
    */
   const settle = async (timeoutMs = 4000) => {
     const sample = () => [
@@ -286,7 +286,7 @@ function runScripts() {
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 120));
       const current = sample();
-      if (current === previous) return;
+      if (current === previous && !vm.runInContext('wholePending()', vmContext)) return;
       previous = current;
     }
     console.error(`settle() timed out after ${timeoutMs}ms — counts below may be mid-render.`);
