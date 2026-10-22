@@ -60,7 +60,7 @@ so `DaemonLayersTest` does; the reasoning is in `docs/decisions/daemon-and-mcp.m
 
 | Package | Holds | May import, beyond `kotlin.`, `kotlinx.serialization.`, `kotlinx.coroutines.`, `java.` and `dev.inspector.model.` |
 |---|---|---|
-| `archive/` | the on-disk archive: config, layout, reader, writer, retention, route templates (the config's `routeTemplates` and the heuristic they override), findings settings (the `findings` key, read live) and the rule catalogue | nothing else in the daemon |
+| `archive/` | the on-disk archive: config, layout, reader, writer, retention, session stamps, route templates (the config's `routeTemplates` and the heuristic they override), findings settings (the `findings` key, read live) and the rule catalogue | nothing else in the daemon |
 | `service/` | live sessions, live apps, replay, peers, MCP control, exports, route stats, findings, `daemonVersion()` | `archive/` |
 | `http/` | the Ktor server, its route groups and the control gate | `archive/`, `service/`, `io.ktor.` |
 | `mcp/` | the MCP server and its tools | `archive/`, `service/` |

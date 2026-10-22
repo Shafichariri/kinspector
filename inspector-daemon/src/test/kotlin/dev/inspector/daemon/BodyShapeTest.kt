@@ -229,4 +229,26 @@ class BodyShapeTest {
         assertFalse(JsonPaths.isAtOrUnder("$", prefixes))
         assertFalse(JsonPaths.isAtOrUnder("$.card", emptySet()))
     }
+
+    /**
+     * The diff's fold: a map keyed by ids is one path, not one per id, by the route heuristic itself.
+     * Its misses are the route heuristic's, pinned so nobody "fixes" one here alone: a currency code,
+     * an e-mail address or a short slug stays literal.
+     */
+    @Test
+    fun `foldIdKeys reads id-like object keys as the route heuristic does`() {
+        assertEquals("$.accounts.{id}.balance", JsonPaths.foldIdKeys("$.accounts.12345.balance"))
+        assertEquals("$.byUser.{id}", JsonPaths.foldIdKeys("$.byUser.0b8f3c2e-5d1a-4f6b-9a7c-1e2d3f4a5b6c"))
+        assertEquals("$.items[*].{id}[*].{id}", JsonPaths.foldIdKeys("$.items[*].deadbeef42[*].7"))
+        assertEquals("$.rates.USD", JsonPaths.foldIdKeys("$.rates.USD"), "a currency code is a documented miss")
+        assertEquals("$.byEmail.a@example.invalid", JsonPaths.foldIdKeys("$.byEmail.a@example.invalid"))
+        assertEquals("$.id.v2", JsonPaths.foldIdKeys("$.id.v2"), "a short key stays literal")
+        assertEquals("$", JsonPaths.foldIdKeys("$"))
+        assertEquals("$[*]", JsonPaths.foldIdKeys("$[*]"))
+        // Every key the heuristic reads as an id, and no other, over the same segments the route test uses.
+        for (key in listOf("42", "abc", "USD", "deadbeefcafe", "a1b2c3d4", "notification-preferences", "")) {
+            val expected = if (RouteTemplates.NONE.routeOf("/$key").placeholders.single()) "{id}" else key
+            assertEquals("$.m.$expected", JsonPaths.foldIdKeys("$.m.$key"), "key '$key'")
+        }
+    }
 }

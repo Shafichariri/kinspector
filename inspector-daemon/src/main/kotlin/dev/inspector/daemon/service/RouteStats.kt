@@ -70,6 +70,9 @@ data class RouteStatsRow(
     val meanResBytes: Long? = null,
 )
 
+/** [RouteStatsAccumulator.rowsByKey]'s answer: each route's row, and whether the filter reached every term. */
+data class RouteRows(val rows: Map<RouteKey, RouteStatsRow>, val carried: Boolean)
+
 /**
  * The order of a route table. In the daemon, not the page, so `limit` cuts the right rows and REST,
  * MCP and the page share one order. Every key is descending with nulls (withheld or unmeasurable)
@@ -104,7 +107,7 @@ enum class StatsSort(val key: String, val metric: (RouteStatsRow) -> Number?) {
  *
  * It keeps per route only counts, a growable array of latencies, the set of `callId`s and the few
  * attempts after a first, and session-wide the 3xx attempts in [RedirectHops]; never the rows.
- * Retries and redirects are told apart at [snapshot], not as rows arrive, so a fold that met an
+ * Retries and redirects are told apart at [rowsByKey], not as rows arrive, so a fold that met an
  * attempt before the one it follows still classifies it right.
  */
 class RouteStatsAccumulator(
@@ -112,8 +115,14 @@ class RouteStatsAccumulator(
     private val filter: Filter,
     private val context: FilterContext,
 ) {
-    private var total = 0
-    private var matched = 0
+    /** Rows folded so far, every attempt: what a report calls `total`. */
+    var total = 0
+        private set
+
+    /** Rows the filter kept: what a report calls `matched`. */
+    var matched = 0
+        private set
+
     private val routes = HashMap<RouteKey, RouteTally>()
 
     /** Every row in the session, filtered or not: see [RedirectHops] for why. */
@@ -122,27 +131,28 @@ class RouteStatsAccumulator(
     /** Most sessions call a few hundred paths many times; this saves templating each again. */
     private val keyByOrigin = HashMap<OriginPath, RouteKey>()
 
-    fun add(txn: NetworkTransaction) {
+    /**
+     * Counts [txn], and returns the route it was counted under, or null when the filter dropped it.
+     * The session diff folds the same rows into its own tallies, and keys them by what this returns,
+     * so the two cannot disagree about which rows a route holds or which route a row is on.
+     */
+    fun add(txn: NetworkTransaction): RouteKey? {
         total++
         redirectHops.add(txn)
-        if (filter != Filter.MatchAll && !filter.matches(txn, context)) return
+        if (filter != Filter.MatchAll && !filter.matches(txn, context)) return null
         matched++
         val origin = OriginPath(txn.method, txn.scheme, txn.host, txn.port, txn.path)
         val key = keyByOrigin[origin] ?: templates.keyOf(txn).also {
             if (keyByOrigin.size < KEY_MEMO_LIMIT) keyByOrigin[origin] = it
         }
         routes.getOrPut(key) { RouteTally() }.add(txn)
+        return key
     }
 
     /** The report as of the rows folded so far. [filterText] must be the text [filter] was parsed from. */
     fun snapshot(sessionId: String, filterText: String, sort: StatsSort, limit: Int): RouteStatsReport {
-        var carriedAll = true
-        val rows = routes.map { (key, tally) ->
-            val (term, carried) = RouteTemplates.compose(filterText, filter, RouteTemplates.filterTerm(key))
-            if (!carried) carriedAll = false
-            tally.row(key, term)
-        }
-        val ordered = rows.sortedWith(order(sort))
+        val (byKey, carriedAll) = rowsByKey(filterText, filter)
+        val ordered = byKey.values.sortedWith(order(sort))
         return RouteStatsReport(
             sessionId = sessionId,
             filter = filterText,
@@ -155,7 +165,24 @@ class RouteStatsAccumulator(
         )
     }
 
-    /** An attempt after a first; a retry or a hop, decided at [snapshot]. */
+    /**
+     * Every route's row as of the rows folded so far, unordered, and whether [termText] was carried
+     * into every row's filter term. [termParsed] is what decides an `Or` (see
+     * [RouteTemplates.compose]), so a caller whose rows were cut by more than its text says, as the
+     * diff's `since` cut is, passes the filter the text came from rather than the whole cut.
+     */
+    fun rowsByKey(termText: String, termParsed: Filter): RouteRows {
+        var carriedAll = true
+        val rows = LinkedHashMap<RouteKey, RouteStatsRow>(routes.size * 2)
+        for ((key, tally) in routes) {
+            val (term, carried) = RouteTemplates.compose(termText, termParsed, RouteTemplates.filterTerm(key))
+            if (!carried) carriedAll = false
+            rows[key] = tally.row(key, term)
+        }
+        return RouteRows(rows, carriedAll)
+    }
+
+    /** An attempt after a first; a retry or a hop, decided at [rowsByKey]. */
     private class LaterAttempt(val callId: String, val attempt: Int)
 
     private data class OriginPath(val method: String, val scheme: String, val host: String, val port: Int?, val path: String)

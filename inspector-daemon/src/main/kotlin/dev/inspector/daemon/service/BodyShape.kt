@@ -1,5 +1,6 @@
 package dev.inspector.daemon.service
 
+import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.model.NetworkTransaction
 import java.nio.file.Path
@@ -145,6 +146,23 @@ object JsonPaths {
 
     /** [path] with every array index written `[*]`: `$.items[3].id` is `$.items[*].id`. */
     fun group(path: String): String = INDEX.replace(path, "[*]")
+
+    /**
+     * [path] with every object key the route heuristic reads as an id written `{id}`:
+     * `$.accounts.12345.balance` is `$.accounts.{id}.balance`. The session diff compares paths after
+     * this, so a map keyed by account ids is one path rather than one per account, and two runs with
+     * different accounts do not read as every key removed and added.
+     *
+     * The heuristic is [RouteTemplates]'s, called and not copied, so a key and a path segment are
+     * judged alike; among what it misses, a map keyed by currency codes or by e-mail addresses keeps
+     * its keys literal. A key holding `.` or `[` was already ambiguous in the Redactor's syntax, and
+     * is judged piece by piece. Detection need not call this: its paths name the field a value was in.
+     */
+    fun foldIdKeys(path: String): String = MEMBER.replace(path) { match ->
+        if (RouteTemplates.isIdLike(match.groupValues[1])) ".{id}" else match.value
+    }
+
+    private val MEMBER = Regex("\\.([^.\\[]*)")
 
     /**
      * True when [path] is one of [prefixes] or lies under one: under means the next character after
