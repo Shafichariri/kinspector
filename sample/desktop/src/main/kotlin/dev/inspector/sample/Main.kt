@@ -147,6 +147,9 @@ fun main() {
                 name = "Checkout",
                 data = buildJsonObject { put("step", "pay"); put("items", 3) },
             )
+            // The pay step's own mistakes, for the Findings page: a double submit with no
+            // idempotency key and a token in a query string. See sample/README.md.
+            DemoFlow.run(client)
             // Emitted per change, with no throttling here on purpose: conflation is the
             // library's job, so a consuming app never has to reinvent it.
             repeat(50) { i ->
@@ -208,6 +211,9 @@ private fun SampleScreen(client: HttpClient) {
                     }
                 }
             }) { Text("POST echo") }
+
+            // What the Findings page is for: see sample/README.md.
+            Button(onClick = { scope.launch { DemoFlow.run(client) } }) { Text("pay twice + token") }
 
             Button(onClick = {
                 // Burst: the queue is DROP_OLDEST, so this must not stutter the UI.

@@ -150,6 +150,9 @@ private fun SampleScreen(client: HttpClient, okHttp: okhttp3.OkHttpClient) {
                 }
             }) { Text("POST echo") }
 
+            // What the Findings page is for: see sample/README.md.
+            Button(onClick = { scope.launch { DemoFlow.run(client) } }) { Text("pay twice + token") }
+
             Button(onClick = {
                 // Burst: the queue is DROP_OLDEST, so this must not stutter the UI. On a phone
                 // that is a claim you can feel rather than measure, which is why it is a button.
