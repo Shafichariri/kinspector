@@ -3,7 +3,9 @@ package dev.inspector.daemon.service
 import dev.inspector.daemon.archive.DaemonConfig
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -101,8 +103,47 @@ class McpProbeCleanupTest {
         assertStopped(child)
     }
 
+    @Test
+    fun `a probe whose child holds its output open and never writes returns within its timeout`() {
+        lateinit var child: Process
+        val probing = Executors.newSingleThreadExecutor { task -> Thread(task, "silent-probe").apply { isDaemon = true } }
+        try {
+            val began = System.nanoTime()
+            val pending = probing.submit<McpProbeResult> {
+                control { stub(McpProbeStubChild.SILENT).also { child = it } }.probe(timeoutMs = SILENT_TIMEOUT_MS)
+            }
+            // The test's own bound, so a probe that blocks fails here instead of hanging the
+            // suite. The probe's thread is a daemon and stays stuck in its read until teardown
+            // kills the stub, which ends that read.
+            val result = try {
+                pending.get(SILENT_TIMEOUT_MS + SILENT_MARGIN_MS, TimeUnit.MILLISECONDS)
+            } catch (_: TimeoutException) {
+                fail(
+                    "probe(timeoutMs = $SILENT_TIMEOUT_MS) had not returned after " +
+                        "${SILENT_TIMEOUT_MS + SILENT_MARGIN_MS}ms: its deadline waits on a read the silent child never ends",
+                )
+            }
+            val tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - began)
+
+            assertFalse(result.ok)
+            assertContains(result.error.orEmpty(), "did not answer a tools/list within ${SILENT_TIMEOUT_MS}ms")
+            assertTrue(tookMs >= SILENT_TIMEOUT_MS, "the probe gave up after ${tookMs}ms, before its own deadline")
+            assertStopped(child)
+        } finally {
+            probing.shutdownNow()
+        }
+    }
+
     private companion object {
         const val GRACE_SECONDS = 5L
+
+        const val SILENT_TIMEOUT_MS = 1_500L
+
+        /**
+         * What the silent test allows past the probe's timeout: the probe's own `waitFor` of 2 s
+         * on a child that ignores EOF, plus 3 s for starting the stub JVM on a loaded CI runner.
+         */
+        const val SILENT_MARGIN_MS = 5_000L
     }
 }
 
@@ -114,6 +155,7 @@ object McpProbeStubChild {
     const val ANSWER = "answer"
     const val CHATTER = "chatter"
     const val CLOSE_STDIN = "close-stdin"
+    const val SILENT = "silent"
     const val STDIN_CLOSED = "stdin closed"
     const val TOOL_COUNT = 3
 
@@ -134,6 +176,9 @@ object McpProbeStubChild {
                 System.out.flush()
                 Thread.sleep(50)
             }
+            // Holds stdout open and writes nothing: a wedged server. Only a deadline that does not
+            // wait on the read can end a probe of this one.
+            SILENT -> Unit
             CLOSE_STDIN -> {
                 System.`in`.close()
                 System.err.println(STDIN_CLOSED)
