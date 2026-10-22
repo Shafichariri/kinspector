@@ -151,8 +151,8 @@ data class PaymentSettings(
 }
 
 /**
- * The parsed `findings` key of `config.json`: which rules are on, at what severity, and the payment
- * rules' settings.
+ * The parsed `findings` key of `config.json`: which rules are on, at what severity, the payment
+ * rules' settings and the sensitive-data rules' ([SensitiveConfig]).
  *
  * One reader serves both callers, so a `PUT` and a hand edit are judged by the same words:
  * `ConfigFile` refuses a value whose [problem] is not null, and the live read ([FindingSettingsSource])
@@ -162,6 +162,7 @@ data class PaymentSettings(
 data class FindingSettings(
     val rules: Map<String, RuleOverride> = emptyMap(),
     val payment: PaymentSettings = PaymentSettings(),
+    val sensitive: SensitiveSettings = SensitiveSettings.DEFAULT,
 ) {
     /**
      * The effective settings as JSON with sorted keys and every default written out, so two files
@@ -185,12 +186,13 @@ data class FindingSettings(
                 }
             }
         }
+        put("sensitive", sensitive.canonical())
     }.toString()
 
     companion object {
         val DEFAULT = FindingSettings()
 
-        private val KEYS = listOf("rules", "payment")
+        private val KEYS = listOf("rules", "payment", "sensitive")
         private val RULE_KEYS = listOf("enabled", "severity")
         private val PAYMENT_KEYS =
             listOf("idempotencyHeaders", "paymentPaths", "ignorePaths", "duplicateWindowMs", "resubmitWindowMs")
@@ -214,7 +216,7 @@ data class FindingSettings(
         fun read(value: JsonElement?, report: (String) -> Unit): FindingSettings {
             if (value == null || value is JsonNull) return DEFAULT
             val obj = value as? JsonObject ?: run {
-                report("findings must be an object with rules and payment, for example {\"payment\": {\"paymentPaths\": [\"payment\"]}}")
+                report("findings must be an object with rules, payment and sensitive, for example {\"payment\": {\"paymentPaths\": [\"payment\"]}}")
                 return DEFAULT
             }
             for (key in obj.keys) {
@@ -223,6 +225,7 @@ data class FindingSettings(
             return FindingSettings(
                 rules = obj["rules"]?.let { readRules(it, report) } ?: emptyMap(),
                 payment = obj["payment"]?.let { readPayment(it, report) } ?: PaymentSettings(),
+                sensitive = SensitiveConfig.read(obj["sensitive"], report),
             )
         }
 
@@ -234,6 +237,12 @@ data class FindingSettings(
             }
             val rules = LinkedHashMap<String, RuleOverride>()
             for ((id, entry) in obj) {
+                if (id.startsWith(SensitiveConfig.CUSTOM_PREFIX)) {
+                    // A custom rule exists only while its entry does, and its own enabled and severity
+                    // are the one place it is switched and graded, so this map never validates against another.
+                    report("findings.rules cannot take the custom rule '$id'; set enabled and severity on its entry in findings.sensitive.valueRules")
+                    continue
+                }
                 if (FindingRuleCatalog.byId(id) == null) {
                     report("findings.rules has an unknown rule '$id'; the rules are ${FindingRuleCatalog.ALL.joinToString { it.id }}")
                     continue

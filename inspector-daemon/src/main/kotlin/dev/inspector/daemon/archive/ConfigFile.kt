@@ -159,6 +159,7 @@ class ConfigFile(private val dataDir: Path) {
                 "signalCaps" -> validateSignalCaps(value)
                 "routeTemplates" -> validateRouteTemplates(value)
                 "findings" -> FindingSettings.problem(value)
+                "findingDismissals" -> SensitiveConfig.dismissalsProblem(value)
                 else -> null
             }
             if (problem != null) return problem
@@ -208,6 +209,6 @@ class ConfigFile(private val dataDir: Path) {
         /** The most megabytes [DaemonConfig.maxTotalBytes] can hold as bytes. */
         const val MAX_TOTAL_MB = Long.MAX_VALUE / (1024L * 1024L)
 
-        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps", "routeTemplates", "findings")
+        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps", "routeTemplates", "findings", "findingDismissals")
     }
 }

@@ -272,6 +272,47 @@ class ConfigFileTest {
     }
 
     @Test
+    fun `a valid findings sensitive and findingDismissals are written as sent`() {
+        val sensitive = """{"firstPartyHosts":["*.example.invalid"],"valueRules":[{"id":"member-id","label":"Member","shape":"AA-######"}]}"""
+        val dismissals = """[{"ruleId":"sensitive.field.secret","route":"POST https://auth.example.invalid/login","location":"reqBody","path":"$.password","reason":"the login form"}]"""
+        assertEquals(
+            json("""{"findings":{"sensitive":$sensitive},"findingDismissals":$dismissals}"""),
+            written("""{"findings":{"sensitive":$sensitive},"findingDismissals":$dismissals}"""),
+        )
+    }
+
+    @Test
+    fun `a bad findings sensitive or findingDismissals is refused whole, named, and nothing is written`() {
+        path.writeText("""{"maxSessions":3}""")
+        val before = path.readBytes()
+        val ok = """{"ruleId":"r.x","route":"GET /x","reason":"why"}"""
+        val cases = mapOf(
+            """{"findings":{"sensitive":{"firstPartyHosts":["ok.example.invalid","https://x"]}}}""" to "entry 'https://x' is not a host",
+            """{"findings":{"sensitive":{"valueRules":[{"id":"a","label":"A","shape":"\\d{4}"}]}}}""" to "a shape is not a regular expression",
+            """{"findings":{"sensitive":{"colour":1}}}""" to "findings.sensitive has an unknown key 'colour'",
+            """{"findings":{"rules":{"sensitive.custom.a":{"enabled":false}}}}""" to "findings.rules cannot take the custom rule 'sensitive.custom.a'",
+            """{"findingDismissals":[$ok,{"ruleId":"r.y","route":"GET /y"}]}""" to "findingDismissals entry 2 needs a reason",
+            """{"findingDismissals":[{"ruleId":"r.x","route":"GET /x","reason":"why","txnId":"t1"}]}""" to "findingDismissals entry 1 has an unknown key 'txnId'",
+            """{"findingDismissals":{"ruleId":"r.x"}}""" to "findingDismissals must be a list",
+        )
+        val wrong = cases.mapNotNull { (patch, expected) ->
+            val result = file.merge(json(patch))
+            if (result is ConfigMergeResult.Invalid && expected in result.message) null else "$patch → $result"
+        }
+        assertEquals(emptyList(), wrong)
+        assertContentEquals(before, path.readBytes(), "a refused save changed the file")
+    }
+
+    @Test
+    fun `a findingDismissals that is not a list makes the file malformed, and a save leaves it untouched`() {
+        path.writeText("""{"findingDismissals":{"ruleId":"r.x"}}""")
+        val before = path.readBytes()
+        assertIs<ConfigFileState.Malformed>(file.read())
+        assertIs<ConfigMergeResult.Unreadable>(file.merge(json("""{"maxSessions":4}""")))
+        assertContentEquals(before, path.readBytes())
+    }
+
+    @Test
     fun `a findings key that is not an object makes the file malformed, as any wrong-typed known key does`() {
         path.writeText("""{"findings":[]}""")
         assertIs<ConfigFileState.Malformed>(file.read())
