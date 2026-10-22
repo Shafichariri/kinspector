@@ -115,20 +115,26 @@ async function prepareSide(opts, name, tree, probe, tmp) {
   return { name, tree, urls };
 }
 
-async function onPage(chrome, run) {
-  const page = await chrome.openPage();
-  try { return await run(page); } finally { await page.close(); }
+// `name` is the case's, so a run that fails because Chrome went away says which case it was in. A
+// lost page's readings are refused even if the case returned some: none may print as passed.
+async function onPage(chrome, name, run) {
+  const page = await chrome.openPage(name);
+  try {
+    const rows = await run(page);
+    if (page.lost) throw page.lost;
+    return rows;
+  } finally { await page.close(); }
 }
 
 async function measureSide(chrome, side, opts) {
   const groups = [];
   if (opts.only.includes('layout')) {
-    groups.push((p) => cases.layout(p, side.urls.probe, 'probe'));
-    groups.push((p) => cases.layout(p, side.urls.big, 'big'));
+    groups.push(['layout probe', (p) => cases.layout(p, side.urls.probe, 'probe')]);
+    groups.push(['layout big', (p) => cases.layout(p, side.urls.big, 'big')]);
   }
-  if (opts.only.includes('run')) groups.push((p) => cases.runToggle(p, side.urls.big, 'big'));
-  if (opts.only.includes('live')) groups.push((p) => cases.liveArrival(p, side.urls.big, 'big'));
-  if (opts.only.includes('topbar')) groups.push((p) => topBar(p, side.urls.big, 'long'));
+  if (opts.only.includes('run')) groups.push(['run', (p) => cases.runToggle(p, side.urls.big, 'big')]);
+  if (opts.only.includes('live')) groups.push(['live', (p) => cases.liveArrival(p, side.urls.big, 'big')]);
+  if (opts.only.includes('topbar')) groups.push(['topbar', (p) => topBar(p, side.urls.big, 'long')]);
   return groups;
 }
 
@@ -153,21 +159,21 @@ async function main() {
     const results = Object.fromEntries(sides.map((s) => [s.name, []]));
     const jobs = [];
     for (const side of sides) {
-      for (const group of await measureSide(chrome, side, opts)) {
-        jobs.push(onPage(chrome, group).then((rows) => results[side.name].push(...rows)));
+      for (const [name, group] of await measureSide(chrome, side, opts)) {
+        jobs.push(onPage(chrome, `${side.name} ${name}`, group).then((rows) => results[side.name].push(...rows)));
       }
     }
     await Promise.all(jobs);
     // After the parallel batch, one window per tree: twelve windows opened at once made Chrome's
     // DevTools endpoint drop a request, failing the whole run before anything was measured.
     if (opts.only.includes('room')) {
-      await Promise.all(sides.map((side) => onPage(chrome, (p) => room(p, side.urls))
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} room`, (p) => room(p, side.urls))
         .then((rows) => results[side.name].push(...rows))));
     }
     if (opts.only.includes('shell')) {
-      await Promise.all(sides.map((side) => onPage(chrome, (p) => shell(p, side.urls.big, 'long'))
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} shell`, (p) => shell(p, side.urls.big, 'long'))
         .then((rows) => results[side.name].push(...rows))));
-      await Promise.all(sides.map((side) => onPage(chrome, (p) => statsRouteBreaks(p, side.urls.routes))
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} stats routes`, (p) => statsRouteBreaks(p, side.urls.routes))
         .then((rows) => results[side.name].push(...rows))));
     }
     // Against a daemon per tree with an empty data directory, so the streamed sessions are the only
@@ -177,14 +183,14 @@ async function main() {
         const data = path.join(tmp, `${side.name}-traffic-data`);
         fs.mkdirSync(data);
         const origin = await startDaemon(opts, path.join(side.tree, WEB), data, path.join(tmp, `${side.name}-traffic.log`));
-        results[side.name].push(...await onPage(chrome, (p) => liveTraffic(p, origin)));
+        results[side.name].push(...await onPage(chrome, `${side.name} traffic`, (p) => liveTraffic(p, origin)));
       }
     }
     if (opts.only.includes('first')) {
       for (const session of ['huge', 'big']) {
         for (const side of sides) {
-          results[side.name].push(...await onPage(chrome, (p) => cases.firstRows(p, side.urls[session], session, opts.firstRowsMs)));
-          if (session === 'huge') results[side.name].push(...await onPage(chrome, (p) => statsFirstDraw(p, side.urls.huge, session)));
+          results[side.name].push(...await onPage(chrome, `${side.name} first rows ${session}`, (p) => cases.firstRows(p, side.urls[session], session, opts.firstRowsMs)));
+          if (session === 'huge') results[side.name].push(...await onPage(chrome, `${side.name} stats first draw ${session}`, (p) => statsFirstDraw(p, side.urls.huge, session)));
         }
       }
     }
