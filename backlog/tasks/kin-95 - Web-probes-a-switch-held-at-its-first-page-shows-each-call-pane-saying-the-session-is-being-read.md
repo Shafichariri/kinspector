@@ -3,11 +3,11 @@ id: KIN-95
 title: >-
   Web probes: a switch held at its first page shows each call pane saying the
   session is being read
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-21 22:17'
-updated_date: '2026-10-21 23:21'
+updated_date: '2026-10-22 06:42'
 labels:
   - 'item:web-switch-clears-call-panes'
 dependencies:
@@ -23,18 +23,18 @@ Order row 20. Design: the architect's note for item:web-switch-clears-call-panes
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Nine live-probe lines (switch list … switch counts), each red with the break the note names, and each failing with 'found no …' when the session left drew nothing in that pane
-- [ ] #2 UI_EXPECT_CHECKS is 260
-- [ ] #3 traffic session switch window in measure-web-ui.js --only traffic, red with renderList() removed from followSession, and green
-- [ ] #4 live timeline plain re-proven red with drawLive() removed (Pace rule)
-- [ ] #5 now switch shows none stays green, unchanged
+- [x] #1 Nine live-probe lines (switch list … switch counts), each red with the break the note names, and each failing with 'found no …' when the session left drew nothing in that pane
+- [x] #2 UI_EXPECT_CHECKS is 260
+- [x] #3 traffic session switch window in measure-web-ui.js --only traffic, red with renderList() removed from followSession, and green
+- [x] #4 live timeline plain re-proven red with drawLive() removed (Pace rule)
+- [x] #5 now switch shows none stays green, unchanged
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -59,3 +59,9 @@ Found-nothing: one run with every pane's shape taken out of from (row/wf-row/pv-
 Pace: drawLive() out of 05's call branch: 'live timeline plain: NO - liveprobe-c5 not on the timeline 3 s after it arrived with no filter set'. now switch shows none green throughout (unchanged).
 Chrome: measure --only traffic with renderList() out: 'FAIL traffic session switch window: old rows (the list drew 10 of …_main_measure_debug's rows while its answer was held)'. Green against a base worktree of 5b21593 with --only traffic,layout,run,live: 192 readings each side, head 0 failed; moved against base: only 'traffic session switch window: old rows -> being read'.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #135 merge 4645c43, round 1, no failures. Criterion 1: nine `switch ...` lines in `render-web-ui.js`, 260 passed 0 failed 1 n/a; QA re-ran three reds, each failing only its own line: `state.allTransactions = []` removed -> `switch endpoints: NO - endpoints v 10 with stock, Balance, accounts...`; timeline guard removed -> `switch timeline: NO - #timeline-empty reads "nothing was recorded in this session"`; tag browser's `sessionPending() ? beingRead() :` removed -> `switch browser: NO - #browser-list-empty reads "no state signals in this session"`. The `found no ...` run and the path's unwrapped-saysBeingRead red are the builder's. Criterion 2: ci.yml UI_EXPECT_CHECKS 260, matches the run. Criterion 3: `measure-web-ui.js --only traffic --base 117aeee` head 10 readings 0 failed; with renderList() removed from followSession `FAIL traffic session switch window: old rows (the list drew 10 of ... rows while its answer was held)`; on base the same driver shows A's rows. Criterion 4: `live timeline plain` is green in the 260; the red with drawLive() removed is the builder's (`liveprobe-c5 not on the timeline 3 s after it arrived`), QA did not repeat it. Criterion 5: `now switch shows none` green. Not verified: the Pace rule's red by QA; Safari and Firefox.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -50,11 +50,9 @@ not an instant check: a matching live row appears about a second after the first
 a burst of 100 rows in a second costs at most 2 re-reads. Daemon and wire unchanged.
 `item:web-now-strip-follows-session` (done 2026-10-21) owes an eighth, in the same daemon-only entry:
 *"Web UI: after switching sessions, the now strip, the timeline's signal rows and the session
-glance no longer show the previous session's values while the new one loads; the glance says it is
-loading. Of two overlapping reads of the current state the newer one wins, and a failed read no
+glance no longer show the previous session's values while the new one loads; the glance says the
+session is being read. Of two overlapping reads of the current state the newer one wins, and a failed read no
 longer empties the strip of the session you are on: it keeps its values, each with its age."*
-The timeline's call rows and the endpoint chips still show the previous session for the same
-window; the line says nothing about calls.
 `item:web-list-says-what-it-holds` (done 2026-10-21, with its fix round) owes a ninth, in the same
 daemon-only entry: *"Web UI: under a filter matching more than 1000 calls, the header no longer
 reads as if only 1000 matched. It says `newest 1000 of 1200 matches shown`, also while a stretch is
@@ -120,3 +118,7 @@ hostname label such as `api.qa-long-name` is held whole, so one very long route 
 leaves fewer number columns beside it until the table is scrolled. No `INTEGRATION.md` bump of its own: the change is in the web
 files the daemon serves, v62's description of the Stats page does not mention wrapping, and no consumer code, coordinates or
 release build is touched. The `release-steward` may overrule that.
+`item:web-switch-clears-call-panes` (KIN-94 and KIN-95, done 2026-10-22, PR #135) owes an eighteenth, in the same daemon-only entry, and it is consumer-visible: *"Web UI: switching sessions no longer shows the previous session's calls, endpoint chips, markers or tab counts while the new one loads; each pane says the session is being read until it arrives, and a call left open from the previous session closes."* It finishes what the eighth line started, which covered only the now strip, the signal rows and the glance. The tab bar keeps its tabs through the window, without counts. No `INTEGRATION.md` bump of its own, as for the lines above: the change is in the web files the daemon serves. The `release-steward` may overrule that.
+`item:signals-query-one-rule`'s KIN-42 (done 2026-10-22, PR #136) owes a nineteenth, in the same daemon-only entry, and it is consumer-visible: *"Web UI: on a very large session the first rows and the live connection now appear at once, instead of after about 25 seconds of 'waiting for an app'. Counts that need the whole session (the glance, the path, the endpoint shortcuts, the overview axis) say the session is still being read until it is."* "About 25 seconds" was measured on a 160,000-call session in headless Chrome and is not a promise for other sizes or machines; the whole-session read itself is unchanged and uncapped. No `INTEGRATION.md` bump of its own.
+`item:docs-housekeeping-2026-10-21` (KIN-89, done 2026-10-22, PR #140) owes a twentieth, in the same daemon-only entry, and it is consumer-visible: *"Web UI: the Sessions page names the folder this daemon keeps its sessions in, whatever `--data` is, where it always said `~/.inspector/sessions`. An exported file, which has no Sessions page, names none."* A relative `--data` shows a relative path, as the Processes page does. No `INTEGRATION.md` bump of its own; the rest of that item (the `INTEGRATION.md` headings, the `AGENTS.md` table, `architect.md`) changes nothing a consumer does.
+`item:mcp-probe-deadline-holds` (KIN-96, done 2026-10-22, PR #138) owes a twenty-first, in the same daemon-only entry. The daemon ships in the release zip, so this is user-visible: *"Daemon: the MCP probe in settings now gives up after its timeout when `inspector mcp` is wedged and writes nothing, and stops that process, instead of never answering."* The `release-steward` decides whether it belongs in the notes; the probe's 15 s default and its route are unchanged. No `INTEGRATION.md` bump of its own.

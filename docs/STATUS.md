@@ -5,16 +5,17 @@ Moved here from the root `AGENTS.md` so the root stays an index; the delivery tr
 old, and **no full run has been counted since**; a branch-wide total by arithmetic is not claimed.
 Latest per-target counts from QA, each at the commit named and none a full-repository total:
 `:inspector-model:jvmTest` 162/0 and `:inspector-core:jvmTest` 76/0, 0 skipped, at `66c1bad` (QA, `item:host-port-everywhere`; 160 and 74 on its
-base `623c571`); `:inspector-daemon:test` 362/0 at `66c1bad` (360 at `74f5ca0`, QA, `item:guard-mcp-probe-cleanup`; 357 at `0a5a1c9`, QA, PR #115);
+base `623c571`); `:inspector-daemon:test` 363/0 at `ffc9278` (QA, `item:mcp-probe-deadline-holds`) and again at `85e9552` (the tracker, JUnit XML, `:inspector-daemon:test --rerun`); 362/0 at `66c1bad` (360 at `74f5ca0`, QA, `item:guard-mcp-probe-cleanup`; 357 at `0a5a1c9`, QA, PR #115);
 `:inspector-ui:jvmTest` 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-noop:jvmTest` 3/0, `:inspector-stream:jvmTest` 3/0,
 `:inspector-noop-stream:jvmTest` 1/0 and `:repo-checks:test` 35/0 at `1479c30`. At `623c571` (QA, `item:guard-twin-pairs-alike`) each of the four
 core and stream modules ran two parity tests, 0 failed, so the noop and stream totals above are one higher there (`every_public_declaration_is_in_the_contract`);
 their module totals were not recounted. `:repo-checks:test --rerun` was green at `623c571`, `66c1bad`, `7b37d7a` and `5b21593` (QA, count not recorded); the tracker
-counted 36/0 from the JUnit XML at `5b21593` plus these doc edits, which is one more than the 35 above (`NoopTwinTest.every_pair_names_a_golden_file_that_exists`). Web static checks 110/0 at `7b37d7a` (QA, `item:web-stats-route-breaks-whole`; 109 at `66c1bad`, 107 at `b1bbcac`);
+counted 36/0 from the JUnit XML at `5b21593` plus these doc edits, which is one more than the 35 above (`NoopTwinTest.every_pair_names_a_golden_file_that_exists`), and again 36/0 at `85e9552` with the doc edits of this close. Web static checks 116/0 at `85e9552` (the tracker ran `check-web-static.js`; QA read 116 at `1888380` and `95b4de4`; 112 at `4645c43`, 110 at `7b37d7a`);
+live probe 262 passed 0 failed 1 n/a and archive probe 48 at `1888380` (QA, `item:signals-query-one-rule`'s KIN-42; 260 at `4645c43`, QA, `item:web-switch-clears-call-panes`) and live probe 263 passed 0 failed 1 n/a at `95b4de4` (QA, `item:docs-housekeeping-2026-10-21`, the Sessions page line; `ci.yml` pins 263). Web static checks 110/0 at `7b37d7a` (QA, `item:web-stats-route-breaks-whole`; 109 at `66c1bad`, 107 at `b1bbcac`);
 live probe 251 passed 0 failed 1 n/a and archive probe 48 passed at `b1bbcac` (QA, `item:guard-probe-finds-nothing-fails`, round 1; the same counts at
 `d256174`, QA, PR #121). PRs #127, #129, #132 and #133 left both probes' counts alone, and neither probe was recounted after #133, which changed only
 Chrome-case scripts. At `5b21593` QA ran `check-web-static.js` (110 checks, 0 failed) and `measure-web-ui.js --only shell,room` on the fixture (61 readings,
-0 failed). Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
+0 failed). At `85e9552` only `:repo-checks:test` and `:inspector-daemon:test` were run for this count; neither probe was run by the tracker. Not included in any of these: the Android host tests and the iOS simulator tests, because the QA machine
 has no Android SDK and no working `xcrun`; CI runs them.
 
 **Phase A of the structure pass (web checks and mirror cases in CI) is done**: its first CI run, on
@@ -84,7 +85,7 @@ Not run: `:inspector-model` and the iOS, Android and overlay targets (nothing th
 are Done on verifier evidence over four panels (`5f6b610`, `e1711a3`, `a86dde2`, `8082e02`) and a fresh
 QA at `8f64058`. Counts at `8f64058`, per target and not a full-repository total:
 `:inspector-daemon:test` 267/0, `:repo-checks:test` 35/0, web static checks 71/0, live probe 182
-passed, archive probe 26 passed. KIN-42 is open and deferred by the maintainer. Not run for this item:
+passed, archive probe 26 passed. KIN-42 closed 2026-10-22, PR #136 (see below). Not run for this item:
 `:inspector-model` and the iOS, Android and overlay test targets (nothing there changed).
 Not verified: the no-client-names check (term list not available to the tracker).
 
@@ -148,7 +149,17 @@ finishing. `docs/ROADMAP-DONE.md` §3 has each item's detail and cost line.
 - `item:guard-probe-finds-nothing-fails` (KIN-87, PRs #128 and #133, `b1bbcac` and `5b21593`): QA's first round failed criterion 2 (`shell <w> rail` passed
   over no rail item, and the inventory had missed four Chrome case files); the fix round passed.
 - `item:host-port-everywhere` (KIN-92, PR #129, `66c1bad`) and `item:web-stats-route-breaks-whole` (KIN-93, PR #132, `7b37d7a`): one round each.
-  Counts, base to head, are in the paragraph above. KIN-89 (`item:docs-housekeeping-2026-10-21`) is not closed: its Sessions page line remains.
+  Counts, base to head, are in the paragraph above. KIN-89 (`item:docs-housekeeping-2026-10-21`) stayed open for its Sessions page line; it closed below.
+
+**Five more items are done** (2026-10-22, on `main` at `85e9552`; each ticket Done on QA's pass over detached copies, built without QA before merge, one engineer
+per item, by the maintainer's choice for this run). CI on each PR: `build`, `release-swap`, `repo` and `web` green. The push runs on `main` for `4645c43` (succeeded),
+`1888380` (succeeded), `ffc9278`, `95b4de4` and `85e9552` (the last three in progress when QA looked) were not all seen finishing. `docs/ROADMAP-DONE.md` has each item's
+detail and cost line. No QA round failed.
+- `item:docs-housekeeping-2026-10-21` (KIN-89; PRs #124, #130, #140; `6c1cb32`, `e071594`, `95b4de4`): the `INTEGRATION.md` headings, the `AGENTS.md` S row (14,606 bytes), the
+  `architect.md` golden line, and the Sessions page naming the daemon's own sessions folder. QA passed part 1, then the whole item.
+- `item:mcp-probe-deadline-holds` (KIN-96, PR #138, `ffc9278`), `item:guard-measure-chrome-exit-fails` (KIN-99, PR #141, `85e9552`),
+  `item:web-switch-clears-call-panes` (KIN-94 and KIN-95, PR #135, `4645c43`) and KIN-42 of `item:signals-query-one-rule` (PR #136, `1888380`): one round each.
+  `item:control-boundary-advisory` is not among them and stays open.
 
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
@@ -173,6 +184,37 @@ The lesson worth keeping: **the live path and the REST path are two renderings o
 only the REST one was tested.** Any new field on `NetworkTransaction` needs a check on both.
 
 ### Verified
+
+- **A silent MCP child no longer hangs the probe and is left running, in the daemon's JVM tests.** At `ffc9278` (QA, `item:mcp-probe-deadline-holds`): `McpProbeCleanupTest`'s
+  silent stub (stdout held open, nothing written, EOF ignored) makes `probe(timeoutMs = 1500)` return in 3.514 s with `did not answer a tools/list within 1500ms`, under
+  the test's own 6.5 s bound, and the child is dead afterwards. Red by QA: the blocking `readLine` back (`had not returned after 6500ms: its deadline waits on a read the
+  silent child never ends`, the only failure of 9, 14 s, no hang), `poll` replaced by `take` (the same), and `destroyForcibly()` replaced by `Unit` (4 of 4 fail naming a pid).
+  `McpProbeCleanupTest` and `McpControlTest` 9 tests, 0 failed restored; daemon tests 362 to 363; no `McpProbeStubChild` left at t+0 to t+3 s.
+- **A measure run fails within about a second when Chrome exits or a DevTools socket closes mid-case, on macOS.** At `85e9552` (QA, `item:guard-measure-chrome-exit-fails`): Chrome
+  killed 8 s into `--only traffic` gives `run exited with 2 after 0s`, `head traffic: Chrome exited (signal SIGKILL) before Runtime.evaluate was sent`, no reading printed, and
+  no Chrome or daemon naming the run's temp dir left; 4 s into `--only layout,run,live`, `head layout big: Chrome exited ... while Runtime.evaluate waited for its answer`. At
+  `95b4de4` the same kill hung (`run still alive 60s after Chrome was killed`, five daemons left). A closed socket rejects in 258 ms; with `ws.onclose`'s `lose(...)` removed it
+  waits 30003 ms for the deadline. A case that swallows the error exits 2 with `if (page.lost) throw` and exits 0 printing `ok SWALLOWED: 1` without it. Each command is
+  bounded at 30 s, about 40x the slowest send the builder measured in a full run (718 ms, 287 readings, `first` included); `--only first` on the 160,016-call session
+  (9 readings), `--only traffic` (10) and `--only layout` (124) stay green with 0 failed.
+- **A session switch shows nothing of the session left, in jsdom and headless Chrome 131.** At `4645c43` (QA, `item:web-switch-clears-call-panes`): with the new session's first
+  page held, the live probe's nine `switch ...` lines read the list, the timeline, the waterfall, the path, a tag browser, the endpoints, the tab bar, the detail and the counts,
+  and each says `this session is being read…` or is cleared (260 passed, 0 failed, 1 n/a); QA's own Chrome case, two sessions, was 15 of 15 clean at 1440, 1000 and 400 and 0 of 15 on
+  `117aeee`. Red by QA, each restored: `state.callLoad++` removed (`callLoad 5, so a load of A in flight still writes`), `state.allTransactions = []` removed (static and live), the
+  timeline's `saysBeingRead` guard removed (`#timeline-empty reads "nothing was recorded in this session"`), the tag browser's guard removed, and `renderList()` removed from
+  `followSession` in Chrome (`traffic session switch window: old rows`). The two session-switch races still read `old dropped`. Counts: static 110 to 112, live probe 251 to 260, archive 48.
+- **The first rows and the live socket on a 160,016-call session no longer wait for the whole-session copy, in headless Chrome 131.** At `1888380` (QA, KIN-42 of
+  `item:signals-query-one-rule`): `first rows huge` 411 ms and `connected huge` 414 ms (bar 3000; `over 3000 ms` at `4645c43`, about 24 s). While the copy is read the page shows no
+  empty-state claim: QA sampled every 400 ms, 57 to 58 samples per width at 1440, 1000 and 400, and found no `waiting for an app`, `nothing recorded` or `no calls`; the glance and the
+  reserved overview band say the session is being read. The copy lands in place: scroll kept, 10 chips, `calls in session 160016`, first row moved 33 px (`copy lands huge`). Red by
+  QA: `connectLive()` moved back after the load (`connected huge: over 3000 ms (23748 ms)`) and the overview band not reserved (66 px). `measure-web-ui.js --only first,traffic,layout,run,live,room`
+  220 readings, 0 failed on head, 4 failed on base. Counts: static 112 to 116, live probe 260 to 262, archive 48.
+- **The Sessions page names the daemon's own sessions folder, in headless Chrome 131.** At `95b4de4` (QA, `item:docs-housekeeping-2026-10-21`): with `--data "<scratch>/custom data"`,
+  `#sessions-dir` reads `<scratch>/custom data/sessions` at 1440 and 400 and the document does not widen; with no `--data` (and `-Duser.home` pointed at the scratchpad) it reads the
+  expanded `<scratch>/home/.inspector/sessions`; in an export the page is hidden and the placeholder stays. The probe line `sessions folder` is green on head (263 passed, 0 failed,
+  1 n/a) and red against `84a1747`'s page (`NO - the note says "Every run of the app is a folder under ~/.inspector/sessions. …"`, 262 passed, 1 failed). Also at `6c1cb32`
+  (QA, part 1): the `AgentGuideTest` budget is green at 14,999 bytes and red at 15,000 and 15,007; only v62's `INTEGRATION.md` heading says `(this document)`; `CLAUDE.md` and
+  `.cursorrules` are symlinks. At `e071594` `architect.md` names `api/inspector-ui-public-api.txt`.
 
 - **Scan probes on the shared probe page fail on an empty scan and print what they checked, in headless Chrome and jsdom against the CI fixture.** At `b1bbcac`
   and `5b21593` (QA, `item:guard-probe-finds-nothing-fails`, two rounds): `scripts/lib/scan-verdicts.js` holds the rule; on the fixture
@@ -412,6 +454,21 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **Gaps behind the five items closed on 2026-10-22 (the second close).** *Local machine and CI:* no Android SDK on the QA or tracker machine, so the full `./gradlew build` and
+  Android rest on CI's jobs, which passed on every PR; the push runs on `main` for `ffc9278`, `95b4de4` and `85e9552` were in progress when QA looked. Linux and Windows ran only through
+  CI. *`item:web-switch-clears-call-panes`:* Safari and Firefox (only jsdom and headless Chrome ran it); the delete and clear path (`afterSessionChange`) has no probe of its own and
+  goes through the same `followSession`; the `|| sessionPending()` clause in `50-path.js` matters only when a live call arrives during the switch window and no probe drives that, so it
+  is unproven (removing it leaves `switch path` green); the tag browser keeps its old empty-state line as a fallback behind an inline guard; Chrome's `topbar`, `room`, `shell` and `first`
+  sections were not run for it. *KIN-42:* Safari and Firefox on the huge session; Chrome `topbar` and `shell` in that round; a filter typed during the whole-session read restarts it, by
+  design, and one read per session is unplaced; a row arriving during the first page's own request can miss the list until the next load, an address naming a view other than traffic or
+  path still waits for the whole load, and the waterfall's stub groups for screens older than the list's page say `no calls` (predates KIN-42), all unplaced; **the overview band's
+  `min-height` rule is unguarded**: with `.axis-hint.axis-reading { min-height: 24px }` removed, `measure-web-ui.js --only first` stays green (`copy lands huge`, row moved 44 px,
+  under its 48 px bound), so "rows move only by the scope bar" is held by the bound and not by an exact reading; the Chrome readings were taken by QA on the merged tree, after the
+  builder's working tree was lost and restored. *`item:guard-measure-chrome-exit-fails`:* Linux (only macOS Chrome was killed); a wedged renderer inside a real case (only a scratch
+  driver's never-resolving command exercised the deadline); a kill during a `--base` run; Ctrl-C or SIGTERM sent to `measure-web-ui.js` itself still skips its `finally` and leaves the
+  daemons (unplaced). *`item:mcp-probe-deadline-holds`:* a real wedged `inspector mcp` behind the web UI's button (only the stub ran); a write to a child that never reads is still
+  unbounded, though the probe writes two short lines; the 5 s margin on the test's bound covers a JVM start and may need watching on a slow CI runner. *`item:docs-housekeeping-2026-10-21`:*
+  a relative `--data` shows a relative path, which is the daemon's own value.
 - **Gaps behind the six items closed on 2026-10-22.** *Local machine and CI:* no Android SDK and no working `xcrun` on the QA machine, so the full `./gradlew build`,
   `-Pinspector=off`, the Android targets, the iOS test links and the klib half of `check-release-clean.sh` for these items rest on CI's `build` and `release-swap`
   jobs, which passed on every PR; the release scan was run locally on the JVM jars only (self-test found the canary, the plain run found nothing). The push runs on
@@ -421,9 +478,8 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   a failure is unplaced; these were read from the code and not run red: `rail is navigation`, `route pages`, `exportMenu`, `sort flip restores`, `map matches log`,
   `start times shown`, `duplicate badges`, `unanchored chips`, `hop-by-hop stripped`, `onTop`'s `n/a` branch and the socket half of `traffic reaches`; the decision text in
   `web-ui.md` does not yet name the Chrome cases fixed in #133. *`item:guard-live-traffic-driver`:* pause and resume, reconnect, 400px and spaces-only have no committed
-  check; `measure-cdp.js` does not notice a closed DevTools socket, and one run hung once when Chrome exited mid-case; the burst bound for a burst longer than a second was
-  never exercised. *`item:guard-mcp-probe-cleanup`:* an MCP probe whose child keeps stdout open and writes nothing never returns, because the timeout is checked only between
-  lines (read from the code by the builder and QA, not reproduced, unplaced); Linux ran only in CI, and which operating system each CI job used was not checked.
+  check; `measure-cdp.js` fails a run within about a second when Chrome exits or a DevTools socket closes mid-case, naming the case, and bounds each command at 30 s (KIN-99); the burst bound for a burst longer than a second was
+  never exercised. *`item:guard-mcp-probe-cleanup`:* an MCP probe whose child keeps stdout open and writes nothing now returns at its timeout (`item:mcp-probe-deadline-holds`, Verified); Linux ran only in CI, and which operating system each CI job used was not checked.
   *`item:web-stats-route-breaks-whole`:* headless Chrome only, and the base's break count depends on fonts (29 for the builder, 30 for QA); one over-long route widens the
   whole route column at 400px, so fewer number columns fit beside it.
 - **`item:endpoint-latency-stats` was built without a design review and without a UX pass, and QA rendered the Stats page in headless Chrome only.** Nobody has
@@ -454,7 +510,7 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   kill reply; the real case of a peer exiting before the kill was seen only by QA, in round 2.
 - **The "recovers" probe's red proof** is the engineer's record in PR #112's body; QA did not repeat it.
 - **Fixed by 1b (2026-10-21):** the closed detail drawer that widened the page at 1000 and 400 px; see Verified.
-- **Older, not 1a's:** the Sessions page says sessions live under `~/.inspector/sessions` even with `--data` elsewhere.
+- **Fixed after 1a (2026-10-22):** the Sessions page names the daemon's own sessions folder, `--data` or not; see Verified.
 - **The full `./gradlew build` for the six items of 2026-10-21 was not run on the QA machine** (no Android SDK).
   It rests on CI, which was green on each PR. For phase H and phase I the `-Pinspector=off` build on the Android
   and iOS targets, the iOS framework and test links (no working `xcrun`) and the klib half of
@@ -473,9 +529,6 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   and `[::1]` from Ktor. One IPv6 server reached by both clients draws as two identical-looking route rows on the Stats page and in the Markdown routes table
   (QA reproduced it at `66c1bad` and at `7b37d7a`; `byHost` merges them). Zone ids (`fe80::1%en0`) were not handled. The IPv6 capture tests ran on QA's Mac; the builder
   reports no skip line in CI's log, which QA did not check, and a runner without an IPv6 loopback reports them skipped.
-- **In the window after a session switch the timeline's call rows and endpoint chips still show the session just
-  left**, true at base. The path, waterfall and tag browsers are not redrawn by the switch either (by inspection;
-  not rendered).
 - **A stretch under a filter holding some loaded rows and some older unloaded matches** says `at least 10 calls
   hidden` and not that more matches are older. At 400 px the header count is off-screen; at 1000 px the closed
   picker drops the start time (ROADMAP 1a (e), 1b).
@@ -498,13 +551,8 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   signature changed).
 - **The archive half of KIN-44's red proof** is retired, not met: offline the copy is the list, so the
   pager is never called. Offline paging is guarded instead by `long offset 1000 sliced`.
-- **Whether the whole-session read should be capped** is KIN-42's, deferred; the read is still awaited
-  and uncapped.
 - **Closed session picker at 600-700 px** can read `com.example.`, so two sessions of one app look
   alike (ROADMAP 1a (e)).
-- **A ~160,000-call session shows a false empty state for about 25 s before the first rows**, in
-  headless Chrome (rows at 26 to 27 s, connected at 26 to 29 s, over the 3000 ms bar). KIN-42, introduced
-  by KIN-34, deferred by the maintainer on 2026-10-19.
 - **`item:web-live-calls-reach-every-pane` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it. **An open run staying
   open under a live call** was checked in jsdom only (`socket run stays open`), and that line stays green with the redraw removed, so
   it guards the follow rule, not the redraw. **A live signal or marker** still redraws the timeline once per message, so a signal
