@@ -1,11 +1,11 @@
 ---
 id: KIN-130
 title: Rehearse the 1.4.0 release locally before the tag
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 13:28'
-updated_date: '2026-10-22 17:31'
+updated_date: '2026-10-22 18:06'
 labels:
   - 'item:release-rehearsal'
 dependencies: []
@@ -20,17 +20,17 @@ ROADMAP §6 → Release 1.4.0 → 'Rehearse the release locally before the tag' 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Publish to a local repository at the release version (e.g. -Pinspector.version=1.4.0-rc) and read a generated POM from each of the seven published modules: name, coordinates and dependency versions match the locks, and no dependency is missing or added.
-- [ ] #2 The daemon zip is built and passes the same smoke test release.yml runs: unzip, serve, /api/sessions and /, and MCP serverInfo.version.
-- [ ] #3 On the rehearsal's artifacts, check-release-clean.sh --self-test finds the canary and the real check finds nothing.
-- [ ] #4 The delivery tracker records the results in docs/STATUS.md with the commit they ran on; a fault found becomes an item or a fix before the tag.
+- [x] #1 Publish to a local repository at the release version (e.g. -Pinspector.version=1.4.0-rc) and read a generated POM from each of the seven published modules: name, coordinates and dependency versions match the locks, and no dependency is missing or added.
+- [x] #2 The daemon zip is built and passes the same smoke test release.yml runs: unzip, serve, /api/sessions and /, and MCP serverInfo.version.
+- [x] #3 On the rehearsal's artifacts, check-release-clean.sh --self-test finds the canary and the real check finds nothing.
+- [x] #4 The delivery tracker records the results in docs/STATUS.md with the commit they ran on; a fault found becomes an item or a fix before the tag.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -86,4 +86,12 @@ AC#3 (release-clean). MET, with no gap.
 - No aars: there is no SDK here, so none were built.
 
 Not verified: android aars and their contents (no SDK; CI's build and release-swap generate the android POMs and PublishedPomTest checks them), signing, the Central bundle. No new fault found.
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/release-rehearsal-report.md (verdict: close yes for #1 to #3; #4 is the STATUS entry written in the batch-5 close-out). Rehearsal on 0b364f5, evidence in PR #174, merge 52a36ba. Faults: round 1's F1, F2 and F3 became KIN-133, KIN-132 and KIN-134, all fixed and Done; no new fault in round 2 or in QA's independent repeat. Not verified: the Android aars (no SDK on the machine), signing and the Central bundle (out of scope).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA, independent repeat from a detached copy of 52a36ba with 1.4.0-rc: #1 35 POMs (28 published plus 7 android), 154 dependencies, 0 lock faults, metadata and sources/javadoc jars complete, dependency sets identical to the published 1.3.0 POMs in all 28; #2 daemon zip 11589662 bytes, release.yml's smoke step gives SMOKE PASSED, red with VERSION=1.4.0: 'MCP serverInfo.version is 1.4.0-rc, expected 1.4.0'; #3 --self-test 'SELF-TEST PASSED: canary detected in 4 core artifact(s)', real check 'PASSED: no capture code found in 7 artifact(s)', --paths per folder: the 4 inspector-core folders exit 1, the other 24 exit 0, 0 UNREADABLE; #4 recorded in docs/STATUS.md, faults fixed before the tag.
+<!-- SECTION:FINAL_SUMMARY:END -->

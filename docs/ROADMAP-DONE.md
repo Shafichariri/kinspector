@@ -2179,6 +2179,80 @@ Android only looked right because 120px clears a status bar at that density.
   still the carried-over row in §3. `docs/INTEGRATION.md`, whose version line this does not touch.
   Surfaces: docs and the landing page only. No public API. **Size:** XS.
 
+- ~~**The landing page scrolls sideways at 400 px, and cuts a card's text.**~~ **Done, 2026-10-22.** PR #168 merged as `41b968c` (row 13f); `build`, `release-swap`, `repo` and `web` passed on the PR and on main's push run. KIN-131 is Done on QA's pass from detached copies, one round, no blocking findings. The entry is moved verbatim below; what was built and learned follows it.
+
+*The entry below was found on 2026-10-22 by QA on `item:public-claims-true` (KIN-125). It is true at
+that item's base `fc7b205`, so it did not join that item, and it is recorded in `docs/STATUS.md` →
+Not verified. Placed by the product owner on 2026-10-22, checked in Chrome and against the CSS at
+`638119e`. Its place is in "Order from here".*
+
+- **The landing page scrolls sideways at 400 px, and cuts a card's text.** *Ticket label:*
+  `item:landing-page-fits-400`
+
+  **For whom.** Anyone who opens the landing page on a phone, which is where a link shared in a chat
+  or a post is opened. It is the first page of Inspector most people see, it is public today, and
+  it is the one page in the repository no check reads at a phone's width. At 400 px the document
+  is 605 px wide, so the page pans sideways, and in the "Four surfaces" section a card runs past
+  the right edge, so the ends of its bullets are not on screen.
+
+  **What causes it, from the CSS at `638119e`, measured in headless Chrome at 400 px.** QA's report
+  and `docs/STATUS.md` name the architecture diagram. That is not it: each diagram's SVG keeps
+  `min-width: 640px` on purpose inside `.diagram-box`, which has `overflow-x: auto`, so the diagrams
+  scroll inside their own box and do not widen the page. The cause is two CSS grids whose items
+  keep the default `min-width: auto`, so a wide child sets the column's width instead of scrolling
+  inside it:
+  - `.step` (`grid-template-columns: 36px 1fr`, the "Get started" steps). Its `pre` blocks are
+    531 px wide at their narrowest and have `overflow-x: auto`, but the grid item holding them does
+    not shrink below them. This makes the 605 px. With `.step > * { min-width: 0 }` added in the
+    page, the document is 400 px.
+  - `.grid2` (the "Four surfaces" cards). The `.term` block in one card is `white-space: pre` and
+    454 px wide, and that card's column grows to 558 px. That is the cut card: with the `.step` rule
+    alone the document is still 558 px and 12 card bullets end past the edge; with `.grid2 > *` as
+    well, it is 400 px and none does.
+
+  **Acceptance criteria.**
+  - At 400 px, served from `site/` in Chrome, the document is no wider than the window, and no
+    element outside a scroll container ends past the window's right edge. The diagrams, the
+    gallery, the code blocks and the tables may still scroll inside their own boxes, as they do
+    today.
+  - Every bullet of every card in "Four surfaces" ends inside the window at 400 px.
+  - At 1440 px the page measures as it does at `638119e`: the fix narrows nothing that fits today.
+  - A check measures it. `scripts/measure-web-ui.js` can host it: its Chrome harness
+    (`lib/measure-cdp.js`) already sets a width and reads layout, and this case needs no daemon,
+    only `site/index.html` from disk. It fails when the document is wider than the window at 400 px
+    or a card's text passes the edge. It is proven red with the fix removed (605 px, then 558 px
+    with only one half of it) and green with it.
+  - `site/index.html` stays inside its line budget (723, and it is at 723 today). The fix is CSS on
+    lines that already exist; the budget is not raised.
+
+  **Question for the architect, left open here.** `measure-web-ui.js` is run by hand, once per web
+  fix round, and CI does not run it; the `pages` workflow publishes `site/` with no check at all. A
+  guard nobody runs on a landing-page edit will not catch the next one. Whether the new case can run
+  in CI without a new tool (GitHub's Ubuntu runners carry Chrome, but no job here uses it today, and
+  §5's "no new tools" is the bar), and in which job, is the architect's call. If it cannot, the
+  item still closes, with the case run by hand and that said in `docs/STATUS.md`.
+
+  **Why now, and why before the 1.4.0 tag.** The release plan has no promotion before 1.4.0, but
+  the page does not wait for a release: `pages.yml` publishes `site/` on every push to `main` that
+  touches it, so it is public now, and the fix ships the moment it merges, independent of the tag.
+  The release's own docs commit edits the page anyway, to bump its coordinate (as the 1.3.0 one
+  did), and a release is when someone new is most likely to look; a page that pans sideways on a
+  phone reads as unfinished. It costs about an hour and touches nothing the release depends on, so
+  it does not gate the tag either: **it should land before the tag, and if it has not, the tag does
+  not wait for it.** It is not added to "Release 1.4.0" → "Required before the tag".
+
+  **Out of scope.** The page's copy, which `item:public-claims-true` set. The 1.4.0 coordinate on
+  the page, which the release's docs commit bumps. The diagrams' own width, which scroll on purpose.
+  Widths other than 400 and 1440 px. Any web UI page under `inspector-daemon/`. This does not
+  overturn a recorded decision. Surfaces: the landing page and a script. No public API, no noop
+  twin, no golden file. **Size:** S.
+
+  **What was built and learned.** Two existing lines of `site/index.html` changed, so the 723-line budget held: `.step > * { min-width: 0 }` at every width, and `.grid2 > * { min-width: 0 }` **inside the 820 px one-column query**. The `.grid2` rule is scoped on purpose: as a global rule it evened the two columns at 1440 (478 and 538 px became 508 and 508) and narrowed the web UI card by 30 px, against the 1440 criterion. `measure-web-ui.js --only site` hosts the guard (new `scripts/lib/site-cases.js`); it starts no daemon and needs no build or JDK. **The architect's open question was answered by the ground, not by a decision:** CI's `web` job runs it on the Chrome the runner already carries, through the existing no-install CDP helper, so the maintainer's proxy's condition for putting it in CI held and nothing was added to the runner (the proxy approved 13f's place, first in lane S and landing before the tag if it could, and the guard's home on that condition; decision `2026-10-22-landing-page-fits-400`). On Linux it reads `385 px in 400`, because a classic scrollbar takes 15 px. Red both ways, re-run by QA: both rules removed gives 605 px, 51 elements past the edge and 12 of 12 bullets cut; only `.step`'s removed gives 605 px; only `.grid2`'s removed gives 558 px; both in place, 0 failed. **The cause the item recorded was right and QA's earlier report was wrong:** the architecture SVG scrolls inside `.diagram-box`, and QA's overflow listing had not excluded a scroll container. The 1440 layout digest (`1469658b`) is identical on both trees.
+
+  **Left open.** From 821 to 885 px the page is still 886 px wide, on main before the fix too (the two-column `.grid2` above its breakpoint; a candidate in §6). Safari, Firefox and real phones were not run.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -2267,6 +2341,14 @@ tag cut before any of this existed.
 | ~~The README and the landing page say only what is true~~ **Done, 2026-10-22** (KIN-125, PR #159, merge `82887c1`; one round of QA; the maintainer's Android question stays open) *(was row 13b)* | §3 → Bugs found | `item:public-claims-true` | XS |
 | ~~The release page and `ACCESS.md` name the same place to get the library~~ **Done, 2026-10-22** (KIN-126, PR #159, merge `82887c1`; one round of QA) *(was row 13d)* | §6 → Release 1.4.0 | `item:release-notes-boilerplate` | XS |
 | ~~A sample demo flow that both rule families catch~~ **Done, 2026-10-22** (KIN-128, PR #162, merge `b34ea8b`; one round of QA) *(was row 30a)* | §6 | `item:sample-demo-flow` | S |
+| ~~The landing page fits a 400 px window~~ **Done, 2026-10-22** (KIN-131, PR #168, merge `41b968c`; one round of QA; approved by the maintainer's proxy as first in lane S, before the tag if it could) *(was row 13f)* | §3 → Bugs found | `item:landing-page-fits-400` | S |
+| ~~Rehearse the release locally before the tag~~ **Done, 2026-10-22** (KIN-130, PRs #170 and #174, merges `201a46c` and `52a36ba`; round 1 found three faults, round 2 and QA's independent repeat found none) *(was row 13e)* | §6 → Release 1.4.0 | `item:release-rehearsal` | S |
+| ~~The release guard unpacks published klibs and exits 2 on its own errors~~ **Done, 2026-10-22** (KIN-132, PR #171, merge `f32734e`; one round of QA; a fault the rehearsal found) | §6 → Release 1.4.0 | `item:release-guard-klib` | S |
+| ~~Published POMs state the versions the locks resolve~~ **Done, 2026-10-22** (KIN-133, PR #172, merge `9481339`; one round of QA; a fault the rehearsal found) | §6 → Release 1.4.0 | `item:pom-version-mapping` | S |
+| ~~The release guard fails on an archive it cannot unpack~~ **Done, 2026-10-22** (KIN-134, PR #173, merge `0b364f5`; one round of QA; found by QA while verifying KIN-132) | §6 → Release 1.4.0 | `item:release-guard-unzip` | XS |
+| ~~Findings, and the payment-safety rules~~ **Done, 2026-10-22** (KIN-111 to KIN-119; PRs #151 to #153, #160 and #164; one round of QA each; the item closed with detection T5) *(was row 26)* | §6 → Findings | `item:findings-payment-safety` | L |
+| ~~Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract~~ **Done, 2026-10-22** (KIN-112, PR #151, merge `428745a`) *(was row 26a)* | §6 → Findings | `item:findings-payment-safety` | S |
+| ~~Sensitive-data detection — detect, never redact~~ **Done, 2026-10-22** (KIN-120 to KIN-124 and KIN-127; PRs #156, #158, #161 and #169; one round of QA each) *(was row 30)* | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -3453,6 +3535,212 @@ defaults.
 
 cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
 
+### Findings, and the payment-safety rules
+
+**Done, 2026-10-22, all eight tickets, with row 26a.** PR A (T1 to T4, KIN-111 to KIN-115; PRs #151, #152, #153, merges `428745a`, `66ab63c`, `e751a25`), PR B (T5 and T6, KIN-116 and KIN-117; PR #160, `f661683`) and PR C (T7 and T8, KIN-118 and KIN-119; PR #164, `f4bbfbf`), each Done on QA's pass over detached copies, one round each, no blocking findings; the item closed with detection T5 (KIN-124, PR #169, `445408e`), which was the last 1.4.0 feature. The section's text, including its progress line, is moved verbatim below; what was built and learned follows it.
+
+**Progress, 2026-10-22: all eight tickets Done.** T1 (KIN-111, the shared fold cursor and retry rule) and
+Shared body evidence (KIN-112) merged in PR #151 (`428745a`); T2 (KIN-113, the framework, live
+findings settings, engine, cache, REST, MCP `list_findings` and CLI) and T3 (KIN-114, the six
+payment-safety rules) in PR #152 (`66ab63c`); T4 (KIN-115, the exports and the leak guard) in PR #153
+(`e751a25`); T5 and T6 (KIN-116, the Findings page; KIN-117, the Settings fieldset) in PR #160 (`f661683`);
+T7 and T8 (KIN-118, badges and the detail section; KIN-119, flagged rows only) in PR #164 (`f4bbfbf`).
+Each ticket is Done on QA's pass over detached copies (one round each, no blocking findings). The item
+stays open in "Order from here" together with row 30 until detection T5 (KIN-124) lands. **Correction,
+applied 2026-10-22: the design note's payments-fixture counts were wrong and the code is right.** The fixture
+holds 13 mutation calls and 12 flagged rows. The design's own §8.3 table lists 15 distinct calls, 2 of
+them GETs, so 13 mutation calls; the flagged rows are b1 to b10 less the offline pair, the GETs and the
+redirect, which is 12. KIN-114's sixth criterion said 15 mutation calls and the note said 14 flagged rows;
+both were arithmetic errors, the tickets are restated to 13 and 12, and `PaymentRulesTest` asserts 13 and
+12. QA's wording nit on `daemon-and-mcp.md` line 72 is a candidate under "Candidates, not ordered".
+
+**Ruled 2026-10-22 by the product owner: a payment finding is dismissed for its rule on its route, in every session, and that is intended; the design note's "Invariants to keep" is worded wrong, not the code.** The code matches the recorded decision (`daemon-and-mcp.md`: rule, route, location and path) and the detection design that owns dismissals ("payment findings dismiss the same way"); the invariant's "group key" cannot hold for payment rules, whose group key is a `callId`, one session's, which the same invariant's portability clause forbids. For 1.4.0 no code changes: detection T5's dismiss control, and `item:release-1-4-docs`' line for dismissals, say that a dismissal reaches every finding of that rule on that route.
+
+**The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
+message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
+archive**, so a rule edit applies to every session already recorded; cached per session against
+row count and rule version. Rules are **data in the config file** — the defaults ship, and a user
+can edit, disable or add rules from Settings without a release.
+
+**This bends one stated constraint, and on purpose.** "Inspector learns nothing about app domain
+concepts" stands for *capture*. These rules are user configuration over captured rows; the
+defaults are generic conventions (`Idempotency-Key`), never a particular backend's.
+
+Payment rules apply to mutations (POST/PUT/PATCH/DELETE):
+
+| Rule | When | Severity |
+|---|---|---|
+| Duplicate mutation | same method + template + body hash, **different** `callId`, within a window (3 s), no idempotency key | high |
+| Key reused, body changed | same idempotency key, different body | high |
+| Automatic retry without a key | attempt > 1, no key | high |
+| Ambiguous resubmit | a mutation ends in timeout or transport failure and is sent again as a new call | medium |
+| Key missing on a payment path | path matches a configured pattern, no key | medium |
+| Retry with a key | attempt > 1, key present | info — the safe case, shown for context |
+
+Configurable: idempotency header names (default `Idempotency-Key`, `X-Idempotency-Key`), payment
+path patterns in the existing `path:` syntax, the window. A request body that was not captured
+makes the evidence read "body unknown"; a duplicate is never claimed without both bodies.
+
+"Template" in the table is the route from `archive/RouteTemplates.kt` (method, host and path template), built in `item:endpoint-latency-stats`.
+
+**Shared body evidence** — one ticket under this item, carved out of `item:session-diff`'s T1 on
+2026-10-22 when findings moved ahead of the diff (the maintainer's proxy; the architect confirmed
+the dependency is this one piece and starts at findings T3).
+
+*The user and the problem.* Findings, detection and the diff each have to answer the same two
+questions about a call: is it a mutation, and how much of each body do we actually have. Answered
+three times, they will disagree. A row that findings reads as "body complete" and the diff reads as
+"unknown" is the false claim `BodyOmission` exists to prevent.
+
+*Acceptance criteria.*
+- `archive/RouteTemplates.kt` has `RouteKey.mutation`, a computed property and the one definition of
+  "mutation" (POST, PUT, PATCH, DELETE). Equality and every constructor call are unchanged, and the
+  route-stats tests pass unedited.
+- `service/BodyShape.kt` has `BodySide` (`REQ("req")`, `RES("res")`), `BodyState` with all seven
+  states (`complete`, `empty`, `truncated`, `omitted`, `missing`, `notJson`, `unparsed`),
+  `BodyEvidence.state(txn, side)` (from the row only), `BodyEvidence.read(repository, dir, txn,
+  side)` (bytes only when the body is whole, any content type) and `JsonPaths.redactedPaths(txn,
+  side): Set<String>` (both `body:req:`/`body:res:` and the older `body:$.x`). The names and
+  signatures are those of `item:session-diff`'s design §10 and are a contract: the diff's T1 later
+  adds `walk`, `group`, `foldIdKeys` and `isAtOrUnder` to the same `JsonPaths` object, and
+  `item:sensitive-data-detection`'s T2 calls it.
+- A truncated body is `truncated` and never `complete`, and an omitted one is `omitted`, each shown
+  by a test that is proven red with the state check removed.
+
+*Out of scope.* Anything the diff alone uses. Any change to what capture records.
+*Surfaces.* Daemon `archive/` and `service/` only. No public API, no golden file. **Size:** S.
+
+Findings T2 no longer waits on the diff. Findings T3 is the first ticket that reads this piece,
+which lands between findings T1 and T2, inside findings PR A.
+
+**The filter grammar stays frozen**, so there is no `has:finding` term — "flagged rows only" is a
+view toggle. Changing the grammar is a separate decision.
+
+`GET /api/sessions/{id}/findings?category=`, MCP `list_findings`, a Findings page grouped by rule,
+a row badge, a section in the detail pane, and disclosure in every export (HAR's entry `comment`).
+
+**Decided 2026-10-22 by the maintainer's proxy: keep both**, as recommended below. The rule is
+Duplicate mutation, drawn only as a severity badge, and its evidence never cites a repeat group.
+The same body sent twice with different keys is not in this item; it is in "Candidates, not
+ordered" below.
+
+*Was an open decision —* **two notions of "duplicate" on one row.** *(Review, 2026-10-17. Does not block
+the start; gates the row badge for this rule.)* The page already marks repeats: `duplicateGroups` in
+`:inspector-model`, mirrored in `app.js`, keys on method + full URL + status + both byte counts,
+requires a different `callId`, excludes headers, and chains members whose consecutive gap is within
+a window — 3 s by default, editable as a *view preference* in `prefs`. It draws a `repeat` tag. The
+Duplicate mutation rule keys on method + **template** + **body hash**, has no status in the key, and
+its window lives in **config**. They will disagree in both directions: a resent POST whose first try
+got a 500 and second a 200 is a finding and not a repeat; two GETs to different ids under one
+template can never be a finding but two identical ones are a repeat. A row carrying a `repeat` tag
+and a "duplicate" badge that mean different things, with two settings both called "window", will be
+read as one feature that is broken.
+
+Options: retire the `repeat` tag on mutations and let the finding speak for them; fold
+`duplicateGroups` into the findings as an `info` rule; or keep both and make them unmistakably
+different claims. Recommended: the last. The `repeat` tag stays what it is — a row-level
+observation for every method, drawn as a tag, with its own name — and this rule is named **Duplicate
+mutation** everywhere and drawn only as a severity badge. Two things to settle in the build: the
+rule's window should chain consecutive gaps the way `duplicateGroups` does, or the two answer
+"within 3 s" differently for a run of three; and the evidence may cite a coinciding repeat group by
+id, which explains the overlap rather than hiding it. Retiring the tag would make the overlay and the
+web disagree, since the overlay has no findings; folding it in means a model-side rule moving into
+daemon config, which is a larger decision than this item.
+
+**Decided 2026-10-17: a disk cache is acceptable, under the three conditions at the end of this
+paragraph** — beside `sessions/`, never inside a session folder; masked evidence only; removed on
+every deletion path; and retention's byte budget states whether it counts. Memory-only remains the
+starting point until a measurement on a large real session says recomputing is slow; the disk option
+is no longer ruled out, and building it needs no further decision.
+
+*Was an open decision — where the findings cache lives.* *(Review, 2026-10-17. Did not block the
+start; in-memory is safe by default. Gated any on-disk cache, here and in Sensitive-data detection.)*
+"Cached per session against row count and rule version" says when the cache is valid, not where it
+is. It must not be inside the session folder. The recorded rule is narrower than "nothing in a
+session folder" — the daemon writes `index.jsonl`, `meta.json` and `bodies/` there by design — it is
+`export_session`'s rule that **derived** files go beside `sessions/`, because retention sizes a
+session by walking its whole folder (`sessionBytes`), so a derived file inside it inflates the
+session it describes and is pruned with it. A findings cache is derived in exactly that sense.
+
+Options: memory only, recomputed after a daemon restart; or a file per session beside `sessions/`
+(for example under the data directory's own `cache/`). Recommended: **memory only** until a
+measurement on a large real session says recomputing is slow, because the sensitive-data scan is
+the one with a real cost (it reads bodies) and nobody has measured it. If a disk cache is ever
+added, three conditions come with it: every deletion path — retention, `sessions/delete`, clear-all
+— removes the entry with the session; it holds **masked** evidence only, or it becomes an unpruned
+second copy of the credentials the detector found; and retention's byte budget states whether it
+counts.
+
+**What was built and learned.** Six payment-safety rules (a duplicate mutation with no idempotency key, and the rest of R1 to R6) run as one findings framework shared with sensitive data: one engine, one cache keyed on the rule version, one read path for REST (`GET …/findings`), MCP `list_findings` and `inspector findings`, one set of exports with a leak guard (`FindingsLeakTest`), and a Findings page, severity badges, a detail section, a flagged-rows-only view and a Settings fieldset. The `findings` config key is the one key that is re-read on the next read with no restart, and a broken hand edit keeps the last good settings and sets `configError`. Surprises worth keeping: the design note's payments-fixture counts were arithmetic errors and the code was right (13 mutation calls and 12 flagged rows, not 15 and 14); the shared route memo holds raw URL paths, so a card number in a path sits in the cache (a follow-up, §6 "Candidates"); the product owner ruled that a payment finding is dismissed for its rule on its route in every session, and the design's "group key" invariant was the part that was worded wrong; one IPv6 server reached by both clients had been two route rows, which `item:route-key-one-ipv6-host` fixed first because findings reuse the route key. Verified against a real daemon, a real `inspector mcp` and the CLI (REST, MCP and the CLI return the same ids in the same order), and in headless Chrome at 1440, 1000, 600 and 400 px, live and exported.
+
+**Left open.** iOS; a real Settings save from the page beyond QA's own clicks; timings on a session larger than `huge`; a 2,001-row whole-session export (builder-tested); MCP `export_session` called directly (it shares `SessionExport` with REST). Full list in `docs/STATUS.md` → Not verified.
+
+cost: not recorded — built in the 2026-10-22 coordinated run, engineer and developer sessions in three PRs, no QA before merge; QA after merge, 1 round each
+
+### Sensitive-data detection — detect, never redact
+
+**Done, 2026-10-22, T1 to T5 and the carved-out KIN-127.** T1 (KIN-120, PR #156, `f0c53a2`), T3 (KIN-122, PR #158, `d5554a9`), T2 (KIN-121), T4 (KIN-123) and KIN-127 (PR #161, `5cce7ab`), and T5, the page (KIN-124, PR #169, `445408e`), each Done on QA's pass, one round each, no blocking findings. The section's text is moved verbatim below; what was built and learned follows it.
+
+**Progress, 2026-10-22: T1 to T4 done.** KIN-120 (T1, rules, masks and config; PR #156, `f0c53a2`), KIN-122 (T3, dismissals; PR #158, `d5554a9`), and KIN-121 (T2, the sensitive source), KIN-123 (T4, exports) and KIN-127 (the `JsonPaths` walker carved out of the diff's T1) in PR #161 (`5cce7ab`), each Done on QA's evidence. **Open:** T5 (KIN-124, the page: dismiss, dismissed fold, no-hosts hint, first-party hosts in Settings); the item is not Done. *The sensitive-data scan was measured in `item:sensitive-data-detection`: 2.7 s cold on 10,000 calls with 4 KB bodies each side; 41 ms after 100 appended rows. The cache stays in memory.* *T5's dismiss control says what it reaches: every finding of that rule on that route, in every session (ruled 2026-10-22, §6 → Findings).*
+
+Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
+addable like the payment rules, in two kinds:
+
+- **Value rules**, validated rather than bare regex: card numbers (13–19 digits, **Luhn**; known
+  test PANs drop to `info`), IBAN (length checked against the full **ISO 13616** country table,
+  and **mod-97**), JWTs and `token=`/`password=`/API keys in query strings, and credentials over
+  `http://`. Email and phone exist and default **off** — they are noise in almost every session.
+  **No national-ID value rule ships by default**; a team whose app handles one adds its own rule in
+  config, like any other.
+- **Field-name rules**, matched on JSON key paths and query parameters whatever the value:
+  `national_id`, `id_number`, `tax_id`, `first_name`, `last_name`, `full_name`, `date_of_birth`,
+  `passport_number`, `iban`, `card_number`, `cvv`, `cvc`, `pin`, `otp`, `password`, and so on —
+  case- and separator-insensitive (`firstName`, `first-name`). The identity names are a neutral
+  spread, not one country's.
+
+Severity rises when the destination is **not** in a configured first-party host list: a card
+number going to an analytics host is the real alarm. Fields listed in `redacted[]` are skipped.
+
+**The detector must not become the leak.** Evidence is stored and shown **masked** —
+`•••• 4242`, `GB82 •••• 5432` (the IBAN registry's own example) — with the location and JSON path; never the value, in the UI, MCP
+or any export. Bodies are scanned when findings are asked for, cached, never on ingest. A finding
+can be dismissed per endpoint and path, with a reason, saved to config.
+
+The cache for this scan follows *where the findings cache lives*, under Findings.
+
+Its T2 reads body evidence through Shared body evidence, the ticket under
+`item:findings-payment-safety` (2026-10-22), and no longer waits on the diff's T1.
+
+**Decided 2026-10-17: generic rules only, no region packs.** The IBAN rule reads the full ISO 13616
+length table; no national-ID value rule ships by default, and a user who needs one adds it through
+config; field-name rules use a neutral spread of identity names. The rule list and masking example
+above have been rewritten to match.
+
+*Was an open decision — regional defaults.* *(Review, 2026-10-17. Did not block the start of the
+framework; gated the rule set that ships as default.)* The first draft of this item carried one
+country's national-ID value rule, that country's IBAN length called out by name, its field name for
+the ID, and a masking example in its IBAN format. Those are country rules, not a client's name, so
+they did not break the no-client-names rule. But they would have been the **only** regional
+defaults in a public repository, and a single country singled out in the shipped rules narrows who
+the consuming app might be about as well as a name would. The constraint that matters — one real
+consuming app handles a national identity number with a known structure — is worth carrying; the
+country is not.
+
+Options were: ship as drafted; ship **generic structure only** (Luhn cards, IBAN with mod-97 and the
+full length table, field names for national identity numbers across many regions, no national-ID
+value rules); or generic structure plus **optional region packs**, off by default, with more than
+one region represented from the first release. The review recommended packs, with generic-only as
+the fallback if no second region could be specified properly. The maintainer chose generic-only:
+the IBAN rule needs no pack once it reads the whole table, and a national-ID rule is exactly the
+kind of thing user-editable rules exist for, so a pack would be shipped maintenance for a case the
+config already covers.
+
+**What was built and learned.** Detection is a second source in the findings framework: value rules validated rather than bare regex (Luhn card numbers, IBAN with its check digits, JWT shape, email and phone, off by default), field-name rules matched on a normalised name with a minimum length so `pin` matches only whole, credentials over http graded by where they were sent, and a `firstPartyHosts` list that decides "sent somewhere it should not be"; with that list empty the page says nothing is raised for where data was sent and links Settings. Findings carry a mask, never a value, in REST, MCP, the CLI, the page and every export, and `SensitiveLeakTest` plants raw values and greps them out. Dismissals match on rule, route, location and path, never a session's paths or call ids, so they reach every session, and the dismiss form says so in words a probe guards. A T5 detail: the page reads the config afresh before it writes and sends only `findingDismissals`, so a hand-edited `fieldNames` survives a dismissal and a restore. Redaction stays off; this is a smoke detector, not a sprinkler.
+
+**Left open.** The false-positive rate on a real consuming app's sessions; the cold scan on a real large body-heavy session beyond the builder's synthetic ones; the IBAN table was transcribed from memory (89 countries) and has not been checked against a current SWIFT registry edition; Safari and Firefox. The no-hosts hint repeats the end of the coverage line above it, which the product owner may want shortened. Full list in `docs/STATUS.md` → Not verified.
+
+cost: not recorded — built in the 2026-10-22 coordinated run, engineer and developer sessions, T1 to T4 in D and T5 in W, no QA before merge; QA after merge, 1 round each
+
 ### Release 1.4.0
 
 #### The release page and `ACCESS.md` name the same place to get the library
@@ -3486,3 +3774,36 @@ sets up a token they do not need.
 **Left open.** The hand-over's main push run and `pages` deploy were read by QA only as reported.
 
 cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
+
+#### Rehearse the release locally before the tag
+
+**Done, 2026-10-22.** Round 1 ran on `445408e` (PR #170, `201a46c`) and found three faults; round 2 ran on `0b364f5` after they were fixed (PR #174, `52a36ba`). KIN-130 is Done on QA's independent repeat from a detached copy of `52a36ba`, with no fault; the three fixes are KIN-132 (PR #171, `f32734e`), KIN-133 (PR #172, `9481339`) and KIN-134 (PR #173, `0b364f5`), each Done on QA's pass. The text is moved verbatim below.
+
+
+*Ticket label:* `item:release-rehearsal`
+
+**The user and the problem.** The maintainer cutting 1.4.0, and every consuming team after them. A
+tagged release is where a broken publish is most expensive to find: a coordinate on Central cannot be
+replaced. 1.4.0 is the first release since the `gradle.lockfile`s came in, so nobody has read a POM
+built under them, and `docs/decisions/release.md` records three POM faults that no build failed on.
+
+**Why now.** Before the tag, with time left to fix what it finds.
+
+**Acceptance criteria.**
+- The publish tasks run to a local repository at the release version, and someone reads a generated
+  POM from each published module: name, coordinates and dependency versions match the locks, and no
+  dependency is missing or added.
+- The daemon zip is built and its smoke test passes, the same one `release.yml` runs.
+- `./scripts/check-release-clean.sh --self-test` finds the canary and `./scripts/check-release-clean.sh`
+  finds nothing, both on the rehearsal's artifacts.
+- The results, with the commit they ran on, are recorded in `docs/STATUS.md` by the delivery tracker.
+  A fault found becomes an item or a fix before the tag, not a note.
+
+**Out of scope.** Signing with the real key, and any upload to Central or GitHub Packages. Changing the
+workflow, unless the rehearsal finds a fault in it. **Size:** S.
+
+**What was built and learned.** The rehearsal earned its place. Round 1 passed the daemon zip's smoke test and failed the other two criteria, and each fault was one no build failed on: **F1**, every published POM stated `kotlin-stdlib` 2.3.20 while the locks resolved 2.3.21 (30 POMs, the Android ones included), because the POM took its versions from the declared dependency graph and not from the configuration the lock covers; fixed by KIN-133 (per-publication `versionMapping` from the locked configuration, with `PublishedPomTest` in `:repo-checks` holding all 35 POMs to their locks, proven red by deleting the mapping line and by hand-editing a lock). **F2**, `check-release-clean.sh --paths` over a published `inspector-core` iOS klib read it clean, because a klib is a zip the guard never unpacked: the exact false pass the root guide records for an earlier version of the same script; **F3**, a target path longer than `NAME_MAX` made it die with exit 1, which a caller reads as "capture code present", even for noop; both fixed by KIN-132 (unpack klibs, and an `ERR` trap that exits 2 on the script's own errors, so exit 1 means only "found"). **A fourth fault QA found while verifying F2:** a corrupt or non-zip archive read clean because `unzip … || true` swallowed the failure; fixed by KIN-134 (an `unzip` exit of 2 or more marks the target `UNREADABLE` and ends the run with exit 2, naming the file; CI pins a truncated jar and a text file named `.klib`). Round 2, with the fixes in: 35 POMs (28 published and the 7 Android ones, generated with `generatePomFileForAndroidPublication`, which needs no SDK) and 154 dependencies with 0 lock mismatches; the daemon zip `inspector-1.4.0-rc.zip` passed the smoke step extracted from `release.yml`; `--self-test` found the canary and the real check found nothing; `--paths` over the published repository flags exactly the four `inspector-core` artifacts. QA's independent checker also compared every non-Android POM's dependency set with the published 1.3.0 POM on Maven Central and found them identical, so only versions moved. The three guard fixes are items of their own in `docs/STATUS.md` → Verified.
+
+**Left open.** The Android aars were never built or scanned locally (no SDK on the machine); the seven Android POMs were generated and checked, and CI's `build` and `release-swap` build the aars on macOS. Signing and the Central bundle were out of scope. `PublishedPomTest` has not run on a Linux developer machine. The last two are candidates in §6.
+
+cost: not recorded — rehearsal in the 2026-10-22 coordinated run, an engineer session per round plus an architect note for F1 and an engineer session for the three fixes, no QA before merge; QA after merge, 1 round each

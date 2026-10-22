@@ -138,16 +138,19 @@ Done 2026-09-24, see `ROADMAP-DONE.md` → §2 → "iOS hardware". What is still
 
 The Android app module and the Xcode project were added 2026-09-18, see `ROADMAP-DONE.md` → §2.
 
-**Neither sample has run on physical hardware.** A cutout, a vendor skin, a gesture bar and a cable
-running `adb reverse` are all still unexercised, and no Inspector build has ever been on a real
-phone of either kind.
+**Neither sample has been looked at on physical hardware by an agent.** A cutout, a vendor skin, a gesture bar and a cable
+running `adb reverse` are all still unexercised by anyone who wrote it down, and the record has no
+Inspector build looked at on a real phone of either kind. *(See the corrections below: the maintainer reported
+on 2026-10-22 that the overlay has run on a physical Android phone and works.)*
 
 *(Corrected 2026-10-22 by the product owner: the last clause is no longer true. An iPhone ran the iOS
 sample over USB on 2026-09-24, with the overlay running and nobody looking at it, and an Android
 device ran the overlay once on 2026-08-17, a month before the Android sample existed (commit
 `ef9058e`, which fixed the four defects it found). The sample's Android
-build has not run on a physical phone. `item:public-claims-true` carried the same correction to the
+build has not been recorded as running on a physical phone. `item:public-claims-true` carried the same correction to the
 README, done 2026-10-22; which build ran on the 2026-08-17 phone is still the maintainer's to say.)*
+
+*(Added 2026-10-22, close-out 5: **the maintainer reported that the overlay has run on a physical Android phone and works, and that Inspector is used daily on a real Compose Multiplatform project.** Reported, not verified by an agent, and not tied to a build or a device; `docs/STATUS.md` records it that way. The first sentence above is now only true of what an agent has seen.)*
 
 ---
 
@@ -447,71 +450,7 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 - ~~**The README and the landing page say things that are not true.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:public-claims-true`.
 
-*The entry below was found on 2026-10-22 by QA on `item:public-claims-true` (KIN-125). It is true at
-that item's base `fc7b205`, so it did not join that item, and it is recorded in `docs/STATUS.md` →
-Not verified. Placed by the product owner on 2026-10-22, checked in Chrome and against the CSS at
-`638119e`. Its place is in "Order from here".*
-
-- **The landing page scrolls sideways at 400 px, and cuts a card's text.** *Ticket label:*
-  `item:landing-page-fits-400`
-
-  **For whom.** Anyone who opens the landing page on a phone, which is where a link shared in a chat
-  or a post is opened. It is the first page of Inspector most people see, it is public today, and
-  it is the one page in the repository no check reads at a phone's width. At 400 px the document
-  is 605 px wide, so the page pans sideways, and in the "Four surfaces" section a card runs past
-  the right edge, so the ends of its bullets are not on screen.
-
-  **What causes it, from the CSS at `638119e`, measured in headless Chrome at 400 px.** QA's report
-  and `docs/STATUS.md` name the architecture diagram. That is not it: each diagram's SVG keeps
-  `min-width: 640px` on purpose inside `.diagram-box`, which has `overflow-x: auto`, so the diagrams
-  scroll inside their own box and do not widen the page. The cause is two CSS grids whose items
-  keep the default `min-width: auto`, so a wide child sets the column's width instead of scrolling
-  inside it:
-  - `.step` (`grid-template-columns: 36px 1fr`, the "Get started" steps). Its `pre` blocks are
-    531 px wide at their narrowest and have `overflow-x: auto`, but the grid item holding them does
-    not shrink below them. This makes the 605 px. With `.step > * { min-width: 0 }` added in the
-    page, the document is 400 px.
-  - `.grid2` (the "Four surfaces" cards). The `.term` block in one card is `white-space: pre` and
-    454 px wide, and that card's column grows to 558 px. That is the cut card: with the `.step` rule
-    alone the document is still 558 px and 12 card bullets end past the edge; with `.grid2 > *` as
-    well, it is 400 px and none does.
-
-  **Acceptance criteria.**
-  - At 400 px, served from `site/` in Chrome, the document is no wider than the window, and no
-    element outside a scroll container ends past the window's right edge. The diagrams, the
-    gallery, the code blocks and the tables may still scroll inside their own boxes, as they do
-    today.
-  - Every bullet of every card in "Four surfaces" ends inside the window at 400 px.
-  - At 1440 px the page measures as it does at `638119e`: the fix narrows nothing that fits today.
-  - A check measures it. `scripts/measure-web-ui.js` can host it: its Chrome harness
-    (`lib/measure-cdp.js`) already sets a width and reads layout, and this case needs no daemon,
-    only `site/index.html` from disk. It fails when the document is wider than the window at 400 px
-    or a card's text passes the edge. It is proven red with the fix removed (605 px, then 558 px
-    with only one half of it) and green with it.
-  - `site/index.html` stays inside its line budget (723, and it is at 723 today). The fix is CSS on
-    lines that already exist; the budget is not raised.
-
-  **Question for the architect, left open here.** `measure-web-ui.js` is run by hand, once per web
-  fix round, and CI does not run it; the `pages` workflow publishes `site/` with no check at all. A
-  guard nobody runs on a landing-page edit will not catch the next one. Whether the new case can run
-  in CI without a new tool (GitHub's Ubuntu runners carry Chrome, but no job here uses it today, and
-  §5's "no new tools" is the bar), and in which job, is the architect's call. If it cannot, the
-  item still closes, with the case run by hand and that said in `docs/STATUS.md`.
-
-  **Why now, and why before the 1.4.0 tag.** The release plan has no promotion before 1.4.0, but
-  the page does not wait for a release: `pages.yml` publishes `site/` on every push to `main` that
-  touches it, so it is public now, and the fix ships the moment it merges, independent of the tag.
-  The release's own docs commit edits the page anyway, to bump its coordinate (as the 1.3.0 one
-  did), and a release is when someone new is most likely to look; a page that pans sideways on a
-  phone reads as unfinished. It costs about an hour and touches nothing the release depends on, so
-  it does not gate the tag either: **it should land before the tag, and if it has not, the tag does
-  not wait for it.** It is not added to "Release 1.4.0" → "Required before the tag".
-
-  **Out of scope.** The page's copy, which `item:public-claims-true` set. The 1.4.0 coordinate on
-  the page, which the release's docs commit bumps. The diagrams' own width, which scroll on purpose.
-  Widths other than 400 and 1440 px. Any web UI page under `inspector-daemon/`. This does not
-  overturn a recorded decision. Surfaces: the landing page and a script. No public API, no noop
-  twin, no golden file. **Size:** S.
+- ~~**The landing page scrolls sideways at 400 px, and cuts a card's text.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:landing-page-fits-400`.
 
 ### Open questions
 
@@ -664,18 +603,14 @@ ends at findings and sensitive-data detection.
   advisory's fix, row 13; and `item:release-1-4-docs`, which lands last.
 - **Fallback:** if those are not merged and verified by QA by **2026-12-03**, 1.4.0 is cut that day
   from what is merged, and anything required that missed it goes to the following release.
+- **Progress, close-out 5, 2026-10-22:** findings and detection T1 to T5 are merged and Done on QA's evidence, the rehearsal ran twice and its three faults are fixed (`ROADMAP-DONE.md` → §6), and the landing page landed. Open before the tag: row 13c's final pass, and row 13 (the private advisory's fix).
 - **After 1.4.0:** session diff, the rest of web UI polish, the two web defects that wait on polish, and the
   native-surface guard. They are in the "After 1.4.0" table below.
 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 13f | The landing page fits a 400 px window | §3 → Bugs found, not fixed | `item:landing-page-fits-400` | S | S, now: first in lane S while 13c's final pass and 13e wait on detection T5. Lands before the tag if it can; the tag does not wait for it |
-| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). |
-| 13e | Rehearse the release locally before the tag | §6 → Release 1.4.0 | `item:release-rehearsal` | S | S; run once findings and detection are merged, before 13c's last commit, so a fault it finds still has time to be fixed |
-| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **Done 2026-10-22, all eight tickets: PR A (T1 to T4, KIN-111 to KIN-115; PRs #151 to #153), PR B (T5, T6; #160) and PR C (T7, T8; #164), each Done on QA's evidence.** PR B and C in W. The row stays open with row 30 until detection T5 (KIN-124) lands |
-| 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. **Ticket KIN-112 done 2026-10-22 (PR #151, `428745a`).** Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
-| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C. **T1 to T4 done 2026-10-22 (KIN-120 to KIN-123, and KIN-127 carved out of the diff; PRs #156, #158, #161); T5 (KIN-124, the page) open** |
+| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). **Progress, close-out 5, 2026-10-22: the final pass is next and is the last commit before the tag.** Findings and detection are merged and Done on QA's evidence (KIN-124 included), the rehearsal passed (`ROADMAP-DONE.md` → §6 → Release 1.4.0), and KIN-129 stays open for it. |
 
 **After 1.4.0**, decided 2026-10-22 by the maintainer. Row labels are kept. Why they wait: 1.4.0 ships the two
 features that catch a defect in the app under test, and none of these is needed to show them.
@@ -694,7 +629,7 @@ lane S has nothing else it can start: `item:release-1-4-docs`' final pass and
 `item:release-rehearsal` both wait on detection T5. It is above the 1.4.0 cut because the page is
 public now and is published from `main`, not by the tag, but it is not one of the tag's required
 items. Its label is out of sequence on purpose: 13a, 13b and 13d were used. The maintainer's proxy
-has not yet approved this place.
+approved this place on 2026-10-22 (decision `2026-10-22-landing-page-fits-400`: first in lane S, before the tag if it can, not gating it), and the row is done: `ROADMAP-DONE.md` → §3 → Bugs found, not fixed.
 
 **Three rows added 2026-10-22 for the 1.4.0 cut, approved by the maintainer's proxy on the product
 owner's proposal**, all in lane S and straight after `item:public-claims-true`: `item:release-1-4-docs`,
@@ -1128,195 +1063,9 @@ case belongs in the same criterion: under `Redaction.On()` a redacted value beco
 string, so a number redacted on one side and not the other would read as a type change. Paths named
 in `redacted[]` are not compared for type.
 
-### Findings, and the payment-safety rules
+### ~~Findings, and the payment-safety rules~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
-**Progress, 2026-10-22: all eight tickets Done.** T1 (KIN-111, the shared fold cursor and retry rule) and
-Shared body evidence (KIN-112) merged in PR #151 (`428745a`); T2 (KIN-113, the framework, live
-findings settings, engine, cache, REST, MCP `list_findings` and CLI) and T3 (KIN-114, the six
-payment-safety rules) in PR #152 (`66ab63c`); T4 (KIN-115, the exports and the leak guard) in PR #153
-(`e751a25`); T5 and T6 (KIN-116, the Findings page; KIN-117, the Settings fieldset) in PR #160 (`f661683`);
-T7 and T8 (KIN-118, badges and the detail section; KIN-119, flagged rows only) in PR #164 (`f4bbfbf`).
-Each ticket is Done on QA's pass over detached copies (one round each, no blocking findings). The item
-stays open in "Order from here" together with row 30 until detection T5 (KIN-124) lands. **Correction,
-applied 2026-10-22: the design note's payments-fixture counts were wrong and the code is right.** The fixture
-holds 13 mutation calls and 12 flagged rows. The design's own §8.3 table lists 15 distinct calls, 2 of
-them GETs, so 13 mutation calls; the flagged rows are b1 to b10 less the offline pair, the GETs and the
-redirect, which is 12. KIN-114's sixth criterion said 15 mutation calls and the note said 14 flagged rows;
-both were arithmetic errors, the tickets are restated to 13 and 12, and `PaymentRulesTest` asserts 13 and
-12. QA's wording nit on `daemon-and-mcp.md` line 72 is a candidate under "Candidates, not ordered".
-
-**Ruled 2026-10-22 by the product owner: a payment finding is dismissed for its rule on its route, in every session, and that is intended; the design note's "Invariants to keep" is worded wrong, not the code.** The code matches the recorded decision (`daemon-and-mcp.md`: rule, route, location and path) and the detection design that owns dismissals ("payment findings dismiss the same way"); the invariant's "group key" cannot hold for payment rules, whose group key is a `callId`, one session's, which the same invariant's portability clause forbids. For 1.4.0 no code changes: detection T5's dismiss control, and `item:release-1-4-docs`' line for dismissals, say that a dismissal reaches every finding of that rule on that route.
-
-**The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
-message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
-archive**, so a rule edit applies to every session already recorded; cached per session against
-row count and rule version. Rules are **data in the config file** — the defaults ship, and a user
-can edit, disable or add rules from Settings without a release.
-
-**This bends one stated constraint, and on purpose.** "Inspector learns nothing about app domain
-concepts" stands for *capture*. These rules are user configuration over captured rows; the
-defaults are generic conventions (`Idempotency-Key`), never a particular backend's.
-
-Payment rules apply to mutations (POST/PUT/PATCH/DELETE):
-
-| Rule | When | Severity |
-|---|---|---|
-| Duplicate mutation | same method + template + body hash, **different** `callId`, within a window (3 s), no idempotency key | high |
-| Key reused, body changed | same idempotency key, different body | high |
-| Automatic retry without a key | attempt > 1, no key | high |
-| Ambiguous resubmit | a mutation ends in timeout or transport failure and is sent again as a new call | medium |
-| Key missing on a payment path | path matches a configured pattern, no key | medium |
-| Retry with a key | attempt > 1, key present | info — the safe case, shown for context |
-
-Configurable: idempotency header names (default `Idempotency-Key`, `X-Idempotency-Key`), payment
-path patterns in the existing `path:` syntax, the window. A request body that was not captured
-makes the evidence read "body unknown"; a duplicate is never claimed without both bodies.
-
-"Template" in the table is the route from `archive/RouteTemplates.kt` (method, host and path template), built in `item:endpoint-latency-stats`.
-
-**Shared body evidence** — one ticket under this item, carved out of `item:session-diff`'s T1 on
-2026-10-22 when findings moved ahead of the diff (the maintainer's proxy; the architect confirmed
-the dependency is this one piece and starts at findings T3).
-
-*The user and the problem.* Findings, detection and the diff each have to answer the same two
-questions about a call: is it a mutation, and how much of each body do we actually have. Answered
-three times, they will disagree. A row that findings reads as "body complete" and the diff reads as
-"unknown" is the false claim `BodyOmission` exists to prevent.
-
-*Acceptance criteria.*
-- `archive/RouteTemplates.kt` has `RouteKey.mutation`, a computed property and the one definition of
-  "mutation" (POST, PUT, PATCH, DELETE). Equality and every constructor call are unchanged, and the
-  route-stats tests pass unedited.
-- `service/BodyShape.kt` has `BodySide` (`REQ("req")`, `RES("res")`), `BodyState` with all seven
-  states (`complete`, `empty`, `truncated`, `omitted`, `missing`, `notJson`, `unparsed`),
-  `BodyEvidence.state(txn, side)` (from the row only), `BodyEvidence.read(repository, dir, txn,
-  side)` (bytes only when the body is whole, any content type) and `JsonPaths.redactedPaths(txn,
-  side): Set<String>` (both `body:req:`/`body:res:` and the older `body:$.x`). The names and
-  signatures are those of `item:session-diff`'s design §10 and are a contract: the diff's T1 later
-  adds `walk`, `group`, `foldIdKeys` and `isAtOrUnder` to the same `JsonPaths` object, and
-  `item:sensitive-data-detection`'s T2 calls it.
-- A truncated body is `truncated` and never `complete`, and an omitted one is `omitted`, each shown
-  by a test that is proven red with the state check removed.
-
-*Out of scope.* Anything the diff alone uses. Any change to what capture records.
-*Surfaces.* Daemon `archive/` and `service/` only. No public API, no golden file. **Size:** S.
-
-Findings T2 no longer waits on the diff. Findings T3 is the first ticket that reads this piece,
-which lands between findings T1 and T2, inside findings PR A.
-
-**The filter grammar stays frozen**, so there is no `has:finding` term — "flagged rows only" is a
-view toggle. Changing the grammar is a separate decision.
-
-`GET /api/sessions/{id}/findings?category=`, MCP `list_findings`, a Findings page grouped by rule,
-a row badge, a section in the detail pane, and disclosure in every export (HAR's entry `comment`).
-
-**Decided 2026-10-22 by the maintainer's proxy: keep both**, as recommended below. The rule is
-Duplicate mutation, drawn only as a severity badge, and its evidence never cites a repeat group.
-The same body sent twice with different keys is not in this item; it is in "Candidates, not
-ordered" below.
-
-*Was an open decision —* **two notions of "duplicate" on one row.** *(Review, 2026-10-17. Does not block
-the start; gates the row badge for this rule.)* The page already marks repeats: `duplicateGroups` in
-`:inspector-model`, mirrored in `app.js`, keys on method + full URL + status + both byte counts,
-requires a different `callId`, excludes headers, and chains members whose consecutive gap is within
-a window — 3 s by default, editable as a *view preference* in `prefs`. It draws a `repeat` tag. The
-Duplicate mutation rule keys on method + **template** + **body hash**, has no status in the key, and
-its window lives in **config**. They will disagree in both directions: a resent POST whose first try
-got a 500 and second a 200 is a finding and not a repeat; two GETs to different ids under one
-template can never be a finding but two identical ones are a repeat. A row carrying a `repeat` tag
-and a "duplicate" badge that mean different things, with two settings both called "window", will be
-read as one feature that is broken.
-
-Options: retire the `repeat` tag on mutations and let the finding speak for them; fold
-`duplicateGroups` into the findings as an `info` rule; or keep both and make them unmistakably
-different claims. Recommended: the last. The `repeat` tag stays what it is — a row-level
-observation for every method, drawn as a tag, with its own name — and this rule is named **Duplicate
-mutation** everywhere and drawn only as a severity badge. Two things to settle in the build: the
-rule's window should chain consecutive gaps the way `duplicateGroups` does, or the two answer
-"within 3 s" differently for a run of three; and the evidence may cite a coinciding repeat group by
-id, which explains the overlap rather than hiding it. Retiring the tag would make the overlay and the
-web disagree, since the overlay has no findings; folding it in means a model-side rule moving into
-daemon config, which is a larger decision than this item.
-
-**Decided 2026-10-17: a disk cache is acceptable, under the three conditions at the end of this
-paragraph** — beside `sessions/`, never inside a session folder; masked evidence only; removed on
-every deletion path; and retention's byte budget states whether it counts. Memory-only remains the
-starting point until a measurement on a large real session says recomputing is slow; the disk option
-is no longer ruled out, and building it needs no further decision.
-
-*Was an open decision — where the findings cache lives.* *(Review, 2026-10-17. Did not block the
-start; in-memory is safe by default. Gated any on-disk cache, here and in Sensitive-data detection.)*
-"Cached per session against row count and rule version" says when the cache is valid, not where it
-is. It must not be inside the session folder. The recorded rule is narrower than "nothing in a
-session folder" — the daemon writes `index.jsonl`, `meta.json` and `bodies/` there by design — it is
-`export_session`'s rule that **derived** files go beside `sessions/`, because retention sizes a
-session by walking its whole folder (`sessionBytes`), so a derived file inside it inflates the
-session it describes and is pruned with it. A findings cache is derived in exactly that sense.
-
-Options: memory only, recomputed after a daemon restart; or a file per session beside `sessions/`
-(for example under the data directory's own `cache/`). Recommended: **memory only** until a
-measurement on a large real session says recomputing is slow, because the sensitive-data scan is
-the one with a real cost (it reads bodies) and nobody has measured it. If a disk cache is ever
-added, three conditions come with it: every deletion path — retention, `sessions/delete`, clear-all
-— removes the entry with the session; it holds **masked** evidence only, or it becomes an unpruned
-second copy of the credentials the detector found; and retention's byte budget states whether it
-counts.
-
-### Sensitive-data detection — detect, never redact
-
-**Progress, 2026-10-22: T1 to T4 done.** KIN-120 (T1, rules, masks and config; PR #156, `f0c53a2`), KIN-122 (T3, dismissals; PR #158, `d5554a9`), and KIN-121 (T2, the sensitive source), KIN-123 (T4, exports) and KIN-127 (the `JsonPaths` walker carved out of the diff's T1) in PR #161 (`5cce7ab`), each Done on QA's evidence. **Open:** T5 (KIN-124, the page: dismiss, dismissed fold, no-hosts hint, first-party hosts in Settings); the item is not Done. *The sensitive-data scan was measured in `item:sensitive-data-detection`: 2.7 s cold on 10,000 calls with 4 KB bodies each side; 41 ms after 100 appended rows. The cache stays in memory.* *T5's dismiss control says what it reaches: every finding of that rule on that route, in every session (ruled 2026-10-22, §6 → Findings).*
-
-Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
-addable like the payment rules, in two kinds:
-
-- **Value rules**, validated rather than bare regex: card numbers (13–19 digits, **Luhn**; known
-  test PANs drop to `info`), IBAN (length checked against the full **ISO 13616** country table,
-  and **mod-97**), JWTs and `token=`/`password=`/API keys in query strings, and credentials over
-  `http://`. Email and phone exist and default **off** — they are noise in almost every session.
-  **No national-ID value rule ships by default**; a team whose app handles one adds its own rule in
-  config, like any other.
-- **Field-name rules**, matched on JSON key paths and query parameters whatever the value:
-  `national_id`, `id_number`, `tax_id`, `first_name`, `last_name`, `full_name`, `date_of_birth`,
-  `passport_number`, `iban`, `card_number`, `cvv`, `cvc`, `pin`, `otp`, `password`, and so on —
-  case- and separator-insensitive (`firstName`, `first-name`). The identity names are a neutral
-  spread, not one country's.
-
-Severity rises when the destination is **not** in a configured first-party host list: a card
-number going to an analytics host is the real alarm. Fields listed in `redacted[]` are skipped.
-
-**The detector must not become the leak.** Evidence is stored and shown **masked** —
-`•••• 4242`, `GB82 •••• 5432` (the IBAN registry's own example) — with the location and JSON path; never the value, in the UI, MCP
-or any export. Bodies are scanned when findings are asked for, cached, never on ingest. A finding
-can be dismissed per endpoint and path, with a reason, saved to config.
-
-The cache for this scan follows *where the findings cache lives*, under Findings.
-
-Its T2 reads body evidence through Shared body evidence, the ticket under
-`item:findings-payment-safety` (2026-10-22), and no longer waits on the diff's T1.
-
-**Decided 2026-10-17: generic rules only, no region packs.** The IBAN rule reads the full ISO 13616
-length table; no national-ID value rule ships by default, and a user who needs one adds it through
-config; field-name rules use a neutral spread of identity names. The rule list and masking example
-above have been rewritten to match.
-
-*Was an open decision — regional defaults.* *(Review, 2026-10-17. Did not block the start of the
-framework; gated the rule set that ships as default.)* The first draft of this item carried one
-country's national-ID value rule, that country's IBAN length called out by name, its field name for
-the ID, and a masking example in its IBAN format. Those are country rules, not a client's name, so
-they did not break the no-client-names rule. But they would have been the **only** regional
-defaults in a public repository, and a single country singled out in the shipped rules narrows who
-the consuming app might be about as well as a name would. The constraint that matters — one real
-consuming app handles a national identity number with a known structure — is worth carrying; the
-country is not.
-
-Options were: ship as drafted; ship **generic structure only** (Luhn cards, IBAN with mod-97 and the
-full length table, field names for national identity numbers across many regions, no national-ID
-value rules); or generic structure plus **optional region packs**, off by default, with more than
-one region represented from the first release. The review recommended packs, with generic-only as
-the fallback if no second region could be specified properly. The maintainer chose generic-only:
-the IBAN rule needs no pack once it reads the whole table, and a national-ID rule is exactly the
-kind of thing user-editable rules exist for, so a pack would be shipped maintenance for a case the
-config already covers.
+### ~~Sensitive-data detection — detect, never redact~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
 ### ~~A sample demo flow that both rule families catch~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
@@ -1356,7 +1105,7 @@ text and `docs/STATUS.md`. No public API, no noop twin, no golden file.
 
 *Ticket label:* `item:release-1-4-docs`
 
-**Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). Ticket KIN-129.
+**Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). Ticket KIN-129. **Progress, close-out 5, 2026-10-22: findings, detection T1 to T5 and the rehearsal are all done and verified, so the final pass is next, and it lands last before the tag.**
 
 **The user and the problem.** A consuming team upgrading from 1.3.0, and the developer on a Mac who
 downloads the 1.4.0 daemon. They read the release page and `INTEGRATION.md` §14, not the commits.
@@ -1391,29 +1140,7 @@ style. **Size:** S.
 
 #### ~~The release page and `ACCESS.md` name the same place to get the library~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6 → Release 1.4.0
 
-#### Rehearse the release locally before the tag
-
-*Ticket label:* `item:release-rehearsal`
-
-**The user and the problem.** The maintainer cutting 1.4.0, and every consuming team after them. A
-tagged release is where a broken publish is most expensive to find: a coordinate on Central cannot be
-replaced. 1.4.0 is the first release since the `gradle.lockfile`s came in, so nobody has read a POM
-built under them, and `docs/decisions/release.md` records three POM faults that no build failed on.
-
-**Why now.** Before the tag, with time left to fix what it finds.
-
-**Acceptance criteria.**
-- The publish tasks run to a local repository at the release version, and someone reads a generated
-  POM from each published module: name, coordinates and dependency versions match the locks, and no
-  dependency is missing or added.
-- The daemon zip is built and its smoke test passes, the same one `release.yml` runs.
-- `./scripts/check-release-clean.sh --self-test` finds the canary and `./scripts/check-release-clean.sh`
-  finds nothing, both on the rehearsal's artifacts.
-- The results, with the commit they ran on, are recorded in `docs/STATUS.md` by the delivery tracker.
-  A fault found becomes an item or a fix before the tag, not a note.
-
-**Out of scope.** Signing with the real key, and any upload to Central or GitHub Packages. Changing the
-workflow, unless the rehearsal finds a fault in it. **Size:** S.
+#### ~~Rehearse the release locally before the tag~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6 → Release 1.4.0
 
 ### Candidates, not ordered
 
@@ -1432,6 +1159,14 @@ Unplaced, no tickets, each checked against the code at `f4bbfbf` before it was w
 - **A lone signal takes about 280 ms to reach the timeline.** `LIVE_DRAW_MS` is 250, and QA read 277 to 281 ms with the render, so "within 250 ms" is true of calls and not of a signal on its own.
 - **`docs/decisions/daemon-and-mcp.md` line 72 can be read the wrong way round.** "Nothing but `findings` and `findingDismissals` applies until the next start" can be taken as "only these wait"; "Only `findings` and `findingDismissals` apply live; every other key waits for the next start" cannot. QA's nit from `item:findings-payment-safety`.
 - **`shell`, `room`, `polish` and `sheet` leave their export temp directories behind on an interrupt.** Each makes `stats-export-`, `room-export-`, `polish-export-` or `sheet-export-` under the OS temp directory and removes it in a `finally`, which a signal skips; `measure-web-ui.js`'s `cleanUp` removes only the run's own directory (KIN-109 named `stats-export-` and `room-export-` as left open).
+
+#### Follow-ups left by the batch-5 close, 2026-10-22
+
+Unplaced, no tickets, each checked before it was written: against `site/index.html` and QA's width sweep for the first, and against `.github/workflows/ci.yml` and `scripts/check-release-clean.sh` for the other two. One line each; the product owner places or drops them.
+
+- **Between 821 and 885 px the landing page is still 886 px wide.** QA measured `scrollWidth` every 5 px from 360 to 1440 (`41b968c`): only that band overflows; at 850 px the widest boxes are a card's `div.shot`, `h3`, `p` and `li`, reaching x = 861. `.grid2` is two columns above its 820 px query (`site/index.html:86-87`), where `.grid2 > * { min-width: 0 }` does not apply. It is true on main before `item:landing-page-fits-400` too, and the 400 px guard does not read it.
+- **`PublishedPomTest` has never been run on a Linux developer machine.** CI runs `:repo-checks:test` only inside the macOS `build` job's `./gradlew build`; the Ubuntu `repo` job runs the identity and name scripts and no JDK. QA's and the builder's runs were on macOS, and the test resolves iOS configurations.
+- **The release guard did not scan the Android aars during the local rehearsal.** There is no Android SDK on the rehearsal machine, so no aar was built; `check-release-clean.sh` reads `*.aar` (and unpacks the nested `classes.jar`), and CI's `build` job, on macOS with the SDK, runs it after `./gradlew build`. Only the seven Android POMs were checked locally.
 
 #### Match routes across origins in the diff
 
