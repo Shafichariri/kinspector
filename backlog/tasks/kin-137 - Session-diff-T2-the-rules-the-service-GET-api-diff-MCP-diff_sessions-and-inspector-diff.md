@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:25'
-updated_date: '2026-10-22 19:44'
+updated_date: '2026-10-22 20:01'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -61,3 +61,9 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), after T1. Des
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once PR A merges. service/SessionDiff.kt (types, route rules, order, caps), SessionDiffShape.kt (shape rule), SessionDiffSide.kt (per-side fold, caps, strict JSON), SessionDiffService.kt (A/B choice, since, cache), http/DiffRoutes.kt, mcp/DiffTool.kt, ToolGroup.boolean, Main.kt diff. Deviations, each reported in the hand-over: (1) strict JSON also checks literals, since kotlinx's default parser accepts NaN, 01 and bare words; (2) response-body tallies and response headers count only attempts with a status, so a transport failure is not an empty body; (3) aChosen is set per reply, not cached (a bug the tests caught: a named A and a found A share an entry); (4) the Redactor placeholder moved to JsonPaths.PLACEHOLDER, which SensitiveSource reads; (5) the order rule ranks added above statusMix, so on base vs probe the loud added DELETE /v3/shop/cart/items sorts before POST orders/submit, and design §12's live line 'diff mutation loud (first row is POST …/orders/submit)' cannot hold as worded; PR B's probe should find the orders row instead. Red proofs (each run, seen failing, restored): > for >= at 50 ms; n >= 4; calls as attempts; a header value kept; a truncated prefix walked leniently; known(B) dropped; observable dropped; redacted exclusion dropped; unread as known; rows through queryTransactions (999 of 1201 on service, REST, MCP and CLI); stamp check dropped; since pasted into filter text; NotFound as 400; --since-b ignored; a reworded description (golden). Timings in the hand-over. -- bob
+<!-- SECTION:NOTES:END -->
