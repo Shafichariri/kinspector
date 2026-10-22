@@ -8,7 +8,9 @@ one item at a time are now one line per user-visible change, grouped as the note
 italic text is the notes line. Under it: the items it carries, whether QA has verified them
 (`docs/STATUS.md` → Verified), and the caveats that keep the line true. **A line marked "QA owed"
 does not go into the notes until STATUS supports it**; at the cut it is reworded to what QA saw, or
-dropped. Whatever `docs/INTEGRATION.md` v59 to v64 call "the next release after 1.3.0" is 1.4.0;
+dropped. The final pass, on 2026-10-22, re-checked every line against STATUS → Verified after
+`b81897b`: none is QA owed now, findings and detection carry their last pieces (findings T7 and T8,
+detection T5), and the release fixes have their own section. Whatever `docs/INTEGRATION.md` v59 to v64 call "the next release after 1.3.0" is 1.4.0;
 the release-steward re-checks that, and every "1.3.0 and earlier" here and in `DAEMON.md` §8,
 against `git tag` at the cut.
 
@@ -45,27 +47,35 @@ These change the library, or what a script or agent reads from the daemon. The r
   retries without a key, resubmits after an ambiguous failure, payment paths without a key, and
   retries with one (info). Rules and their settings live under `findings` in `config.json` and on the
   Settings page, and apply on the next read, with no restart; findings are computed on read and
-  never stored; evidence never shows a captured value; every export carries the findings, the HAR in
-  its entry comments."*
-  `item:findings-payment-safety`: PR A (KIN-111 to KIN-115, PRs #151 to #153) and PR B (KIN-116 the
-  page, KIN-117 the Settings fieldset, PR #160). QA verified KIN-111 to KIN-114 (STATUS → Verified,
-  "Findings (payment safety), daemon side"); **QA owed** for KIN-115 (exports), KIN-116 and KIN-117.
-  `INTEGRATION.md` v64. PR C (T7, the row badge and the detail section; T8, flagged rows only) is not
-  merged; its words join this line in the final pass, from the design's own line.
+  never stored; evidence never shows a captured value; in the traffic list a flagged row carries a
+  badge naming its severity, its detail pane has a Findings section, and `⋮` → flagged rows only
+  narrows the list to them; every export carries the findings, the HAR in its entry comments."*
+  `item:findings-payment-safety`: PR A (KIN-111 to KIN-115, PRs #151 to #153), PR B (KIN-116 the
+  page, KIN-117 the Settings fieldset, PR #160) and PR C (KIN-118 the badge and the detail section,
+  KIN-119 flagged rows only, PR #164). QA verified all nine (STATUS → Verified: "Findings (payment
+  safety), daemon side", "Findings in every export, and the leak guard" and "The Findings page,
+  badges, flagged rows only and the Settings fieldset"). `INTEGRATION.md` v64. The badge names the
+  severity in words, not a hue, and takes the row's first finding; flagged rows only is not kept
+  across a reload, so the line does not say it is remembered.
 - *"Sensitive-data findings — card numbers, IBANs, JWTs and secrets in URLs, credentials sent over
   plain `http`, and field names such as `password`, `cvv`, `date_of_birth` or `passport_number` — on
   the Findings page, in `list_findings` and in every export, always masked (`•••• 4242`), never the
   value. Severity rises for values in URLs and, once `findings.sensitive.firstPartyHosts` is set in
-  `config.json`, for requests to other hosts. Email and phone rules ship off. A finding can be
-  dismissed with a reason by listing it under `findingDismissals` in `config.json`, which applies on
-  the next read. Teams add their own value rules as shapes with an optional checksum. Nothing changes
-  on the device and nothing is redacted."*
-  `item:sensitive-data-detection` T1 to T4 (KIN-120 to KIN-123, and KIN-127 carved out for it; PRs
-  #156, #158, #161). **QA owed** for all of them. `INTEGRATION.md` v64. Written for `main` as it is:
-  the page draws both families and the Settings page turns every rule on or off, but the page cannot
-  dismiss yet and Settings does not edit `firstPartyHosts`. T5 (KIN-124: dismiss from the page, the
-  dismissed fold, the no-hosts hint, first-party hosts in Settings) widens it in the final pass, back
-  to the design's own line ("or Settings", and dismissal from the page).
+  `config.json` or Settings, for requests to other hosts; until it is, the Findings page says nothing
+  is raised for where data was sent and links Settings. Email and phone rules ship off. Any finding
+  can be dismissed with a reason, from the Findings page or under `findingDismissals` in
+  `config.json`, with no restart. A dismissal reaches every finding of that rule on that route, at
+  that location and path, in every session, not only the one on screen, until it is restored from
+  the rule's `dismissed` fold. Teams add their own value rules as shapes with an optional checksum.
+  Nothing changes on the device and nothing is redacted."*
+  `item:sensitive-data-detection` T1 to T5 (KIN-120 to KIN-124, and KIN-127 carved out for it; PRs
+  #156, #158, #161, #169). QA verified all of them (STATUS → Verified: "Sensitive-data detection, T1
+  to T4" and "Sensitive-data detection, T5, the page"). `INTEGRATION.md` v64, plus the release's own
+  entry for what T5 changed (the page dismisses, Settings edits `firstPartyHosts`). The reach is
+  load-bearing: the page says it before asking for a reason, and that wording is guarded. A dismissal
+  names no session or call, so it also covers sessions recorded later. Settings edits
+  `firstPartyHosts` and nothing else under `findings.sensitive`; field names and value rules stay in
+  the file, so the line does not say Settings edits them. No MCP tool dismisses.
 - *"Daemon and web UI: a Stats page, `GET /api/sessions/{id}/stats`, the MCP tool `route_stats` and
   `inspector stats` show per-route calls, attempts, retries, 4xx, 5xx and transport-failure rates and
   p50/p90/p95/p99/max latency, with p95 and p99 reading `n<20` below 20 samples; paths group into
@@ -101,8 +111,8 @@ These change the library, or what a script or agent reads from the daemon. The r
   for every page: `g` then `t` Traffic, `s` Stats, `f` Findings, `a` Sessions, `p` Processes and `,`
   Settings, and `?` for the list of keys; the top of the list is now `g g`, not `g`. Typing in the
   replay editor no longer triggers shortcuts."*
-  `item:web-ui-polish` PR A parts 1 and 2: A1 and A2 (KIN-102, KIN-103, PR #150), QA verified; A3
-  (KIN-104, PR #155), **QA owed**. A7 (KIN-108, the contact sheet) owes no line. A4 to A6 and PR B
+  `item:web-ui-polish` PR A parts 1 and 2: A1 and A2 (KIN-102, KIN-103, PR #150) and A3 (KIN-104,
+  PR #155, "Page keys" in STATUS → Verified), all QA verified. A7 (KIN-108, the contact sheet) owes no line. A4 to A6 and PR B
   come after 1.4.0. `g g` is load-bearing: it is the one change to an existing key. No
   `INTEGRATION.md` bump of its own.
 - *"Web UI: the Sessions page names the folder this daemon keeps its sessions in, whatever `--data`
@@ -215,9 +225,32 @@ The sample is not a published module, so nothing here changes what a consumer bu
 - *"The sample app has a demo flow that both findings families catch — a double submit with no
   idempotency key and a token in a query string — and a `sample/README.md` that walks a newcomer
   through it."*
-  `item:sample-demo-flow` (KIN-128, PR #162). **QA owed.**
+  `item:sample-demo-flow` (KIN-128, PR #162). QA verified, on desktop from a clean clone: 50 calls
+  and 7 findings, as `sample/README.md` says. The line claims no device run.
+
+## Published artifacts and the release guard
+
+Found by the 1.4.0 release rehearsal and fixed before the tag. No code of yours changes.
+
+- *"Library: the published POMs now state the dependency versions the build resolves. Every module
+  that depends on Ktor declares `kotlin-stdlib` 2.3.21, where 1.3.0's POMs said 2.3.20, so a
+  Maven-style consumer gets the version Ktor needs; `inspector-model` still declares 2.3.20. Gradle
+  builds already resolved 2.3.21 through Ktor's own metadata and see no change."*
+  `item:pom-version-mapping` (KIN-133, PR #172). QA verified, and the rehearsal's round 2 compared
+  all 35 POMs with the locks: 0 mismatches. Ktor 3.5.0 and coroutines 1.11.0 are unchanged, and
+  Inspector is still compiled by Kotlin 2.3.20, so `INTEGRATION.md` §1 is unchanged.
+- *"Release guard (`scripts/check-release-clean.sh`, from a checkout): `--paths` now unpacks a
+  published `.klib` and finds capture code in it, where it read `PASSED`; an archive it cannot unpack
+  exits 2 and names the file, and so does a failure of the script itself, where either could read as
+  clean or as capture code."*
+  `item:release-guard-klib` (KIN-132, PR #171) and `item:release-guard-unzip` (KIN-134, PR #173). QA
+  verified. Exit 1 still means "canary found". It reaches only a consumer who runs the script from
+  an Inspector checkout; `INTEGRATION.md` §3's own grep of `dev/inspector/` is unchanged.
 
 ## Owe nothing
 
 `item:structure-split-mcp-test` and `item:structure-phase-h` (tests and file moves only), polish A7
-(the contact sheet), and the guard and script items merged on 2026-10-21 and 2026-10-22.
+(the contact sheet), the guard and script items merged on 2026-10-21 and 2026-10-22, the release
+rehearsal (`item:release-rehearsal`, KIN-130: evidence, no change), the release page's boilerplate
+(`item:release-notes-boilerplate`: it is the notes, not a change in them), and the landing page
+fitting a 400 px window (`item:landing-page-fits-400`, the site only).
