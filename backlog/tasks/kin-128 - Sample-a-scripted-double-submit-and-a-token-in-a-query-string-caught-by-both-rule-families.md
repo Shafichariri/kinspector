@@ -7,6 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 12:18'
+updated_date: '2026-10-22 12:29'
 labels:
   - 'item:sample-demo-flow'
 dependencies: []
@@ -35,3 +36,9 @@ ROADMAP §6 → 'A sample demo flow that both rule families catch' (order row 30
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR #162. Shown locally on a fresh daemon (port 8112, temp --data, no config.json) + desktop autofire: 7 findings / 2 high. payment.duplicate-mutation high citing both /checkout/payments calls; sensitive.jwt-in-url high, evidence query access_token '•••• HS256'; key-missing-payment-path x2 medium; card-number info (test card), credentials-over-http info (loopback), field.secret info (old /secret). No JWT segment or card number in REST, MCP list_findings, CLI or the Findings page DOM. Disabling the three rules via PUT /api/config turned the check red; removing config.json restored green. Not run here: Android compile (no SDK), iOS framework link (no Xcode; Kotlin compile passed); CI covers both. Button not pressed by hand; autofire calls the same DemoFlow.run. Ready for QA.
+<!-- SECTION:NOTES:END -->
