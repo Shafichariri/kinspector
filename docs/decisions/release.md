@@ -43,6 +43,21 @@ It is computed once in the `subprojects` body now, where `this` is the Project. 
 keeping: after changing anything in the `pom {}` block, run `publishToMavenLocal` and **read the
 generated POM**. None of the three was visible any other way.
 
+**Every publication maps its dependency versions from the configuration its lock covers, named
+per publication; `fromResolutionResult()` alone is a no-op on a KMP publication.** Without a
+mapping a POM states the declared version, so every Ktor module's POM said kotlin-stdlib 2.3.20
+while its lock resolves 2.3.21, raised by Ktor, and a Maven-style consumer got the older one.
+`versionMapping { allVariants { fromResolutionResult() } }` changed nothing and the build stayed
+green. Gradle 9.5.1 maps versions only from a configuration that is named, carried by a
+`ResolutionBackedVariant`, or registered by the `java` plugin; KGP 2.3.20 provides none, so
+Gradle silently keeps the declared version. The root build names each target's locked
+configuration, and `commonMainResolvableDependenciesMetadata` for the root POM, which is unlocked.
+A publication no locked configuration covers fails configuration. `PublishedPomTest` holds all 35
+POMs to the lock *text*, because with a hand-edited lock the mapping's own resolution fails
+quietly and the POM falls back to the declared version. The Gradle module metadata moves with it
+(`requires 2.3.21`), a floor Ktor's own metadata already imposes. Found by the 1.4.0 release
+rehearsal.
+
 **Signing is wired to create no `Sign` task at all when no key is configured, rather than to
 create one that signs nothing.** Maven Central wants a detached `.asc` beside every artifact;
 GitHub Packages, which is where everything through 1.0.0 went, does not. So the build has to keep

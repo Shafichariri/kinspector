@@ -101,6 +101,8 @@ subprojects {
     // had it ever interpolated. `Inspector core` and `Inspector noop-ui` are what a dependency
     // report wants beside the coordinate.
     val moduleLabel = "Inspector ${project.name.removePrefix("inspector-")}"
+    // Same receiver lesson: inside the publication block below, `path` and `name` are not the Project's.
+    val modulePath = path
 
     // Publishing is opt-in per module: this configures whichever modules apply `maven-publish`
     // themselves, rather than listing them here. An allowlist in this file would be a second
@@ -167,6 +169,30 @@ subprojects {
                 // Attached to every publication, including each target's: Central wants a
                 // javadoc artifact beside every coordinate, not only the root one.
                 artifact(javadocJar)
+
+                /*
+                 * The POM states the versions the lock resolves, not the ones the build declares.
+                 * Without this, kotlin-stdlib went out as the Kotlin plugin's 2.3.20 while Ktor
+                 * raises every lock to 2.3.21, so a Maven-style consumer got the older one.
+                 *
+                 * `allVariants { fromResolutionResult() }`, the documented fix, is a silent no-op
+                 * here: Gradle maps versions only from a configuration that is named, carried by a
+                 * `ResolutionBackedVariant`, or registered by the `java` plugin. KGP gives none of
+                 * them, so Gradle keeps the declared version and the build stays green. Hence the
+                 * configuration is named per publication: each target's own locked one, and for
+                 * the root POM the metadata configuration of the source set it lists, which is
+                 * unlocked and held to the lock by `PublishedPomTest` instead. A publication no
+                 * lock covers fails here, so a new target cannot publish unlocked versions.
+                 */
+                val versionSource = when (name) {
+                    "kotlinMultiplatform" -> "commonMainResolvableDependenciesMetadata"
+                    else -> lockedConfigurations.singleOrNull { it == "${name}RuntimeClasspath" || it == "${name}CompileKlibraries" }
+                        ?: throw GradleException(
+                            "$modulePath publishes '$name', which no locked configuration covers. " +
+                                "Add its configuration to `lockedConfigurations` and regenerate the locks."
+                        )
+                }
+                versionMapping { allVariants { fromResolutionOf(versionSource) } }
 
                 pom {
                     // Computed in the subprojects body; see the note on `moduleLabel`.
