@@ -229,29 +229,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 recorded in `docs/STATUS.md` → Not verified. Placed by the product owner on 2026-10-22 and checked
 against the code at `5b21593`. **Both ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
-- **`expanded unfolded` judges a line with no failure on it.** *Ticket label:*
-  `item:guard-expanded-unfolded-has-failures`.
-
-  **For whom.** Whoever changes the path view and trusts a green `render-web-ui.js` in CI. Behind
-  them, the web UI user on a Mac who opens a visit's line to find the 500 in it.
-
-  **Why.** The probe opens the second station (`stops()[1]` in `scripts/render-web-ui.js`), which on
-  the CI fixture is Home, and Home has no failed call. So the line reads `yes (1 expanded line, 0
-  failures drawn)`: it passes, prints its count, and compares 0 with 0. The empty-scan rule cannot
-  see this, because the scan found a line. QA saw the rule work (`4 failures drawn`) only with
-  KIN-55's leak put back.
-
-  **Acceptance criteria.**
-  - The probe opens a station whose visit holds at least one failed call, chosen from the
-    daemon's rows rather than from what the page drew. On the fixture it prints a count of at least
-    one failure drawn.
-  - With no visit holding a failure in the session, it reads `n/a (no visit holds a failure)`,
-    never `yes`.
-  - Proven red: with an expanded line made to drop its failed calls' status, the line fails.
-  - If the pinned `INSPECTOR_UI_EXPECT_CHECKS` count moves, the change says why.
-
-  **Out of scope.** `failures unfolded`, which is read before anything opens. The fixture's content,
-  unless no visit in it holds a failure. Surfaces: none a user sees; scripts only. **Size:** XS.
+- ~~**`expanded unfolded` judges a line with no failure on it.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-expanded-unfolded-has-failures`.
 
 - ~~**A measure run hangs when Chrome dies mid-case.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-measure-chrome-exit-fails`.
 
@@ -292,31 +270,7 @@ proxy**: see "Order from here".*
   `measure-web-ui.js` in CI. Surfaces: none a user sees; scripts, plus one sentence in
   `web-ui.md` if needed. No public API. **Size:** XS.
 
-- **Interrupting a measure run leaves its daemons running.** *Ticket label:*
-  `item:guard-measure-interrupt-cleans-up`.
-
-  **For whom.** Every engineer and QA agent who runs `scripts/measure-web-ui.js`, which every W-lane
-  fix round does, and who stops it with Ctrl-C because a case looks wrong or a run takes too long.
-
-  **Why.** The run cleans up in one `finally`: it closes Chrome, kills each daemon it spawned and
-  deletes its temp directory. SIGINT and SIGTERM end Node without running it. Each interrupted run
-  leaves one or two JVM daemons behind, each serving a copy of the fixtures from a temp directory that
-  is never deleted, and the 160,016-call session is one of those fixtures. Ports are picked free, so
-  nothing collides; the cost is that leaked processes and disk pile up unnoticed. KIN-99 fixed the
-  case where Chrome dies on its own, and named this case as out of its scope.
-
-  **Acceptance criteria.**
-  - SIGINT or SIGTERM sent to a measure run mid-case ends it within a few seconds. Afterwards no
-    process whose command line names the run's temp directory is left, and the directory is gone
-    unless `--keep` was given.
-  - The run exits non-zero and says it was interrupted. It prints no readings as if they were a
-    result.
-  - This is proven both ways with KIN-99's harness, signalling the run instead of killing Chrome.
-    At base, the daemons survive. On the change, nothing survives. A `--base` run is included.
-
-  **Out of scope.** SIGKILL, which no handler can catch. `render-web-ui.js` and the other scripts,
-  unless the architect finds they share the cleanup. If one has the same gap, that is a new entry,
-  not scope creep. Windows signals. Surfaces: scripts only. No public API. **Size:** XS.
+- ~~**Interrupting a measure run leaves its daemons running.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-measure-interrupt-cleans-up`.
 
 ### Bugs found, not fixed
 
@@ -433,7 +387,7 @@ from here" yet**: the maintainer reviews the list first.*
 
 | Follow-up | Goes to | Why there |
 |---|---|---|
-| A live signal or marker redraws the timeline once per message | **new item**, `item:web-live-signal-burst-bounded` | the `drawLive` timer from `item:web-live-calls-reach-every-pane` already exists, and the same branch reads `/current` once per signal, which `docs/STATUS.md` records (50 signals, 53 requests). One item takes both |
+| ~~A live signal or marker redraws the timeline once per message~~ **Done 2026-10-22** (KIN-101; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:web-live-signal-burst-bounded` | the `drawLive` timer from `item:web-live-calls-reach-every-pane` already exists, and the same branch reads `/current` once per signal, which `docs/STATUS.md` records (50 signals, 53 requests). One item takes both |
 | `#/txn/<id>` has no visible way back | **new item**, `item:web-txn-page-way-back` | a missing control, not a look. Web UI polish is far off |
 | The `⤢` and `⇥` glyphs are 13px and nobody has judged them | §6 → Web UI polish | a judgement with no defect in it, and that item is the first human design pass |
 | ~~At 400px the Stats page's route cell breaks hostnames mid-word~~ **Done 2026-10-22** (KIN-93; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
@@ -446,34 +400,7 @@ from here" yet**: the maintainer reviews the list first.*
 | `twins-and-api.md` says v59 tells consumers to "copy the colours they need" | not an item | QA called it looser wording, not a false claim. Copying the colours is one of v59's three cases |
 | No item in the run recorded what it cost | not an item | a team rule, in the roadmap-cycle skill ("Record what each item cost"), not a product change. Whether a coordinated run is held to it is a question for the maintainer |
 
-- **A burst of live signals or markers redraws every pane once per message.** *Ticket label:*
-  `item:web-live-signal-burst-bounded`. From the hand-over and QA on
-  `item:web-live-calls-reach-every-pane`, and from `docs/STATUS.md` → Not verified.
-
-  **For whom.** A web UI user on a Mac watching an app live. An app that snapshots its caches at
-  launch, or a view-model that emits on every keystroke, sends signals in bursts, and the page does a
-  full redraw for each one.
-
-  **Why now.** It is the bug `item:web-live-calls-reach-every-pane` fixed for calls, in the branch
-  beside it, and the fix is already built. The `signal` branch of `ws.onmessage`
-  (`web/js/05-network.js`) calls `renderTimeline`, `renderWaterfall`, `renderPath` and
-  `refreshCurrent` for every signal, so each one costs three whole-session redraws and a `/current`
-  read. The `marker` branch calls `renderTimeline` and `renderPath` for every marker. Calls go
-  through `drawLive` at one redraw per 250 ms.
-
-  **Acceptance criteria.**
-  - A burst of 100 signals over T ms costs at most ⌈T/250⌉+1 redraws of each of the timeline,
-    the waterfall and the path, and at most that many `/current` reads. A burst of markers costs at
-    most that many redraws of the timeline and the path. These are the bound calls already meet.
-  - A single signal or marker is still drawn within 250 ms, and the timeline keeps its follow rule.
-  - The existing `socket at end timeline` lines for markers and signals wait for the throttled draw
-    and still pass. A new burst line is proven red with the per-message redraws put back.
-  - When paused, or for another session, nothing moves, as for calls.
-
-  **Out of scope.** Changing `LIVE_DRAW_MS`. The two payload reads this branch also makes, when the
-  path view or the signal's own tag is on screen: the architect says whether they ride the same timer,
-  and if not, the item says why. Surfaces: web UI only. No public API, no noop twin, no golden file.
-  **Size:** S.
+- ~~**A burst of live signals or markers redraws every pane once per message.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-live-signal-burst-bounded`.
 
 - **`#/txn/<id>` has no visible way back.** *Ticket label:* `item:web-txn-page-way-back`. From the
   hand-over and QA on `item:web-foundation-list-room` (1b).
@@ -536,57 +463,16 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 | Follow-up | Goes to | Why there |
 |---|---|---|
 | ~~A silent MCP child hangs the probe~~ **Done 2026-10-22** (KIN-96; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:mcp-probe-deadline-holds` | `item:guard-mcp-probe-cleanup` put the timeout out of scope; its test file has the stub this needs |
-| One IPv6 server reached by OkHttp and Ktor is two route rows | **new item**, `item:route-key-one-ipv6-host` | the route key, not the Stats page's drawing; neither IPv6 item owned the key |
-| `web-ui.md` does not name the cases #133 fixed; its "29 breaks" depends on fonts | **new item**, `item:docs-housekeeping-2026-10-22` | `item:docs-housekeeping-2026-10-21` was open with only a web line left, and reopening its docs part would mix lanes |
-| `expanded unfolded` opens Home, which has no failure | §3 → Guards, `item:guard-expanded-unfolded-has-failures` | a guard that passes without judging its rule |
+| ~~One IPv6 server reached by OkHttp and Ktor is two route rows~~ **Done 2026-10-22** (KIN-100; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:route-key-one-ipv6-host` | the route key, not the Stats page's drawing; neither IPv6 item owned the key |
+| ~~`web-ui.md` does not name the cases #133 fixed; its "29 breaks" depends on fonts~~ **Done 2026-10-22** (KIN-97; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:docs-housekeeping-2026-10-22` | `item:docs-housekeeping-2026-10-21` was open with only a web line left, and reopening its docs part would mix lanes |
+| ~~`expanded unfolded` opens Home, which has no failure~~ **Done 2026-10-22** (KIN-98; `ROADMAP-DONE.md` → §3 → Guards) | §3 → Guards, `item:guard-expanded-unfolded-has-failures` | a guard that passes without judging its rule |
 | ~~`measure-cdp.js` hangs when Chrome dies mid-case~~ **Done 2026-10-22** (KIN-99; `ROADMAP-DONE.md` → §3 → Guards) | §3 → Guards, `item:guard-measure-chrome-exit-fails` | a check that cannot fail when its browser goes away |
 
 - ~~**A silent MCP child hangs the probe, and is left running.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:mcp-probe-deadline-holds`.
 
-- **One IPv6 server reached by both clients is two route rows.** *Ticket label:*
-  `item:route-key-one-ipv6-host`. From QA on `item:host-port-everywhere`, seen again by QA on
-  `item:web-stats-route-breaks-whole`.
+- ~~**One IPv6 server reached by both clients is two route rows.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:route-key-one-ipv6-host`.
 
-  **For whom.** A web UI user on a Mac reading the Stats page, a consuming team reading the
-  Markdown export, and an agent reading the MCP route stats, for an app that calls one IPv6 server
-  through both an OkHttp client and Ktor. OkHttp stores the host as `::1` and Ktor as `[::1]`
-  (`docs/decisions/capture.md`), and `RouteTemplates.keyOf` keys on the stored host. So the same
-  route on the same server is two identical rows reading `http://[::1]:8080`, each with half the
-  calls and its own percentiles, while the session summary's `byHost` already counts it once.
-
-  **Why now.** The route key is reused by `item:session-diff` and `item:findings-payment-safety`,
-  which are not built. Fixed after them, it changes three surfaces' answers instead of one.
-
-  **Acceptance criteria.**
-  - A session with three OkHttp calls to `::1` port 8080 and three Ktor calls to `[::1]` port 8080 on
-    one path draws one route row on the Stats page with six calls, at every width. The Markdown
-    routes table and the MCP route stats agree.
-  - That row's filter term opens all six calls. The `host:` term is a substring match, so the bare
-    literal finds both stored forms; the grammar is unchanged.
-  - Two ports, or a host that is not an IPv6 literal, key exactly as today.
-  - A daemon test with both stored forms, proven red with the key's host left as stored.
-
-  **Out of scope.** Changing what capture stores: `capture.md` decided brackets on read, so archives
-  recorded before read the same. Making the `host:` filter term bracket-aware. Zone ids
-  (`fe80::1%en0`). This does not overturn a recorded decision: `capture.md` notes that `host:`
-  matches the stored host, and this item keeps that. Surfaces: daemon (Stats page, Markdown export,
-  MCP read what it computes). No public API. **Size:** S.
-
-- **Housekeeping after the 2026-10-22 batch.** *Ticket label:* `item:docs-housekeeping-2026-10-22`.
-  Two lines in one decision file, neither worth an item of its own.
-
-  **For whom.** The agents and engineers who read `docs/decisions/web-ui.md` before changing a probe.
-
-  **Acceptance criteria.**
-  - "A scan that finds nothing to check fails, and says so" names the Chrome readings PR #133 put
-    under the rule: `shell <w> rail`, `room 400 rows`, `toolbar fits` and `one row`,
-    `tab never enters closed`, `traffic reaches` and the top bar's count wording. Each is
-    marked shown red or resting on review, as KIN-87's notes record.
-  - The Stats route-break paragraph no longer gives main's break count as a fact ("29 breaks"; QA
-    saw 30 on another machine). It names the break that reproduces, `http://127.0.0.1:808|0`, and
-    says the count depends on fonts.
-
-  **Out of scope.** Any other rewording of `web-ui.md`. Surfaces: docs only. **Size:** XS.
+- ~~**Housekeeping after the 2026-10-22 batch.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:docs-housekeeping-2026-10-22`.
 
 *The entry below was found on 2026-10-22 outside any item, while the maintainer's proxy reviewed
 what the repository says about itself in public. Placed by the product owner the same day and
@@ -794,19 +680,14 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
 | 13b | The README and the landing page say only what is true | §3 → Bugs found, not fixed, below the 2026-10-22 housekeeping | `item:public-claims-true` | XS | S, first in the lane; its Android sentence waits on the maintainer's answer in the item |
-| 16a | Housekeeping after the 2026-10-22 batch | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:docs-housekeeping-2026-10-22` | XS | S |
-| 16b | `expanded unfolded` judges a line with no failure on it | §3 → Guards | `item:guard-expanded-unfolded-has-failures` | XS | S; may share a PR with `item:docs-housekeeping-2026-10-22` |
-| 16d | Interrupting a measure run leaves its daemons running | §3 → Guards | `item:guard-measure-interrupt-cleans-up` | XS | S |
 | 16e | The overview band's reserved height is a promise nothing holds | §3 → Guards | `item:guard-overview-band-reserved` | XS | S; lands before `item:web-ui-polish` PR A, which restyles the bands it guards |
-| 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:findings-payment-safety` PR A and `item:session-diff` PR A |
-| 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
-| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host`: T1, then Shared body evidence, then T2, T3 and T4. PR B and C in W |
-| 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
+| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **PR A part done 2026-10-22: T1, Shared body evidence, T2 and T3 (PRs #151, #152); T4 open.** PR B and C in W |
+| 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. **Ticket KIN-112 done 2026-10-22 (PR #151, `428745a`).** Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
 | 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C |
 | 30a | A sample demo flow that both rule families catch | §6 → A sample demo flow | `item:sample-demo-flow` | S | S, after detection T5, so QA runs both rule families on it |
 | 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after detection T4: T4, then T1 reduced by Shared body evidence, then T2 and T3. PR B in W, after detection T5 and polish PR A |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22: A1, A2 and A7 (PR #150); A3 to A6 open** |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
 
@@ -854,6 +735,12 @@ the measure runner, which goes before the W lane's next fix round because every 
 three surfaces' answers instead of one. KIN-42 merged on 2026-10-22 as PR #136 and QA verified it the same day; its row, with the
 rows for `item:mcp-probe-deadline-holds`, `item:docs-housekeeping-2026-10-21`,
 `item:guard-measure-chrome-exit-fails` and `item:web-switch-clears-call-panes`, moved to `ROADMAP-DONE.md`.
+
+On 2026-10-22, later the same day and after QA, the rows for `item:docs-housekeeping-2026-10-22` (16a),
+`item:guard-expanded-unfolded-has-failures` (16b), `item:guard-measure-interrupt-cleans-up` (16d),
+`item:route-key-one-ipv6-host` (21a) and `item:web-live-signal-burst-bounded` (23) moved to `ROADMAP-DONE.md` too.
+`item:guard-overview-band-reserved` (16e) stays: its PR #149 is not merged, so row 16e's "lands before
+`item:web-ui-polish` PR A" did not hold; PR A part 1 (#150) merged first.
 
 **Two rows added 2026-10-22, ordered by the maintainer's proxy on the product owner's proposal.**
 16d is the measure run's interrupt cleanup: every W-lane fix round runs that script, and it is the same
@@ -1224,6 +1111,22 @@ in `redacted[]` are not compared for type.
 
 ### Findings, and the payment-safety rules
 
+**Progress, 2026-10-22: PR A part done.** T1 (KIN-111, the shared fold cursor and retry rule) and
+Shared body evidence (KIN-112) merged in PR #151 (`428745a`); T2 (KIN-113, the framework, live
+findings settings, engine, cache, REST, MCP `list_findings` and CLI) and T3 (KIN-114, the six
+payment-safety rules) in PR #152 (`66ab63c`). Each ticket is Done on QA's pass over detached copies
+(one round, no blocking findings; 453 daemon tests, 0 failed). **Open:** T4 (KIN-115, the exports and
+the leak guard) and everything after it. PR A is not finished, PR B and C have not started, and the
+item is not Done. **Correction for T5 to T8: the design note's payments-fixture counts are wrong and
+the code is right.** The fixture holds 13 mutation calls and 12 flagged rows. The design's own §8.3
+table lists 15 distinct calls, 2 of them GETs, so 13 mutation calls; the flagged rows are b1 to b10
+less the offline pair, the GETs and the redirect, which is 12. KIN-114's sixth criterion (15 mutation
+calls) and the note's 14 flagged rows are arithmetic errors, no code changes; KIN-118 and KIN-119
+repeat "14 flagged rows" and the Findings page of T5 counts from the same fixture, so those figures
+are to be read against the code's 12 before they are built. QA's wording nit: `daemon-and-mcp.md`
+line 72 ("Nothing but the `findings` key applies until the next start") can be read the wrong way
+round; "Nothing except the `findings` key applies before the next start" would not be.
+
 **The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
 message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
 archive**, so a rule edit applies to every session already recorded; cached per session against
@@ -1432,6 +1335,16 @@ defaults.
 **Surfaces.** The sample app and its docs. No library API, no noop twin, no golden file. **Size:** S.
 
 ### Web UI polish
+
+**Progress, 2026-10-22: PR A part 1 done.** A1 (KIN-102, icon controls), A2 (KIN-103, page
+documents) and A7 (KIN-108, the contact sheet harness) merged in PR #150 (`4343823`), each Done on
+QA's pass over detached copies (one round, no blocking findings; `check-web-static.js` 120 to 124,
+the live probe 263 to 264, `measure-web-ui.js --only polish,room,shell` 19 failing readings at base
+to 0 at head). **Open:** A3 to A6 (KIN-104 to KIN-107) and the diff's PR B. The item is not Done. QA
+ran the contact sheet (120 PNGs and an `index.html`) and left it in the run folder for the
+maintainer; whether the pages look right is still the maintainer's call, and that question stays
+open. The Settings page reading `0 row(s) in this session` on a direct load of `#/settings` is in
+the sheet and is A5's.
 
 The notes from use, applied once the new screens exist; the first human design pass the web UI
 has had (still listed under open questions; *decided 2026-10-22 by the maintainer's proxy: the item

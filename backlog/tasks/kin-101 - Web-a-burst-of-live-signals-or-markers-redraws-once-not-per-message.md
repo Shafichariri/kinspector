@@ -1,11 +1,11 @@
 ---
 id: KIN-101
 title: 'Web: a burst of live signals or markers redraws once, not per message'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 06:18'
-updated_date: '2026-10-22 06:41'
+updated_date: '2026-10-22 09:31'
 labels:
   - 'item:web-live-signal-burst-bounded'
 dependencies: []
@@ -20,14 +20,14 @@ Order row 23 (§3 → Bugs found). Acceptance criteria are the roadmap item's ow
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:web-live-signal-burst-bounded holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:web-live-signal-burst-bounded holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -71,3 +71,9 @@ Head Chrome: 100 signals over 1178 ms: 5/5/5 redraws, 5 /current reads (bound 6)
 
 Found, not changed (out of scope): the call branch still calls renderWaterfall and renderPath per call, so the roadmap's "the bound calls already meet" holds for the timeline and the glance only. The marker branch keeps renderMarkers/renderList per marker and the signal branch renderTabs per signal.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #144 merge e34542e. node scripts/measure-web-ui.js --only traffic --base 907b708: 'ok traffic signal burst: within bound (100 signals over 1190 ms: 5 renderTimeline, 5 renderWaterfall, 5 renderPath, 5 current, at most 6 each)' and 'ok traffic marker burst: within bound (50 markers over 1075 ms: 5 renderTimeline, 5 renderPath)'; base 100 and 50. Red re-run with base 05-network.js: both Chrome burst readings FAIL (2 of 16), static 4 of 120 fail (live signal burst timeline/path, live marker burst, live signal still). QA also checked the payload-read decision on the path view (30 screen signals: renderPath 2, base 60) and the state browser (40 state signals: renderBrowser 2, base 40). Paused and other-session readings: 0 redraws, 0 /current reads. check-web-static.js 120, 0 failed (was 116); :repo-checks:test --rerun green. Not verified (agreed): a lone signal or marker reaches the timeline 277-281 ms after arriving (250 ms timer plus render), strictly over 'within 250 ms' as calls are; the call branch still redraws the waterfall and path once per call. Verdict: close yes.
+<!-- SECTION:FINAL_SUMMARY:END -->

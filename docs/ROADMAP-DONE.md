@@ -926,6 +926,76 @@ Android only looked right because 120px clears a status bar at that density.
   (first rows on 160,000 calls) is shown to meet. Surfaces: none a user sees; scripts only.
   **Size:** S.
 
+- ~~**`expanded unfolded` judges a line with no failure on it.**~~ **Done, 2026-10-22.** PR #143 merged as `c608ec8`, in one PR with `item:docs-housekeeping-2026-10-22`, as the order row allowed; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded. KIN-98 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `scripts/lib/scan-verdicts.js` gained `failingVisit(screens, txns, leading)`, which splits the daemon's own rows into visits without the page's `visits()` (for the reason `route matches` does the same), and `stationToOpen`, which picks the first visit holding a failure, or the second station when none does, so `station opens line` still runs. `expandedUnfolded(lines, held)` gained an n/a branch and a NO when the opened line draws fewer failures than the daemon holds. `scripts/render-web-ui.js` changed by +2/-2 lines in `probePath` and stays at its 2354-line budget; `INSPECTOR_UI_EXPECT_CHECKS` did not move, because the line was `yes` and is still `yes`. On the CI fixture the probe now reads `station opens line : yes (Checkout)` and `expanded unfolded : yes (1 expanded line, 4 failures drawn in Checkout)`, 263 passed, 0 failed, 1 n/a; at `85e9552` the same fixture read `yes (Home)` and `yes (1 expanded line, 0 failures drawn)`. QA's red: `pathItem`'s status span stripped of its failure class gives `expanded unfolded : NO - an expanded line hides a failure (Checkout)`, 262 passed, 1 failed, exit 1, where base with the same mutation stayed green. A fixture copy with every 5xx set to 200 reads `n/a (no visit holds a failure)` and the station still opens. KIN-55's leak still turns `failures unfolded` red.
+
+  **What was learned.** The old probe compared 0 with 0 and could not see the mutation the item is about. The hand-over's recipe for the daemon-count branch was wrong and the code was right: `const isFailure = () => false` removes the line's `· N failed` header but the spans keep their failure class, so the hiding branch wins. QA reached the count branch (`NO - Checkout holds 4 failures, its open line draws 0`) by keeping the hide mutation and removing the `pv-failed` header line.
+
+  **Left open.** The same-millisecond tie branch of `failingVisit` was not exercised; the fixture has no tie.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-expanded-unfolded-has-failures`.
+
+  **For whom.** Whoever changes the path view and trusts a green `render-web-ui.js` in CI. Behind
+  them, the web UI user on a Mac who opens a visit's line to find the 500 in it.
+
+  **Why.** The probe opens the second station (`stops()[1]` in `scripts/render-web-ui.js`), which on
+  the CI fixture is Home, and Home has no failed call. So the line reads `yes (1 expanded line, 0
+  failures drawn)`: it passes, prints its count, and compares 0 with 0. The empty-scan rule cannot
+  see this, because the scan found a line. QA saw the rule work (`4 failures drawn`) only with
+  KIN-55's leak put back.
+
+  **Acceptance criteria.**
+  - The probe opens a station whose visit holds at least one failed call, chosen from the
+    daemon's rows rather than from what the page drew. On the fixture it prints a count of at least
+    one failure drawn.
+  - With no visit holding a failure in the session, it reads `n/a (no visit holds a failure)`,
+    never `yes`.
+  - Proven red: with an expanded line made to drop its failed calls' status, the line fails.
+  - If the pinned `INSPECTOR_UI_EXPECT_CHECKS` count moves, the change says why.
+
+  **Out of scope.** `failures unfolded`, which is read before anything opens. The fixture's content,
+  unless no visit in it holds a failure. Surfaces: none a user sees; scripts only. **Size:** XS.
+
+- ~~**Interrupting a measure run leaves its daemons running.**~~ **Done, 2026-10-22.** PR #148 merged as `1796b96`; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded. KIN-109 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `scripts/measure-web-ui.js` runs one memoised `cleanUp()` from the end of `main` and from a SIGINT and SIGTERM handler. It closes Chrome, asks each process it spawned to stop and waits for its exit (`STOP_MS`, 5 s, then SIGKILL), and removes the temp directory unless `--keep`. Interrupted, it prints one line, `measure-web-ui: interrupted by SIG…; stopping the N processes it started. Nothing measured is a result.`, prints no readings and no stack trace, and exits 130 (SIGINT) or 143 (SIGTERM). `scripts/lib/measure-cdp.js`'s `launchChrome(profileDir, onSpawn)` hands over the Chrome process as soon as it is spawned, so a signal while Chrome starts still reaches it. QA's own harness signalled the node process alone: SIGTERM 4 s into `layout,run,live` gave exit 143 after 2 s with 0 processes naming the temp directory left and the directory gone; SIGINT the same with exit 130; SIGINT with `--base 85e9552` (9 processes started) left 0; `--keep` kept only the directory. At `85e9552` the same signals left 18 processes (4 daemons, Chrome and 13 helpers) and a 45M directory, and 26 processes and 83M with `--base`. An uninterrupted `--only layout,traffic` gave 140 readings, 0 failed, exit 0, directory removed.
+
+  **What was learned.** Signalling the node process alone is the harder case for the cleanup, which is why the harness does it: a terminal Ctrl-C signals the whole foreground group, Chrome and the JVMs included, and the cleanup then waits on exits that already happened. The `if (run.interrupted) return 2` guard before the readings print is defensive and was never reached: every interrupted run ended through the handler first.
+
+  **Left open.** A real terminal Ctrl-C was not watched; Linux; a signal during the probe fixture's gradle write (every run used `--probe`); the small `stats-export-*` and `room-export-*` directories that `shell` and `room` make outside the run's temp directory.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:guard-measure-interrupt-cleans-up`.
+
+  **For whom.** Every engineer and QA agent who runs `scripts/measure-web-ui.js`, which every W-lane
+  fix round does, and who stops it with Ctrl-C because a case looks wrong or a run takes too long.
+
+  **Why.** The run cleans up in one `finally`: it closes Chrome, kills each daemon it spawned and
+  deletes its temp directory. SIGINT and SIGTERM end Node without running it. Each interrupted run
+  leaves one or two JVM daemons behind, each serving a copy of the fixtures from a temp directory that
+  is never deleted, and the 160,016-call session is one of those fixtures. Ports are picked free, so
+  nothing collides; the cost is that leaked processes and disk pile up unnoticed. KIN-99 fixed the
+  case where Chrome dies on its own, and named this case as out of its scope.
+
+  **Acceptance criteria.**
+  - SIGINT or SIGTERM sent to a measure run mid-case ends it within a few seconds. Afterwards no
+    process whose command line names the run's temp directory is left, and the directory is gone
+    unless `--keep` was given.
+  - The run exits non-zero and says it was interrupted. It prints no readings as if they were a
+    result.
+  - This is proven both ways with KIN-99's harness, signalling the run instead of killing Chrome.
+    At base, the daemons survive. On the change, nothing survives. A `--base` run is included.
+
+  **Out of scope.** SIGKILL, which no handler can catch. `render-web-ui.js` and the other scripts,
+  unless the architect finds they share the cleanup. If one has the same gap, that is a new entry,
+  not scope creep. Windows signals. Surfaces: scripts only. No public API. **Size:** XS.
+
 ### Bugs found, not fixed
 
 - ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
@@ -1897,6 +1967,110 @@ Android only looked right because 120px clears a status bar at that density.
   **Out of scope.** Making the switch faster, and KIN-42's whole-session read. The list, which the
   first page already replaces. Surfaces: web UI only. **Size:** S.
 
+- ~~**A burst of live signals or markers redraws every pane once per message.**~~ **Done, 2026-10-22.** PR #144 merged as `e34542e`; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` was in progress when QA looked. KIN-101 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `web/js/05-network.js`'s `drawLive({ path, signal })` records what the one armed redraw owes and `drawLiveNow` is the tick, so the signal and marker branches go through the existing 250 ms timer (`LIVE_DRAW_MS` unchanged). Chrome `measure-web-ui.js --only traffic --base 907b708`: `ok traffic signal burst: within bound (100 signals over 1190 ms: 5 renderTimeline, 5 renderWaterfall, 5 renderPath, 5 current, at most 6 each)` and `ok traffic marker burst: within bound (50 markers over 1075 ms: 5 renderTimeline, 5 renderPath)`, where base read 100 and 50. With base's `05-network.js` put back both Chrome readings fail (2 of 16) and four static lines fail (4 of 120: `live signal burst timeline`, `live signal burst path`, `live marker burst`, `live signal still`). Paused, or for another session, nothing moves: 0 redraws and 0 `/current` reads. Counts: static 116 to 120, live probe 263 and archive probe 48 unchanged.
+
+  **What was learned.** The architect's call on the two payload reads was that they ride the same timer. Each payload is its own request, so the timer saves no request; what it removes is the redraw each answer triggered (the path redrew twice per screen, the tag browser once per signal) and `loadScreenPayloads` re-asking for payloads in flight. At each tick the pane waits for its payloads and is drawn once. QA checked the two views the committed case does not cover, in Chrome: 30 screen signals on the path view cost `renderPath` 2 (base 60), 30 payload reads and `/current` 2; 40 state signals in the state browser cost `renderBrowser` 2 (base 40). No payload was read twice. The reads happen only when the page is on the session the signals came from, that session is loaded and live is on, so a switch inside the 250 ms window never puts the new session's values in the strip while the other panes say they are being read. The item's sentence "the bound calls already meet" is true only for the timeline and the glance: the call branch still calls `renderWaterfall` and `renderPath` once per call.
+
+  **Left open.** A lone signal or marker reaches the timeline 277 to 281 ms after it arrives (the 250 ms timer plus the render), strictly over the criterion's "within 250 ms", as calls already are; the reading allows 50 ms. The call branch's per-call waterfall and path redraws are unplaced. The marker branch keeps `renderMarkers` and `renderList` per marker and the signal branch `renderTabs` per signal, by design.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:web-live-signal-burst-bounded`. From the hand-over and QA on
+  `item:web-live-calls-reach-every-pane`, and from `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a Mac watching an app live. An app that snapshots its caches at
+  launch, or a view-model that emits on every keystroke, sends signals in bursts, and the page does a
+  full redraw for each one.
+
+  **Why now.** It is the bug `item:web-live-calls-reach-every-pane` fixed for calls, in the branch
+  beside it, and the fix is already built. The `signal` branch of `ws.onmessage`
+  (`web/js/05-network.js`) calls `renderTimeline`, `renderWaterfall`, `renderPath` and
+  `refreshCurrent` for every signal, so each one costs three whole-session redraws and a `/current`
+  read. The `marker` branch calls `renderTimeline` and `renderPath` for every marker. Calls go
+  through `drawLive` at one redraw per 250 ms.
+
+  **Acceptance criteria.**
+  - A burst of 100 signals over T ms costs at most ⌈T/250⌉+1 redraws of each of the timeline,
+    the waterfall and the path, and at most that many `/current` reads. A burst of markers costs at
+    most that many redraws of the timeline and the path. These are the bound calls already meet.
+  - A single signal or marker is still drawn within 250 ms, and the timeline keeps its follow rule.
+  - The existing `socket at end timeline` lines for markers and signals wait for the throttled draw
+    and still pass. A new burst line is proven red with the per-message redraws put back.
+  - When paused, or for another session, nothing moves, as for calls.
+
+  **Out of scope.** Changing `LIVE_DRAW_MS`. The two payload reads this branch also makes, when the
+  path view or the signal's own tag is on screen: the architect says whether they ride the same timer,
+  and if not, the item says why. Surfaces: web UI only. No public API, no noop twin, no golden file.
+  **Size:** S.
+
+- ~~**One IPv6 server reached by both clients is two route rows.**~~ **Done, 2026-10-22.** PR #142 merged as `1ed50c1`; `build`, `release-swap`, `repo` and `web` passed on the PR (rebased eight times over a moving `main`, all four checks green on every head) and the push run on `main` was queued when QA looked. KIN-100 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `RouteTemplates.keyOf`, still the only place a key is built, now keys the host through `RouteTemplates.serverHost`: it lowercases the host and strips the brackets only from a host that starts with `[`, ends with `]` and holds a `:`. Bare `::1` is the canonical form because the row's `host:` term is a substring match and only the bare literal finds both stored forms. Display is unchanged: the page (`hostPortOf` in `statsOrigin`) and the Markdown export (`hostPort` in `serverOf`) bracket the host again on read. Capture, the filter grammar, the web UI, the MCP tool description (golden) and the public API did not change. QA seeded one session through `/ingest` (3 × `::1` and 3 × `[::1]` on port 8080, one `::1` on 9090, two bracketed non-IPv6 hosts): `GET …/stats` reads `host='::1' port=8080 /v6 calls=6 attempts=6` (base two rows of 3), MCP `route_stats` through a real `inspector mcp` the same, the Markdown Routes table one line with the 500 now one in six, and the Stats page in Chrome at 1440 and 400 four rows with exactly one naming `[::1]:8080`. The row's term `method:GET host:::1 path:*/v6` opens 7 calls (the six plus the port-9090 superset) in REST and in Chrome. Red by QA: `keyOf` on the stored host fails 5 of 61, one test per surface; dropping the `':' in lower` condition fails `RouteTemplatesTest` with `expected: <[example.invalid]> but was: <example.invalid>`. `:inspector-daemon:test` and `:repo-checks:test` with `--rerun`: 368 tests, 0 failed.
+
+  **What was learned.** `web/` did not change: `95-stats.js` does no grouping of its own and counts origins through `hostPortOf`, which already treats `::1` and `[::1]` as one origin, so the item was daemon-only and needed no mirror case. The row's `host` field now reads bare `::1`, where the page and the Markdown still draw `[::1]:8080`; that split between key and display is deliberate. The item sits ahead of `item:findings-payment-safety` and `item:session-diff` because both reuse the key, and QA's findings run on `::1:8080` and `[::1]:8080` reads as one route for rule R1.
+
+  **Left open.** No real dual-client capture against `[::1]` was run (the session holds archived rows in both stored forms, which is what `Ipv6CaptureTest` shows each client stores); zone ids (`fe80::1%en0`) are out of scope and a bracketed `[fe80::1%25en0]` from Ktor would be stripped without a test; the `host:` filter itself still matches the stored host, by its frozen grammar.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:*
+  `item:route-key-one-ipv6-host`. From QA on `item:host-port-everywhere`, seen again by QA on
+  `item:web-stats-route-breaks-whole`.
+
+  **For whom.** A web UI user on a Mac reading the Stats page, a consuming team reading the
+  Markdown export, and an agent reading the MCP route stats, for an app that calls one IPv6 server
+  through both an OkHttp client and Ktor. OkHttp stores the host as `::1` and Ktor as `[::1]`
+  (`docs/decisions/capture.md`), and `RouteTemplates.keyOf` keys on the stored host. So the same
+  route on the same server is two identical rows reading `http://[::1]:8080`, each with half the
+  calls and its own percentiles, while the session summary's `byHost` already counts it once.
+
+  **Why now.** The route key is reused by `item:session-diff` and `item:findings-payment-safety`,
+  which are not built. Fixed after them, it changes three surfaces' answers instead of one.
+
+  **Acceptance criteria.**
+  - A session with three OkHttp calls to `::1` port 8080 and three Ktor calls to `[::1]` port 8080 on
+    one path draws one route row on the Stats page with six calls, at every width. The Markdown
+    routes table and the MCP route stats agree.
+  - That row's filter term opens all six calls. The `host:` term is a substring match, so the bare
+    literal finds both stored forms; the grammar is unchanged.
+  - Two ports, or a host that is not an IPv6 literal, key exactly as today.
+  - A daemon test with both stored forms, proven red with the key's host left as stored.
+
+  **Out of scope.** Changing what capture stores: `capture.md` decided brackets on read, so archives
+  recorded before read the same. Making the `host:` filter term bracket-aware. Zone ids
+  (`fe80::1%en0`). This does not overturn a recorded decision: `capture.md` notes that `host:`
+  matches the stored host, and this item keeps that. Surfaces: daemon (Stats page, Markdown export,
+  MCP read what it computes). No public API. **Size:** S.
+
+- ~~**Housekeeping after the 2026-10-22 batch.**~~ **Done, 2026-10-22.** PR #143 merged as `c608ec8`, in one PR with `item:guard-expanded-unfolded-has-failures`; `build`, `release-swap`, `repo` and `web` passed on the PR and the push run on `main` succeeded. KIN-97 is Done on QA's pass over detached copies, one round, no blocking findings.
+
+  `docs/decisions/web-ui.md`'s "A scan that finds nothing to check fails, and says so" now names PR #133's Chrome readings, each with its file: `shell <w> rail` (`lib/shell-cases.js`), `room 400 rows`' repeat marks, `room <w> toolbar fits` and `one row`, and `room 1000 tab never enters closed` (`lib/list-room-cases.js`), `traffic reaches` (`lib/live-traffic-cases.js`) and the top bar's `count` wording (`lib/topbar-cases.js`). Each is marked shown red, except the socket half of `traffic reaches`, which rests on review. The Stats route-break paragraph no longer says "29 breaks": it says how many breaks main makes depends on the fonts Chrome finds (29 on one machine, 30 on another) and names the break that reproduces, `http://127.0.0.1:808|0`. QA: `grep -c "29 breaks"` gives 0, and the added sentence matches KIN-87's fix-round notes and QA's own KIN-87 round 2.
+
+  **What was learned.** "Shown red" in a decision file restates a record kept in a ticket; nobody re-ran those mutants for this item, and QA relied on having re-run the rail and repeat-mark cases itself in KIN-87's second round. A count of breaks is a fact about one machine's fonts, so only the break that reproduces belongs in the text. Docs only, so there was no guard to prove.
+
+  **Left open.** Nothing.
+
+  cost: not recorded — built in the 2026-10-22 coordinated run, one engineer per item, no QA before merge; QA after merge, 1 round
+
+  *Ticket label:* `item:docs-housekeeping-2026-10-22`.
+  Two lines in one decision file, neither worth an item of its own.
+
+  **For whom.** The agents and engineers who read `docs/decisions/web-ui.md` before changing a probe.
+
+  **Acceptance criteria.**
+  - "A scan that finds nothing to check fails, and says so" names the Chrome readings PR #133 put
+    under the rule: `shell <w> rail`, `room 400 rows`, `toolbar fits` and `one row`,
+    `tab never enters closed`, `traffic reaches` and the top bar's count wording. Each is
+    marked shown red or resting on review, as KIN-87's notes record.
+  - The Stats route-break paragraph no longer gives main's break count as a fact ("29 breaks"; QA
+    saw 30 on another machine). It names the break that reproduces, `http://127.0.0.1:808|0`, and
+    says the count depends on fonts.
+
+  **Out of scope.** Any other rewording of `web-ui.md`. Surfaces: docs only. **Size:** XS.
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -1976,6 +2150,11 @@ tag cut before any of this existed.
 | ~~A measure run hangs when Chrome dies mid-case~~ **Done, 2026-10-22** (KIN-99, PR #141, merge `85e9552`; one round of QA) *(was row 16c; the later rows keep their numbers)* | §3 → Guards | `item:guard-measure-chrome-exit-fails` | S |
 | ~~A session switch clears the timeline's calls and the endpoint chips~~ **Done, 2026-10-22** (KIN-94, KIN-95, PR #135, merge `4645c43`; one round of QA; overturned a `web-ui.md` sentence, approved by the maintainer 2026-10-21) *(was row 20; the later rows keep their numbers)* | §3 → Bugs found | `item:web-switch-clears-call-panes` | S |
 | ~~KIN-42: draw the first page at once, read the whole-session copy in the background~~ **Done, 2026-10-22** (PR #136, merge `1888380`; one round of QA; undeferred by the maintainer 2026-10-21) *(was row 21; the later rows keep their numbers)* | §3 → Guards | `item:signals-query-one-rule` | one ticket |
+| ~~Housekeeping after the 2026-10-22 batch~~ **Done, 2026-10-22** (KIN-97, PR #143, merge `c608ec8`; one round of QA, shared a PR with the next row) *(was row 16a; the later rows keep their numbers)* | §3 → Bugs found | `item:docs-housekeeping-2026-10-22` | XS |
+| ~~`expanded unfolded` judges a line with no failure on it~~ **Done, 2026-10-22** (KIN-98, PR #143, merge `c608ec8`; one round of QA) *(was row 16b; the later rows keep their numbers)* | §3 → Guards | `item:guard-expanded-unfolded-has-failures` | XS |
+| ~~Interrupting a measure run leaves its daemons running~~ **Done, 2026-10-22** (KIN-109, PR #148, merge `1796b96`; one round of QA) *(was row 16d; the later rows keep their numbers)* | §3 → Guards | `item:guard-measure-interrupt-cleans-up` | XS |
+| ~~One IPv6 server reached by both clients is two route rows~~ **Done, 2026-10-22** (KIN-100, PR #142, merge `1ed50c1`; one round of QA) *(was row 21a; the later rows keep their numbers)* | §3 → Bugs found | `item:route-key-one-ipv6-host` | S |
+| ~~A burst of live signals redraws once, not per message~~ **Done, 2026-10-22** (KIN-101, PR #144, merge `e34542e`; one round of QA) *(was row 23; the later rows keep their numbers)* | §3 → Bugs found | `item:web-live-signal-burst-bounded` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 

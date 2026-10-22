@@ -3,11 +3,11 @@ id: KIN-102
 title: >-
   Polish A1: icon controls — --target-min, .btn.btn-icon, SVG for the four icon
   controls
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 08:05'
+updated_date: '2026-10-22 09:31'
 labels:
   - 'item:web-ui-polish'
 dependencies: []
@@ -22,14 +22,14 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A1 criteria hold, each guard shown red
+- [x] #1 The note's §9 A1 criteria hold, each guard shown red
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -51,3 +51,9 @@ Built (bob). --target-min 24px (00-tokens); .btn.btn-icon in 40-detail.css after
 Static (check-web-static 120 -> 122): icon target css red: 'NO - .btn.btn-icon does not take min-height from var(--target-min)'; with .more-button { font-size: 13px ... } put back: 'NO - sized outside .btn.btn-icon: .more-button { font-size: 13px } (css/10-panes.css); ...'. icon controls svg red with &#10530; back in #detail-full: 'NO - #detail-full holds 0 svg, not one; #detail-full holds text "&#10530;"'. Both green after restore.
 Chrome polish <w> icon targets <served|export> <dark|light> at 1440/1000/400: 12 readings, all 'at least 24x24, hit' (controls 26x24, svg 16x16, row ✕ 24x24). Red with the min sizes removed: 'head: 12 readings, 12 failed' (#more-button 26x18, row ✕ 22.2x18). Empty scan: 'NO - found no icon control, so this checked nothing'. --base origin/main: only the polish readings moved (small -> at least 24x24, hit); room 1440 bands list top 145px on both; room 1000 close disjoint served/export disjoint (✕ 26x24).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #150 merge 4343823; item web-ui-polish stays open (A3-A6). 12 readings 'polish <w> icon targets <served|export> <dark|light>' pass at 1440, 1000 and 400: 5 served controls '26x24 svg 16x16', Sessions row close 24x24, 3 exported controls; base read 'small' on all 12. Red re-run: removing .btn.btn-icon min-width and min-height fails all 12 (#more-button 26x18, #detail-full 26x18, row close 22.2x24). Titles and aria-labels unchanged word for word in the index.html diff. room 1440 bands list: top 145px; no room or shell reading moved. check-web-static.js 124, 0 failed (+4: icon target css, icon controls svg, page targets css, prose width css); icon target css and icon controls svg red proofs are the builder's, not repeated. web-ui.md:79 carries the icon paragraph. Contact-sheet shots served-dark-1440-detail and export-light-400-detail read crisp by eye. Deviation accepted: row close keeps min-width 24 rather than auto. Verdict: close yes.
+<!-- SECTION:FINAL_SUMMARY:END -->
