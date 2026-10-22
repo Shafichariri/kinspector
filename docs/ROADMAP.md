@@ -447,6 +447,72 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 - ~~**The README and the landing page say things that are not true.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:public-claims-true`.
 
+*The entry below was found on 2026-10-22 by QA on `item:public-claims-true` (KIN-125). It is true at
+that item's base `fc7b205`, so it did not join that item, and it is recorded in `docs/STATUS.md` →
+Not verified. Placed by the product owner on 2026-10-22, checked in Chrome and against the CSS at
+`638119e`. Its place is in "Order from here".*
+
+- **The landing page scrolls sideways at 400 px, and cuts a card's text.** *Ticket label:*
+  `item:landing-page-fits-400`
+
+  **For whom.** Anyone who opens the landing page on a phone, which is where a link shared in a chat
+  or a post is opened. It is the first page of Inspector most people see, it is public today, and
+  it is the one page in the repository no check reads at a phone's width. At 400 px the document
+  is 605 px wide, so the page pans sideways, and in the "Four surfaces" section a card runs past
+  the right edge, so the ends of its bullets are not on screen.
+
+  **What causes it, from the CSS at `638119e`, measured in headless Chrome at 400 px.** QA's report
+  and `docs/STATUS.md` name the architecture diagram. That is not it: each diagram's SVG keeps
+  `min-width: 640px` on purpose inside `.diagram-box`, which has `overflow-x: auto`, so the diagrams
+  scroll inside their own box and do not widen the page. The cause is two CSS grids whose items
+  keep the default `min-width: auto`, so a wide child sets the column's width instead of scrolling
+  inside it:
+  - `.step` (`grid-template-columns: 36px 1fr`, the "Get started" steps). Its `pre` blocks are
+    531 px wide at their narrowest and have `overflow-x: auto`, but the grid item holding them does
+    not shrink below them. This makes the 605 px. With `.step > * { min-width: 0 }` added in the
+    page, the document is 400 px.
+  - `.grid2` (the "Four surfaces" cards). The `.term` block in one card is `white-space: pre` and
+    454 px wide, and that card's column grows to 558 px. That is the cut card: with the `.step` rule
+    alone the document is still 558 px and 12 card bullets end past the edge; with `.grid2 > *` as
+    well, it is 400 px and none does.
+
+  **Acceptance criteria.**
+  - At 400 px, served from `site/` in Chrome, the document is no wider than the window, and no
+    element outside a scroll container ends past the window's right edge. The diagrams, the
+    gallery, the code blocks and the tables may still scroll inside their own boxes, as they do
+    today.
+  - Every bullet of every card in "Four surfaces" ends inside the window at 400 px.
+  - At 1440 px the page measures as it does at `638119e`: the fix narrows nothing that fits today.
+  - A check measures it. `scripts/measure-web-ui.js` can host it: its Chrome harness
+    (`lib/measure-cdp.js`) already sets a width and reads layout, and this case needs no daemon,
+    only `site/index.html` from disk. It fails when the document is wider than the window at 400 px
+    or a card's text passes the edge. It is proven red with the fix removed (605 px, then 558 px
+    with only one half of it) and green with it.
+  - `site/index.html` stays inside its line budget (723, and it is at 723 today). The fix is CSS on
+    lines that already exist; the budget is not raised.
+
+  **Question for the architect, left open here.** `measure-web-ui.js` is run by hand, once per web
+  fix round, and CI does not run it; the `pages` workflow publishes `site/` with no check at all. A
+  guard nobody runs on a landing-page edit will not catch the next one. Whether the new case can run
+  in CI without a new tool (GitHub's Ubuntu runners carry Chrome, but no job here uses it today, and
+  §5's "no new tools" is the bar), and in which job, is the architect's call. If it cannot, the
+  item still closes, with the case run by hand and that said in `docs/STATUS.md`.
+
+  **Why now, and why before the 1.4.0 tag.** The release plan has no promotion before 1.4.0, but
+  the page does not wait for a release: `pages.yml` publishes `site/` on every push to `main` that
+  touches it, so it is public now, and the fix ships the moment it merges, independent of the tag.
+  The release's own docs commit edits the page anyway, to bump its coordinate (as the 1.3.0 one
+  did), and a release is when someone new is most likely to look; a page that pans sideways on a
+  phone reads as unfinished. It costs about an hour and touches nothing the release depends on, so
+  it does not gate the tag either: **it should land before the tag, and if it has not, the tag does
+  not wait for it.** It is not added to "Release 1.4.0" → "Required before the tag".
+
+  **Out of scope.** The page's copy, which `item:public-claims-true` set. The 1.4.0 coordinate on
+  the page, which the release's docs commit bumps. The diagrams' own width, which scroll on purpose.
+  Widths other than 400 and 1440 px. Any web UI page under `inspector-daemon/`. This does not
+  overturn a recorded decision. Surfaces: the landing page and a script. No public API, no noop
+  twin, no golden file. **Size:** S.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -604,6 +670,7 @@ ends at findings and sensitive-data detection.
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
+| 13f | The landing page fits a 400 px window | §3 → Bugs found, not fixed | `item:landing-page-fits-400` | S | S, now: first in lane S while 13c's final pass and 13e wait on detection T5. Lands before the tag if it can; the tag does not wait for it |
 | 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). |
 | 13e | Rehearse the release locally before the tag | §6 → Release 1.4.0 | `item:release-rehearsal` | S | S; run once findings and detection are merged, before 13c's last commit, so a fault it finds still has time to be fixed |
 | 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **Done 2026-10-22, all eight tickets: PR A (T1 to T4, KIN-111 to KIN-115; PRs #151 to #153), PR B (T5, T6; #160) and PR C (T7, T8; #164), each Done on QA's evidence.** PR B and C in W. The row stays open with row 30 until detection T5 (KIN-124) lands |
@@ -620,6 +687,14 @@ features that catch a defect in the app under test, and none of these is needed 
 | 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; the rest of PR A (A3 to A6) before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 (A4 to A6, KIN-105 to KIN-107) is parked on `shafic/web-ui-polish-a456` for after 1.4.0, with PR B** |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
+
+**One row added 2026-10-22 by the product owner, at the coordinator's request:**
+`item:landing-page-fits-400`, from QA on `item:public-claims-true`. It goes first in lane S because
+lane S has nothing else it can start: `item:release-1-4-docs`' final pass and
+`item:release-rehearsal` both wait on detection T5. It is above the 1.4.0 cut because the page is
+public now and is published from `main`, not by the tag, but it is not one of the tag's required
+items. Its label is out of sequence on purpose: 13a, 13b and 13d were used. The maintainer's proxy
+has not yet approved this place.
 
 **Three rows added 2026-10-22 for the 1.4.0 cut, approved by the maintainer's proxy on the product
 owner's proposal**, all in lane S and straight after `item:public-claims-true`: `item:release-1-4-docs`,
@@ -1070,6 +1145,8 @@ redirect, which is 12. KIN-114's sixth criterion said 15 mutation calls and the 
 both were arithmetic errors, the tickets are restated to 13 and 12, and `PaymentRulesTest` asserts 13 and
 12. QA's wording nit on `daemon-and-mcp.md` line 72 is a candidate under "Candidates, not ordered".
 
+**Ruled 2026-10-22 by the product owner: a payment finding is dismissed for its rule on its route, in every session, and that is intended; the design note's "Invariants to keep" is worded wrong, not the code.** The code matches the recorded decision (`daemon-and-mcp.md`: rule, route, location and path) and the detection design that owns dismissals ("payment findings dismiss the same way"); the invariant's "group key" cannot hold for payment rules, whose group key is a `callId`, one session's, which the same invariant's portability clause forbids. For 1.4.0 no code changes: detection T5's dismiss control, and `item:release-1-4-docs`' line for dismissals, say that a dismissal reaches every finding of that rule on that route.
+
 **The framework**, shared with sensitive data: `{ruleId, category, severity, txnIds, callIds,
 message, evidence}`, severities `high` / `medium` / `info`. **Computed on read, never written to the
 archive**, so a rule edit applies to every session already recorded; cached per session against
@@ -1187,7 +1264,7 @@ counts.
 
 ### Sensitive-data detection — detect, never redact
 
-**Progress, 2026-10-22: T1 to T4 done.** KIN-120 (T1, rules, masks and config; PR #156, `f0c53a2`), KIN-122 (T3, dismissals; PR #158, `d5554a9`), and KIN-121 (T2, the sensitive source), KIN-123 (T4, exports) and KIN-127 (the `JsonPaths` walker carved out of the diff's T1) in PR #161 (`5cce7ab`), each Done on QA's evidence. **Open:** T5 (KIN-124, the page: dismiss, dismissed fold, no-hosts hint, first-party hosts in Settings); the item is not Done. *The sensitive-data scan was measured in `item:sensitive-data-detection`: 2.7 s cold on 10,000 calls with 4 KB bodies each side; 41 ms after 100 appended rows. The cache stays in memory.*
+**Progress, 2026-10-22: T1 to T4 done.** KIN-120 (T1, rules, masks and config; PR #156, `f0c53a2`), KIN-122 (T3, dismissals; PR #158, `d5554a9`), and KIN-121 (T2, the sensitive source), KIN-123 (T4, exports) and KIN-127 (the `JsonPaths` walker carved out of the diff's T1) in PR #161 (`5cce7ab`), each Done on QA's evidence. **Open:** T5 (KIN-124, the page: dismiss, dismissed fold, no-hosts hint, first-party hosts in Settings); the item is not Done. *The sensitive-data scan was measured in `item:sensitive-data-detection`: 2.7 s cold on 10,000 calls with 4 KB bodies each side; 41 ms after 100 appended rows. The cache stays in memory.* *T5's dismiss control says what it reaches: every finding of that rule on that route, in every session (ruled 2026-10-22, §6 → Findings).*
 
 Redaction stays off by default; this is a smoke detector, not a sprinkler. Rules are editable and
 addable like the payment rules, in two kinds:
