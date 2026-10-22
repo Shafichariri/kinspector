@@ -610,7 +610,7 @@ ends at findings and sensitive-data detection.
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). **Progress, close-out 5, 2026-10-22: the final pass is next and is the last commit before the tag.** Findings and detection are merged and Done on QA's evidence (KIN-124 included), the rehearsal passed (`ROADMAP-DONE.md` → §6 → Release 1.4.0), and KIN-129 stays open for it. |
+| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). **Progress, close-out 5, 2026-10-22: the final pass is next and is the last commit before the tag.** Findings and detection are merged and Done on QA's evidence (KIN-124 included), the rehearsal passed (`ROADMAP-DONE.md` → §6 → Release 1.4.0), and KIN-129 stays open for it. **Done 2026-10-22** (final pass: PR #176, then the release-docs PR #177): UNRELEASED up to date and then emptied into the 1.4.0 notes, README and landing page say what the maintainer reports, coordinates 1.4.0, `INTEGRATION.md` v66 (the 1.4.0 entry). |
 
 **After 1.4.0**, decided 2026-10-22 by the maintainer. Row labels are kept. Why they wait: 1.4.0 ships the two
 features that catch a defect in the app under test, and none of these is needed to show them.
@@ -1105,7 +1105,7 @@ text and `docs/STATUS.md`. No public API, no noop twin, no golden file.
 
 *Ticket label:* `item:release-1-4-docs`
 
-**Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). Ticket KIN-129. **Progress, close-out 5, 2026-10-22: findings, detection T1 to T5 and the rehearsal are all done and verified, so the final pass is next, and it lands last before the tag.**
+**Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). Ticket KIN-129. **Progress, close-out 5, 2026-10-22: findings, detection T1 to T5 and the rehearsal are all done and verified, so the final pass is next, and it lands last before the tag.** **Done 2026-10-22** (final pass: PR #176, then the release-docs PR #177): `INTEGRATION.md` v66 is the 1.4.0 entry, every coordinate says 1.4.0, and `docs/UNRELEASED.md` is back to its header.
 
 **The user and the problem.** A consuming team upgrading from 1.3.0, and the developer on a Mac who
 downloads the 1.4.0 daemon. They read the release page and `INTEGRATION.md` §14, not the commits.

@@ -198,7 +198,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space
 <!-- ───────────────────────── HERO ───────────────────────── -->
 <header class="hero">
   <div class="wrap">
-    <a class="new" href="#path"><b>1.3.0</b>The path a user took, and what happened on every screen</a>
+    <a class="new" href="#findings"><b>1.4.0</b>Findings: payment-safety and sensitive-data problems in your traffic</a>
     <div class="eyebrow">Compose Multiplatform · Ktor · OkHttp</div>
     <h1>Every call your app makes.<br>In the app, in your browser,<br>and in your AI agent.</h1>
     <p class="lede">Inspector is a network inspector for Compose Multiplatform apps. One capture feeds an
@@ -207,7 +207,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space
     <div class="btns">
       <a class="btn primary" href="#start">Get started</a>
       <a class="btn" href="https://github.com/Shafichariri/kinspector">★ Star on GitHub</a>
-      <span class="coord"><span id="coord">io.github.shafichariri:inspector-core:1.3.0</span><button onclick="copyCoord(this)">copy</button></span>
+      <span class="coord"><span id="coord">io.github.shafichariri:inspector-core:1.4.0</span><button onclick="copyCoord(this)">copy</button></span>
     </div>
 
     <!-- Diagram 1: one call, four places. The dots are the point — a request leaves the app and
@@ -449,23 +449,22 @@ inspector: usb bridge on — a USB-attached iPhone is dialled
   </div>
 </section>
 
-<!-- ───────────────────────── PATH ───────────────────────── -->
-<section id="path">
+<!-- ───────────────────────── FINDINGS ───────────────────────── -->
+<section id="findings">
   <div class="wrap">
-    <div class="eyebrow">New in 1.3.0</div>
-    <h2>Follow the user from screen to screen</h2>
-    <p class="lede">The <b>path</b> tab draws the route through the app as a line of stations, one per visit, and under
-      it a line per visit: the calls, cache writes, analytics events and taps that happened while that screen was up,
-      in order. It updates live as the user moves, without pulling the view away from what you are reading.</p>
-    <div class="window">
-      <div class="bar"><i></i><i></i><i></i><span style="margin-left:8px">127.0.0.1:8099</span></div>
-      <picture>
-        <source srcset="img/web-path-light.png" media="(prefers-color-scheme: light)">
-        <img src="img/web-path-dark.png" alt="The path tab: stations for each screen visit along the top, and a line per visit with its calls and signals" loading="lazy">
-      </picture>
+    <div class="eyebrow">New in 1.4.0</div>
+    <h2>See what your traffic gets wrong</h2>
+    <p class="lede">A <b>Findings</b> page reads the session and flags two kinds of problem: payment-safety mistakes in
+      POST, PUT, PATCH and DELETE calls, and sensitive data in what the app sends. Findings are worked out when you
+      ask and never stored, and their evidence never shows a captured value.</p>
+    <div class="formats">
+      <div class="format"><span class="ext">payment</span><h3>Payment safety</h3><p>A double submit with no idempotency key, a key reused with a changed body, a retry without one.</p></div>
+      <div class="format"><span class="ext">sensitive</span><h3>Sensitive data</h3><p>Card numbers, IBANs, JWTs and secrets in URLs, credentials over plain <code>http</code>. Shown masked; nothing is redacted.</p></div>
+      <div class="format"><span class="ext">list · cli · mcp</span><h3>Everywhere you look</h3><p>Flagged rows carry a badge. REST, <code>inspector findings</code>, the MCP tool <code>list_findings</code> and every export carry the same findings.</p></div>
+      <div class="format"><span class="ext">stats</span><h3>Per-route stats</h3><p>A Stats page with each route's calls, retries, 4xx, 5xx and failure rates, and p50 to p99 latency.</p></div>
     </div>
-    <p class="note">Needs your app to send a <code>screen</code> signal when it navigates. Anything else you send, under any
-      tag, appears on the screen it happened on. A failed call is always shown, never folded away.</p>
+    <p class="note">Dismiss a finding with a reason on the Findings page, or turn a rule off in Settings, with no restart. To see
+      both kinds fire, run the sample app's demo flow; <code>sample/README.md</code> walks through it.</p>
   </div>
 </section>
 
@@ -643,8 +642,8 @@ inspector: usb bridge on — a USB-attached iPhone is dialled
     <div class="steps">
       <div class="step"><div>
         <h3>Add the dependency</h3>
-<pre>implementation("io.github.shafichariri:inspector-core:1.3.0")
-implementation("io.github.shafichariri:inspector-ui:1.3.0")</pre>
+<pre>implementation("io.github.shafichariri:inspector-core:1.4.0")
+implementation("io.github.shafichariri:inspector-ui:1.4.0")</pre>
       </div></div>
       <div class="step"><div>
         <h3>Install it and wrap your root</h3>

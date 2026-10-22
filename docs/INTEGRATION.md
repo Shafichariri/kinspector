@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v64 — 2026-10-22.**
+**Document version: v66 — 2026-10-22.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -34,8 +34,8 @@ repositories { mavenCentral() }
 
 ```kotlin
 // your module's build file. §2 — and check §1 first, version alignment is the usual failure
-implementation("io.github.shafichariri:inspector-core:1.3.0")
-implementation("io.github.shafichariri:inspector-ui:1.3.0")
+implementation("io.github.shafichariri:inspector-core:1.4.0")
+implementation("io.github.shafichariri:inspector-ui:1.4.0")
 ```
 
 ```kotlin
@@ -177,8 +177,8 @@ purpose is that release builds carry nothing — with a 401 that names the wrong
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.shafichariri:inspector-core:1.3.0")
-            implementation("io.github.shafichariri:inspector-ui:1.3.0")
+            implementation("io.github.shafichariri:inspector-core:1.4.0")
+            implementation("io.github.shafichariri:inspector-ui:1.4.0")
         }
     }
 }
@@ -239,11 +239,11 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             if (inspectorOff) {
-                implementation("io.github.shafichariri:inspector-noop:1.3.0")
-                implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
+                implementation("io.github.shafichariri:inspector-noop:1.4.0")
+                implementation("io.github.shafichariri:inspector-noop-ui:1.4.0")
             } else {
-                implementation("io.github.shafichariri:inspector-core:1.3.0")
-                implementation("io.github.shafichariri:inspector-ui:1.3.0")
+                implementation("io.github.shafichariri:inspector-core:1.4.0")
+                implementation("io.github.shafichariri:inspector-ui:1.4.0")
             }
         }
     }
@@ -424,13 +424,13 @@ Add it to **both** branches of the if/else from section 3:
 
 ```kotlin
 if (inspectorOff) {
-    implementation("io.github.shafichariri:inspector-noop:1.3.0")
-    implementation("io.github.shafichariri:inspector-noop-ui:1.3.0")
-    implementation("io.github.shafichariri:inspector-noop-stream:1.3.0")
+    implementation("io.github.shafichariri:inspector-noop:1.4.0")
+    implementation("io.github.shafichariri:inspector-noop-ui:1.4.0")
+    implementation("io.github.shafichariri:inspector-noop-stream:1.4.0")
 } else {
-    implementation("io.github.shafichariri:inspector-core:1.3.0")
-    implementation("io.github.shafichariri:inspector-ui:1.3.0")
-    implementation("io.github.shafichariri:inspector-stream:1.3.0")
+    implementation("io.github.shafichariri:inspector-core:1.4.0")
+    implementation("io.github.shafichariri:inspector-ui:1.4.0")
+    implementation("io.github.shafichariri:inspector-stream:1.4.0")
 }
 ```
 
@@ -615,17 +615,28 @@ is listed as checked. **Evidence never shows a captured value**: a card reads `�
 live on, the page refreshes at most once a second; in an HTML export it reads the report embedded in
 the file.
 
+Findings reach the traffic list too. A flagged row carries a badge naming its severity in words,
+taken from the row's first finding, and its detail pane has a **Findings** section with each rule's
+evidence. **⋮** → **flagged rows only** narrows the list to flagged rows; it is not kept across a
+reload.
+
 The rules run with their defaults until you change them under `findings` in
 `~/.inspector/config.json` on your Mac. The Settings page's **Findings** section edits the same key:
 each rule on or off and its severity, the idempotency header names, the payment and ignored paths,
-and the two time windows. Sensitive data's own settings are in the file only: `firstPartyHosts`, your
-app's own hosts, raises the severity of sensitive data sent anywhere else, and while it is empty,
-the default, nothing is raised for where data was sent; `fieldNames` and `valueRules` add your own
-names and value shapes. The email and phone rules are off until you turn them on. To set a finding
-aside on purpose, list it under `findingDismissals` with a reason. It leaves the counts but is not
-deleted: every export lists it with its reason, and REST and MCP do when asked. **Unlike every other
-key in the file, `findings` and `findingDismissals` apply on the next read, with no restart**, in the
-daemon and in `inspector mcp`.
+the two time windows, and `firstPartyHosts`. `firstPartyHosts`, your app's own hosts, set in the
+file or on Settings, raises the severity of sensitive data sent anywhere else; while it is empty,
+the default, nothing is raised for where data was sent, and the Findings page says so and links
+Settings. Sensitive data's other settings are in the file only: `fieldNames` and `valueRules` add
+your own names and value shapes. The email and phone rules are off until you turn them on.
+
+To set a finding aside on purpose, choose **dismiss…** on it on the Findings page and give a
+reason, or list it under `findingDismissals` in the file with one. **A dismissal reaches every
+finding of that rule on that route, at that location and path, in every session**, not only the one
+on screen, and sessions recorded later, until it is restored; the page says so before it asks for
+the reason. It leaves the counts but is not deleted: the rule's **dismissed** fold lists it with its
+reason and **restore** takes it out, every export lists it with its reason, and REST and MCP do when
+asked. No MCP tool dismisses. **Unlike every other key in the file, `findings` and
+`findingDismissals` apply on the next read, with no restart**, in the daemon and in `inspector mcp`.
 `docs/DAEMON.md` §6 has the rules for both keys, and §7 → "Findings" the rule table, the REST route
 `GET /api/sessions/{id}/findings` and `inspector findings`.
 
@@ -1382,7 +1393,53 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v64 — 2026-10-22 (this document)
+### v66 — 2026-10-22 (this document)
+
+**Bump to 1.4.0 and download the 1.4.0 daemon. Your code does not have to change, unless it names
+`InspectorTheme`, `InspectorColors` or `LocalInspectorColors` (v59), or parses an IPv6 URL or the
+summary's `byHost` keys (v63).**
+
+```diff
+-implementation("io.github.shafichariri:inspector-core:1.3.0")
++implementation("io.github.shafichariri:inspector-core:1.4.0")
+```
+
+…and the same for every other `inspector-*` coordinate, `inspector-noop*` included. 1.4.0 is the
+release that v59 to v64 call "the next release after 1.3.0", library and daemon alike. It is a
+minor version although v59 removes three public symbols, because v59 was the notice a major would
+have given. Then read each entry below from v59 up to this one; each says whether it applies to you.
+In short:
+
+- **v59, if your app names the overlay's theme.** `InspectorTheme`, `InspectorColors` and
+  `LocalInspectorColors` are `internal` in 1.4.0. v59 says what to use instead. A release build on
+  the no-op artifacts is unaffected.
+- **v63, if your code parses `NetworkTransaction.url` or `hostPort`, or a script reads `byHost`.**
+  A call to an IPv6 address has a bracketed host, and `byHost` keys a server by host and port.
+- **v64, if a script reads a route row's `host`, or you want findings quieter.** The row's `host` is
+  the bare IPv6 literal. Findings run by default; `findings` and `findingDismissals` in the daemon's
+  `config.json` turn them down, and apply on the next read.
+- **v60 to v62:** the web UI's rail and pages, more room for rows, and the Stats page. Nothing to
+  do; they arrive with the daemon.
+
+What changed since v64, all in the daemon you download (§6e):
+
+- **The Findings page dismisses a finding**, with a reason, and **restore** in the rule's
+  **dismissed** fold takes it back. A dismissal, from the page or written in `findingDismissals`,
+  reaches every finding of that rule on that route, at that location and path, in every session,
+  not only the one on screen. The page says so before it asks for the reason. A dismissal you wrote
+  by hand under v64 means exactly that, too.
+- **Settings edits `firstPartyHosts`**, one host per line. `fieldNames` and `valueRules` are still
+  edited in the file only. While `firstPartyHosts` is empty, the Findings page says nothing is
+  raised for where data was sent, and links Settings.
+- **The traffic list shows findings.** A flagged row carries a severity badge and its detail pane a
+  Findings section; **⋮** → **flagged rows only** narrows the list to them.
+
+**If you build with Maven, or read the POMs:** every module that depends on Ktor now declares
+`kotlin-stdlib` 2.3.21 in its POM, the version Ktor itself needs, where 1.3.0's POMs said 2.3.20;
+`inspector-model` still declares 2.3.20. A Gradle build already resolved 2.3.21 through Ktor's own
+metadata and sees no change. Inspector is still compiled by Kotlin 2.3.20, so §1 is unchanged.
+
+### v64 — 2026-10-22
 
 **Nothing to do in your app. Findings run by default in the next daemon release after 1.3.0. To
 turn a rule off, change its severity or set a finding aside, edit `findings` or `findingDismissals`
