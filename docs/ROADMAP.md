@@ -142,6 +142,13 @@ The Android app module and the Xcode project were added 2026-09-18, see `ROADMAP
 running `adb reverse` are all still unexercised, and no Inspector build has ever been on a real
 phone of either kind.
 
+*(Corrected 2026-10-22 by the product owner: the last clause is no longer true. An iPhone ran the iOS
+sample over USB on 2026-09-24, with the overlay running and nobody looking at it, and an Android
+device ran the overlay once on 2026-08-17, a month before the Android sample existed (commit
+`ef9058e`, which fixed the four defects it found). The sample's Android
+build has run on a physical phone. `item:public-claims-true` carries the same correction to the
+README.)*
+
 ---
 
 ## 3. Carried over, unbuilt
@@ -155,7 +162,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 | 4b — report what we cannot see | `docs/decisions/capture.md` | Not designed; flagged there as possibly not worth it |
 | Signal payload redaction | `SIGNALS.md`, `schema.md` | `Signal.redacted` is reserved and always empty; the schema field is already there |
 | Disconnected-transaction backfill | `schema.md` | Explicitly a v2 candidate |
-| Landing-page sponsor link | Moved here 2026-10-18 from a marker comment in `site/index.html`, when phase B made such markers fail the build | The button links `https://github.com/sponsors/Shafichariri`, which shows a real page only once GitHub Sponsors (or Ko-fi) is set up. Point it at whichever page exists then |
+| Landing-page sponsor link | Moved here 2026-10-18 from a marker comment in `site/index.html`, when phase B made such markers fail the build | The button links `https://github.com/sponsors/Shafichariri`, which shows a real page only once GitHub Sponsors (or Ko-fi) is set up. Point it at whichever page exists then. *(2026-10-22: the box's copy, which promised proxy capture, is corrected by `item:public-claims-true`; the link stays here.)* |
 | The path view — what was left out | `docs/decisions/shared-rules.md`, "the path, the waterfall and the axis band are one rule" | Web `path` tab **done, 2026-10-11; released in 1.3.0**. Deliberately deferred: the overlay (a phone has no width for a route, and its merged list is already the vertical version); an MCP `path` tool (`timeline` carries the same stream — build it when an agent visibly struggles); concurrency hints inside a column; a map view with each screen once and transitions counted; making `path` the landing tab, which stays `network` until the view has earned it |
 
 ### Guards
@@ -581,6 +588,65 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
   **Out of scope.** Any other rewording of `web-ui.md`. Surfaces: docs only. **Size:** XS.
 
+*The entry below was found on 2026-10-22 outside any item, while the maintainer's proxy reviewed
+what the repository says about itself in public. Placed by the product owner the same day and
+checked against `docs/STATUS.md` and `ROADMAP-DONE.md` at `e34542e`. **Ordered 2026-10-22 by the
+maintainer's proxy**, first in lane S: see "Order from here".*
+
+- **The README and the landing page say things that are not true.** *Ticket label:*
+  `item:public-claims-true`.
+
+  **For whom.** A developer on a Mac deciding whether to try Inspector, who reads the README or
+  `site/index.html` before the code, and a consuming team that quotes either to justify adopting it.
+  Each of them takes the page's word for what has been tested and what is coming. A claim the record
+  contradicts costs more than the gap it hides.
+
+  **Why now.** Findings and detection are next, and they will draw readers to these two pages. The
+  three claims below are each false today, each is a sentence or two, and none needs code.
+
+  1. **The README's "Honest gaps" paragraph** says the overlay "has been run on one Android device,
+     the iOS simulator and desktop, never on iOS hardware". `docs/STATUS.md` → Verified records a
+     physical iPhone streaming to the daemon over USB on 2026-09-24, with the overlay running the
+     whole time. `docs/STATUS.md` → Not verified says nobody *looked* at the overlay there, and that
+     no Android build has run on a physical phone. So "never on iOS hardware" is false, and the
+     Android half needs the record settled first (see the open question below).
+  2. **The README's test count** reads `779 tests`. `docs/STATUS.md` gives the last full count as
+     886, 0 failures, and says it is old and that no full run has been counted since.
+  3. **The landing page's sponsor box** says sponsoring "pays for what's next: proxy capture for
+     WebViews and native iOS networking". Proxy capture (4c) is not started and starts only if the
+     maintainer explicitly chooses it (§3's carried-over table, and "What this document does not
+     overturn"). A page that sells it as next promises something nobody has chosen.
+
+  **Acceptance criteria.**
+  - The README's phone sentences say what `docs/STATUS.md` says, no more: the overlay ran on one
+    iPhone over USB and nobody looked at it there, and the Android claim says whatever the record
+    settles (below). The rest of the paragraph (the signals work never touched by a thumb, the Auth0
+    adapter, nothing non-Ktor on iOS) is re-read against `docs/STATUS.md` and kept only where it
+    still holds.
+  - The README's count is `docs/STATUS.md`'s last full count, re-read on the day of the change, with
+    STATUS's own caveat that it is old. If no full run is counted by then, the README says "886 at the
+    last full count" or links to `docs/STATUS.md`. It never states a total made by adding per-module
+    counts.
+  - The sponsor box says sponsoring pays for maintenance and what is on the roadmap, and links the
+    roadmap. It names no unstarted item, and no phrase on the page reads as a promise of proxy capture.
+  - Every other place the README or `site/index.html` claims hardware, a count or a future feature is
+    read against `docs/STATUS.md` and this roadmap, and the change lists each one it checked. The
+    landing page's Android row ("no Android build has run on a physical phone yet") is one of them.
+
+  **Open question for the maintainer, which the first criterion waits on.** The record disagrees
+  with itself about Android. Commit `ef9058e`, "Fix four overlay defects found on a real phone",
+  says "First run on an Android device", and `docs/STATUS.md` → Not verified opens with "The overlay
+  has now been seen on a phone once". The same section ends "No Android build has run on a physical
+  phone", and the proxy's note says no Android phone has run the overlay. Both can be true if that
+  first outing was a consuming app's build and not the sample's. The maintainer, who held that phone,
+  says which. The README then says "once, on one Android phone, before 0.7.0" or "never on an Android
+  phone", and `docs/STATUS.md` is corrected by the delivery tracker to match.
+
+  **Out of scope.** The README's hero and any rewrite of the pitch, which wait until findings ship in
+  a release: a claim about something unbuilt is a false fact. The sponsor link's target, which is
+  still the carried-over row in §3. `docs/INTEGRATION.md`, whose version line this does not touch.
+  Surfaces: docs and the landing page only. No public API. **Size:** XS.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -727,19 +793,46 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
+| 13b | The README and the landing page say only what is true | §3 → Bugs found, not fixed, below the 2026-10-22 housekeeping | `item:public-claims-true` | XS | S, first in the lane; its Android sentence waits on the maintainer's answer in the item |
 | 16a | Housekeeping after the 2026-10-22 batch | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:docs-housekeeping-2026-10-22` | XS | S |
 | 16b | `expanded unfolded` judges a line with no failure on it | §3 → Guards | `item:guard-expanded-unfolded-has-failures` | XS | S; may share a PR with `item:docs-housekeeping-2026-10-22` |
 | 16d | Interrupting a measure run leaves its daemons running | §3 → Guards | `item:guard-measure-interrupt-cleans-up` | XS | S |
 | 16e | The overview band's reserved height is a promise nothing holds | §3 → Guards | `item:guard-overview-band-reserved` | XS | S; lands before `item:web-ui-polish` PR A, which restyles the bands it guards |
-| 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:session-diff` PR A and `item:findings-payment-safety` PR A |
+| 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:findings-payment-safety` PR A and `item:session-diff` PR A |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
-| 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
+| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host`: T1, then Shared body evidence, then T2, T3 and T4. PR B and C in W |
+| 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
+| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C |
+| 30a | A sample demo flow that both rule families catch | §6 → A sample demo flow | `item:sample-demo-flow` | S | S, after detection T5, so QA runs both rule families on it |
+| 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after detection T4: T4, then T1 reduced by Shared body evidence, then T2 and T3. PR B in W, after detection T5 and polish PR A |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after diff PR A merges; PR B and C in W |
 | 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
-| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D; T5 in W after findings PR B |
+
+**Re-ordered 2026-10-22 by the maintainer's proxy: features that catch real defects and can be
+demonstrated come first; the architect confirmed the findings/diff dependency is one shared piece.**
+Row labels are kept, not renumbered, because tickets and notes already cite them; position is the
+order, and the labels now run out of sequence on purpose. What changed:
+
+- `item:public-claims-true` is new and first in lane S. A false fact comes before anything else in
+  its lane, by the maintainer's own rule, and the three it fixes are on the two pages a newcomer
+  reads first.
+- `item:findings-payment-safety` PR A and `item:sensitive-data-detection` T1 to T4 move ahead of
+  `item:session-diff`. Each catches a defect in the app under test (a payment sent twice, a token in
+  a URL), where the diff reports a change that may or may not be one. The architect checked the
+  dependency that had put findings after diff PR A and found it narrow: it starts at findings T3, and
+  it is the one piece of diff T1 that both use. That piece is now its own ticket, Shared body
+  evidence, under `item:findings-payment-safety`, built to the names and signatures
+  `item:session-diff`'s design fixes in its §10. Diff T1 shrinks by it and depends on it.
+  `item:route-key-one-ipv6-host` stays ahead of both, for its own reason.
+- `item:sample-demo-flow` is new, after detection T5 and before the diff. Until the sample sends a
+  double submit and a token in a query string, nobody can watch either rule family fire without
+  writing their own app, and QA has no fresh session to verify them on.
+- In lane W the order is findings PR B and C, detection T5, then the diff's PR B and polish as
+  before. Polish PR A still lands before diff PR B.
+- Two unordered candidates were added to §6 → "Candidates, not ordered": `item:findings-ci-check` and
+  `item:mcp-registry-listing`.
 
 **Rows after the advisory decided 2026-10-21 by the maintainer**, on the architect's and the
 product owner's joint proposal; the order is approved, and each "(waits: …)" is a decision still
@@ -1095,6 +1188,15 @@ Endpoint identity here is the **route** — the template decided under Endpoint 
 
 The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
 
+**Shared body evidence moved to findings, 2026-10-22** (the maintainer's proxy, confirmed by the
+architect). `RouteKey.mutation` and the contract half of `service/BodyShape.kt` (`BodySide`,
+`BodyState`, `BodyEvidence.state`, `BodyEvidence.read` and `JsonPaths.redactedPaths`) are built as
+the Shared body evidence ticket under `item:findings-payment-safety`, to the names and signatures
+of this item's design §10. **Diff T1 shrinks by that piece and depends on it**: it keeps
+`SessionStamp`, the route-stats and Markdown moves, and adds `walk`, `group`, `foldIdKeys` and
+`isAtOrUnder` to the same `JsonPaths` object. It renames nothing the shared piece built. Findings
+and detection now come before this item; see "Order from here".
+
 **Decided 2026-10-22 by the maintainer's proxy: the recommendation below, made stricter.** A key
 path is "removed" only when every JSON body on the other side was read complete, and nothing at or
 under a redacted path is compared. Cross-origin matching is not in this item; it is in "Candidates,
@@ -1148,6 +1250,36 @@ path patterns in the existing `path:` syntax, the window. A request body that wa
 makes the evidence read "body unknown"; a duplicate is never claimed without both bodies.
 
 "Template" in the table is the route from `archive/RouteTemplates.kt` (method, host and path template), built in `item:endpoint-latency-stats`.
+
+**Shared body evidence** — one ticket under this item, carved out of `item:session-diff`'s T1 on
+2026-10-22 when findings moved ahead of the diff (the maintainer's proxy; the architect confirmed
+the dependency is this one piece and starts at findings T3).
+
+*The user and the problem.* Findings, detection and the diff each have to answer the same two
+questions about a call: is it a mutation, and how much of each body do we actually have. Answered
+three times, they will disagree. A row that findings reads as "body complete" and the diff reads as
+"unknown" is the false claim `BodyOmission` exists to prevent.
+
+*Acceptance criteria.*
+- `archive/RouteTemplates.kt` has `RouteKey.mutation`, a computed property and the one definition of
+  "mutation" (POST, PUT, PATCH, DELETE). Equality and every constructor call are unchanged, and the
+  route-stats tests pass unedited.
+- `service/BodyShape.kt` has `BodySide` (`REQ("req")`, `RES("res")`), `BodyState` with all seven
+  states (`complete`, `empty`, `truncated`, `omitted`, `missing`, `notJson`, `unparsed`),
+  `BodyEvidence.state(txn, side)` (from the row only), `BodyEvidence.read(repository, dir, txn,
+  side)` (bytes only when the body is whole, any content type) and `JsonPaths.redactedPaths(txn,
+  side): Set<String>` (both `body:req:`/`body:res:` and the older `body:$.x`). The names and
+  signatures are those of `item:session-diff`'s design §10 and are a contract: the diff's T1 later
+  adds `walk`, `group`, `foldIdKeys` and `isAtOrUnder` to the same `JsonPaths` object, and
+  `item:sensitive-data-detection`'s T2 calls it.
+- A truncated body is `truncated` and never `complete`, and an omitted one is `omitted`, each shown
+  by a test that is proven red with the state check removed.
+
+*Out of scope.* Anything the diff alone uses. Any change to what capture records.
+*Surfaces.* Daemon `archive/` and `service/` only. No public API, no golden file. **Size:** S.
+
+Findings T2 no longer waits on the diff. Findings T3 is the first ticket that reads this piece,
+which lands between findings T1 and T2, inside findings PR A.
 
 **The filter grammar stays frozen**, so there is no `has:finding` term — "flagged rows only" is a
 view toggle. Changing the grammar is a separate decision.
@@ -1234,6 +1366,9 @@ can be dismissed per endpoint and path, with a reason, saved to config.
 
 The cache for this scan follows *where the findings cache lives*, under Findings.
 
+Its T2 reads body evidence through Shared body evidence, the ticket under
+`item:findings-payment-safety` (2026-10-22), and no longer waits on the diff's T1.
+
 **Decided 2026-10-17: generic rules only, no region packs.** The IBAN rule reads the full ISO 13616
 length table; no national-ID value rule ships by default, and a user who needs one adds it through
 config; field-name rules use a neutral spread of identity names. The rule list and masking example
@@ -1257,6 +1392,44 @@ the fallback if no second region could be specified properly. The maintainer cho
 the IBAN rule needs no pack once it reads the whole table, and a national-ID rule is exactly the
 kind of thing user-editable rules exist for, so a pack would be shipped maintenance for a case the
 config already covers.
+
+### A sample demo flow that both rule families catch
+
+*Ticket label:* `item:sample-demo-flow`. Added 2026-10-22 by the product owner, at the maintainer's
+proxy's request; placed in "Order from here".
+
+**The user and the problem.** A developer on a Mac trying Inspector from a clean clone, and the QA
+agent verifying findings and detection. The sample's server (`sample/shared/kotlin`'s `DemoServer`)
+answers GETs, one echo POST and a body with a token in it. Nothing in it sends a mutation twice or
+puts a credential in a URL, so neither the payment-safety rules nor the query-string rule has
+anything to find in a sample session. To watch them fire today you write your own app, which is what
+a newcomer will not do and what QA should not have to.
+
+**Why now.** Findings and detection come first in the order, and they are only worth as much as
+someone can see them do. A demo that reproduces from a clean clone also gives QA the fresh session
+its verification needs, without a hand-built fixture.
+
+**Acceptance criteria.**
+- The sample server gains a payment-shaped mutation route, and the sample's scripted run (the
+  desktop sample's `-Dinspector.sample.autofire=true` today) sends one request body to it twice
+  within the duplicate window with no idempotency key: a double submit. The same run makes one call
+  with a token in its query string.
+- On a fresh sample session, with the daemon's default config, `GET /api/sessions/{id}/findings`
+  and MCP `list_findings` each return at least one Duplicate mutation finding at `high` that cites
+  both calls, and at least one query-string token finding from detection. Its evidence is masked:
+  the token's value appears nowhere in the response.
+- The Findings page shows both on that session.
+- A sample README (none exists; `sample/AGENTS.md` is the agent guide) says how to run the flow
+  and what each finding should show, in steps a newcomer can follow from a clean clone.
+- `-Pinspector=off` still builds the sample, and the release guard's check and self-test are unchanged.
+
+**Out of scope.** Any change to the rules, their defaults or the daemon. The overlay, which has no
+findings. The Android and iOS samples, unless the architect finds the scripted run is shared at no
+cost. Whatever the demo route is called, Inspector learns nothing from it: the payment shape lives in
+the sample app, as it would in a consuming one, and the rules match it through their generic
+defaults.
+
+**Surfaces.** The sample app and its docs. No library API, no noop twin, no golden file. **Size:** S.
 
 ### Web UI polish
 
@@ -1338,6 +1511,61 @@ and any knowledge of a particular backend's payment API.
 
 **Surfaces.** Daemon only. The page, MCP and exports get it through the findings framework. No
 library API. **Size:** S.
+
+*The two candidates below were added 2026-10-22 by the product owner, at the maintainer's proxy's
+request, when findings moved ahead of the diff. They follow the rule above: unordered, no tickets,
+and each names what would decide it.*
+
+#### A findings check for CI
+
+*Ticket label:* `item:findings-ci-check`
+
+**The user and the problem.** A consuming team that has recorded a payment flow and wants a pull
+request to fail when that flow starts double-submitting. Findings answer on a page, over MCP and from
+the CLI, but nothing turns a finding into a failed build, so a regression is caught only when someone
+opens the page.
+
+**Why not now.** It is worth building only if two things are true, and the architect has not
+confirmed either. **Decide when the architect confirms** that the findings engine runs as a pure
+function over a session folder, with no running daemon, and that a team's CI can produce a session
+at all: a test run that streams into a daemon, or a recorded folder checked in. If CI cannot produce a
+session, this is "Not worth doing" with that reason.
+
+**Acceptance criteria, if placed.**
+- `inspector findings <session folder> --fail-on <severity>` exits non-zero when any undismissed
+  finding is at or above that severity, and zero otherwise. It prints the findings it counted, with
+  masked evidence.
+- It reads the same rules and dismissals from `config.json` as the page and `list_findings`, so the
+  three agree on the same session.
+- Without `--fail-on`, the command behaves as the findings item built it.
+
+**Out of scope.** A hosted service, or anything listening beyond loopback. A new filter-grammar
+term. Comparing two sessions, which is the diff's.
+
+**Surfaces.** Daemon CLI only. No library API. **Size:** S, if the engine is already pure.
+
+#### MCP registry listing
+
+*Ticket label:* `item:mcp-registry-listing`
+
+**The user and the problem.** A developer whose editor's agent finds MCP servers through a
+registry. Inspector's server is described only in this repository, so that developer never finds
+it, and an agent that could read their archive does not.
+
+**Why not now.** It is docs only, and the listing should describe findings once they ship in a
+release, not before. **Decide when findings are in a release**, and when the maintainer has picked
+the registries and holds the accounts, which only the maintainer can.
+
+**Acceptance criteria, if placed.**
+- Each listing names what the server reads (the local session archive), that it binds loopback
+  only, and the command that starts it, and lists the tools in the MCP tools-list golden file.
+- Nothing in a listing claims more than `docs/STATUS.md` → Verified. The same check as
+  `item:public-claims-true`.
+
+**Out of scope.** A remote or hosted transport, which would overturn the loopback boundary in
+`docs/decisions/daemon-and-mcp.md`. Any change to the tools.
+
+**Surfaces.** Docs only. **Size:** XS, plus the maintainer's time with each registry.
 
 ### Deferred: mocking, fault injection, breakpoints
 
