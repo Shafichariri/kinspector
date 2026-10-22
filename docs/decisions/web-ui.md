@@ -380,6 +380,28 @@ branch is never reached, so none of the three moves. `check-web-static.js`'s `so
 `live glance plain`, `live timeline plain`, `live glance filter`, `live paused still` and `live other
 still` hold it, each proven red with its rule removed.
 
+Live signals and markers ride the same timer. The signal branch redrew the timeline, the waterfall
+and the path and read `/current` for every signal, and the marker branch redrew the timeline and the
+path for every marker, so 100 signals cost 300 whole-session redraws and 100 reads. A marker now owes
+the redraw the path, and a signal owes it the waterfall, the path, one `/current` read and the
+payload reads of the pane that shows them; each runs at most once per redraw, so the bound is the
+calls' ⌈T/250⌉+1. **The payload reads ride the timer too**, though each payload is its own request
+and riding saves none of them. What it saves is the redraw each answer made: the path redrew per
+screen on landing as well as per signal, and `loadScreenPayloads`, which reads every screen not yet
+held, asked again for those still in flight. The path and a tag's browser wait for their payloads and
+are drawn once. Drawn before them and again after, the path would cost two redraws per tick and break
+the bound; on loopback the wait is milliseconds. The reads are made only for the session the signals
+arrived on, while it is read and live tail is on: after a switch inside the window, the timer's
+`/current` read put the new session's values in the strip while every other pane said the session
+was being read. The tab bar still redraws per signal, because a tag's first signal is when its tab
+becomes reachable, and the list and the markers popover per marker. `check-web-static.js`'s `live
+signal burst timeline`, `live signal burst path`, `live marker burst` and `live signal still`, and
+`socket at end timeline`, which now waits for the redraw for markers and signals, hold it in jsdom;
+`measure-web-ui.js --only traffic`'s `traffic signal burst`, `traffic marker burst`, `traffic lone
+signal drawn`, `traffic lone marker drawn`, `traffic paused still` and `traffic other still` hold it
+through a real daemon. Each was proven red with its rule removed, the bursts with the per-message
+branches put back.
+
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
 enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls

@@ -198,30 +198,66 @@ function setConn(kind) {
 const RESTART_GRACE_MS = 20000;
 
 /**
- * How long live calls wait before the timeline and the glance are redrawn for them.
+ * How long live rows wait before the panes that redraw from the whole session are redrawn for them.
  *
- * Each redraws from every row the session holds, so one per call made a burst cost as many full
- * redraws as it had calls. The first call arms one redraw and the calls arriving meanwhile ride on
- * it, as the filtered re-read's rows do (`LIVE_REREAD_MS`): a burst of 100 calls over one second
- * costs at most `⌈1000 / 250⌉ + 1`, five, of each, and a lone call is drawn within a quarter second.
+ * Each redraws from every row the session holds, so one per row made a burst cost as many full
+ * redraws as it had rows. The first row arms one redraw and the rows arriving meanwhile ride on
+ * it, as the filtered re-read's rows do (`LIVE_REREAD_MS`): a burst of 100 rows over one second
+ * costs at most `⌈1000 / 250⌉ + 1`, five, of each, and a lone row is drawn within a quarter second.
  */
 const LIVE_DRAW_MS = 250;
 
 /**
- * Arms the one pending redraw of the timeline and the glance, unless one is already armed.
+ * Arms the one pending live redraw, unless one is already armed, and adds what it owes.
  *
- * It draws whatever the page holds when it fires, so a switch or a pause meanwhile draws that and
- * nothing stale. The timeline keeps its own follow rule (`renderTimeline`): at its end it follows,
- * scrolled back it stays, and an open run stays open. The glance is drawn only while no call is
- * open, as everywhere else.
+ * A call owes the timeline and the glance. A marker owes the path as well (`path`). A signal owes
+ * the waterfall, the path, one `/current` read and the payload reads of the panes that show them
+ * (`signal`), which a signal used to make per message: 100 signals were 300 whole-session redraws
+ * and 100 `/current` reads. The reads ride the timer too, for the reasons `drawLiveNow` gives.
  */
-function drawLive() {
-  if (state.liveDraw.timer !== null) return;
-  state.liveDraw.timer = setTimeout(() => {
-    state.liveDraw.timer = null;
-    renderTimeline();
-    if ($('detail').hidden) renderSessionGlance();
-  }, LIVE_DRAW_MS);
+function drawLive({ path = false, signal = null } = {}) {
+  const draw = state.liveDraw;
+  if (path || signal) draw.path = true;
+  if (signal) (draw.signals ||= []).push({ sessionId: state.sessionId, signal });
+  if (draw.timer !== null) return;
+  draw.timer = setTimeout(drawLiveNow, LIVE_DRAW_MS);
+}
+
+/**
+ * The redraw `drawLive` armed. It draws whatever the page holds when it fires, so a switch or a
+ * pause meanwhile draws that and nothing stale. The timeline keeps its own follow rule
+ * (`renderTimeline`): at its end it follows, scrolled back it stays, and an open run stays open.
+ * The glance is drawn only while no call is open, as everywhere else.
+ *
+ * The reads are made only while the page still shows what they were owed for: the session the
+ * signals arrived on, read, with live tail on. After a switch the switch's own load reads
+ * `/current`, and a read here would put the new session's values in the strip while every other
+ * pane says it is being read; paused, nothing moves, as for calls.
+ *
+ * The path and a tag's browser wait for the payloads they draw, and are drawn once. A payload is
+ * a different read per signal, so riding the timer saves no request of its own; what it saves is
+ * the redraw each answer made, a whole path per screen on landing beside the one per signal, and
+ * the screen reads still in flight that each signal asked for again (`loadScreenPayloads` reads
+ * every screen not yet held). Drawn before its payloads and again after, the path would cost two
+ * redraws per tick and break the bound; on loopback the wait is a few milliseconds.
+ */
+async function drawLiveNow() {
+  const draw = state.liveDraw;
+  const { path } = draw;
+  const owed = draw.signals || [];
+  Object.assign(draw, { timer: null, path: false, signals: [] });
+  renderTimeline();
+  if ($('detail').hidden) renderSessionGlance();
+  if (!path) return;
+  if (owed.length) renderWaterfall();
+  const reads = state.liveTail && !sessionPending() ? owed.filter((o) => o.sessionId === state.sessionId) : [];
+  if (reads.length) refreshCurrent();
+  if (state.view === 'path' && reads.some((o) => tagOf(o.signal) === 'screen')) await loadScreenPayloads();
+  renderPath();
+  const shown = reads.filter((o) => tagOf(o.signal) === state.view);
+  if (!shown.length) return;
+  await Promise.all(shown.map((o) => loadPayload(o.signal)));
+  renderBrowser();
 }
 
 function connectLive() {
@@ -268,8 +304,8 @@ function connectLive() {
       state.markers.push(message.marker);
       renderMarkers();
       renderList();
-      renderTimeline();
-      renderPath();
+      // The timeline and the path redraw from the whole session, so they wait for the live redraw.
+      drawLive({ path: true });
       // A marker can move a `since:marker(…)` cut in the Stats filter.
       oweStats();
     } else if (message.type === 'signal') {
@@ -278,21 +314,14 @@ function connectLive() {
       admitLive('signals', message.signal);
       if (state.filter) oweReread('signals');
       else state.signals.push(message.signal);
-      if (tagOf(message.signal) === 'screen') {
-        state.screens.push(message.signal);
-        if (state.view === 'path') loadScreenPayloads().then(renderPath);
-      }
+      if (tagOf(message.signal) === 'screen') state.screens.push(message.signal);
       // A tag's first signal is the moment its tab becomes reachable, and the moment `all`
       // starts having something to merge. Both are decided by what the session holds, so the
       // bar is rebuilt rather than revealed.
       renderTabs();
-      refreshCurrent();
-      renderTimeline();
-      renderWaterfall();
-      renderPath();
-      if (tagOf(message.signal) === state.view) {
-        loadPayload(message.signal).then(renderBrowser);
-      }
+      // The strip, the payloads and every pane that redraws from the whole session wait for the
+      // live redraw: per signal, a burst cost three whole-session redraws and a `/current` read each.
+      drawLive({ signal: message.signal });
     }
   };
   ws.onclose = () => {

@@ -24,6 +24,13 @@
  *   traffic session switch window while the switch's first page is held, the list draws none of
  *                               the session left's rows and says the session is being read, the
  *                               endpoints button is hidden and no tab and no header counts anything
+ *   traffic signal burst        100 signals with no filter, arriving over T ms, cost at most
+ *                               ⌈T/250⌉ + 1 calls each of the timeline, the waterfall and the path
+ *                               renderers and as many `/current` reads (`drawLive`), every one drawn
+ *   traffic marker burst        50 markers, the same bound for the timeline and the path
+ *   traffic lone signal drawn, … one signal or marker is on the timeline within the live redraw
+ *   traffic paused still, other still   a signal or marker while paused, or for another session,
+ *                               calls no renderer and reads no `/current`
  *   traffic hosts               every call the daemon archived has a host ending in `.invalid`
  *   traffic reaches             every request and socket the page opened was to 127.0.0.1
  *   traffic exceptions          the page threw nothing throughout
@@ -263,6 +270,131 @@ async function burst(page, origin, app, sent) {
   ];
 }
 
+// Installed once the page is on the session the bursts are sent to. It counts the calls of the three
+// renderers a live signal redraws, by replacing the page's global functions, which is where the
+// page's own calls resolve; and it records each live signal or marker as the socket hands it over,
+// with its session, so a reading's T is the span the page saw and an empty scan can be told apart.
+const DRAW_COUNTER = `(() => {
+  window.__draws = { renderTimeline: 0, renderWaterfall: 0, renderPath: 0 };
+  for (const name of Object.keys(window.__draws)) {
+    const real = window[name];
+    window[name] = function (...args) { window.__draws[name]++; return real.apply(this, args); };
+  }
+  window.__arrived = [];
+  const sock = window.__sockets.find((s) => s.url.includes('/api/live') && s.readyState === 1);
+  sock.addEventListener('message', (event) => {
+    const m = JSON.parse(event.data);
+    if (m.type === 'signal' || m.type === 'marker') window.__arrived.push({ type: m.type, sessionId: m.sessionId, at: performance.now() });
+  });
+  return true;
+})()`;
+
+const RESET = `window.__asked.length = 0; window.__arrived.length = 0;
+  for (const k of Object.keys(window.__draws)) window.__draws[k] = 0`;
+
+/** What the page drew and read since RESET, and what arrived for [sessionId]. */
+const drawsSince = (page, sessionId) => page.ev(`(() => {
+  const mine = window.__arrived.filter((a) => a.sessionId === ${JSON.stringify(sessionId)});
+  return { ...window.__draws, current: window.__asked.filter((e) => /\\/current$/.test(e.path)).length,
+    arrived: mine.length, span: mine.length ? Math.round(mine[mine.length - 1].at - mine[0].at) : 0,
+    elsewhere: window.__arrived.length - mine.length, armed: state.liveDraw.timer !== null };
+})()`);
+
+/** Sends [count] rows [every] ms apart, then waits for the page to see all of them and settle. */
+async function sendAndSettle(page, sessionId, count, every, send) {
+  for (let i = 0; i < count; i++) {
+    send(i);
+    await sleep(every);
+  }
+  await page.waitFor(`window.__arrived.filter((a) => a.sessionId === ${JSON.stringify(sessionId)}).length >= ${count}`, 10000);
+  // The redraw armed by the last row, and a while longer, so a late one still counts.
+  await page.waitFor('state.liveDraw.timer === null', 3000);
+  await sleep(600);
+}
+
+const burstRow = (key, what, seen, names, extra) => {
+  const counts = names.map((n) => seen[n]);
+  if (!seen.arrived) {
+    return { key, value: 'checked nothing', ok: false,
+      detail: `found no ${what} arriving (${seen.elsewhere} for other sessions): ${names.map((n, i) => `${counts[i]} ${n}`).join(', ')}` };
+  }
+  const bound = Math.ceil(seen.span / 250) + 1;
+  const within = counts.every((c) => c <= bound) && !extra.missing;
+  return { key, value: within ? 'within bound' : 'over bound', ok: within,
+    detail: `${seen.arrived} ${what}s over ${seen.span} ms: ${names.map((n, i) => `${counts[i]} ${n}`).join(', ')}, at most ${bound} each; ${extra.text}` };
+};
+
+/**
+ * The live redraw for signals and markers (`drawLive`, `docs/decisions/web-ui.md`): bursts on the
+ * timeline with no filter, a lone row's delay, and nothing moved while paused or for another session.
+ * Run on [app]'s session, the one with signals, so the timeline tab is offered.
+ */
+async function signalBursts(page, origin, app, other) {
+  await switchTo(page, app.sessionId);
+  if (await page.waitFor(`state.sessionId === ${JSON.stringify(app.sessionId)} && state.signalSessionId === state.sessionId`, 10000) === null) {
+    throw new Error(`the page did not come back to ${app.sessionId}`);
+  }
+  await setFilter(page, '');
+  await page.ev(`document.querySelector('#tabs .tab[data-view="all"]').click()`);
+  if (await page.waitFor(`state.view === 'all'`, 3000) === null) throw new Error('the timeline tab did not open');
+  await sleep(400);
+  await page.ev(DRAW_COUNTER);
+  const rows = [];
+  const names = ['renderTimeline', 'renderWaterfall', 'renderPath', 'current'];
+
+  // For another session, then paused: nothing called, nothing read.
+  for (const [key, sessionId, before, after] of [
+    ['traffic other still', other.sessionId, null, null],
+    ['traffic paused still', app.sessionId, `document.getElementById('live-btn').click()`, `document.getElementById('live-btn').click()`],
+  ]) {
+    const sender = sessionId === app.sessionId ? app : other;
+    if (before) await page.ev(before);
+    await page.ev(RESET);
+    await sendAndSettle(page, sessionId, 20, 10, (i) => (i % 4 ? sender.signal('state', `still${i}`) : sender.marker(`still ${i}`)));
+    const seen = await drawsSince(page, sessionId);
+    if (after) {
+      await page.ev(after);
+      await page.waitFor(`state.liveTail && !state.reread.busy`, 5000);
+      await sleep(1500);
+    }
+    const moved = names.reduce((n, k) => n + seen[k], 0);
+    rows.push(!seen.arrived ? { key, value: 'checked nothing', ok: false, detail: `found no signal or marker arriving for ${sessionId}` }
+      : { key, value: moved || seen.armed ? 'moved' : 'still', ok: !moved && !seen.armed,
+        detail: `${seen.arrived} signals and markers: ${names.map((n) => `${seen[n]} ${n}`).join(', ')}, redraw armed ${seen.armed}` });
+  }
+
+  // A lone signal and a lone marker, each timed from the socket handing it over to its timeline row.
+  for (const [key, send, found] of [
+    ['traffic lone signal drawn', () => app.signal('state', 'Lone'), (id) => `document.querySelector('#timeline [data-id="${id}"]')`],
+    ['traffic lone marker drawn', () => app.marker('lone marker'), () => `[...document.querySelectorAll('#timeline .marker-divider')].some((n) => n.textContent === 'lone marker')`],
+  ]) {
+    await page.ev(RESET);
+    const id = send();
+    await page.ev(`window.__lone = null; (function poll() {
+      if (${found(id)}) { const a = window.__arrived[0]; window.__lone = a ? Math.round(performance.now() - a.at) : -1; return; }
+      setTimeout(poll, 5); })()`);
+    const ms = await page.waitFor('window.__lone !== null', 3000) === null ? null : await page.ev('window.__lone');
+    rows.push(ms === null || ms < 0 ? { key, value: 'not drawn', ok: false, detail: 'not on the timeline 3 s after it was sent' }
+      : { key, value: ms <= 300 ? 'within the redraw' : 'late', ok: ms <= 300, detail: `on the timeline ${ms} ms after it arrived (redraw 250 ms, 50 ms slack)` });
+  }
+
+  await page.ev(RESET);
+  const ids = [];
+  await sendAndSettle(page, app.sessionId, 100, 10, (i) => ids.push(app.signal(i % 2 ? 'state' : 'cache', `Burst${i}`)));
+  let seen = await drawsSince(page, app.sessionId);
+  const drawn = await page.ev(`${JSON.stringify(ids)}.filter((id) => document.querySelector('#timeline [data-id="' + id + '"]')).length`);
+  rows.push(burstRow('traffic signal burst', 'signal', seen, names,
+    { missing: seen.arrived && drawn < ids.length, text: `${drawn} of ${ids.length} on the timeline` }));
+
+  await page.ev(RESET);
+  await sendAndSettle(page, app.sessionId, 50, 20, (i) => app.marker(`burst ${i}`));
+  seen = await drawsSince(page, app.sessionId);
+  const dividers = await page.ev(`[...document.querySelectorAll('#timeline .marker-divider')].filter((n) => /^burst \\d+$/.test(n.textContent)).length`);
+  rows.push(burstRow('traffic marker burst', 'marker', seen, ['renderTimeline', 'renderPath'],
+    { missing: seen.arrived && dividers < 50, text: `${dividers} of 50 on the timeline` }));
+  return rows;
+}
+
 async function reaches(page, origin, sessions) {
   const seen = await page.ev(`({ asked: window.__origins || [],
     sockets: [...new Set((window.__sockets || []).map((s) => new URL(s.url).host))] })`);
@@ -318,6 +450,7 @@ async function liveTraffic(page, origin) {
     const rows = await burst(page, origin, app, sent);
     rows.push(...await filterEditRaces(page, origin, app));
     rows.push(...await sessionSwitchRaces(page, origin, app, other.sessionId));
+    rows.push(...await signalBursts(page, origin, app, other));
     rows.push(...await reaches(page, origin, [app.sessionId, other.sessionId]));
     const thrown = page.exceptions.length;
     rows.push({ key: 'traffic exceptions', value: thrown ? 'thrown' : 'none', ok: !thrown,

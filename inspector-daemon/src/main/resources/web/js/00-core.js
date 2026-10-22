@@ -81,8 +81,9 @@ const state = {
   // Live rows under a filter wait for the daemon to say which match (`rereadLive`): the kinds a
   // re-read is owed for, its timer, and whether one is in flight.
   reread: { transactions: false, signals: false, timer: null, busy: false },
-  // The timeline and the glance redraw for live calls on one timer (`drawLive`), not per call.
-  liveDraw: { timer: null },
+  // Live rows redraw the whole-session panes on one timer (`drawLive`), not per row: its timer,
+  // whether a marker or a signal owes the path, and the signals whose reads it owes.
+  liveDraw: { timer: null, path: false, signals: [] },
   // Filtered reads of each kind sent, and the newest one written. A load and a re-read for the same
   // filter can be in flight together, and the one sent first must not overwrite the other's rows.
   readSent: { transactions: 0, signals: 0 },
