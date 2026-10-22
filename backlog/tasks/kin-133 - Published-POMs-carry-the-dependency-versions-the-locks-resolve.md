@@ -1,11 +1,11 @@
 ---
 id: KIN-133
 title: Published POMs carry the dependency versions the locks resolve
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 16:00'
-updated_date: '2026-10-22 16:36'
+updated_date: '2026-10-22 18:06'
 labels:
   - 'item:pom-version-mapping'
 dependencies: []
@@ -20,16 +20,16 @@ Fault F1 from the 1.4.0 release rehearsal (KIN-130). kotlin-stdlib is 2.3.20 in 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every published POM's dependency versions match the module's gradle.lockfile.
-- [ ] #2 A guard checks the POMs against the locks and is proven red on a POM that disagrees with its lock.
-- [ ] #3 The -android POMs are checked where the Android SDK exists (CI, or a machine with the SDK).
+- [x] #1 Every published POM's dependency versions match the module's gradle.lockfile.
+- [x] #2 A guard checks the POMs against the locks and is proven red on a POM that disagrees with its lock.
+- [x] #3 The -android POMs are checked where the Android SDK exists (CI, or a machine with the SDK).
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -51,4 +51,12 @@ R4 dependsOn wiring removed, ./gradlew clean :repo-checks:test -> both Published
 R5 macosArm64() added to inspector-noop -> configuration fails: ":inspector-noop publishes 'macosArm64', which no locked configuration covers. Add its configuration to `lockedConfigurations` and regenerate the locks." (Gradle attributes it to inspector-noop/build.gradle.kts line 190, the root block's configureEach.)
 
 Not verified here: ./gradlew build and build -Pinspector=off (no Android SDK on this machine; CI build and release-swap are the full run and the AC #3 evidence with the SDK). PublishedPomTest on Linux: no CI job runs :repo-checks:test on Linux (repo job runs no Gradle; build and release-swap are macOS); Docker is not running here.
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/pom-version-mapping-report.md (verdict: close yes, no blocking findings), PR #172, merge 9481339. Not verified by QA: PublishedPomTest on a Linux host (CI runs it only on macOS), and the builder's red proofs R2, R4 and R5 were not re-run.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA: :repo-checks:test --rerun 38 tests, 0 failed, PublishedPomTest's 2 included; kotlin-stdlib in inspector-core, inspector-core-jvm and inspector-stream-jvm is 2.3.20 at base and 2.3.21 (the lock's) at head, and the .module requires 2.3.21; red R1 (versionMapping line deleted) lists 30 mismatches, red R3 (lock hand-edited to 2.3.22) lists 5; the -android POMs are read by the test and PR #172's build and release-swap jobs (macOS, with the SDK) passed.
+<!-- SECTION:FINAL_SUMMARY:END -->

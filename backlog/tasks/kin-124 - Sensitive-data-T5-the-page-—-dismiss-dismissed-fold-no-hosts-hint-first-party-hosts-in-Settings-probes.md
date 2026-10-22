@@ -3,11 +3,11 @@ id: KIN-124
 title: >-
   Sensitive data T5: the page — dismiss, dismissed fold, no-hosts hint,
   first-party hosts in Settings, probes
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 09:40'
-updated_date: '2026-10-22 15:02'
+updated_date: '2026-10-22 18:06'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -27,22 +27,22 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The per-width spec holds at 1440, 1000, 600 and 400, live and in an export
-- [ ] #2 A dismissal needs a reason, reads the config afresh and sends only findingDismissals through controlFetch
-- [ ] #3 The finding moves to dismissed (n) only after the daemon's reply; restore removes the entry
-- [ ] #4 Dismiss and restore are hidden in an export; the fold is drawn there
-- [ ] #5 The page's Findings subtree never shows a planted raw value, live or exported
-- [ ] #6 Settings edits findings.sensitive.firstPartyHosts through Findings' configPatch(), which carries the rest of findings.sensitive as the file holds it
-- [ ] #7 The sensitive coverage line and every sensitive rule's line show on the Findings page; with no firstPartyHosts the page says nothing is raised for where data was sent and links Settings
-- [ ] #8 Probe fixture plants without new rows; every existing probe count unchanged except the new lines
-- [ ] #9 Each probe line was shown red, and the Pace neighbour too
+- [x] #1 The per-width spec holds at 1440, 1000, 600 and 400, live and in an export
+- [x] #2 A dismissal needs a reason, reads the config afresh and sends only findingDismissals through controlFetch
+- [x] #3 The finding moves to dismissed (n) only after the daemon's reply; restore removes the entry
+- [x] #4 Dismiss and restore are hidden in an export; the fold is drawn there
+- [x] #5 The page's Findings subtree never shows a planted raw value, live or exported
+- [x] #6 Settings edits findings.sensitive.firstPartyHosts through Findings' configPatch(), which carries the rest of findings.sensitive as the file holds it
+- [x] #7 The sensitive coverage line and every sensitive rule's line show on the Findings page; with no firstPartyHosts the page says nothing is raised for where data was sent and links Settings
+- [x] #8 Probe fixture plants without new rows; every existing probe count unchanged except the new lines
+- [x] #9 Each probe line was shown red, and the Pace neighbour too
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -87,4 +87,12 @@ Reach wording (PO ruling, PR #167), in the form above the reason, and in the con
 Chrome (measure-web-ui.js --only polish,shell,room,layout,first --base f4bbfbf): 236 readings on each side, head 0 failed. The only moves are the 12 new readings, from 'found nothing' on base to whole/fits. first rows huge 414 ms.
 Chrome reds: removing flex:none alone from .ev-masked stays green, because a no-wrap flex item's minimum is its whole text (the decision text says so). Removing flex:none and nowrap together -> 'findings 1440/1000/600 masked whole: cut (... not whole: •••• 5556)', served and export. 400 stacking rule removed -> 'findings 400 dismiss form fits: overflows (... stacked false ...)'.
 Daemon test 532/532 and repo-checks 36/36, both run with --rerun.
+
+Closed 2026-10-22 by the delivery tracker on QA's report qa/sensitive-data-detection-report.md (KIN-124 section; verdict: close yes, no blocking findings), PR #169, merge 445408e. Not blockers QA noted: the no-hosts hint repeats the end of the coverage line; restore leaves findingDismissals as [].
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA, detached copies at 445408e, real Chrome and the real daemon: #1 findings <w> masked whole and dismiss form fits at 1440/1000/600/400, served and exported; #2 empty reason sends nothing, a typed reason writes only the findingDismissals entry (grouped path), red with the reason requirement dropped: 'sensitive dismiss : NO - empty: disabled false'; #3 dismissed (1) after the reply, restore leaves findingDismissals [] and the fold gone; #4 'dismiss hidden in export : yes', fold and reason drawn in the export; #5 'sensitive masked on page : yes' and a grep of #page-findings finds none of the planted raw values live or exported; #6 'sensitive hosts patch : yes' and config.json keeps fieldNames beside firstPartyHosts; #7 coverage line and hint link to #/settings, hint gone once a host is set; #8 still 16 rows, live probe 289 to 299 and archive 56 to 58 (0 failed, match ci.yml), only the 12 new readings moved; #9 reach wording guard red twice and the reason red re-run, 'chip marks active' still true. :inspector-daemon:test 532/0, :repo-checks:test 36/0, check-web-static 133/0.
+<!-- SECTION:FINAL_SUMMARY:END -->
