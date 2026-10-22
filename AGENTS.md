@@ -161,7 +161,7 @@ to say it is stale.
 ./gradlew build                                   # everything, all targets
 node scripts/check-web-static.js                  # web audits + every mirror case; no daemon, no npm
 ./gradlew build -Pinspector=off                   # release swap
-./gradlew :repo-checks:test                       # module graph, twins, locks, markers, file budgets
+./gradlew :repo-checks:test                       # module graph, twins, locks, published POMs, markers, file budgets
 ./gradlew :repo-checks:test -Dinspector.modules.regenerate=true     # ... rewrite structure/modules.txt after a deliberate edge change
 ./gradlew :repo-checks:test -Dinspector.budgets.tighten=true        # ... lower or remove budgets after a file shrank; touches nothing else
 # regenerate every gradle.lockfile, on macOS, after a deliberate dependency change:

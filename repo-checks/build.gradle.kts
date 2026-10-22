@@ -84,4 +84,9 @@ tasks.test {
      */
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
+    /*
+     * `PublishedPomTest` reads the POMs from each module's build directory, so they are generated
+     * first. POMs only, which is about a second for all of them: no compilation and no artifact.
+     */
+    dependsOn(checkedProjects.map { it.tasks.withType<GenerateMavenPom>() })
 }

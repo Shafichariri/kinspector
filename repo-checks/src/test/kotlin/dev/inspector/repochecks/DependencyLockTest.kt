@@ -10,13 +10,10 @@ import kotlin.test.fail
  */
 class DependencyLockTest {
 
-    /** One `group:module:version=configurations` line, version and configurations dropped. */
-    private fun modulesIn(lockfile: File): List<String> = lockfile.readLines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("empty=") }
-        .map { it.substringBefore('=').substringBeforeLast(':') }
+    /** Each locked `group:module`, version and configurations dropped. */
+    private fun modulesIn(lockfile: File): List<String> = Lockfiles.entries(lockfile).map { it.coordinate }
 
-    private fun lockfileOf(projectPath: String) = File(RepoFiles.root, projectPath.removePrefix(":").replace(':', '/') + "/gradle.lockfile")
+    private fun lockfileOf(projectPath: String) = Lockfiles.of(projectPath)
 
     /**
      * A module that ships with no lockfile ships unlocked. STRICT catches a deleted lockfile only
