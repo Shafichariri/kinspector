@@ -2,8 +2,13 @@
 Moved here from the root `AGENTS.md` so the root stays an index; the delivery tracker keeps it current.
 
 **Last full count: 886 tests, 0 failures** across JVM, iOS simulator, Android host and the daemon. It is
-old, and **no full run has been counted since**; a branch-wide total by arithmetic is not claimed.
-Latest per-target counts from QA, each at the commit named and none a full-repository total:
+old, and **no full run including iOS and Android has been counted since**; a branch-wide total by arithmetic is not claimed.
+**Counted by the tracker on 2026-10-22 at `4343823`** (JUnit XML after `./gradlew :inspector-model:jvmTest :inspector-core:jvmTest :inspector-ui:jvmTest :inspector-noop-ui:jvmTest
+:inspector-noop:jvmTest :inspector-stream:jvmTest :inspector-noop-stream:jvmTest :inspector-daemon:test :repo-checks:test --rerun`, with this close's doc edits in the tree): **875 tests, 0 failed,
+0 skipped** across those nine JVM targets: model 162, core 76, ui 136, noop-ui 2, noop 4, noop-stream 2, stream 4, daemon 453, repo-checks 36. Not included: the Android host tests, the iOS
+simulator tests and the full `./gradlew build` (no Android SDK or working `xcrun` here; CI runs them). `node scripts/check-web-static.js` read 124 checks, 0 failed; neither
+live probe was run by the tracker (QA read `render-web-ui.js` 264 passed, 0 failed, 1 n/a and the archive probe 48 at `4343823`; `ci.yml` pins 264).
+Latest per-target counts from QA before that, each at the commit named and none a full-repository total:
 `:inspector-model:jvmTest` 162/0 and `:inspector-core:jvmTest` 76/0, 0 skipped, at `66c1bad` (QA, `item:host-port-everywhere`; 160 and 74 on its
 base `623c571`); `:inspector-daemon:test` 363/0 at `ffc9278` (QA, `item:mcp-probe-deadline-holds`) and again at `85e9552` (the tracker, JUnit XML, `:inspector-daemon:test --rerun`); 362/0 at `66c1bad` (360 at `74f5ca0`, QA, `item:guard-mcp-probe-cleanup`; 357 at `0a5a1c9`, QA, PR #115);
 `:inspector-ui:jvmTest` 136/0, `:inspector-noop-ui:jvmTest` 2/0, `:inspector-noop:jvmTest` 3/0, `:inspector-stream:jvmTest` 3/0,
@@ -161,6 +166,16 @@ detail and cost line. No QA round failed.
   `item:web-switch-clears-call-panes` (KIN-94 and KIN-95, PR #135, `4645c43`) and KIN-42 of `item:signals-query-one-rule` (PR #136, `1888380`): one round each.
   `item:control-boundary-advisory` is not among them and stays open.
 
+**Five more items are done, and two items are part done** (2026-10-22, on `main` at `4343823`; each ticket Done on QA's pass over detached copies, built without QA
+before merge, one engineer per item, by the maintainer's choice for this run). CI on each PR: `build`, `release-swap`, `repo` and `web` green. The push runs on `main`
+for `c608ec8`, `1796b96` (both succeeded), `e34542e` (in progress), `1ed50c1` (queued), `428745a`, `66ab63c` and `4343823` (in progress) were not all seen finishing.
+`docs/ROADMAP-DONE.md` has each finished item's detail and cost line. No QA round failed.
+- `item:docs-housekeeping-2026-10-22` (KIN-97) and `item:guard-expanded-unfolded-has-failures` (KIN-98), PR #143, `c608ec8`; `item:guard-measure-interrupt-cleans-up` (KIN-109),
+  PR #148, `1796b96`; `item:route-key-one-ipv6-host` (KIN-100), PR #142, `1ed50c1`; `item:web-live-signal-burst-bounded` (KIN-101), PR #144, `e34542e`: one round each.
+- **Part done, not closed:** `item:findings-payment-safety` PR A so far (KIN-111, KIN-112 in PR #151, `428745a`; KIN-113, KIN-114 in PR #152, `66ab63c`), with T4 (KIN-115) and
+  everything after it open; and `item:web-ui-polish` PR A part 1 (KIN-102, KIN-103, KIN-108 in PR #150, `4343823`), with A3 to A6 open. KIN-110 (PR #149) was not merged and
+  `item:guard-overview-band-reserved` stays open.
+
 ### First real-app findings (2026-08-16, a consuming app on an Android emulator)
 
 The first session recorded from a real app surfaced four defects. All are fixed; they are listed
@@ -185,6 +200,45 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Verified
 
+- **Findings (payment safety), daemon side, PR A so far, against a real daemon, a real `inspector mcp` and the CLI.** At `66ab63c` (QA, `item:findings-payment-safety`: KIN-111 to
+  KIN-114, base `1ed50c1`): one live session with a case per rule and two near-misses gave R1 1 (on `::1:8080` and `[::1]:8080`, one route), R2 1, R3 1, R4 1, R5 4, R6 1, none for the
+  3001 ms near-miss and none for `UnknownHostException`; 9 findings in 15 rows (3 high, 5 medium, 1 info), `13 mutation calls looked at; 6 request bodies compared`. `GET …/findings`,
+  MCP `list_findings` and `inspector findings` return the same ids in the same order; an unknown session is 404, `?category=nope` is 400, an unknown MCP category is `isError`, and
+  `--category nope` exits 1. Edits to `config.json`'s `findings` key (R5 disabled, R1 severity `medium`) change the next read with no restart, while `routeTemplates` in the same file
+  stays unapplied until a restart; a broken hand edit keeps the last good settings and sets `configError`. `grep` for the planted key values, the error text and the address in it
+  over the REST reply: 0 matches. Daemon tests 453/0 and `:repo-checks:test` 36/0 (`--rerun`). Red by QA: the cursor past an incomplete line (`RouteStatsServiceTest`, expected 4 but
+  was 3, the only failure of 52); `isRedirect` false (fails `RouteStatsTest`, `StatsRouteTest` and `PaymentRulesTest`: the rule is shared); the truncated state removed (fails
+  `BodyShapeTest` and R2); R1's chain `>` to `>=`; `NEVER_SENT` emptied; retries read as `attempt > 1` (a 3xx predecessor then counts); settings cached after the first parse
+  (`FindingsServiceTest`, `FindingSettingsSourceTest`); the engine's `isMasked` check bypassed (`FindingMaskGuardTest`: `expected: <••••> but was: <4111111111111111>`).
+  **The payments fixture's counts:** the code asserts R1 to R6 = 1, 1, 1, 1, 5, 1, 13 mutation calls, 12 flagged rows and 2 truncated bodies, and QA counted the design's own table
+  to the same 13 and 12; the design note's 15 and 14 (and KIN-114's sixth criterion) are arithmetic errors in the note, not in the code.
+- **Web UI polish, PR A part 1, in headless Chrome and jsdom.** At `4343823` (QA, `item:web-ui-polish`: KIN-102, KIN-103, KIN-108, base `66ab63c`): at 1440, 1000 and 400 px, live and
+  exported, dark and light, `#detail-full`, `#detail-hide`, `#drawer-close`, `#more-button` and the Sessions row `✕` are at least 24×24 with SVG at least 14 px (12 `polish <w> icon
+  targets` readings; `26x24 svg 16x16`; base `small` on all 12) and red with `.btn.btn-icon`'s `min-width` and `min-height` removed; every `.btn` on Stats, Sessions, Processes and
+  Settings is at least 24 px tall (27 buttons on 4 pages), `.settings-note` is at most 72ch (widest 544 px), the density select shows `comfortable` whole (112 px for 99 px; red with
+  `width: 84px` back, `82px for 99px`), and Sessions rows lead with the start time (`session row time : yes`). `--only sheet --out <dir>` wrote 120 PNGs and an `index.html`
+  referencing all 120. Counts, base to head: `check-web-static.js` 120 to 124/0, `render-web-ui.js` 263 to 264 passed, 0 failed, 1 n/a (`ci.yml` pins 264), archive probe 48,
+  `measure-web-ui.js --only polish,room,shell --base` 80 readings with 19 failing at base and 0 at head, only the polish readings moved; `room 1440 bands list: top 145px`
+  unchanged. `:repo-checks:test --rerun` green. Not the design: the contact sheet is with the maintainer.
+- **An IPv6 server reached by both clients is one route, in the daemon's tests, a real daemon, `inspector mcp` and headless Chrome.** At `1ed50c1` (QA, `item:route-key-one-ipv6-host`):
+  a session of 3 × `::1` and 3 × `[::1]` on port 8080, `/v6`, plus one `::1` on 9090 reads one row of 6 calls in `GET …/stats` (base two rows of 3), MCP `route_stats` and the Markdown
+  Routes table, and one row naming `[::1]:8080` on the Stats page at 1440 and 400 (4 rows); the row's `host` is the bare `::1` and the page and Markdown still draw `[::1]:8080`.
+  `method:GET host:::1 path:*/v6` opens 7 calls (the six and the port-9090 superset) in REST and in Chrome; a bracketed non-IPv6 host keys as before. Red by QA: `keyOf` on the stored
+  host fails 5 of 61, one per surface; the `':' in lower` condition dropped fails `RouteTemplatesTest`. Daemon and `:repo-checks` tests 368/0 (`--rerun`).
+- **A burst of live signals or markers redraws a bounded number of times, in headless Chrome 131 against a real daemon, and in jsdom.** At `e34542e` (QA,
+  `item:web-live-signal-burst-bounded`): 100 signals over 1190 ms cost 5 redraws of each of the timeline, the waterfall and the path and 5 `/current` reads (bound 6; base 100 of
+  each), 50 markers over 1075 ms cost 5 timeline and 5 path redraws (base 50); on the path view 30 screen signals cost `renderPath` 2 and 30 payload reads (base 60), in the state
+  browser 40 state signals cost `renderBrowser` 2 (base 40); paused, or for another session, 0 redraws and 0 `/current` reads. Red with base's `05-network.js`: both Chrome readings
+  and 4 of 120 static lines fail. Static 116 to 120/0; the live probe stays 263.
+- **Interrupting a measure run leaves nothing behind, on macOS, with the signal sent to the node process alone.** At `1796b96` (QA, `item:guard-measure-interrupt-cleans-up`): SIGTERM and
+  SIGINT mid-case (`layout,run,live`, `traffic`, and the moment Chrome spawned) exit 143 and 130 within 2 s with 0 processes naming the temp dir left and the dir gone, once with
+  `--base 85e9552` (9 processes started); `--keep` keeps only the dir; each log holds one `interrupted by SIG…` line and no readings. At `85e9552` the same signals left 18 and 26
+  processes and 45M and 83M of temp dir. An uninterrupted `--only layout,traffic` read 140 readings, 0 failed.
+- **`expanded unfolded` judges a visit that holds failures, in jsdom against the CI fixture.** At `c608ec8` (QA, `item:guard-expanded-unfolded-has-failures`): the probe opens Checkout, chosen
+  from the daemon's rows, and reads `yes (1 expanded line, 4 failures drawn in Checkout)`, 263 passed, 0 failed, 1 n/a (base `yes (1 expanded line, 0 failures drawn)`); with the status
+  span's failure class stripped it reads `NO - an expanded line hides a failure (Checkout)` (base stays green), with the `pv-failed` header also removed `NO - Checkout holds 4 failures,
+  its open line draws 0`; a fixture with every 5xx set to 200 reads `n/a (no visit holds a failure)`. `web-ui.md` names #133's Chrome cases and no longer states "29 breaks"
+  (`item:docs-housekeeping-2026-10-22`, same PR).
 - **A silent MCP child no longer hangs the probe and is left running, in the daemon's JVM tests.** At `ffc9278` (QA, `item:mcp-probe-deadline-holds`): `McpProbeCleanupTest`'s
   silent stub (stdout held open, nothing written, EOF ignored) makes `probe(timeoutMs = 1500)` return in 3.514 s with `did not answer a tools/list within 1500ms`, under
   the test's own 6.5 s bound, and the child is dead afterwards. Red by QA: the blocking `readLine` back (`had not returned after 6500ms: its deadline waits on a read the
@@ -454,6 +508,20 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 ### Not verified
 
+- **Gaps behind the items closed and part done on 2026-10-22 (the third close).** *Local machine and CI:* no Android SDK on the QA machine, so the full `./gradlew build` and Android
+  rest on CI's jobs, which passed on every PR; the push runs on `main` for `e34542e`, `1ed50c1`, `428745a`, `66ab63c` and `4343823` were not seen finishing. Linux ran only in CI.
+  *`item:web-live-signal-burst-bounded`:* a lone signal or marker reaches the timeline 277 to 281 ms after arriving (the 250 ms timer plus the render), strictly over "within
+  250 ms", as calls are; **the call branch still redraws the waterfall and the path once per call**, so the bound calls meet holds for the timeline and the glance only (unplaced);
+  the marker branch redraws `renderMarkers` and `renderList` per marker and the signal branch `renderTabs` per signal, by design. *`item:guard-measure-interrupt-cleans-up`:* a real
+  terminal Ctrl-C (it signals the whole foreground group; the harness signalled the node process alone), Linux, a signal during the probe fixture's gradle write, the small
+  `stats-export-*` and `room-export-*` directories that `shell` and `room` leave outside the run's temp dir, and the `if (run.interrupted) return 2` guard on its own (never reached).
+  *`item:guard-expanded-unfolded-has-failures`:* the same-millisecond tie branch of `failingVisit`; `measure-web-ui.js` and `./gradlew build` were not run for it. *`item:route-key-one-ipv6-host`:*
+  a real dual-client capture; zone ids (a bracketed `[fe80::1%25en0]` from Ktor would be stripped, untested). *`item:findings-payment-safety` (PR A so far):* there is no web, export or
+  HAR surface yet (T4 to T8); the 200-item caps, the row-1203 fold, the PUT refusals, the custom rule id and the omitted-body red proof are builder-tested only, passing in the suite and
+  not re-run red by QA; Linux; settings are re-read on the next findings read while every other `config.json` key still waits for a restart, and `daemon-and-mcp.md` line 72 words that
+  ambiguously (a nit). *`item:web-ui-polish` (PR A part 1):* the design has not been looked at (the contact sheet is with the maintainer); `icon target css` and `icon controls svg`
+  were shown red by the builder and not re-run by QA; the Settings page reads `0 row(s) in this session` on a direct load of `#/settings` (A5's, not fixed); an export offers six of the
+  served side's nine views, by design.
 - **Gaps behind the five items closed on 2026-10-22 (the second close).** *Local machine and CI:* no Android SDK on the QA or tracker machine, so the full `./gradlew build` and
   Android rest on CI's jobs, which passed on every PR; the push runs on `main` for `ffc9278`, `95b4de4` and `85e9552` were in progress when QA looked. Linux and Windows ran only through
   CI. *`item:web-switch-clears-call-panes`:* Safari and Firefox (only jsdom and headless Chrome ran it); the delete and clear path (`afterSessionChange`) has no probe of its own and
@@ -465,19 +533,18 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   `min-height` rule is unguarded**: with `.axis-hint.axis-reading { min-height: 24px }` removed, `measure-web-ui.js --only first` stays green (`copy lands huge`, row moved 44 px,
   under its 48 px bound), so "rows move only by the scope bar" is held by the bound and not by an exact reading; the Chrome readings were taken by QA on the merged tree, after the
   builder's working tree was lost and restored. *`item:guard-measure-chrome-exit-fails`:* Linux (only macOS Chrome was killed); a wedged renderer inside a real case (only a scratch
-  driver's never-resolving command exercised the deadline); a kill during a `--base` run; Ctrl-C or SIGTERM sent to `measure-web-ui.js` itself still skips its `finally` and leaves the
-  daemons (unplaced). *`item:mcp-probe-deadline-holds`:* a real wedged `inspector mcp` behind the web UI's button (only the stub ran); a write to a child that never reads is still
+  driver's never-resolving command exercised the deadline); a kill during a `--base` run; Ctrl-C or SIGTERM sent to `measure-web-ui.js` itself left the
+  daemons, which `item:guard-measure-interrupt-cleans-up` fixed (Verified above). *`item:mcp-probe-deadline-holds`:* a real wedged `inspector mcp` behind the web UI's button (only the stub ran); a write to a child that never reads is still
   unbounded, though the probe writes two short lines; the 5 s margin on the test's bound covers a JVM start and may need watching on a slow CI runner. *`item:docs-housekeeping-2026-10-21`:*
   a relative `--data` shows a relative path, which is the daemon's own value.
 - **Gaps behind the six items closed on 2026-10-22.** *Local machine and CI:* no Android SDK and no working `xcrun` on the QA machine, so the full `./gradlew build`,
   `-Pinspector=off`, the Android targets, the iOS test links and the klib half of `check-release-clean.sh` for these items rest on CI's `build` and `release-swap`
   jobs, which passed on every PR; the release scan was run locally on the JVM jars only (self-test found the canary, the plain run found nothing). The push runs on
   `main` were not seen finishing. *`measure-web-ui.js` is not in CI*, so `--only traffic`, the shell, room and topbar readings and the `routes` fixture run when
-  someone runs them; CI runs `check-web-static.js`, `render-web-ui.js` and the archive probe. *`item:guard-probe-finds-nothing-fails`:* `expanded unfolded` opens Home,
-  which draws no failure on the fixture (`1 expanded line, 0 failures drawn`), so the rule's expanded half is exercised weakly, and making it open the visit that holds
-  a failure is unplaced; these were read from the code and not run red: `rail is navigation`, `route pages`, `exportMenu`, `sort flip restores`, `map matches log`,
+  someone runs them; CI runs `check-web-static.js`, `render-web-ui.js` and the archive probe. *`item:guard-probe-finds-nothing-fails`:* `expanded unfolded` opened Home
+  and drew no failure, which KIN-98 fixed (Verified above); these were read from the code and not run red: `rail is navigation`, `route pages`, `exportMenu`, `sort flip restores`, `map matches log`,
   `start times shown`, `duplicate badges`, `unanchored chips`, `hop-by-hop stripped`, `onTop`'s `n/a` branch and the socket half of `traffic reaches`; the decision text in
-  `web-ui.md` does not yet name the Chrome cases fixed in #133. *`item:guard-live-traffic-driver`:* pause and resume, reconnect, 400px and spaces-only have no committed
+  `web-ui.md` names the Chrome cases fixed in #133 since KIN-97. *`item:guard-live-traffic-driver`:* pause and resume, reconnect, 400px and spaces-only have no committed
   check; `measure-cdp.js` fails a run within about a second when Chrome exits or a DevTools socket closes mid-case, naming the case, and bounds each command at 30 s (KIN-99); the burst bound for a burst longer than a second was
   never exercised. *`item:guard-mcp-probe-cleanup`:* an MCP probe whose child keeps stdout open and writes nothing now returns at its timeout (`item:mcp-probe-deadline-holds`, Verified); Linux ran only in CI, and which operating system each CI job used was not checked.
   *`item:web-stats-route-breaks-whole`:* headless Chrome only, and the base's break count depends on fonts (29 for the builder, 30 for QA); one over-long route widens the
@@ -525,9 +592,10 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 - **The R12 proof command in the phase I design note** (`:inspector-core:jvmTest :inspector-stream:jvmTest
   -Dinspector.api.regenerate=true --rerun`) re-ran stream only. The result holds when run with `--rerun` after each
   task; the note is not in the repository.
-- **IPv6 hosts are bracketed in `url`, labels and the Stats page, but the `host:` filter and the route key still use the stored host**, which is `::1` from OkHttp
-  and `[::1]` from Ktor. One IPv6 server reached by both clients draws as two identical-looking route rows on the Stats page and in the Markdown routes table
-  (QA reproduced it at `66c1bad` and at `7b37d7a`; `byHost` merges them). Zone ids (`fe80::1%en0`) were not handled. The IPv6 capture tests ran on QA's Mac; the builder
+- **IPv6 hosts are bracketed in `url`, labels and the Stats page, but the `host:` filter still uses the stored host**, which is `::1` from OkHttp
+  and `[::1]` from Ktor. The route key no longer does: one IPv6 server reached by both clients is one route row (Verified above, `item:route-key-one-ipv6-host`, `1ed50c1`; QA
+  had reproduced the two rows at `66c1bad` and `7b37d7a`). A real dual-client capture against `[::1]` was not run for it: the session held archived rows in both stored
+  forms. Zone ids (`fe80::1%en0`) were not handled. The IPv6 capture tests ran on QA's Mac; the builder
   reports no skip line in CI's log, which QA did not check, and a runner without an IPv6 loopback reports them skipped.
 - **A stretch under a filter holding some loaded rows and some older unloaded matches** says `at least 10 calls
   hidden` and not that more matches are older. At 400 px the header count is off-screen; at 1000 px the closed
@@ -536,8 +604,8 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
 
 - **`item:web-live-rows-filtered` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it.
   `-Pinspector=off` was not run (no consumer signature changed). Not on CI: the branch is not pushed.
-- **The burst bound counts re-read requests only.** Each live signal also reads `/current`, with or
-  without a filter (50 signals gave 53 requests in total); that predates the item.
+- **The burst bound counts re-read requests only.** Each live signal also read `/current`, with or
+  without a filter (50 signals gave 53 requests in total); that predates the item, and `item:web-live-signal-burst-bounded` bounded the signal case (Verified above: 100 signals, 5 `/current` reads).
 - **The probe's restore has no guard of its own.** Deleting the restore of `state.lastCaptureTs` and
   `state.expandedVisits` alone leaves 197/0; a later probe that opens a path visit could empty
   `failures unfolded` again without anything failing.
@@ -555,8 +623,8 @@ only the REST one was tested.** Any new field on `NetworkTransaction` needs a ch
   alike (ROADMAP 1a (e)).
 - **`item:web-live-calls-reach-every-pane` in Safari, Firefox and on a phone**; only headless Chrome 131 ran it. **An open run staying
   open under a live call** was checked in jsdom only (`socket run stays open`), and that line stays green with the redraw removed, so
-  it guards the follow rule, not the redraw. **A live signal or marker** still redraws the timeline once per message, so a signal
-  burst is unbounded the way calls were; the builder proposed routing both through `drawLive`, and it is unplaced. **The full
+  it guards the follow rule, not the redraw. **A live signal or marker** redrew the timeline once per message, so a signal
+  burst was unbounded the way calls were; `item:web-live-signal-burst-bounded` routed both through `drawLive` (Verified above). **The full
   `./gradlew build`** was not run on the builder or QA machine (no Android SDK); CI ran it on both PRs.
 - **Follow behaviour on a live socket in Safari, Firefox, or on a real phone-width browser.** Only
   headless Chrome 131 was driven, at 1440 and 400.

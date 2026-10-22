@@ -3,11 +3,11 @@ id: KIN-103
 title: >-
   Polish A2: page documents — 24px controls, prose at 72ch, the density select
   whole, Sessions rows lead with the start time
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 08:05'
+updated_date: '2026-10-22 09:31'
 labels:
   - 'item:web-ui-polish'
 dependencies:
@@ -23,14 +23,14 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A2 criteria hold, each guard shown red
+- [x] #1 The note's §9 A2 criteria hold, each guard shown red
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -54,3 +54,9 @@ Static (122 -> 124): page targets css red with the rule removed: 'NO - found no 
 Live probe (render-web-ui.js 263 -> 264, UI_EXPECT_CHECKS raised): session row time, wired from lib/shell-probes.js probeSessionsPage so render-web-ui.js does not grow (budget 2354 untouched). Red with [app, when] order: 'NO - 2026-01-01T09-00-00_probe_ci_debug leads with session-row-app "com.example.projectx", not the time "11:00 Jan 1"; ...'; red with errors blank: 'NO - 2025-12-31T09-00-00_probe-long_ci_debug has no errors and its cell reads ""'. Pace rule, same run: 'sessions folder: NO - the note says ...' (262 passed, 2 failed), restored. Archive 48 -> 48.
 Chrome: polish 1440/400 page targets (27 buttons), polish 1440 prose width (9 notes, widest 544 = 72ch), polish 1440/400 density whole ('comfortable' 112px for 99px), polish 1440/400 session time whole. Red in one run with the rule removed, the cap removed, width 84px back and the order reversed: 7 failed ('page-sessions preset-keep 19px', 'widest 1232px against a 72ch of 544px', '82px for 99px', 'com.example.projectx not first'). Empty scans fail ('NO - found no ...'). shell <w> page <name> fits green at 1440/1000/600/400.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #150 merge 4343823; item stays open. Chrome: 'polish 1440/400 page targets: at least 24px (27 buttons on 4 pages)' (base short); 'polish 1440 prose width: at most 72ch (9 notes, widest 544px against a 72ch of 544px)' (base wider than 72ch); density select '"comfortable": 112px for 99px' at 1440 and 400, red re-run with width: 84px put back reads 'cut ("comfortable": 82px for 99px)'; 'session time whole: whole, first (2 rows)' at 1440 and 400; live probe 'session row time : yes (2 rows lead with their start time; 1 error-free read 0)', render-web-ui.js 264 passed, 0 failed, 1 n/a matching ci.yml 264; shell <w> page <name> fits unchanged at all four widths; web-ui.md:707 carries the picker sentence. measure-web-ui.js --only polish,room,shell --base: base 80 readings 19 failed, head 80 readings 0 failed, only the 19 polish readings moved. Verdict: close yes.
+<!-- SECTION:FINAL_SUMMARY:END -->

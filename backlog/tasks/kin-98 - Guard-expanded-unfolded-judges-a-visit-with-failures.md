@@ -1,11 +1,11 @@
 ---
 id: KIN-98
 title: 'Guard: expanded unfolded judges a visit with failures'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 05:13'
-updated_date: '2026-10-22 06:06'
+updated_date: '2026-10-22 09:31'
 labels:
   - 'item:guard-expanded-unfolded-has-failures'
 dependencies: []
@@ -20,14 +20,14 @@ Ordered 2026-10-22 by the maintainer on the product owner's proposal. Acceptance
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every acceptance criterion of the roadmap item labelled item:guard-expanded-unfolded-has-failures in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
+- [x] #1 Every acceptance criterion of the roadmap item labelled item:guard-expanded-unfolded-has-failures in docs/ROADMAP.md holds, each with a check shown red when its rule is broken
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
@@ -52,3 +52,9 @@ Pace: KIN-55 leak (live-filter-probes.js lines restoring expandedVisits commente
 Count: UI_EXPECT_CHECKS 262 unmoved (yes stays yes); ci.yml untouched.
 check-web-static.js 116/0; :repo-checks:test --rerun green. Ready for QA.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug), PR #143 merge c608ec8 on detached copies. Green on the CI fixture: 'station opens line : yes (Checkout)', 'expanded unfolded : yes (1 expanded line, 4 failures drawn in Checkout)', 263 passed, 0 failed, 1 n/a (matches ci.yml 263); base 85e9552 read 'yes (1 expanded line, 0 failures drawn)'. Red: pathItem's status span without its failure class gives 'expanded unfolded : NO - an expanded line hides a failure (Checkout)', 262/1, exit 1; the same mutation on base stays green. Daemon-count branch reached by keeping that mutation and removing the pv-failed header (NOT by the hand-over's isFailure=>false recipe, which reaches the hiding branch): 'NO - Checkout holds 4 failures, its open line draws 0'. n/a: fixture with every 5xx set to 200 gives 'expanded unfolded : n/a (no visit holds a failure)' and the station still opens (Home). KIN-55 leak still turns 'failures unfolded' red. render-web-ui.js stays at 2354 lines; INSPECTOR_UI_EXPECT_CHECKS unmoved. Not exercised: the same-millisecond tie branch of failingVisit. Verdict: close yes.
+<!-- SECTION:FINAL_SUMMARY:END -->
