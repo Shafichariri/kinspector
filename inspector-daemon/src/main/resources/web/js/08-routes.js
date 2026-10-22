@@ -149,8 +149,7 @@ function enterPage(page) {
     loadServerInfo();
   }
   if (page === 'settings') {
-    applyDuplicateWindow(state.duplicateWindowMs);   // refreshes the count for this session
-    applyEndpointLimit(state.endpointLimit);
+    paintSettingsCounts();   // for this session; the preferences were applied when they were set
     loadConfig();
   }
 }

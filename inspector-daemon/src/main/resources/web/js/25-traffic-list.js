@@ -306,12 +306,8 @@ function renderListEmpty() {
   } else if (state.filter && inSession !== 0) {
     node.append('no calls match — ');
     node.appendChild(clearFilterButton());
-  } else if (!state.sessionId) {
-    node.textContent = 'waiting for an app with inspector-stream to connect';
-  } else if ((state.recording || []).includes(state.sessionId)) {
-    node.textContent = 'the app is connected — no calls yet';
   } else {
-    node.textContent = 'no calls were recorded in this session';
+    node.textContent = noCallsWhy();
   }
 }
 

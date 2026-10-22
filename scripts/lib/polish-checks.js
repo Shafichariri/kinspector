@@ -199,6 +199,49 @@ function checkTypingTarget(scripts) {
   return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${takes.map(name).join(', ')} take typing; ${not.map(name).join(', ')} do not)`;
 }
 
+/** The body of [name]'s declaration in [text], to the first line that closes it at column 0. */
+function body(text, name) {
+  const start = text.search(new RegExp(`^(?:async )?function ${name}\\(`, 'm'));
+  if (start === -1) return null;
+  const end = text.indexOf('\n}', start);
+  return end === -1 ? null : text.slice(start, end);
+}
+
+/**
+ * Why there are no calls is said once: `noCallsWhy` in the real `15-session-data.js` gives the list's
+ * three sentences, a session that ended without `endedAt` (a killed daemon) included, and both the
+ * list's empty state and the Stats page's ask it. Stats had its own copy and said "yet" of an ended
+ * session, the claim `web-ui.md` took out of the list.
+ */
+function checkNoCallsWhy(scripts) {
+  const run = (state) => {
+    const { noCallsWhy } = runFile(scripts, 'js/15-session-data.js', { state });
+    if (typeof noCallsWhy !== 'function') throw new HarnessError('noCallsWhy is not declared in js/15-session-data.js; update polish-checks.js');
+    return noCallsWhy();
+  };
+  const cases = [
+    [{ sessionId: null, recording: [] }, 'waiting for an app with inspector-stream to connect', 'no session'],
+    [{ sessionId: 'S', recording: ['S'] }, 'the app is connected — no calls yet', 'recording'],
+    [{ sessionId: 'S', recording: ['T'] }, 'no calls were recorded in this session', 'ended, no endedAt, another recording'],
+    [{ sessionId: 'S', recording: undefined }, 'no calls were recorded in this session', 'recording not read yet'],
+  ];
+  const wrong = cases.map(([state, due, what]) => [run(state), due, what]).filter(([got, due]) => got !== due)
+    .map(([got, due, what]) => `${what}: "${got}", not "${due}"`);
+  const callers = [['js/25-traffic-list.js', 'renderListEmpty'], ['js/95-stats.js', 'statsEmptyWhy']];
+  for (const [file, name] of callers) {
+    const source = scripts.find((s) => s.file === file);
+    if (!source) throw new HarnessError(`${file} is not in web/scripts.txt; update polish-checks.js`);
+    const text = body(source.text, name);
+    if (text === null) wrong.push(`found no ${name} in ${file}`);
+    else if (!/\bnoCallsWhy\(\)/.test(text)) wrong.push(`${name} does not ask noCallsWhy()`);
+    // A second copy of a sentence is the drift this rule exists to stop, worded the old way or the new.
+    for (const said of [...cases.map(([, due]) => due), 'No calls in this session yet', 'No session yet']) {
+      if (text && text.includes(said)) wrong.push(`${name} says "${said}" itself`);
+    }
+  }
+  return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${cases.length} sessions; ${callers.map(([, n]) => n).join(' and ')} ask it and word none itself)`;
+}
+
 /** The lines `check-web-static.js` prints under `--- polish ---`. */
 function checkPolish(scripts, styles) {
   return [
@@ -208,6 +251,7 @@ function checkPolish(scripts, styles) {
     ['icon controls svg', auditIconControls(scripts)],
     ['page targets css', auditPageDoc(styles, '.page-doc .btn', 'min-height', '--target-min', (v) => /^(\d+)px$/.test(v) && parseFloat(v) >= 24)],
     ['prose width css', auditPageDoc(styles, '.page-doc .settings-note', 'max-width', '--prose-max', (v) => /^\d+ch$/.test(v) && parseFloat(v) <= 80)],
+    ['no calls why', checkNoCallsWhy(scripts)],
   ];
 }
 

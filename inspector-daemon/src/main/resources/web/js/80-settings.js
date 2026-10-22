@@ -8,12 +8,26 @@ function applyDuplicateWindow(valueMs) {
   state.duplicateWindowMs = ms;
   prefs.set('inspector.duplicateWindowMs', String(ms));
   $('dup-window').value = ms;
+  paintSettingsCounts();
+  renderList();
+}
+
+/**
+ * The repeat and endpoint counts, from the session's calls and the preferences as they stand, writing
+ * no preference. Drawn on entry and again once a load lands the calls (`callsLanded`): a first load
+ * straight to `#/settings` enters before they are read, and said there were no repeats and no endpoints.
+ */
+function paintSettingsCounts() {
+  const ms = state.duplicateWindowMs;
   // The unfiltered set, matching what the list actually highlights. Counting the filtered rows
   // instead made the summary read 0 while the list showed two tinted rows.
-  $('dup-summary').textContent = ms === 0
-    ? 'off'
-    : `${computeDuplicates(state.allTransactions, ms).size} row(s) in this session`;
-  renderList();
+  const repeats = ms === 0 ? 0 : computeDuplicates(state.allTransactions, ms).size;
+  $('dup-summary').textContent = ms === 0 ? 'off' : `${repeats} ${repeats === 1 ? 'row' : 'rows'} in this session`;
+  const limit = state.endpointLimit;
+  const total = new Set(state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean)).size;
+  $('endpoint-summary').textContent = limit === 0
+    ? 'hidden'
+    : `showing ${Math.min(limit, total)} of ${total} ${total === 1 ? 'endpoint' : 'endpoints'} in this session`;
 }
 
 // --- settings: row density ------------------------------------------------------------------
@@ -48,13 +62,7 @@ function applyEndpointLimit(value) {
   state.endpointLimit = limit;
   prefs.set('inspector.endpointChipLimit', String(limit));
   $('endpoint-limit').value = limit;
-
-  const total = new Set(
-    state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean),
-  ).size;
-  $('endpoint-summary').textContent = limit === 0
-    ? 'hidden'
-    : `showing ${Math.min(limit, total)} of ${total} in this session`;
+  paintSettingsCounts();
   renderEndpointChips();
 }
 
@@ -205,6 +213,7 @@ async function saveConfig() {
 }
 
 function wireSettingsPage() {
+  callsLanded.push(() => { if (currentPage() === 'settings') paintSettingsCounts(); });
   $('dup-window').value = state.duplicateWindowMs;
   $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
   $('density').addEventListener('change', (e) => setDensity(e.target.value));
