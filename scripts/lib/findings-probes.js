@@ -1,4 +1,5 @@
-/* Probes of the Findings page, live for `render-web-ui.js` and offline for `render-web-ui-archive.js`.
+/* Probes of the Findings page and the Settings page's findings fieldset, live for `render-web-ui.js`
+ * and offline for `render-web-ui-archive.js`.
  *
  * The page computes nothing: every rule, count, message, masked hint and coverage line is the
  * daemon's. So the live probe compares what the page drew with what `GET …/findings` answers the
@@ -27,6 +28,7 @@ const FINDINGS_LABELS = [
   'findings rail', 'findings none', 'findings payments', 'findings coverage', 'findings txn link',
   'findings anchor', 'findings no value', 'findings live asks', 'findings restored',
 ];
+const SETTINGS_LABELS = ['findings settings drawn', 'findings settings patch', 'findings settings saved', 'findings settings refused'];
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const pageShown = (doc, page) => !doc.getElementById(`page-${page}`).hidden;
@@ -233,6 +235,110 @@ async function probeFindingsPage(ctx) {
   return [...out];
 }
 
+/** Two JSON values equal whatever their keys' order. */
+function sameJson(a, b) {
+  const canon = (v) => (Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object' ? Object.keys(v).sort().reduce((o, k) => ({ ...o, [k]: canon(v[k]) }), {}) : v);
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+}
+
+/**
+ * The Settings page's Findings fieldset, with every `PUT /api/config` stubbed here (the page's own
+ * guard is not what keeps the daemon's file untouched). The page is given a file whose `findings`
+ * holds a sub-object the fieldset does not draw, a rule override and a payment field; the inputs then
+ * put that rule back to its defaults, change another rule's severity, turn a third off and add a
+ * payment path. The one body sent must hold exactly those, the other sub-object as the file had it.
+ * Leaves the page on Traffic with the config read again from the daemon.
+ */
+async function probeFindingsSettings(ctx) {
+  const { window, doc, ORIGIN } = ctx;
+  const out = new Map(SETTINGS_LABELS.map((label) => [label, 'n/a (not reached)']));
+  const config = await (await fetch(`${ORIGIN}/api/config`)).json();
+  const effective = config.effective && config.effective.findings;
+  if (!effective) return SETTINGS_LABELS.map((label) => [label, 'NO - the daemon reports no effective.findings, so this checked nothing']);
+  const sent = [];
+  let answer = { status: 200, body: config };
+  const realFetch = window.fetch;
+  window.fetch = (path, init) => {
+    if (init && init.method === 'PUT' && new URL(path, ORIGIN).pathname === '/api/config') {
+      sent.push(JSON.parse(init.body));
+      const { status, body } = answer;
+      return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+    }
+    return realFetch(path, init);
+  };
+  const box = doc.getElementById('findings-config');
+  const status = doc.getElementById('config-status');
+  const save = async () => {
+    doc.getElementById('config-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => !/saving/.test(status.textContent), 3000);
+    await pause(100);
+  };
+  try {
+    // Opening Settings reads the config; a save made before that read lands would be drawn over by it.
+    const earlier = window.eval('configReply');
+    await window.navigate({ page: 'settings' });
+    await waitFor(() => window.eval('configReply') !== earlier && !box.hidden && box.querySelectorAll('[data-rule-enabled]').length > 0, 5000);
+    const rows = [...box.querySelectorAll('tbody tr')];
+    const whole = rows.filter((tr) => tr.querySelector('input[type="checkbox"][data-rule-enabled]') && tr.querySelector('select[data-rule-severity]'));
+    const defaults = whole.filter((tr) => {
+      const rule = effective.rules.find((r) => r.id === tr.dataset.rule);
+      const option = [...tr.querySelectorAll('option')].find((o) => o.value === (rule && rule.defaultSeverity));
+      return option && option.textContent.endsWith('(default)');
+    });
+    const payment = ['idempotencyHeaders', 'paymentPaths', 'ignorePaths', 'duplicateWindowMs', 'resubmitWindowMs']
+      .filter((key) => box.querySelector(`[data-payment="${key}"]`));
+    out.set('findings settings drawn', whole.length === effective.rules.length && rows.length === whole.length && defaults.length === whole.length && payment.length === 5
+      ? `yes (${whole.length} rules, each with an on box and a severity select naming its default; ${payment.length} payment settings)`
+      : !rows.length ? 'NO - found no rule row, so this checked nothing'
+        : `NO - ${whole.length} of ${rows.length} rows whole, ${effective.rules.length} rules in effective.findings; ${defaults.length} name the default; payment fields: ${payment.join(', ')}`);
+
+    const [dup, keyed, retried] = ['payment.duplicate-mutation', 'payment.retry-without-key', 'payment.retry-with-key'];
+    const file = { findings: { sensitive: { probe: ['kept as written'] }, rules: { [keyed]: { severity: 'info' } }, payment: { resubmitWindowMs: 60000 } } };
+    window.eval(`configReply.file = ${JSON.stringify(file)}; renderConfig(configReply);`);
+    const pick = (sel) => box.querySelector(sel);
+    const inputs = [`[data-rule-severity="${dup}"]`, `[data-rule-severity="${keyed}"]`, `[data-rule-enabled="${retried}"]`, '[data-payment="paymentPaths"]'];
+    const lacking = inputs.filter((sel) => !pick(sel));
+    if (lacking.length) {
+      for (const label of SETTINGS_LABELS.slice(1)) out.set(label, `NO - the fieldset has no ${lacking.join(', ')}, so no save was tried`);
+      return [...out];
+    }
+    pick(`[data-rule-severity="${dup}"]`).value = 'medium';
+    pick(`[data-rule-severity="${keyed}"]`).value = 'high';
+    pick(`[data-rule-enabled="${retried}"]`).checked = false;
+    const paths = pick('[data-payment="paymentPaths"]');
+    paths.value = `${paths.value}\nwallet\n`;
+    answer = { status: 200, body: config };
+    await save();
+    const due = { findings: {
+      sensitive: file.findings.sensitive,
+      rules: { [dup]: { severity: 'medium' }, [retried]: { enabled: false } },
+      payment: { resubmitWindowMs: 60000, paymentPaths: [...effective.payment.paymentPaths, 'wallet'] },
+    } };
+    out.set('findings settings patch', sent.length === 1 && sameJson(sent[0], due)
+      ? `yes (one PUT: ${JSON.stringify(sent[0]).slice(0, 150)}…)`
+      : `NO - ${sent.length} PUTs; sent ${JSON.stringify(sent[0])}; due ${JSON.stringify(due)}`);
+    out.set('findings settings saved', status.textContent === 'saved — findings use it now' && !status.classList.contains('error')
+      ? `yes ("${status.textContent}")`
+      : `NO - "${status.textContent}"${status.classList.contains('error') ? ', drawn as an error' : ''}`);
+
+    const refusal = 'findings.payment.paymentPaths entry \'path:x\': write the pattern without path:';
+    answer = { status: 400, body: { error: refusal } };
+    const again = box.querySelector('[data-payment="paymentPaths"]');
+    again.value = `${again.value}\npath:x`;
+    await save();
+    out.set('findings settings refused', sent.length === 2 && status.textContent === refusal && status.classList.contains('error')
+      ? `yes ("${status.textContent}", as the daemon's 400 said it)`
+      : `NO - ${sent.length} PUTs; status "${status.textContent}", error ${status.classList.contains('error')}`);
+  } finally {
+    window.fetch = realFetch;
+    await window.loadConfig();
+    await window.navigate({ page: 'traffic' });
+    await pause(200);
+  }
+  return [...out];
+}
+
 /**
  * The Findings rail link in an export: shown, because the page reads only the embedded report, while
  * the pages that need the daemon stay hidden (`pages hidden in export` holds those).
@@ -298,12 +404,12 @@ async function probeFindingsExport(window, doc, archive, attempts) {
   return lines;
 }
 
-/** The live probe, for `render-web-ui.js`'s one call. */
+/** Both live probes, the page then the Settings fieldset, for `render-web-ui.js`'s one call. */
 async function probeFindings(ctx) {
-  return probeFindingsPage(ctx);
+  return [...await probeFindingsPage(ctx), ...await probeFindingsSettings(ctx)];
 }
 
 module.exports = {
-  PAYMENTS_SESSION_ID, FINDINGS_LABELS,
-  probeFindings, probeFindingsPage, probeFindingsRailOffline, probeFindingsExport,
+  PAYMENTS_SESSION_ID, FINDINGS_LABELS, SETTINGS_LABELS,
+  probeFindings, probeFindingsPage, probeFindingsSettings, probeFindingsRailOffline, probeFindingsExport,
 };

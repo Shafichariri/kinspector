@@ -783,7 +783,12 @@ the text colour, because every hue already means a status or a method (`shared-r
 through `#/txn/{id}` and push, so Back returns to Findings, and `#/findings?id=` marks one finding
 and scrolls to it once, so a live redraw leaves the reader where they are. In an export it reads the
 embedded report and refuses a category. Live, it asks again by the Stats page's rule: at most once a
-second, never twice at once, and only while it is shown with live tail on. `findings …` in
+second, never twice at once, and only while it is shown with live tail on. Its settings are a
+fieldset in the Settings page's `config.json` form, drawn from `effective.findings`, so a family that
+adds rules adds rows with no page change. A save sends the whole `findings` key, since a top-level
+key is replaced whole: a rule only where it differs from its defaults, a payment field only where it
+differs from the file, and every sub-object the form does not draw as the file holds it; it says
+"findings use it now", because that key alone is read live (`daemon-and-mcp.md`). `findings …` in
 `render-web-ui.js` and `check-web-static.js`, the archive probe's `findings offline drawn`, `findings
 txn in export` and `findings category refused`, and `findings <w> payments fits` in Chrome hold it,
 each shown red with its rule removed; the payments session they read is `ProbeFixture.kt`'s third.

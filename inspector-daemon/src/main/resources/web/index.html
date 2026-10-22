@@ -565,19 +565,21 @@
     </section>
 
     <!--
-      The daemon's config.json. Nothing here changes the running daemon: a port cannot move under a
-      listening socket and retention holds the config it started with, so every key applies at the
-      next start — one rule, said once, rather than a list of which keys apply live.
+      The daemon's config.json. A port cannot move under a listening socket and retention holds the
+      config it started with, so every key applies at the next start, but one: the findings rules,
+      which the daemon reads on every findings read, so the Findings page beside this one agrees.
     -->
     <section class="settings-section">
       <h2 class="settings-title">The daemon's config.json</h2>
       <p class="settings-note muted">
         Saved to <code id="config-path">config.json</code>. A saved value applies when the daemon next
-        starts — <a href="#/processes">restart it from Processes</a>. A command-line flag wins over the
-        file, and a key a flag sets cannot be edited here.
+        starts — <a href="#/processes">restart it from Processes</a> — except the findings settings,
+        which apply on the next read. A command-line flag wins over the file, and a key a flag sets
+        cannot be edited here.
       </p>
       <form id="config-form" class="config-form">
         <div id="config-fields" class="config-fields"></div>
+        <fieldset id="findings-config" class="findings-config" hidden></fieldset>
         <div class="settings-actions">
           <button id="config-save" class="btn btn-sm" type="submit">save</button>
           <span id="config-status" class="muted" role="status"></span>

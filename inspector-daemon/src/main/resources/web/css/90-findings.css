@@ -1,4 +1,4 @@
-/* findings: the Findings page */
+/* findings: the Findings page, and the findings fieldset on the Settings page */
 
 /* --- the page: stacked blocks, no table, so nothing scrolls sideways at 400px ------------------ */
 
@@ -54,3 +54,31 @@
 .finding-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
 .finding-where, .finding-masked { margin-left: 6px; font-size: 11px; color: var(--fg-muted); }
 .finding-evidence li > :first-child { margin-left: 0; }
+
+/* --- Settings: the findings fieldset inside the config.json form -------------------------------- */
+
+.findings-config { margin: 14px 0 0; padding: 0; border: none; min-width: 0; }
+.findings-config legend { font-size: 13px; font-weight: 600; padding: 0; margin: 0 0 6px; }
+.findings-rules { width: auto; margin: 0 0 10px; }
+.findings-rules select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  font-size: 12px;
+  min-height: var(--target-min);
+}
+.findings-config textarea {
+  width: min(100%, 360px);
+  min-height: 56px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.findings-config .config-row { align-items: flex-start; }
+/* "idempotency headers" is the longest label; the inputs keep one left edge under it. */
+.findings-config .config-label { min-width: 140px; }
