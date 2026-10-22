@@ -384,7 +384,7 @@ function renderList() {
 
   const rows = orderedRows();
   $('list-empty').hidden = rows.length > 0;
-  if (!saysBeingRead($('list-empty'))) renderListEmpty();
+  if (!saysBeingRead($('list-empty'), !rows.length)) renderListEmpty();
   renderListNote();
 
   // Build the interleaved sequence oldest-first, where "marker, then the rows after it" is the

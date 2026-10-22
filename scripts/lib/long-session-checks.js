@@ -169,7 +169,7 @@ function longState() {
   return {
     sessionId: 'S', signalSessionId: 'S', filter: '', view: 'all', newestFirst: false, liveTail: false, timeRange: null,
     transactions: calls, allTransactions: calls, sessionTotal: ROWS + 1000, matched: ROWS + 1000,
-    signals, allSignals: signals.concat(screens), screens, markers: [], recording: [],
+    signals, allSignals: signals.concat(screens), screens, markers: [], recording: [], arriving: { transactions: null, signals: null },
     expandedRuns: new Set(), expandedVisits: new Set(), pathFocus: null, pathSessionId: null,
     pathVisitCount: null, pathFresh: true, screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null,
   };
@@ -273,7 +273,7 @@ function checkPathPastTheClamp(sources) {
     const state = {
       sessionId: 'S', signalSessionId: 'S', filter, view: 'path', newestFirst: false, liveTail: false, timeRange: null,
       transactions: held, allTransactions: calls, sessionTotal: calls.length, matched: matched.length,
-      signals: [], allSignals: screens, screens, markers: [], recording: [],
+      signals: [], allSignals: screens, screens, markers: [], recording: [], arriving: { transactions: null, signals: null },
       expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,
       screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null,
     };

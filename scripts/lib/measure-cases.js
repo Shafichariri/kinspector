@@ -232,12 +232,81 @@ async function liveArrival(page, url, session) {
   return rows;
 }
 
+// KIN-42: what the page says between its first draw and the whole-session copy landing, sampled at
+// first rows. No empty-state claim, the glance in `beingRead`'s words, the axis and endpoints hidden.
+const DURING_READ = `(() => {
+  if (typeof wholePending !== 'function') return { error: 'no wholePending on this page' };
+  if (!wholePending()) return { landed: true };
+  const text = document.body.innerText;
+  const claims = ['waiting for an app', 'nothing recorded', 'nothing was recorded', 'no calls'].filter((c) => text.includes(c));
+  const glance = document.getElementById('detail-empty').textContent;
+  const line = document.getElementById('overview');
+  return { claims, glance, due: beingRead(state.sessionTotal), axis: document.getElementById('axis').hidden,
+    endpoints: document.getElementById('endpoints-button').hidden, line: line.hidden ? null : line.innerText.trim() };
+})()`;
+
+function beingReadRow(r) {
+  const key = 'being read huge';
+  if (!r || r.evalError || r.error) return { key, value: 'unreadable', ok: false, detail: (r && (r.evalError || r.error)) || 'no answer' };
+  if (r.landed) return { key, value: 'checked nothing', ok: false, detail: 'the copy landed before the sample' };
+  const wrong = [...r.claims.map((c) => `the page says "${c}"`),
+    ...(r.glance === r.due && /being read/.test(r.glance) ? [] : [`the glance reads "${r.glance.slice(0, 60)}"`]),
+    ...(r.axis ? [] : ['the axis is shown']), ...(r.endpoints ? [] : ['the endpoints are shown']),
+    // Its band kept through the read so the rows do not drop when the copy lands, and saying why.
+    ...(r.line === r.due ? [] : [`the overview line ${r.line === null ? 'is hidden' : `reads "${r.line.slice(0, 60)}"`}`])];
+  return { key, value: wrong.length ? 'claims' : 'being read', ok: !wrong.length, detail: wrong.join('; ') || r.glance };
+}
+
+// KIN-42: the copy landing redraws in place. The list pane is scrolled during the read; after it,
+// the scroll is where it was left and its first visible row moved by at most the scope bar's height.
+const FIRST_VISIBLE = `(() => {
+  const pane = document.getElementById('list').parentElement;
+  const top = pane.getBoundingClientRect().top;
+  const row = [...document.querySelectorAll('#list .row')].find((r) => r.getBoundingClientRect().bottom > top);
+  return row ? { id: row.dataset.id, y: row.getBoundingClientRect().top, scrollTop: pane.scrollTop } : null;
+})()`;
+const AFTER_LANDING = `(() => {
+  const pane = document.getElementById('list').parentElement;
+  const row = [...document.querySelectorAll('#detail-empty.glance .glance-row')]
+    .find((r) => (r.querySelector('.glance-label') || {}).textContent === 'calls in session');
+  return { scrollTop: pane.scrollTop, endpoints: !document.getElementById('endpoints-button').hidden,
+    chips: document.querySelectorAll('#endpoint-chips .chip').length,
+    glance: row ? 'calls in session ' + row.querySelector('.glance-value').textContent : null, total: state.sessionTotal };
+})()`;
+
+async function copyLandsRow(page, start) {
+  const key = 'copy lands huge';
+  // Read after `connected`, which a socket opened after the load holds for the whole read.
+  if (await page.ev(`!wholePending()`) !== false) return { key, value: 'checked nothing', ok: false, detail: 'the copy landed before the scroll' };
+  await page.ev(`document.getElementById('list').parentElement.scrollTop = 4000`);
+  await sleep(200);
+  const before = await page.ev(FIRST_VISIBLE);
+  if (!before || before.evalError || before.scrollTop !== 4000) {
+    return { key, value: 'unreadable', ok: false, detail: `no row or no scroll to 4000 during the read: ${JSON.stringify(before)}` };
+  }
+  const landed = await page.waitFor(`!wholePending()`, 60000);
+  if (landed === null) return { key, value: 'not landed', ok: false, detail: 'the copy did not land in 60 s' };
+  await sleep(300);
+  const after = await page.ev(AFTER_LANDING);
+  const row = await page.ev(`(() => { const r = document.querySelector('#list .row[data-id="${before.id}"]'); return r ? r.getBoundingClientRect().top : null; })()`);
+  const moved = row === null ? null : Math.round(row - before.y);
+  const wrong = [
+    ...(after.scrollTop === 4000 ? [] : [`moved (scrollTop ${after.scrollTop} where 4000 was left)`]),
+    ...(moved !== null && Math.abs(moved) <= 48 ? [] : [`the first visible row moved ${moved === null ? 'out of the list' : `${moved} px`}`]),
+    ...(after.endpoints && after.chips ? [] : ['endpoints hidden after the copy landed']),
+    ...(after.glance === `calls in session ${after.total}` ? [] : [`the glance reads "${after.glance}"`]),
+  ];
+  return { key, value: wrong.length ? 'moved or stale' : 'in place', ok: !wrong.length,
+    detail: `${wrong.join('; ') || `row moved ${moved} px, ${after.chips} chips, ${after.glance}`}; landed at ${Date.now() - start} ms` };
+}
+
 // KIN-37 and KIN-42: how long a session takes to draw its first rows and to connect.
 async function firstRows(page, url, session, limitMs) {
   await page.setWidth(1440);
   await page.navigate(url);
   const start = Date.now();
   const drawn = await page.waitFor(`document.querySelectorAll('#list .row').length > 0`, 60000);
+  const during = session === 'huge' ? beingReadRow(await page.ev(DURING_READ)) : null;
   const connected = await page.waitFor(`(document.querySelector('#conn .conn-label') || {}).textContent === 'connected'`,
     Math.max(1000, 60000 - (Date.now() - start)));
   const total = connected === null ? null : Date.now() - start;
@@ -247,6 +316,7 @@ async function firstRows(page, url, session, limitMs) {
       detail: drawn === null ? 'none in 60 s' : `${drawn} ms` },
     { key: `connected ${session}`, value: judge(total) ? `within ${limitMs} ms` : `over ${limitMs} ms`, ok: judge(total),
       detail: total === null ? 'not in 60 s' : `${total} ms` },
+    ...(during ? [during, await copyLandsRow(page, start)] : []),
     exceptionsRow(`first rows ${session}`, page),
   ];
 }

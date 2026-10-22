@@ -16,7 +16,7 @@ const { clampPage } = require('./session-state-checks');
 function node() {
   const parts = [];
   return {
-    hidden: false, title: '', parts,
+    hidden: false, title: '', parts, parentElement: { scrollTop: 0 },
     replaceChildren() { parts.length = 0; },
     append(...xs) { parts.push(...xs.map(String)); },
     appendChild(child) { parts.push(child.textContent || ''); return child; },

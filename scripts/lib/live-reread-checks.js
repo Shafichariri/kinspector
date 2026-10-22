@@ -52,7 +52,7 @@ function routes(rows) {
 }
 
 function page(sources, api, state) {
-  const element = { hidden: false, textContent: '', title: '' };
+  const element = { hidden: false, textContent: '', title: '', parentElement: { scrollTop: 0 } };
   const context = runFile(sources, ['js/15-session-data.js', 'js/16-session-load.js'], {
     state, api, ARCHIVE: null, tagOf: (s) => String(s.tag).toLowerCase(),
     availableViews: () => [{ id: 'network' }], visibleTransactions: () => state.transactions,

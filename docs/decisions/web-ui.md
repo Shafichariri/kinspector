@@ -281,8 +281,8 @@ page and in the buffer both (`mid-read calls kept`, `mid-read signals kept`, `mi
 
 **A switch follows the session the moment it changes, calls and signals alike, and until the new
 session lands every pane says it is being read.** A switch reads a page of calls, the markers and
-the whole-session calls before `loadSignals`, so until that landed the panes described the session
-just left under the new one's name, for as long as a whole-session read takes: 25 s on a large
+the signals before it draws, and until KIN-42 it read the whole-session calls first too, so until
+those landed the panes described the session just left under the new one's name: 25 s on a large
 session. `followSession` clears both sides at once. It empties the signals, `allSignals`,
 `screens` and `current`, and the calls, `allTransactions`, `markers`, `sessionTotal` and
 `matched`, and leaves both copies unmarked. It overtakes the call load, the signal load and every
@@ -381,8 +381,46 @@ for a `...` whose innermost bracket is a call's `(`; and `axis window 200k` to `
 functions out of the real files over 200,000 rows. Each was proven red with each file's spreads put
 back. What jsdom cannot show — rows and the axis drawn and the dot at "connected" on a real
 160,016-call session in headless Chrome, red at `a86dde2` and green after — is recorded in KIN-37's
-notes. Holding that many rows at all is a cost this does not settle; KIN-42 owns whether the
-whole-session read is capped.
+notes. The whole-session read is not capped, which KIN-42 decided: the path counts what each visit
+recorded and the stretch notes count what lies below the list from that copy, and a cap re-opens
+the defect paging closed, every visit older than the cap reading as having recorded less. Its
+length is kept off the first draw instead (the next paragraph).
+
+**A load draws its first page at once and reads the whole-session copy behind it.** KIN-34 made a
+load read the whole session's calls before it drew anything, because the path, the stretch notes
+and the endpoint chips count from that copy. On a 160,016-call session that is about 160 pages and
+26 s, and for all of it the list said "waiting for an app with inspector-stream to connect" under
+a header counting the session, with the dot at "connecting…", because the socket was opened after
+the load. `loadTransactions` now starts `syncAllTransactions` once the first page and the markers
+are in, reads the signals, and draws the list, the header, the tabs and the view shown. It awaits
+the copy last, and when the copy lands `drawWhole` draws again what reads it. The read opens its
+live-row buffer before its first page, as before (`admitLive`). Until it lands the copy is what the
+switch left, empty and unmarked, and the panes that read it do not count a page as the session.
+The glance and the path say `this session's N calls are being read…` with the header's total
+(`beingRead`). The axis is hidden, because a map drawn from the newest page shows the session
+starting where the page does. Its overview line keeps its band through the read, as tall as the
+axis, with the same words in the axis's hint and never an empty axis: hidden too, the line came back
+when the copy landed and pushed every row 33 px down under the reader, on top of the scope bar's
+33 px. The endpoint chips, repeat marks and scope bar are absent. An empty
+list, timeline or waterfall says the same where it would have said "no calls in the selected
+stretch" (`saysBeingRead(node, whole)`, asked through `wholePending`: a read of this session's
+calls is in flight). The waterfall tab is offered on the session's total, so it does not come and
+go while the copy is read. `drawWhole` leaves each pane where it was: the list's scroll is put back
+after `renderList`, which follows the newest row under live tail, and the timeline is drawn without
+following. Each page of the read asks whether its load still stands, so a newer load, a switch or a
+forget stops it at its next page rather than reading the session for nobody. A filter typed during
+the read therefore starts it again. `loadTransactions` still resolves only once the copy has
+landed, so a caller that awaits a load sees it landed. The socket opens as soon as the session list
+is read, before the first page. A row is matched against the selected session as it arrives and
+needs nothing a load reads, and opened after the load the socket left the dot at "connecting…" and
+dropped every row that arrived in between. A row that arrives during the first page's own request
+can still miss the list until the next load. `measure-web-ui.js`'s `first rows huge` and
+`connected huge` hold the draw and the dot within 3000 ms on the 160,016-call session, and were red
+at `623c571` at 26,378 and 26,482 ms. `being read huge` holds what the page says during the read,
+and `copy lands huge` the redraw in place after it. `check-web-static.js`'s `first draw before
+copy`, `copy lands redraws`, `overtaken read stops` and `reading notes`, and the live probe's
+`long first draw` and `long copy lands` on the 1203-call session, hold the same rules without a
+browser. Each was proven red with its rule removed.
 
 **A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
 list always did; the waterfall, the path and the timeline did not. Under a filter that matched
@@ -496,7 +534,8 @@ count the calls.
 
 **The now strip and the time axis are one overview line.** Two bands of the seven above the first
 row said one thing each; the axis keeps its brush and its ids, and the now list opens as a popover
-instead of pushing the rows down. The line is hidden when both of its parts are, and hiding the now
+instead of pushing the rows down. The line is hidden when both of its parts are, except while the
+whole-session copy is read, when the hint holds it and says so (KIN-42, above), and hiding the now
 strip closes its list, so a popover left open never comes back over another view's rows. The hint
 counts the session's calls, as the bars do: the live probe's `overview line` reads it under a filter
 that thins the rows, red with the count taken from the rows held. `room 1440 bands list` bounds the
