@@ -33,14 +33,18 @@ CI — see [Production safety](#production-safety).
 | **4b** | Report the traffic we know we cannot see | ⬜ not designed |
 | **4c** | Proxy capture — iOS `URLSession`, WebViews, opaque SDKs | ⬜ not started |
 
-**779 tests** across JVM, iOS simulator, Android host and the daemon. Used daily against a real
-Compose Multiplatform app, on an Android emulator and the iOS simulator.
+**886 tests, 0 failures, at the last full count** across JVM, iOS simulator, Android host and the
+daemon. That count is old: no full run including iOS and Android has been counted since, and
+[`docs/STATUS.md`](docs/STATUS.md) has the newer per-target counts. The first session recorded
+from a real Compose Multiplatform app, on an Android emulator, found four defects, all fixed.
 
-Honest gaps: the overlay has been run on one Android device, the iOS simulator and desktop, never on
-iOS hardware — and everything added to it since 0.7.0 has only been exercised in an off-screen
-render at 360dp and by driving its controls in tests, never on a phone. That is now the whole of
-the signals work in the overlay: the payload viewer, the per-key history, the **now** panel and
-pulling a provider on demand have between them never been touched by a thumb. The Auth0 adapter
+Honest gaps: the overlay has been looked at on an Android emulator, the iOS simulator and desktop.
+On hardware, it ran once on an Android phone on 2026-08-17, in a build that predates the Android
+sample, and the Android sample has not been run on a physical phone. One iPhone has run the iOS
+sample over USB, with the overlay running the whole time, but nobody looked at the overlay there.
+So nothing added to the overlay since that first Android outing has been looked at on a phone,
+including the whole of the signals work: the payload viewer, the per-key history, the **now** panel
+and pulling a provider on demand have between them never been touched by a thumb. The Auth0 adapter
 compiles against the real SDK but has not been run against a live tenant, and nothing non-Ktor is
 captured on iOS.
 
@@ -111,7 +115,7 @@ to do about it — that is the list to read before deciding whether to move.
 | Half | Current version | How you get it |
 |---|---|---|
 | Daemon — web UI, archive, CLI, MCP | the badge above | a zip from [Releases](https://github.com/Shafichariri/kinspector/releases/latest), no account needed |
-| Library — the seven modules | the same | GitHub Packages, which needs a token ([`docs/ACCESS.md`](docs/ACCESS.md)) |
+| Library — the seven modules | the same | Maven Central with no token, from 1.0.1, once a person publishes the staged bundle (above); also GitHub Packages, which needs a token ([`docs/ACCESS.md`](docs/ACCESS.md)) |
 
 ---
 
@@ -278,7 +282,7 @@ Read §1 first: **version alignment is the single most common integration failur
 
 | Doc | For |
 |---|---|
-| [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: the token GitHub Packages requires, and what the daemon needs instead (nothing). |
+| [`docs/ACCESS.md`](docs/ACCESS.md) | **Start here if you are new.** Getting Inspector: Maven Central with no token from 1.0.1, the token GitHub Packages requires for older versions, and what the daemon needs instead (nothing). |
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Adding Inspector to a consuming CMP app. Self-contained and versioned. |
 | [`docs/DAEMON.md`](docs/DAEMON.md) | Running the daemon: start, stop, restart, kill, CLI, archive layout. |
 | [`docs/SIGNALS.md`](docs/SIGNALS.md) | Why signals are shaped the way they are. Shipped in 0.3.0; kept as the design record. |
