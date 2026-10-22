@@ -62,7 +62,7 @@ function page(sources, api, state) {
     $: () => element,
   });
   for (const name of ['oweReread', 'rereadLive', 'loadTransactions', 'loadSignals']) {
-    if (typeof context[name] !== 'function') throw new HarnessError(`${name} is not declared in js/15-session-data.js`);
+    if (typeof context[name] !== 'function') throw new HarnessError(`${name} is not declared in js/15-session-data.js or js/16-session-load.js`);
   }
   return context;
 }
