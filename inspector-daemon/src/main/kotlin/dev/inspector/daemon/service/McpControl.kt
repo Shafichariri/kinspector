@@ -2,9 +2,13 @@ package dev.inspector.daemon.service
 
 import dev.inspector.daemon.archive.DaemonConfig
 import kotlinx.serialization.Serializable
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Optional
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import kotlin.io.path.exists
 
 /**
@@ -120,12 +124,14 @@ class ProcessMcpControl internal constructor(
                 // Closing stdin is the stop signal: readLine returns null at EOF and run() ends.
             }
 
-            val reader = process.inputStream.bufferedReader()
+            val frames = readFrames(process)
             var serverName: String? = null
             var toolCount: Int? = null
             val deadline = System.currentTimeMillis() + timeoutMs
-            while (System.currentTimeMillis() < deadline) {
-                val frame = reader.readLine() ?: break
+            while (true) {
+                val left = deadline - System.currentTimeMillis()
+                if (left <= 0) break
+                val frame = frames.poll(left, TimeUnit.MILLISECONDS)?.orElse(null) ?: break
                 val parsed = runCatching {
                     kotlinx.serialization.json.Json.parseToJsonElement(frame)
                 }.getOrNull() ?: continue
@@ -155,6 +161,29 @@ class ProcessMcpControl internal constructor(
             // told not to kill. McpProbeCleanupTest holds this with a child that ignores EOF.
             process.destroyForcibly()
         }
+    }
+
+    /**
+     * The child's stdout, line by line, read on a thread of its own.
+     *
+     * A `readLine` on the probe's thread cannot be bounded: a child that holds stdout open and
+     * writes nothing blocks it for good, the deadline is never checked again, and the `finally`
+     * that stops the child never runs. Polling this queue with the time left keeps the deadline
+     * in the probe's hands. The reader is a daemon thread, and killing the child closes the pipe,
+     * so it ends with the child rather than outliving the probe. An empty `Optional` is EOF.
+     */
+    private fun readFrames(process: Process): LinkedBlockingQueue<Optional<String>> {
+        val frames = LinkedBlockingQueue<Optional<String>>()
+        thread(isDaemon = true, name = "mcp-probe-reader-${process.pid()}") {
+            try {
+                process.inputStream.bufferedReader().forEachLine { frames.put(Optional.of(it)) }
+            } catch (_: IOException) {
+                // The pipe closed under the read because the probe killed the child.
+            } finally {
+                frames.put(Optional.empty())
+            }
+        }
+        return frames
     }
 
     private companion object {
