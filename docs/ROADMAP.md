@@ -214,7 +214,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 *The two guards below were left open by the batch closed on 2026-10-22, from QA on
 `item:guard-probe-finds-nothing-fails` and the hand-over of `item:guard-live-traffic-driver`, and
 recorded in `docs/STATUS.md` → Not verified. Placed by the product owner on 2026-10-22 and checked
-against the code at `5b21593`. **Neither is in "Order from here" yet**: the maintainer orders them.*
+against the code at `5b21593`. **Both ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 - **`expanded unfolded` judges a line with no failure on it.** *Ticket label:*
   `item:guard-expanded-unfolded-has-failures`.
@@ -529,8 +529,8 @@ from here" yet**: the maintainer reviews the list first.*
 `item:web-stats-route-breaks-whole`), from their hand-overs and QA reports, and recorded in
 `docs/STATUS.md` → Not verified. Each is true at the base of the item that found it, or outside
 its criteria. Placed by the product owner on 2026-10-22 and checked against the code at `5b21593`.
-Two are items here, one is a doc entry here, and two are guards under §3 → Guards. **None is in
-"Order from here" yet**: the maintainer orders them.*
+Two are items here, one is a doc entry here, and two are guards under §3 → Guards. **All five
+ordered 2026-10-22 by the maintainer**: see "Order from here".*
 
 | Follow-up | Goes to | Why there |
 |---|---|---|
@@ -754,9 +754,14 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
+| 13a | A silent MCP child hangs the probe, and is left running | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:mcp-probe-deadline-holds` | S | D, first in the lane after the advisory |
 | 16 | Housekeeping after the 2026-10-20/21 run (waits: maintainer approval of the `architect.md` edit, for that edit only) | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-21` | S | S for the docs, then W for the Sessions page line; the `AGENTS.md` edit merges before any status-row close |
+| 16a | Housekeeping after the 2026-10-22 batch | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:docs-housekeeping-2026-10-22` | XS | S |
+| 16b | `expanded unfolded` judges a line with no failure on it | §3 → Guards | `item:guard-expanded-unfolded-has-failures` | XS | S; may share a PR with `item:docs-housekeeping-2026-10-22` |
+| 16c | A measure run hangs when Chrome dies mid-case | §3 → Guards | `item:guard-measure-chrome-exit-fails` | S | S, before the W lane's next fix round |
 | 20 | A session switch clears the timeline's calls and the endpoint chips *(approved 2026-10-21 by the maintainer: overturns the `web-ui.md` sentence; replacement text comes with the item)* | §3 → Bugs found, not fixed | `item:web-switch-clears-call-panes` | S | W; cleared panes say "being read" |
-| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note; merged 2026-10-22 as PR #136, open until QA verifies it)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
+| 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:session-diff` PR A and `item:findings-payment-safety` PR A |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
 | 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
@@ -773,6 +778,18 @@ daemon, L library twins, S scripts and docs. W is strictly serial. `25-traffic-l
 budget to share: KIN-42 takes it to at most 592, polish A4 to 589, the stretch to 591, findings
 T7/T8 to 600. `15-session-data.js` has about 52 lines left, so KIN-42's note states its line count;
 past that a new numbered script, never a raised budget.
+
+**Five rows added 2026-10-22: decided by the maintainer on the product owner's proposal**, from the
+follow-ups the batch closed that day left open. Lettered rows sit between existing ones so no row
+already here is renumbered; docs refer to those numbers. `item:mcp-probe-deadline-holds` is first in
+lane D after the advisory: a probe that never answers and a child that outlives it are a user-visible
+hang and a leak, and the fix is small. The three S-lane rows follow the 2026-10-20/21 housekeeping:
+the doc entry, then the `expanded unfolded` guard (same lane and small enough to share its PR), then
+the measure runner, which goes before the W lane's next fix round because every round runs it.
+`item:route-key-one-ipv6-host` goes in lane D before `item:session-diff` and
+`item:findings-payment-safety`, because both reuse the route key; fixed after them, it would change
+three surfaces' answers instead of one. KIN-42 merged on 2026-10-22 as PR #136; its row stays until QA
+verifies it.
 
 §6 items 3 to 6 were **not scheduled** by the 2026-10-18 decision. They keep their place in §6's table and
 wait for the next one.
