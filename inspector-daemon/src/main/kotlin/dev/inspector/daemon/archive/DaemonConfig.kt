@@ -3,6 +3,7 @@ package dev.inspector.daemon.archive
 import dev.inspector.model.SignalTags
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import java.nio.file.Path
 import kotlin.io.path.Path
@@ -175,6 +176,8 @@ data class DaemonConfig(
          * that is not an object makes the file malformed, as any wrong-typed known key does.
          */
         val findings: JsonObject? = null,
+        /** The same for `findingDismissals`, which must be a list. */
+        val findingDismissals: JsonArray? = null,
     )
 }
 
