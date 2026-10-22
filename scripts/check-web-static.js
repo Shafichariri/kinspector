@@ -39,7 +39,8 @@
  *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed;
  *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed;
  *   - the polish rules: an icon-only control is an SVG in a box sized by one rule from `--target-min`,
- *     a page document's buttons are as tall and its prose stops at `--prose-max`.
+ *     a page document's buttons are as tall and its prose stops at `--prose-max`; and the page keys,
+ *     `g` and a letter for each page `PAGES` offers, `g g` the top, and no key while typing.
  *
  * The scripts section printed last so the lines above it stayed comparable with reports from before
  * it existed, and the per-file stylesheet check prints in it for the same reason: under `stylesheet`

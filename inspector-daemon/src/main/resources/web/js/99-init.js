@@ -2,9 +2,28 @@
 'use strict';
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+  // Typing is never a shortcut, in the replay editor's textarea as in the filter (`typingTarget`).
+  if (typingTarget(e.target)) {
     if (e.key === 'Escape') e.target.blur();
     return;
+  }
+  if (e.key === 'Escape' && !$('keys-pop').hidden) {
+    $('keys-pop').hidden = true;
+    return;
+  }
+  // `?` and the page keys work on every page, `#/txn` included. A held ⌘, Ctrl or Alt is the
+  // browser's shortcut, not ours: ⌘G then S is find-next and a letter, never a page.
+  if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === '?') {
+      state.pageKeyAt = null;
+      showKeys();
+      return;
+    }
+    const read = readPageKey(state.pageKeyAt, e.key, Date.now());
+    state.pageKeyAt = read.pending;
+    if (read.page) navigate({ page: read.page });
+    if (read.top && currentPage() === 'traffic' && !$('panes').classList.contains('txn-full')) move(-1e9);
+    if (read.consumed) return;
   }
   // Every key below moves through, filters or copies the traffic list, which only one page draws.
   if (currentPage() !== 'traffic') return;
@@ -18,7 +37,6 @@ document.addEventListener('keydown', (e) => {
     case 'k': move(-1); break;
     case '/': case 'f': e.preventDefault(); $('filter').focus(); break;
     case 'o': setSortOrder(!state.newestFirst); break;
-    case 'g': move(-1e9); break;
     case 'G': move(1e9); break;
     case 'Escape':
       state.selectedId = null;

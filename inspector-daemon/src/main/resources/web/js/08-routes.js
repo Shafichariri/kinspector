@@ -157,7 +157,9 @@ function enterPage(page) {
 
 /**
  * The rail's links, from `PAGES`: each one's address, its name for a reader when only the icon is
- * drawn, which one is current, and which an export hides (`data-live`, read by `body.archive`).
+ * drawn, which one is current, and which an export hides (`data-live`, read by `body.archive`). The
+ * title also names the page's key, `Stats (g s)`, which is how the keys are learnt; `aria-label`
+ * stays the bare name, since a reader announces the shortcut nowhere else in a link's name.
  */
 function renderRail() {
   const page = currentPage();
@@ -165,12 +167,66 @@ function renderRail() {
     const link = document.querySelector(`#rail .rail-item[data-page="${p.id}"]`);
     if (!link) continue;
     link.href = routeHash({ page: p.id });
-    link.title = p.label;
+    const key = PAGE_KEYS.find(([, id]) => id === p.id)?.[0];
+    link.title = key ? `${p.label} (g ${key})` : p.label;
     link.setAttribute('aria-label', p.label);
     if (p.live) link.dataset.live = '';
     if (p.id === page) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
+}
+
+// --- page keys ---------------------------------------------------------------
+
+/**
+ * `g` then a letter goes to a page; `g g` is the top of the list. Diff and Findings hold their letters
+ * before their pages exist: a letter whose page is not in `PAGES` does nothing and is left out of the
+ * legend (`pageKeyAvailable`), so a page that arrives needs no key work of its own. `s` is Stats
+ * because the roadmap's example is `g s`, Sessions is `a` because that page manages the archive, and
+ * Settings is `,` after the platforms' ⌘, for preferences.
+ */
+const PAGE_KEYS = [['t', 'traffic'], ['s', 'stats'], ['f', 'findings'], ['d', 'diff'], ['a', 'sessions'], ['p', 'processes'], [',', 'settings']];
+
+/** How long `g` waits for its second key, in ms. */
+const PAGE_KEY_MS = 1500;
+
+/**
+ * Held for the key after them, so they neither start a prefix nor spend one: a shifted second key, as
+ * `,` is on some layouts, arrives after the Shift's own keydown, which would otherwise spend it first.
+ */
+const MODIFIER_KEYS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'];
+
+/** A page this build offers, and not one an export hides: there `applyRoute` would only land on Traffic. */
+function pageKeyAvailable(id) {
+  const page = PAGES.find((p) => p.id === id);
+  return Boolean(page) && !(ARCHIVE && page.live);
+}
+
+/**
+ * Reads one key against the prefix [pending] (the `g`'s time, or null) at [now], as `{ pending, page,
+ * top, consumed }`. Pure but for `PAGES` and `ARCHIVE`. `g` with no live prefix starts one; with one,
+ * `g` is the top and a listed letter its page. Any other second key is spent and clears the prefix,
+ * so `g j` moves nothing, as in vim and on GitHub. `consumed` false leaves the key to the list's own.
+ *
+ * `g` alone used to select the first row at once, and a `g` that acts at once cannot also wait for a
+ * second key, so the top of the list became `g g`.
+ */
+function readPageKey(pending, key, now) {
+  const none = { pending: null, page: null, top: false, consumed: false };
+  if (MODIFIER_KEYS.includes(key)) return { ...none, pending };
+  if (pending === null || now - pending >= PAGE_KEY_MS) return key === 'g' ? { ...none, pending: now, consumed: true } : none;
+  if (key === 'g') return { ...none, top: true, consumed: true };
+  const row = PAGE_KEYS.find(([letter]) => letter === key);
+  return { ...none, page: row && pageKeyAvailable(row[1]) ? row[1] : null, consumed: true };
+}
+
+/**
+ * Whether [el] takes typing, where no key is a shortcut. The guard once skipped only inputs and
+ * selects, so `f` typed in the replay editor's body moved focus to the filter and lost the letter,
+ * and `o` reversed the list behind it.
+ */
+function typingTarget(el) {
+  return Boolean(el) && (['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) || el.isContentEditable === true);
 }
 
 /**

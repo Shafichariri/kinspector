@@ -7,7 +7,7 @@
  * found by hand in a verify panel, after the build that caused it. `traffic` streams real rows into
  * a daemon of its own through `/ingest` and judges the page's filtered re-read
  * (`lib/live-traffic-cases.js`). `polish` reads the icon controls' targets and the page documents' buttons, prose, density select
- * and Sessions rows (`lib/polish-cases.js`).
+ * and Sessions rows, and the key legend `?` opens on Settings (`lib/polish-cases.js`).
  * `sheet`, opt-in, judges nothing: it writes a PNG of every page and view at four widths, dark and
  * light, served and exported, and an `index.html` grid of them to `--out` (`lib/sheet-cases.js`),
  * for a person to look at.

@@ -6,8 +6,10 @@
  * reaches a control through a selector naming none of its classes or ids. Chrome is the real check
  * (`polish <w> …` in `measure-web-ui.js`, `lib/polish-cases.js`). Zero dependencies.
  */
+const vm = require('vm');
 const { HarnessError, cssBlocks, selectorList } = require('./web-audits');
 const { loadIndexHtml } = require('./web-sources');
+const { runFile } = require('./session-state-checks');
 
 const uncomment = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -125,9 +127,83 @@ function auditPageDoc(styles, selector, property, name, floor) {
   return takes ? `yes (${selector} takes ${property} from ${name}, ${value})` : `NO - ${selector} does not take ${property} from var(${name})`;
 }
 
+/** The real `js/08-routes.js` with `ARCHIVE` as given and, when [stubs], a `PAGES` row for Diff and Findings. */
+function routes(scripts, archive, stubs) {
+  const context = runFile(scripts, 'js/08-routes.js', { ARCHIVE: archive });
+  for (const name of ['readPageKey', 'pageKeyAvailable', 'typingTarget']) {
+    if (typeof context[name] !== 'function') throw new HarnessError(`${name} is not declared in js/08-routes.js; update polish-checks.js`);
+  }
+  // `PAGES` is a `const`, in the script scope every file run in this context shares, so a second
+  // script reaches it as the pages' own items will: a row in the table, and nothing else.
+  if (stubs) new vm.Script(`PAGES.push({ id: 'diff', label: 'Diff', live: true }, { id: 'findings', label: 'Findings', live: false })`).runInContext(context);
+  return context;
+}
+
+/**
+ * `g` then a letter goes to its page within 1500 ms, `g g` is the top, any other second key is spent,
+ * and a letter whose page is not in `PAGES`, or is live in an export, goes nowhere. Each sequence is
+ * `[key, ms]` pairs read from no prefix; what is judged is the last key's reading.
+ */
+function checkPageKeys(scripts) {
+  const run = (context, keys) => {
+    let pending = null;
+    let read = null;
+    for (const [key, at] of keys) ({ pending } = read = context.readPageKey(pending, key, at));
+    return { page: read.page ?? null, top: Boolean(read.top), consumed: Boolean(read.consumed), pending: read.pending };
+  };
+  const g = (second, at = 100) => [['g', 0], [second, at]];
+  const cases = [
+    // [archive, stub rows, keys, page due, top due, what it shows]
+    [null, false, g('s'), 'stats', false, 'g s'],
+    [null, false, g('g'), null, true, 'g g'],
+    [null, false, g('s', 1501), null, false, 'g, 1501 ms, s'],
+    [null, false, g('j'), null, false, 'g j'],
+    [null, false, [...g('j'), ['s', 200]], null, false, 'g j s (the prefix spent)'],
+    [null, false, [['g', 0], ['Shift', 50], ['s', 100]], 'stats', false, 'g Shift s'],
+    [null, false, g('t'), 'traffic', false, 'g t'],
+    [null, false, g('a'), 'sessions', false, 'g a'],
+    [null, false, g('p'), 'processes', false, 'g p'],
+    [null, false, g(','), 'settings', false, 'g ,'],
+    [null, false, g('d'), null, false, 'g d with no diff row'],
+    [null, false, g('f'), null, false, 'g f with no findings row'],
+    [null, true, g('d'), 'diff', false, 'g d over a stub row'],
+    [null, true, g('f'), 'findings', false, 'g f over a stub row'],
+    [{}, false, g('a'), null, false, 'g a in an export'],
+    [{}, false, g('p'), null, false, 'g p in an export'],
+    [{}, false, g('s'), 'stats', false, 'g s in an export'],
+    [{}, true, g('f'), 'findings', false, 'g f over a stub row in an export'],
+    [{}, true, g('d'), null, false, 'g d over a stub row in an export'],
+  ];
+  const wrong = [];
+  for (const [archive, stubs, keys, page, top, what] of cases) {
+    const got = run(routes(scripts, archive, stubs), keys);
+    if (got.page !== page || got.top !== top) wrong.push(`${what} gave ${JSON.stringify({ page: got.page, top: got.top })}, not ${JSON.stringify({ page, top })}`);
+  }
+  // The second key is spent whatever it is, and a lone key with no prefix is the list's.
+  const plain = routes(scripts, null, false);
+  const spent = run(plain, g('j'));
+  if (!spent.consumed || spent.pending !== null) wrong.push(`g j left ${JSON.stringify(spent)}, where the j is spent and the prefix cleared`);
+  const lone = run(plain, [['j', 0]]);
+  if (lone.consumed) wrong.push('j with no prefix was taken from the list');
+  return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${cases.length} sequences, live and exported, with and without stub Diff and Findings rows)`;
+}
+
+/** `typingTarget` is every element that takes typing, and nothing that does not. */
+function checkTypingTarget(scripts) {
+  const { typingTarget } = routes(scripts, null, false);
+  const takes = [{ tagName: 'INPUT' }, { tagName: 'SELECT' }, { tagName: 'TEXTAREA' }, { tagName: 'DIV', isContentEditable: true }];
+  const not = [{ tagName: 'BUTTON' }, { tagName: 'BODY' }, { tagName: 'DIV', isContentEditable: false }, { tagName: 'A' }];
+  const name = (e) => `${e.tagName.toLowerCase()}${e.isContentEditable ? '[contenteditable]' : ''}`;
+  const wrong = [...takes.filter((e) => !typingTarget(e)).map((e) => `${name(e)} is not a typing target`),
+    ...not.filter((e) => typingTarget(e)).map((e) => `${name(e)} is a typing target`)];
+  return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${takes.map(name).join(', ')} take typing; ${not.map(name).join(', ')} do not)`;
+}
+
 /** The lines `check-web-static.js` prints under `--- polish ---`. */
 function checkPolish(scripts, styles) {
   return [
+    ['page keys', checkPageKeys(scripts)],
+    ['typing skips keys', checkTypingTarget(scripts)],
     ['icon target css', auditIconTargets(styles)],
     ['icon controls svg', auditIconControls(scripts)],
     ['page targets css', auditPageDoc(styles, '.page-doc .btn', 'min-height', '--target-min', (v) => /^(\d+)px$/.test(v) && parseFloat(v) >= 24)],

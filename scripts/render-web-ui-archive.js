@@ -24,6 +24,7 @@ const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits')
 const { LONG_LABELS, LONG_SESSION_ID, readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { probeStatsOffline } = require('./lib/stats-probes');
+const { probeKeysInExport } = require('./lib/polish-probes');
 
 let JSDOM, VirtualConsole;
 try {
@@ -268,6 +269,10 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   const left = await waitFor(() => !panes.classList.contains('txn-full'), 3000);
   check('txn route in export', opened && missing && left && attempts.length === 0,
     `${embedded.method} ${embedded.path} drawn ${opened}; an unknown id: "${said}" ${missing}; left ${left}; ${attempts.length} requests`);
+
+  // The page keys offline, live pages' letters doing nothing; see lib/polish-probes.js. Back on Traffic after.
+  const keysInExport = await probeKeysInExport(window, doc);
+  check('keys in export', keysInExport.startsWith('yes'), keysInExport.replace(/^(yes|NO)\s*(- )?/, ''));
 
   // The Stats page from the route table the export embeds; see lib/stats-probes.js. Back on Traffic after.
   for (const [label, value] of await probeStatsOffline(window, doc, archive, attempts)) {
