@@ -143,8 +143,13 @@ checked nothing`. It says `n/a (why)` instead only where the shape cannot exist,
 from a source the scan's emptiness cannot have caused: the daemon's rows, its `/current`, or the
 page's whole-session state, never the elements scanned. `failures unfolded` is the one decided from
 the page: with no summarised line it is `n/a` only when no line is open either, because a line left
-open is the only way a long visit stops being summarised. A count compared with an independent truth
-(`route matches`, `signal tabs count`, the archive's `marker dividers`) is not an empty scan: at
+open is the only way a long visit stops being summarised. `expanded unfolded` opened the second
+station, which on the CI fixture is Home with no failed call, so it compared 0 failures with 0. It
+now opens the first visit holding a failure by the daemon's rows, split into visits by the probe
+itself as `route matches` is, and also fails when that line draws fewer failures than the daemon
+holds there; with no failure in the session it reads `n/a (no visit holds a failure)`. A count
+compared with an independent truth (`route matches`, `signal tabs count`, the archive's `marker
+dividers`) is not an empty scan: at
 zero it still asserts that nothing spurious was drawn. The live probe's verdicts are in
 `lib/scan-verdicts.js`; the stylesheet audits `min text size` and `hidden panes hide`, the shell's
 `self has kill btn`, `rail is navigation` and `route pages`, the archive probe's `daemon controls

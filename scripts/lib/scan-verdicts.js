@@ -94,13 +94,60 @@ function failuresUnfolded(lines) {
     ?? `yes (${summarised} summarised ${summarised === 1 ? 'line' : 'lines'}, ${plural(lines.length, 'line')} in all)`;
 }
 
-/** `expanded unfolded`, after a station opened its line: the same rule, which needs an open line to mean anything. */
-function expandedUnfolded(lines) {
+/**
+ * The first visit holding a failed call, from the daemon's rows: `{ index, name, failures }`, or
+ * null when no visit holds one. `expanded unfolded` opens this one. The second station, which it
+ * opened before, is Home on the CI fixture, with no failure, so the rule compared 0 with 0.
+ *
+ * Visits are split here rather than by the page's `visits()`, for the reason `route matches` is: a
+ * probe calling the same function agrees with any bug in it. A visit starts at each change of
+ * screen name, plus a leading one when anything came before the first screen ([leading]); a call
+ * belongs to the last start at or before it, `seq` deciding a tie when both carry one.
+ */
+function failingVisit(screens, txns, leading) {
+  const starts = [];
+  const arrivals = [...screens].sort((a, b) => a.mono - b.mono || (a.seq ?? -Infinity) - (b.seq ?? -Infinity));
+  for (const s of arrivals) {
+    if (starts[starts.length - 1]?.name !== s.name) starts.push({ name: s.name, mono: s.mono, seq: s.seq ?? null });
+  }
+  if (leading) starts.unshift({ name: '', mono: -Infinity, seq: null });
+  if (!starts.length) return null;
+  const opensBy = (start, t) => (start.mono !== t.mono ? start.mono < t.mono
+    : start.seq == null || t.seq == null || start.seq < t.seq);
+  const failures = new Array(starts.length).fill(0);
+  for (const t of txns) {
+    if (!(t.error || (t.status ?? 0) >= 400)) continue;
+    let owner = 0;
+    starts.forEach((start, i) => { if (opensBy(start, t)) owner = i; });
+    failures[owner] += 1;
+  }
+  const index = failures.findIndex((n) => n > 0);
+  return index === -1 ? null : { index, name: starts[index].name || 'leading', failures: failures[index] };
+}
+
+/** The station `expanded unfolded` opens: the failing visit's, else the second, so `station opens line` still runs. */
+function stationToOpen(stations, screens, txns, leading) {
+  const held = failingVisit(screens, txns, leading);
+  const target = (held && stations.find((s) => s.dataset.visit === String(held.index)))
+    || stations[Math.min(1, stations.length - 1)];
+  return { held, target };
+}
+
+/**
+ * `expanded unfolded`, after a station opened its line: the same rule, which needs an open line to
+ * mean anything, and a line with a failure in it, or it compares 0 with 0. [held] is
+ * `failingVisit`'s answer; the opened line must draw at least the failures the daemon holds there.
+ */
+function expandedUnfolded(lines, held) {
+  if (!held) return 'n/a (no visit holds a failure)';
   const open = lines.filter((c) => c.classList.contains('pv-open'));
   const hiding = lines.filter((c) => failedIn(c) !== shownIn(c));
+  const target = open.find((c) => c.dataset.visit === String(held.index));
+  const drawn = target ? shownIn(target) : 0;
   return emptyScan(open.length, 'expanded line')
     ?? (hiding.length ? `NO - an expanded line hides a failure (${lineNames(hiding)})`
-      : `yes (${open.length} expanded ${open.length === 1 ? 'line' : 'lines'}, ${plural(open.reduce((n, c) => n + failedIn(c), 0), 'failure')} drawn)`);
+      : drawn < held.failures ? `NO - ${held.name} holds ${plural(held.failures, 'failure')}, its ${target ? 'open' : 'unopened'} line draws ${drawn}`
+        : `yes (${open.length} expanded ${open.length === 1 ? 'line' : 'lines'}, ${plural(drawn, 'failure')} drawn in ${held.name})`);
 }
 
 /**
@@ -128,5 +175,5 @@ function currentAgeVerdict(doc, current) {
 }
 
 module.exports = {
-  emptyScan, scopeRowVerdicts, waterfallVerdicts, failuresUnfolded, expandedUnfolded, unknownTagVerdict, currentAgeVerdict,
+  emptyScan, scopeRowVerdicts, waterfallVerdicts, failuresUnfolded, stationToOpen, expandedUnfolded, unknownTagVerdict, currentAgeVerdict,
 };

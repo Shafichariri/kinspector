@@ -1605,8 +1605,8 @@ function runScripts() {
     // Every failure named, collapsed or expanded; read before anything here opens a line.
     result.errorsUnfolded = scan.failuresUnfolded(cols());
 
-    // A station opens its line. Expanded, the same failure rule must still hold.
-    const target = stops()[Math.min(1, stops().length - 1)];
+    // A station opens its line, one holding a failure by the daemon's rows; expanded, the rule must still hold.
+    const { held, target } = scan.stationToOpen(stops(), screens, txns.items || [], leading);
     if (target) {
       const index = target.dataset.visit;
       await click(target);
@@ -1615,7 +1615,7 @@ function runScripts() {
       result.stationOpensLine = line && line.classList.contains('pv-open') && line.classList.contains('pv-focus')
         ? `yes (${line.dataset.screen || 'leading'})`
         : 'NO - the line did not open';
-      result.expandedUnfolded = scan.expandedUnfolded(cols());
+      result.expandedUnfolded = scan.expandedUnfolded(cols(), held);
     }
 
     const call = doc.querySelector('#path .pv-chip-call, #path .pv-call');
