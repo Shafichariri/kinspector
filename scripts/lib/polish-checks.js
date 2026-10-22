@@ -110,11 +110,28 @@ function auditIconControls(scripts) {
   return bad.length ? `NO - ${bad.join('; ')}` : `yes (${seen} icon controls: ⤢ ⇥ ✕ and ⋮ as svg, the Sessions row ✕ as text, each btn-icon)`;
 }
 
+/**
+ * A page document's buttons are at least `--target-min` tall (`.page-doc .btn`), and its prose stops
+ * at `--prose-max` (`.page-doc .settings-note`), from tokens that say so. The traffic toolbar is not a
+ * page document, so its height stays the band budget it was given (`room 1440 bands list`).
+ */
+function auditPageDoc(styles, selector, property, name, floor) {
+  const value = token(styles, name);
+  if (value === null) return `NO - ${name} is not declared in css/00-tokens.css`;
+  if (!floor(value)) return `NO - ${name} is "${value}"`;
+  const found = rulesInOrder(styles).filter((r) => r.selector === selector);
+  if (!found.length) return `NO - found no ${selector} rule, so this checked nothing`;
+  const takes = found.some((r) => r.decls.some(([n, v]) => n === property && v === `var(${name})`));
+  return takes ? `yes (${selector} takes ${property} from ${name}, ${value})` : `NO - ${selector} does not take ${property} from var(${name})`;
+}
+
 /** The lines `check-web-static.js` prints under `--- polish ---`. */
 function checkPolish(scripts, styles) {
   return [
     ['icon target css', auditIconTargets(styles)],
     ['icon controls svg', auditIconControls(scripts)],
+    ['page targets css', auditPageDoc(styles, '.page-doc .btn', 'min-height', '--target-min', (v) => /^(\d+)px$/.test(v) && parseFloat(v) >= 24)],
+    ['prose width css', auditPageDoc(styles, '.page-doc .settings-note', 'max-width', '--prose-max', (v) => /^\d+ch$/.test(v) && parseFloat(v) <= 80)],
   ];
 }
 

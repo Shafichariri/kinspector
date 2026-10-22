@@ -3,9 +3,11 @@ id: KIN-103
 title: >-
   Polish A2: page documents — 24px controls, prose at 72ch, the density select
   whole, Sessions rows lead with the start time
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 07:27'
+updated_date: '2026-10-22 08:05'
 labels:
   - 'item:web-ui-polish'
 dependencies:
@@ -30,3 +32,25 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Note §9 A2 criteria:
+1. At 1440 and 400 every visible .btn on Stats, Sessions, Processes and Settings is at least 24 px tall (polish <w> page targets).
+2. At 1440 every .settings-note is at most 72ch (polish 1440 prose width).
+3. At 1440 and 400 the density select shows comfortable whole (polish <w> density whole).
+4. At 400 and 1440 every Sessions row shows its start time whole, first, with the app ellipsized after it. The errors cell reads 0 when there are none (session row time, polish <w> session time whole).
+5. shell <w> page <name> fits stays green at 1440, 1000, 600 and 400.
+6. The picker paragraph's appended sentence (§8) is in.
+Files: web/css/00-tokens.css, 07-shell.css, 55-duplicates.css, 75-sessions.css, web/js/90-sessions.js, scripts/lib/polish-checks.js, polish-probes.js, polish-cases.js, scripts/render-web-ui.js, .github/workflows/ci.yml, structure/budgets.txt, docs/decisions/web-ui.md.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built (bob). --prose-max 72ch; .page-doc .btn { min-height: var(--target-min) } and .page-doc .settings-note, .page-doc .page-prose { max-width: var(--prose-max) } in 07-shell.css beside .page-actions; .settings-field select { width: auto; min-width: 84px } in 55-duplicates.css; Sessions label = span.session-row-time (flex none) + span.session-row-app (ellipsis), label flex gap 6px; errors cell .session-errors reads 0 muted.
+Static (122 -> 124): page targets css red with the rule removed: 'NO - found no .page-doc .btn rule, so this checked nothing'; prose width css red with the cap removed: 'NO - .page-doc .settings-note does not take max-width from var(--prose-max)'.
+Live probe (render-web-ui.js 263 -> 264, UI_EXPECT_CHECKS raised): session row time, wired from lib/shell-probes.js probeSessionsPage so render-web-ui.js does not grow (budget 2354 untouched). Red with [app, when] order: 'NO - 2026-01-01T09-00-00_probe_ci_debug leads with session-row-app "com.example.projectx", not the time "11:00 Jan 1"; ...'; red with errors blank: 'NO - 2025-12-31T09-00-00_probe-long_ci_debug has no errors and its cell reads ""'. Pace rule, same run: 'sessions folder: NO - the note says ...' (262 passed, 2 failed), restored. Archive 48 -> 48.
+Chrome: polish 1440/400 page targets (27 buttons), polish 1440 prose width (9 notes, widest 544 = 72ch), polish 1440/400 density whole ('comfortable' 112px for 99px), polish 1440/400 session time whole. Red in one run with the rule removed, the cap removed, width 84px back and the order reversed: 7 failed ('page-sessions preset-keep 19px', 'widest 1232px against a 72ch of 544px', '82px for 99px', 'com.example.projectx not first'). Empty scans fail ('NO - found no ...'). shell <w> page <name> fits green at 1440/1000/600/400.
+<!-- SECTION:NOTES:END -->

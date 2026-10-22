@@ -80,6 +80,11 @@
   gap: 8px;
   margin: 4px 0 8px;
 }
+/* A page's buttons are targets of at least `--target-min`, at the same 11px text. The traffic toolbar
+   is not a page document: its height is the band budget the list was given (`room 1440 bands list`). */
+.page-doc .btn { min-height: var(--target-min); }
+/* Prose stops at a readable measure; tables, `pre` and the actions row keep the page's width. */
+.page-doc .settings-note, .page-doc .page-prose { max-width: var(--prose-max); }
 .page-actions input[type="number"], .config-row input {
   width: 72px;
   background: var(--bg);

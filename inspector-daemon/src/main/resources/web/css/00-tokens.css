@@ -50,6 +50,8 @@
   /* Sizes, not colours, so not the overlay's. The smallest box a pointer is asked to hit: WCAG 2.2's
      minimum target (2.5.8, AA). */
   --target-min: 24px;
+  /* The widest a page's prose runs: at 1440 a Sessions note ran 1232px, about 190 characters a line. */
+  --prose-max: 72ch;
 }
 
 @media (prefers-color-scheme: light) {

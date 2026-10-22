@@ -335,13 +335,17 @@ function sessionRow(meta) {
   row.appendChild(cellOf(tick, 'col-check'));
 
   const name = el('td', 'session-name');
-  name.appendChild(el('div', 'session-row-label', [parts.app, parts.when].filter(Boolean).join(' · ')));
+  // The start time leads and never shrinks, as on the picker's face; the app ellipsizes after it.
+  const label = el('div', 'session-row-label');
+  label.append(el('span', 'session-row-time', parts.when), el('span', 'session-row-app', parts.app || ''));
+  name.appendChild(label);
   name.appendChild(el('div', 'session-row-id mono muted', meta.sessionId));
   name.title = meta.sessionId;
   row.appendChild(name);
   row.appendChild(el('td', 'col-secondary', meta.device || ''));
   row.appendChild(el('td', 'num mono', String(meta.txnCount ?? 0)));
-  row.appendChild(el('td', 'col-secondary num mono', meta.errorCount ? String(meta.errorCount) : ''));
+  // `0`, muted, as Stats prints `0%`: a blank cell read as "not counted".
+  row.appendChild(el('td', `col-secondary num mono session-errors${meta.errorCount ? '' : ' muted'}`, String(meta.errorCount || 0)));
   row.appendChild(el('td', live ? 'session-state recording' : 'session-state muted', live ? 'recording' : 'ended'));
 
   const actions = el('td', 'col-actions');
