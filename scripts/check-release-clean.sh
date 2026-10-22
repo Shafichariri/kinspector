@@ -14,7 +14,8 @@
 #   check-release-clean.sh --paths P...    scan explicit files/dirs, expect NO canary
 #                                          (use for app release APK/AAB/.framework outputs)
 #
-# Exit codes: 0 expected result, 1 unexpected canary state, 2 usage or internal error.
+# Exit codes: 0 expected result, 1 unexpected canary state, 2 usage or internal error, or a target
+# that is missing or cannot be unpacked.
 
 set -Eeuo pipefail
 
@@ -120,6 +121,10 @@ missing=()
 # needs a different message.
 unproven=()
 
+# Archives `unzip` could not open. Separate again: the file was there, but nothing inside it was
+# looked at, so neither "clean" nor "canary found" is an answer about it.
+unreadable=()
+
 scan_target() {
   local target="$1"
   # Never a skip. A guard that cannot find what it was asked to scan has proven nothing, and
@@ -134,14 +139,30 @@ scan_target() {
     # A published klib is a deflate zip. Its strings are plain ASCII only once unpacked, in
     # default/ir/strings.knt, so a raw grep of the file finds nothing in inspector-core's own klib.
     *.jar|*.aar|*.apk|*.aab|*.zip|*.klib)
-      local dest
+      local dest status=0
       unpacked=$((unpacked + 1))
       dest="$WORK/$unpacked"
       mkdir -p "$dest"
-      unzip -qo "$target" -d "$dest" >/dev/null 2>&1 || true
-      # .aar wraps classes.jar; unpack one level of nested archives too.
+      # unzip exits 1 for a warning with everything extracted, such as bytes before the archive,
+      # and 2 or more when it could not read the archive: 9 for a truncated jar or a text file
+      # named `.klib`. That status was once dropped with `|| true`, and an empty unpack folder
+      # greps as clean. Tested inline, never through a function returning non-zero: under `-E` a
+      # function that fails inside `$(...)` runs the ERR trap and prints a false internal error.
+      unzip -qo "$target" -d "$dest" >/dev/null 2>&1 || status=$?
+      if [[ $status -ge 2 ]]; then
+        unreadable+=("$target")
+        echo "  UNREADABLE (unzip exit $status): $target"
+        return
+      fi
+      # .aar wraps classes.jar; unpack one level of nested archives too. A nested jar that cannot
+      # be read leaves its classes unscanned, which is the same unproven answer as the outer file.
       while IFS= read -r nested; do
-        unzip -qo "$nested" -d "${nested}.unpacked" >/dev/null 2>&1 || true
+        unzip -qo "$nested" -d "${nested}.unpacked" >/dev/null 2>&1 || status=$?
+        if [[ $status -ge 2 ]]; then
+          unreadable+=("$target (${nested#"$dest"/})")
+          echo "  UNREADABLE (unzip exit $status on ${nested#"$dest"/}): $target"
+          return
+        fi
       done < <(find "$dest" -name "*.jar" 2>/dev/null || true)
       if grep -rlaF -- "$CANARY" "$dest" >/dev/null 2>&1; then
         hits+=("$target")
@@ -209,6 +230,15 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   echo >&2
   echo "Nothing was proven about them. Check the paths, and note that relative paths are" >&2
   echo "resolved against the directory you ran this from ($INVOCATION_DIR)." >&2
+  exit 2
+fi
+
+if [[ ${#unreadable[@]} -gt 0 ]]; then
+  echo "ERROR: ${#unreadable[@]} archive(s) could not be unpacked:" >&2
+  printf '  %s\n' "${unreadable[@]}" >&2
+  echo >&2
+  echo "Nothing was proven about them: an archive this script cannot open is not clean. Check" >&2
+  echo "that each is a complete jar, aar, apk, aab, zip or klib, not truncated or renamed." >&2
   exit 2
 fi
 

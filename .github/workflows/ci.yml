@@ -50,7 +50,7 @@ jobs:
       # is a zip: core's own read as clean until the guard unpacked klibs. A deep path once made a
       # temp name too long, and the mkdir error exited 1, "canary found". Each case pins its exit
       # code, so a regression either way fails here and not at a consumer's release.
-      - name: Release guard — packed klibs, deep paths, internal errors
+      - name: Release guard — packed klibs, deep paths, unreadable archives, internal errors
         run: |
           ./gradlew :inspector-core:iosArm64Klib :inspector-noop:iosArm64Klib
           expect() {
@@ -71,6 +71,13 @@ jobs:
           printf '#!/bin/sh\nexit 1\n' > "$RUNNER_TEMP/stub/mktemp"
           chmod +x "$RUNNER_TEMP/stub/mktemp"
           PATH="$RUNNER_TEMP/stub:$PATH" expect 2 --paths "$deep/noop"
+          # An archive unzip cannot open once unpacked to an empty folder and read as clean, so
+          # half of core's own jar passed. Exit 2: nothing was proven.
+          jar="$(ls inspector-core/build/libs/inspector-core-jvm-*.jar | grep -v -e sources -e javadoc | head -1)"
+          head -c "$(( $(wc -c < "$jar") / 2 ))" "$jar" > "$RUNNER_TEMP/truncated.jar"
+          printf 'not a zip\n' > "$RUNNER_TEMP/text.klib"
+          expect 2 --paths "$RUNNER_TEMP/truncated.jar"
+          expect 2 --paths "$RUNNER_TEMP/text.klib"
 
       # A CI-only failure is diagnosed from CI or not at all. The console log carries the assertion
       # message; these reports carry the full per-test output and stack traces.
