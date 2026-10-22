@@ -676,20 +676,48 @@ structure pass before §6 rather than leave it trailing. See below.)*
 The maintainer set this order on 2026-10-18. It runs across §3, §5 and §6, so it is recorded once,
 here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` → §5 → "Order from here — the rows finished". They are not in this table.
 
+**Release 1.4.0 — decided 2026-10-22 by the maintainer.** One release, and its part of the order
+ends at findings and sensitive-data detection.
+- **Scope:** everything merged on `main` when the tag is cut.
+- **Required before the tag:** all of `item:findings-payment-safety` (its PR B and C included) and
+  `item:sensitive-data-detection` T1 to T5, each merged and verified by QA; the private security
+  advisory's fix, row 13; and `item:release-1-4-docs`, which lands last.
+- **Fallback:** if those are not merged and verified by QA by **2026-12-03**, 1.4.0 is cut that day
+  from what is merged, and anything required that missed it goes to the following release.
+- **After 1.4.0:** session diff, the rest of web UI polish, the two web defects that wait on polish, and the
+  native-surface guard. They are in the "After 1.4.0" table below.
+
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
 | 13b | The README and the landing page say only what is true | §3 → Bugs found, not fixed, below the 2026-10-22 housekeeping | `item:public-claims-true` | XS | S, first in the lane; its Android sentence waits on the maintainer's answer in the item |
+| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA |
+| 13d | The release page and `ACCESS.md` name the same place to get the library | §6 → Release 1.4.0 | `item:release-notes-boilerplate` | XS | S; independent of 13c, so it does not wait for 13c's last commit |
+| 13e | Rehearse the release locally before the tag | §6 → Release 1.4.0 | `item:release-rehearsal` | S | S; run once findings and detection are merged, before 13c's last commit, so a fault it finds still has time to be fixed |
 | 16e | The overview band's reserved height is a promise nothing holds | §3 → Guards | `item:guard-overview-band-reserved` | XS | S; lands before `item:web-ui-polish` PR A, which restyles the bands it guards |
 | 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after `item:route-key-one-ipv6-host` *(done 2026-10-22)*: T1, then Shared body evidence, then T2, T3 and T4. **PR A part done 2026-10-22: T1, Shared body evidence, T2 and T3 (PRs #151, #152); T4 open.** PR B and C in W |
 | 26a | Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract, carved out of diff T1 | §6 → Findings, "Shared body evidence" | `item:findings-payment-safety` | S | D, inside findings PR A: after findings T1, before findings T2. **Ticket KIN-112 done 2026-10-22 (PR #151, `428745a`).** Findings T3 is the first ticket that depends on it; diff T1 and detection T2 depend on it too |
 | 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D, after findings PR A; T5 in W, after findings PR B and C |
 | 30a | A sample demo flow that both rule families catch | §6 → A sample demo flow | `item:sample-demo-flow` | S | S, after detection T5, so QA runs both rule families on it |
+
+**After 1.4.0**, decided 2026-10-22 by the maintainer. Row labels are kept. Why they wait: 1.4.0 ships the two
+features that catch a defect in the app under test, and none of these is needed to show them.
+
+| Order | Item | Where | Ticket label | Size | Lane |
+|---|---|---|---|---|---|
 | 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after detection T4: T4, then T1 reduced by Shared body evidence, then T2 and T3. PR B in W, after detection T5 and polish PR A |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22: A1, A2 and A7 (PR #150); A3 to A6 open** |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; the rest of PR A (A3 to A6) before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150)** |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
+
+**Three rows added 2026-10-22 for the 1.4.0 cut, approved by the maintainer's proxy on the product
+owner's proposal**, all in lane S and straight after `item:public-claims-true`: `item:release-1-4-docs`,
+`item:release-notes-boilerplate` and `item:release-rehearsal`. Each is cheap, and each is what stands
+between a merged feature and a release a consuming team can take on trust: notes that match the
+evidence, a release page that agrees with `docs/ACCESS.md`, and a publish path exercised before the
+tag rather than by it. The rows under "After 1.4.0" keep their order relative to each other; they only
+moved below the cut. §6's "Ships in" column (1.5 to 1.7) is superseded by this split.
 
 **Re-ordered 2026-10-22 by the maintainer's proxy: features that catch real defects and can be
 demonstrated come first; the architect confirmed the findings/diff dependency is one shared piece.**
@@ -940,6 +968,9 @@ screen, and building those into the current single page would mean building them
 | 5 | Sensitive-data detection — detect, never redact | M | 1.6 | yes, decided 2026-10-21 |
 | 6 | Web UI polish, against the finished screens | M | 1.7 | yes, decided 2026-10-21 |
 | — | Mocking, fault injection, breakpoints | — | Deferred: needs the SDK | — |
+
+*"Ships in" superseded 2026-10-22 by the maintainer: findings and detection are required for 1.4.0, and
+session diff and the rest of polish come after it. See "Order from here" → "Release 1.4.0".*
 
 *Last column added 2026-10-18.* The maintainer's decision that day ordered work across §3, §5 and
 §6 together. Items 3 to 6 keep their §6 order but are not scheduled by it. The advisory row is not
@@ -1356,6 +1387,96 @@ The `⤢` and `⇥` glyphs in the detail pane's tools row, drawn at 13px since 1
 (placed 2026-10-21 from the coordinated run's follow-ups; §3 → Bugs found, not fixed has the table).
 
 An editor for `routeTemplates` on the Settings page. 1a's editor covers retention and signal caps, and `item:endpoint-latency-stats` left templates to `config.json` and `PUT /api/config`, which validates them.
+
+### Release 1.4.0
+
+Added 2026-10-22 by the product owner and approved the same day by the maintainer's proxy. These three
+items are the 1.4.0 cut's own work; its scope, what it requires and its fallback date are in "Order from
+here" → "Release 1.4.0". None changes code a consumer compiles. Surfaces: docs, the release workflow's
+text and `docs/STATUS.md`. No public API, no noop twin, no golden file.
+
+#### The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships
+
+*Ticket label:* `item:release-1-4-docs`
+
+**The user and the problem.** A consuming team upgrading from 1.3.0, and the developer on a Mac who
+downloads the 1.4.0 daemon. They read the release page and `INTEGRATION.md` §14, not the commits.
+`docs/UNRELEASED.md` holds twenty-three owed lines written one item at a time. Several describe the same
+screen twice, some sentences were true when written and have since been overtaken by a later item, and
+the lines for findings, detection and the merged polish work are not written yet. `INTEGRATION.md` v60
+and v61 tell a reader that the 1.3.0 daemon's web UI "is the one v59 described". v59 is about `inspector-ui`'s public API and describes no web
+UI; the entry for 1.3.0 is v57.
+
+**Why now.** It is the last thing before the tag, and the tag is required to wait for it. Starting the
+consolidation now, on the lines that already exist, leaves only the findings and detection lines for
+the end.
+
+**Acceptance criteria.**
+- `docs/UNRELEASED.md`'s owed lines that overlap are one line each: the sixth, eighth and eighteenth;
+  the fifth, ninth and nineteenth; the thirteenth and twenty-third. A sentence a later item made false
+  is dropped, and the change lists each one it dropped and which item overtook it.
+- Lines are added for findings, sensitive-data detection and the merged parts of web UI polish, each
+  once its work is merged and verified by QA, never before.
+- Every claim in the consolidated notes matches `docs/STATUS.md` → Verified at the cut. A claim STATUS
+  does not support is reworded or removed. Nothing is claimed for an item the cut left out (the
+  fallback in "Release 1.4.0").
+- `INTEGRATION.md` gains, with a version bump and a §14 entry that says what a consumer must *do*:
+  `GET /api/sessions/{id}/findings`, the MCP tool `list_findings`, the CLI's `inspector findings`, the
+  `findings` config key and that it is re-read live, and the same set for detection as built.
+- v60 and v61 point to v57 for the 1.3.0 web UI. Older changelog entries are otherwise left as written.
+- It lands last before the tag. A later merge that changes what 1.4.0 ships reopens it.
+
+**Out of scope.** The README and the landing page, which are `item:public-claims-true`'s. The release
+page's boilerplate, which is `item:release-notes-boilerplate`'s. Rewriting old changelog entries for
+style. **Size:** S.
+
+#### The release page and `ACCESS.md` name the same place to get the library
+
+*Ticket label:* `item:release-notes-boilerplate`
+
+**The user and the problem.** A consuming team reading a release page to add the dependency. The notes
+`.github/workflows/release.yml` writes say the library comes "from GitHub Packages", that the registry
+wants a token, and that `docs/ACCESS.md` leads with that. `docs/ACCESS.md` leads with Maven Central,
+anonymous from 1.0.1, and keeps GitHub Packages as the older path. A reader who follows the release page
+sets up a token they do not need.
+
+**Why now.** Every release page from now on repeats it, and 1.4.0 is the next one. It is a few lines.
+
+**Acceptance criteria.**
+- The release page's library section names Maven Central first, with `mavenCentral()` and no token, and
+  GitHub Packages as the alternative that needs one, in the same order and words as `docs/ACCESS.md`.
+- It does not claim the version is on Central when the page is created. The Central job only stages the
+  bundle and a person publishes it (`docs/decisions/release.md`), so the page says the version reaches
+  Central once the maintainer publishes it, or the workflow's order makes the claim true. The architect
+  picks which.
+- No other sentence in the boilerplate contradicts `docs/ACCESS.md`, and the change lists each one checked.
+
+**Out of scope.** Publishing automatically to Central, which `docs/decisions/release.md` rejects.
+**Size:** XS.
+
+#### Rehearse the release locally before the tag
+
+*Ticket label:* `item:release-rehearsal`
+
+**The user and the problem.** The maintainer cutting 1.4.0, and every consuming team after them. A
+tagged release is where a broken publish is most expensive to find: a coordinate on Central cannot be
+replaced. 1.4.0 is the first release since the `gradle.lockfile`s came in, so nobody has read a POM
+built under them, and `docs/decisions/release.md` records three POM faults that no build failed on.
+
+**Why now.** Before the tag, with time left to fix what it finds.
+
+**Acceptance criteria.**
+- The publish tasks run to a local repository at the release version, and someone reads a generated
+  POM from each published module: name, coordinates and dependency versions match the locks, and no
+  dependency is missing or added.
+- The daemon zip is built and its smoke test passes, the same one `release.yml` runs.
+- `./scripts/check-release-clean.sh --self-test` finds the canary and `./scripts/check-release-clean.sh`
+  finds nothing, both on the rehearsal's artifacts.
+- The results, with the commit they ran on, are recorded in `docs/STATUS.md` by the delivery tracker.
+  A fault found becomes an item or a fix before the tag, not a note.
+
+**Out of scope.** Signing with the real key, and any upload to Central or GitHub Packages. Changing the
+workflow, unless the rehearsal finds a fault in it. **Size:** S.
 
 ### Candidates, not ordered
 
