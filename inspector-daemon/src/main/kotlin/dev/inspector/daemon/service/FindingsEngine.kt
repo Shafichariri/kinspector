@@ -14,7 +14,8 @@ import kotlinx.serialization.json.JsonPrimitive
 /** Every family of findings rules. */
 object FindingSources {
     /** The one registration point. A family adds one line. */
-    fun all(settings: FindingSettings): List<FindingSource> = listOf(PaymentSource(settings.payment))
+    fun all(settings: FindingSettings): List<FindingSource> =
+        listOf(PaymentSource(settings.payment), SensitiveSource(settings.sensitive))
 }
 
 /**
@@ -102,15 +103,18 @@ class FindingsEngine internal constructor(
         val coverage = LinkedHashMap<String, JsonObject>()
         for ((source, part) in fold.parts) {
             val (session, accumulator) = part
-            val registered = source.rules.mapTo(HashSet()) { it.id }
+            // The source instance's rules, not the static catalogue: a custom rule built from settings
+            // exists only there, and checking the catalogue would drop every one of its findings.
+            val registered = source.rules.associateBy { it.id }
             for (finding in accumulator.findings()) {
-                if (finding.ruleId !in registered) {
+                val rule = registered[finding.ruleId]
+                if (rule == null) {
                     once("unregistered:${finding.ruleId}") {
                         "dropped a finding under '${finding.ruleId}', which the ${source.category} source did not register"
                     }
                     continue
                 }
-                if (!session.enabled(finding.ruleId)) continue
+                if (!(fold.rules.settings.rules[rule.id]?.enabled ?: rule.defaultEnabled)) continue
                 kept += checked(finding) to (session.firstMono[finding.id] ?: Long.MAX_VALUE)
             }
             accumulator.coverage()?.let { cover ->
@@ -167,7 +171,7 @@ class FindingsEngine internal constructor(
                     summary = rule.summary,
                     severity = (override?.severity ?: rule.defaultSeverity).key,
                     defaultSeverity = rule.defaultSeverity.key,
-                    enabled = override?.enabled ?: true,
+                    enabled = override?.enabled ?: rule.defaultEnabled,
                     count = counts[rule.id] ?: 0,
                     note = source.note(rule.id),
                 )

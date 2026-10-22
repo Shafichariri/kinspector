@@ -3,9 +3,11 @@ id: KIN-123
 title: >-
   Sensitive data T4: sensitive findings in the exports, masked, dismissals
   disclosed
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 09:40'
+updated_date: '2026-10-22 11:32'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -34,3 +36,9 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once its PR merges. Sensitive findings reach every export through Findings' existing path (compute -> SessionExport, ExportMarkdown, Har notes), masked; dismissals: service/ExportMarkdown.kt ('N dismissed, listed with their reasons.' and a 'dismissed: <reason> (<at>)' line under the finding), service/Har.kt ('(dismissed: <reason>)' on the finding note), docs/decisions/exports.md (the design's paragraph). The JSON/HTML carry Finding.dismissed (T3). Tests: ExportDismissalTest (its own file: ExportTest is at its 600-line budget), SensitiveLeakTest covers the JSON export's findings (the HTML embeds the same document), the Markdown section and every HAR comment. Red proofs: dismissed filtered out of exports (compute with includeDismissed = false) -> ExportDismissalTest 'Collection contains no element matching the predicate'; leak breaks as in KIN-121. — bob
+<!-- SECTION:NOTES:END -->

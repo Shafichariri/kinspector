@@ -183,10 +183,10 @@ class ExportTest {
     fun `a session with no calls exports no findings and every rule it checked`() {
         val findings = json.parseToJsonElement(SessionExport.toJson(build(session { }))).jsonObject.getValue("findings").jsonObject
         assertEquals(0, findings["findings"]?.jsonArray?.size, findings.toString())
-        assertEquals(6, findings["rules"]?.jsonArray?.size, findings.toString())
+        assertEquals(17, findings["rules"]?.jsonArray?.size, findings.toString())
         assertContains(
             ExportMarkdown.render(build(session("2026-08-16T10-14-03_app_dev_debug") { })),
-            "## Findings\n\nNo findings: 6 rules checked.",
+            "## Findings\n\nNo findings: 17 rules checked.",
         )
     }
 
@@ -200,12 +200,12 @@ class ExportTest {
         val findings = md.indexOf("## Findings")
         assertTrue(findings in (routes + 1) until md.indexOf("## Timeline"), md)
         val section = md.substring(findings, md.indexOf("## Timeline"))
-        assertContains(section, "1 high, 2 medium, 0 info from 6 rules (rule version ")
+        assertContains(section, "1 high, 2 medium, 0 info from 17 rules (rule version ")
         assertContains(section, "### Duplicate mutation — high (1)")
         assertContains(section, "  rows: `aaaa1111`, `bbbb2222`")
         assertContains(section, "  - call 2: attempt 1, 201, +1200 ms; same request body as call 1, 32 B (`bbbb2222`)")
         assertContains(section, "### Key missing on a payment path — medium (2)")
-        assertContains(section, "Checked, nothing found: Key reused, body changed; Automatic retry without a key; Ambiguous resubmit; Retry with a key.")
+        assertContains(section, "Checked, nothing found: Key reused, body changed; Automatic retry without a key; Ambiguous resubmit; Retry with a key; Card number;")
         assertContains(section, "2 mutation calls looked at; 2 request bodies compared.")
     }
 

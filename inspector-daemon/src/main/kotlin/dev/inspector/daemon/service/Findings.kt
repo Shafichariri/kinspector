@@ -164,8 +164,9 @@ class FindingSession(
     /** The first member's `mono` per finding id, for the engine's order. */
     internal val firstMono = HashMap<String, Long>()
 
-    /** The `findings.rules` override, else on. */
-    fun enabled(ruleId: String): Boolean = settings.rules[ruleId]?.enabled ?: true
+    /** The `findings.rules` override, else the catalogue default (on, but for rules that ship off). */
+    fun enabled(ruleId: String): Boolean =
+        settings.rules[ruleId]?.enabled ?: FindingRuleCatalog.byId(ruleId)?.defaultEnabled ?: true
 
     /** The override, else the catalogue default. A source may raise it by its own documented rule. */
     fun severity(ruleId: String): FindingSeverity =

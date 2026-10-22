@@ -41,6 +41,8 @@ data class FindingRuleInfo(
     /** One sentence: what the rule flags and why it matters. */
     val summary: String,
     val defaultSeverity: FindingSeverity,
+    /** Whether the rule runs with no `findings.rules` entry; email and phone ship off. */
+    val defaultEnabled: Boolean = true,
 )
 
 /**
@@ -97,8 +99,77 @@ object FindingRuleCatalog {
         RETRY_WITH_KEY,
     )
 
+    const val SENSITIVE = "sensitive"
+    private const val SENSITIVE_TITLE = "Sensitive data"
+
+    private fun sensitive(name: String, title: String, summary: String, severity: FindingSeverity, enabled: Boolean = true) =
+        FindingRuleInfo("$SENSITIVE.$name", SENSITIVE, SENSITIVE_TITLE, title, summary, severity, enabled)
+
+    val CARD_NUMBER = sensitive(
+        "card-number", "Card number",
+        "A string of 13 to 19 digits that could be a card (first digit 2 to 6) and passes Luhn; a JSON " +
+            "number counts only under a card field name. Published test numbers are info.",
+        FindingSeverity.MEDIUM,
+    )
+    val IBAN = sensitive(
+        "iban", "IBAN",
+        "A bank account number of its country's ISO 13616 length that passes mod-97.",
+        FindingSeverity.MEDIUM,
+    )
+    val JWT_IN_URL = sensitive(
+        "jwt-in-url", "JWT in a URL",
+        "A token whose header decodes to JSON with an alg, in the path or query, where every proxy and " +
+            "server on the way logs it.",
+        FindingSeverity.HIGH,
+    )
+    val SECRET_IN_URL = sensitive(
+        "secret-in-url", "Secret in a URL",
+        "A query parameter named like a token, password, key or session id, with a value.",
+        FindingSeverity.HIGH,
+    )
+    val CREDENTIALS_OVER_HTTP = sensitive(
+        "credentials-over-http", "Credentials over http",
+        "An Authorization, Cookie or key header, a Set-Cookie, or a secret in the URL or a password field, " +
+            "sent over plain http. Medium to a private address; info to loopback or an emulator's host alias.",
+        FindingSeverity.HIGH,
+    )
+    val EMAIL = sensitive(
+        "email", "Email address", "An email address. Off unless turned on in findings.rules.", FindingSeverity.INFO, enabled = false,
+    )
+    val PHONE = sensitive(
+        "phone", "Phone number", "A phone number in international form. Off unless turned on in findings.rules.",
+        FindingSeverity.INFO, enabled = false,
+    )
+    val FIELD_SECRET = sensitive(
+        "field.secret", "Secret field",
+        "A field or parameter named like a password, PIN, one-time code or secret, whatever its value; " +
+            "expected in an auth request.",
+        FindingSeverity.INFO,
+    )
+    val FIELD_PAYMENT = sensitive(
+        "field.payment", "Payment field",
+        "A field or parameter named like a card number, CVV, IBAN or account number, whatever its value.",
+        FindingSeverity.MEDIUM,
+    )
+    val FIELD_IDENTITY = sensitive(
+        "field.identity", "Identity field",
+        "A field or parameter named like a national id, tax number, passport number or date of birth, " +
+            "or a name added in findings.sensitive.fieldNames.",
+        FindingSeverity.MEDIUM,
+    )
+    val FIELD_NAME = sensitive(
+        "field.name", "Personal name field",
+        "A field or parameter named like a first, last or full name.",
+        FindingSeverity.INFO,
+    )
+
+    val SENSITIVE_RULES: List<FindingRuleInfo> = listOf(
+        CARD_NUMBER, IBAN, JWT_IN_URL, SECRET_IN_URL, CREDENTIALS_OVER_HTTP, EMAIL, PHONE,
+        FIELD_SECRET, FIELD_PAYMENT, FIELD_IDENTITY, FIELD_NAME,
+    )
+
     /** Built-ins only. Each family appends its shipped list here. */
-    val ALL: List<FindingRuleInfo> = PAYMENT_RULES
+    val ALL: List<FindingRuleInfo> = PAYMENT_RULES + SENSITIVE_RULES
 
     val CATEGORIES: List<String> = ALL.map { it.category }.distinct()
 

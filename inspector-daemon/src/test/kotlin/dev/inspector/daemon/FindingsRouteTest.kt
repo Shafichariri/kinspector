@@ -101,7 +101,7 @@ class FindingsRouteTest {
                 "payment.duplicate-mutation", "payment.key-reused-body-changed", "payment.retry-without-key",
                 "payment.ambiguous-resubmit", "payment.key-missing-payment-path", "payment.retry-with-key",
             ),
-            report.list("rules").map { it.getValue("id").jsonPrimitive.content },
+            report.list("rules").map { it.getValue("id").jsonPrimitive.content }.filter { it.startsWith("payment.") },
         )
         assertEquals(
             listOf("id", "category", "categoryTitle", "title", "summary", "severity", "defaultSeverity", "enabled", "count"),
@@ -127,8 +127,8 @@ class FindingsRouteTest {
         assertEquals(16, report.int("total"))
         assertEquals(0, report.int("findingCount"))
         assertEquals(emptyList(), report.list("findings"))
-        assertEquals(6, report.list("rules").size)
-        assertEquals(List(6) { 0 }, report.list("rules").map { it.int("count") })
+        assertEquals(17, report.list("rules").size)
+        assertEquals(List(17) { 0 }, report.list("rules").map { it.int("count") })
     }
 
     @Test
@@ -142,7 +142,7 @@ class FindingsRouteTest {
     fun `category narrows, limit is clamped, and a bad one is a 400 naming the categories`() = runBlocking {
         assertEquals(6, ok("payments", "category" to "payment").list("rules").size)
         assertEquals("payment", ok("payments", "category" to "payment").getValue("category").jsonPrimitive.content)
-        assertEquals(6, ok("payments", "category" to "").list("rules").size)
+        assertEquals(17, ok("payments", "category" to "").list("rules").size)
 
         val one = ok("payments", "limit" to "1")
         assertEquals(1, one.list("findings").size)
@@ -152,7 +152,7 @@ class FindingsRouteTest {
 
         val bad = findings("payments", "category" to "pay")
         assertEquals(400, bad.status.value)
-        assertEquals("""{"error":"unknown category 'pay'. Use one of: payment."}""", bad.bodyAsText())
+        assertEquals("""{"error":"unknown category 'pay'. Use one of: payment, sensitive."}""", bad.bodyAsText())
     }
 
     @Test

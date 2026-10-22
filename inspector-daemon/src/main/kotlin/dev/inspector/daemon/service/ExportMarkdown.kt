@@ -149,12 +149,15 @@ object ExportMarkdown {
     private fun StringBuilder.renderFindings(report: FindingsReport) {
         appendLine("## Findings")
         appendLine()
+        // A dismissed finding is still listed, with its reason: an export that left it out would tell
+        // its reader nothing was found.
+        val dismissed = if (report.dismissedCount > 0) " ${report.dismissedCount} dismissed, listed with their reasons." else ""
         if (report.findingCount == 0) {
-            appendLine("No findings: ${count(report.rules.size, "rule")} checked.")
+            appendLine("No findings: ${count(report.rules.size, "rule")} checked.$dismissed")
         } else {
             appendLine(
                 "${report.high} high, ${report.medium} medium, ${report.info} info from ${count(report.rules.size, "rule")} " +
-                    "(rule version ${report.ruleVersion}). Evidence never shows a captured value.",
+                    "(rule version ${report.ruleVersion}). Evidence never shows a captured value.$dismissed",
             )
         }
         appendLine()
@@ -165,6 +168,7 @@ object ExportMarkdown {
             appendLine()
             for (finding in found) {
                 appendLine("- ${line(finding.message)}")
+                finding.dismissed?.let { appendLine("  dismissed: ${line(it.reason)}${it.at?.let { at -> " (${line(at)})" }.orEmpty()}") }
                 val shown = finding.txnIds.take(MAX_FINDING_ROWS).joinToString(", ") { inlineCode(it) }
                 val more = finding.txnCount - minOf(finding.txnIds.size, MAX_FINDING_ROWS)
                 appendLine("  rows: $shown${if (more > 0) " and $more more" else ""}")

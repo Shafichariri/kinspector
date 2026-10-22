@@ -98,11 +98,13 @@ async function probeFindingsPage(ctx) {
     if (own.findingCount > 0) {
       out.set('findings none', `n/a (${sessionId} has ${own.findingCount} findings)`);
     } else {
+      // Rules that ship off (sensitive email and phone) say so instead; every rule that ran reads checked.
       const checked = page.rules.filter((s) => text(s).includes('— checked, none found'));
-      out.set('findings none', page.count === ownDue && own.rules.length > 0 && checked.length === own.rules.length && page.articles.length === 0
-        ? `yes ("${page.count}"; ${checked.length} rules read "checked, none found", as the daemon checked ${own.rules.length})`
+      const ran = own.rules.filter((rule) => rule.enabled);
+      out.set('findings none', page.count === ownDue && ran.length > 0 && checked.length === ran.length && page.articles.length === 0
+        ? `yes ("${page.count}"; ${checked.length} rules read "checked, none found", as the daemon ran ${ran.length} of ${own.rules.length})`
         : !page.rules.length ? `NO - found no rule section, so this checked nothing; "${page.count}"`
-          : `NO - "${page.count}" where "${ownDue}" was due; ${checked.length} of ${own.rules.length} rules read checked; ${page.articles.length} findings drawn`);
+          : `NO - "${page.count}" where "${ownDue}" was due; ${checked.length} of ${ran.length} rules that ran read checked; ${page.articles.length} findings drawn`);
     }
 
     const hasPayments = [...picker.options].some((o) => o.value === PAYMENTS_SESSION_ID);
@@ -128,10 +130,12 @@ async function probeFindingsPage(ctx) {
         : `NO - "${page.count}" where "${due}" was due (the fixture's ${PAYMENTS.findings}/${PAYMENTS.calls}/${PAYMENTS.high}/${PAYMENTS.medium}/${PAYMENTS.info} held: ${fixture}); `
           + `title "${title}"; ${page.articles.length} findings; rules drawn otherwise: ${wrongRules.join(', ') || 'none'}; ${rowsDrawn.size} rows linked, ${PAYMENTS.rows} due`);
 
+      // One line per family, as the daemon wrote it and in its order; the payment one is the fixture's.
       const line = report.coverage && report.coverage.payment && report.coverage.payment.line;
-      out.set('findings coverage', page.coverage.length === 1 && page.coverage[0] === line && line === PAYMENTS.coverage
-        ? `yes ("${line}", as given)`
-        : `NO - drew ${JSON.stringify(page.coverage)}; the daemon says "${line}", the fixture "${PAYMENTS.coverage}"`);
+      const lines = Object.values(report.coverage || {}).map((cover) => cover.line);
+      out.set('findings coverage', lines.length > 1 && sameJson(page.coverage, lines) && line === PAYMENTS.coverage
+        ? `yes (${lines.length} lines as given, payment's "${line}")`
+        : `NO - drew ${JSON.stringify(page.coverage)}; the daemon says ${JSON.stringify(lines)}, the fixture's payment line "${PAYMENTS.coverage}"`);
 
       // A call link opens the call's own page, pushed, so Back returns to the page as it was.
       const first = report.findings[0];

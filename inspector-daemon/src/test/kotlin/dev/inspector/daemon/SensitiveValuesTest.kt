@@ -153,12 +153,13 @@ class SensitiveValuesTest {
 
     @Test
     fun `secret parameter names are matched normalised and whole`() {
-        for (name in listOf("api_key", "Api-Key", "access_token", "id_token", "client-secret", "Password", "session.id", "auth")) {
+        for (name in listOf("api_key", "Api-Key", "apikey", "X-Api-Key", "x_api_key", "access_token", "id_token", "client-secret", "Password", "session.id", "auth")) {
             assertTrue(SensitiveValues.isSecretName(name), name)
         }
         for (name in listOf("monkey", "author", "tokens", "pin", "page")) assertFalse(SensitiveValues.isSecretName(name), name)
-        // A documented miss: whole names only, so a vendor-style prefix is not stripped.
-        assertFalse(SensitiveValues.isSecretName("X-Api-Key"))
+        // Whole names otherwise: no prefix but the listed `x` of X-Api-Key is stripped.
+        assertFalse(SensitiveValues.isSecretName("X-Auth-Token"))
+        assertFalse(SensitiveValues.isSecretName("Y-Api-Key"))
     }
 
     @Test

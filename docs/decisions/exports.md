@@ -96,6 +96,15 @@ HTML page answers `/findings` from the embedded report in `archiveSource`, cut b
 daemon cuts with `findingCount` kept, and refuses a category, which needs the daemon; an export from
 before findings existed falls through to the 404, and the page says so in those words.
 
+**An export carries each finding's masked hint and its dismissal, never the value and never
+silence.** The exports already hold the bodies, so a finding's evidence adds nothing a reader could
+not find; what it must not add is the value printed beside the claim that it is sensitive, in a
+file made to be handed on. A dismissed finding is listed with its reason (`dismissed` in the JSON
+and HTML, a `dismissed:` line in the Markdown, `(dismissed: …)` on the HAR note), because an export
+that left it out would tell its reader nothing was found. `SensitiveLeakTest` searches the JSON
+export's findings, the Markdown section and every HAR comment; `ExportDismissalTest` holds the dismissed
+line, red with dismissed findings filtered out.
+
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
 bytes the app sent, so payloads travel in `signalData` with the same utf8/base64 rule bodies use.

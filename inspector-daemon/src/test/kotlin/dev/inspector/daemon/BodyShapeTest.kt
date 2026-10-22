@@ -12,6 +12,11 @@ import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.io.path.deleteExisting
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -163,5 +168,65 @@ class BodyShapeTest {
         assertEquals(setOf("$.pin", "$.x"), JsonPaths.redactedPaths(row, BodySide.REQ))
         assertEquals(setOf("$.items[3].token", "$.x"), JsonPaths.redactedPaths(row, BodySide.RES))
         assertEquals(emptySet(), JsonPaths.redactedPaths(post("r2"), BodySide.REQ))
+    }
+
+    @Test
+    fun `walk visits every element with its concrete path in the Redactor's syntax`() {
+        val json = Json.parseToJsonElement("""{"a":{"b":[{"id":1},{"id":"x","tags":[]}]},"c":null,"d":true}""")
+        val seen = ArrayList<Pair<String, String>>()
+        val whole = JsonPaths.walk(json) { path, element ->
+            seen += path to when (element) {
+                is JsonObject -> "object"
+                is JsonArray -> "array"
+                JsonNull -> "null"
+                is JsonPrimitive -> if (element.isString) "string" else element.content.toBooleanStrictOrNull()?.let { "boolean" } ?: "number"
+            }
+        }
+        assertTrue(whole)
+        assertEquals(
+            listOf(
+                "$" to "object", "$.a" to "object", "$.a.b" to "array", "$.a.b[0]" to "object", "$.a.b[0].id" to "number",
+                "$.a.b[1]" to "object", "$.a.b[1].id" to "string", "$.a.b[1].tags" to "array", "$.c" to "null", "$.d" to "boolean",
+            ),
+            seen,
+        )
+        // The Redactor's own entry for the second id compares equal to the walked path as a string.
+        val redacted = JsonPaths.redactedPaths(post("r3", redacted = listOf("body:req:$.a.b[1].id")), BodySide.REQ)
+        assertTrue("$.a.b[1].id" in redacted && seen.any { it.first == "$.a.b[1].id" })
+    }
+
+    @Test
+    fun `walk stops below its depth and says so`() {
+        fun nested(levels: Int) = Json.parseToJsonElement("{\"k\":".repeat(levels) + "1" + "}".repeat(levels))
+        var deepest = 0
+        assertTrue(JsonPaths.walk(nested(32)) { path, _ -> deepest = maxOf(deepest, path.count { it == '.' }) }, "32 levels is whole")
+        assertEquals(32, deepest)
+        deepest = 0
+        assertFalse(JsonPaths.walk(nested(33)) { path, _ -> deepest = maxOf(deepest, path.count { it == '.' }) }, "33 levels is not")
+        assertEquals(32, deepest, "the 33rd level is not visited")
+        assertTrue(JsonPaths.walk(nested(3), maxDepth = 3) { _, _ -> })
+        assertFalse(JsonPaths.walk(nested(3), maxDepth = 2) { _, _ -> })
+    }
+
+    @Test
+    fun `group writes every index as a star`() {
+        assertEquals("$.items[*].id", JsonPaths.group("$.items[12].id"))
+        assertEquals("$.a[*][*].b", JsonPaths.group("$.a[0][3].b"))
+        assertEquals("$.items[*].id", JsonPaths.group("$.items[*].id"))
+        assertEquals("$", JsonPaths.group("$"))
+    }
+
+    @Test
+    fun `isAtOrUnder holds a path and its children, never a sibling sharing a prefix`() {
+        val prefixes = setOf("$.card", "$.items[3].token")
+        assertTrue(JsonPaths.isAtOrUnder("$.card", prefixes))
+        assertTrue(JsonPaths.isAtOrUnder("$.card.number", prefixes))
+        assertTrue(JsonPaths.isAtOrUnder("$.card[0]", prefixes))
+        assertTrue(JsonPaths.isAtOrUnder("$.items[3].token.x", prefixes))
+        assertFalse(JsonPaths.isAtOrUnder("$.cardholder", prefixes))
+        assertFalse(JsonPaths.isAtOrUnder("$.items[3].tokens", prefixes))
+        assertFalse(JsonPaths.isAtOrUnder("$.items[4].token", prefixes))
+        assertFalse(JsonPaths.isAtOrUnder("$", prefixes))
+        assertFalse(JsonPaths.isAtOrUnder("$.card", emptySet()))
     }
 }

@@ -217,7 +217,7 @@ class FindingsEngineTest {
 
     @Test
     fun `an unknown category is refused naming the categories`() {
-        assertEquals("unknown category 'pay'. Use one of: payment.", FindingsEngine.parseCategory("pay").exceptionOrNull()?.message)
+        assertEquals("unknown category 'pay'. Use one of: payment, sensitive.", FindingsEngine.parseCategory("pay").exceptionOrNull()?.message)
         assertNull(FindingsEngine.parseCategory(" ").getOrThrow())
         assertEquals("payment", FindingsEngine.parseCategory("payment").getOrThrow())
     }
