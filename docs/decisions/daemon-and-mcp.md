@@ -251,6 +251,49 @@ Memory only, four entries. `RouteStatsServiceTest` holds a fold equal to a cold 
 shown red with the offset advanced past an incomplete line. `StatsRouteTest` and
 `RouteStatsToolTest` pin 1203 rows on both adapters.
 
+**A session diff compares routes, never calls, and the page derives nothing.** Calls have no
+identity across runs — `id` and `callId` are per session — so pairing the i-th call of one run
+with the i-th of another would claim that one call became the other, which capture cannot know.
+The unit is the route key, origin included, so a run against another host shows every route added
+and removed; matching across origins is not built. Per route and side the diff reuses the route
+stats row, so its latency and sizes are the Stats page's numbers, and adds what stats do not keep:
+status codes, header names and body shapes. Header values are never compared or returned: they
+carry nonces and credentials. Latency is judged on p50 only with 5 or more responses on each side
+and a change of at least 50 ms and 25% of A's, in integers; below that the row says `n<5` and the
+page prints it. A mutation added, removed or called a different number of times is loud and sorts
+first; that is an order, not a severity, so "high" keeps the one meaning findings give it. B
+defaults to `latest` and A to the newest earlier session of B's app; `since` per side is a
+constructed `SinceMarkerTerm`, never pasted into filter text, and a label that side does not hold
+is a 400, because an empty side would read as every route removed. `SessionDiffTest` pins the
+rules, red at 50 ms with `>` for `>=` and with calls counted as attempts;
+`SessionDiffServiceTest`, `DiffRouteTest` and `DiffToolTest` pin 1203 rows on every adapter.
+
+**A body capture did not keep whole is unknown, and the diff never calls a key removed because of
+one.** Shape comes only from bodies that are complete — not truncated, not omitted, not missing —
+and parse strictly as UTF-8 JSON; a truncated body is never opened, because a lenient walk of a
+cut prefix reports every key after the cut as removed, on exactly the large responses people
+diff. Strictly means more than kotlinx's default parser, which takes any unquoted value (`NaN`,
+`01`, a bare word) as a literal, so every literal is also checked against JSON's own grammar. A
+key is removed only when the other side has a complete sample where its parent is present
+and none containing it, and every JSON body on that side was read whole; otherwise it is listed as
+unsure. A key under an empty array is not observable there. Nothing at or under a path in
+`redacted[]` on either side is compared, presence included, because the redactor replaces a value
+or a whole object with a placeholder string. Caps on bodies read only ever make a claim unsure.
+This closes the review's open decision of 2026-10-17 in the direction it recommended, made
+stricter twice, as the maintainer's proxy confirmed on 2026-10-22. `DiffShapeTest` pins it; it was
+shown red with a truncated prefix walked leniently, with the all-read condition dropped, with the
+observable rule dropped and with the redacted exclusion dropped.
+
+**A diff is computed on read, cached whole, and not folded.** Both sides are read through
+`IndexTail` from the start, never `queryTransactions`, for the reason `HarTest` exists. Four
+finished reports are kept in memory, keyed by the two folders, the filter and the two `since`
+labels, and each stands while both sessions' `SessionStamp` does. Unlike route stats it is not
+folded from an offset: which claims are sure depends on every body of a route, and the Diff page
+does not refresh live, so a recording B costs one recompute per refresh. `aChosen` is set on each
+reply, not cached, because A named and A found as the previous run share an entry.
+`SessionDiffServiceTest` holds a cached read and a recompute after an appended row and an appended
+marker, red with the stamp check dropped.
+
 **Findings are computed on read from every call, cached in memory, and never written to the
 archive.** The rules run in `service/`, not `:inspector-model` (ROADMAP §5, decided 2026-10-18), so
 the web UI mirrors nothing and the overlay has no findings. Each source folds a row once, through

@@ -87,6 +87,19 @@ internal fun JsonObject.flag(key: String): Boolean {
     return primitive.content.equals("true", ignoreCase = true)
 }
 
+/**
+ * `true` or `false`, as a boolean or as a string, since agents send both, as they do numbers (see
+ * [int]); absent, or anything else, is [default]. Unlike [flag], an absent argument can default to true.
+ */
+internal fun JsonObject.boolean(key: String, default: Boolean): Boolean {
+    val primitive = this[key] as? JsonPrimitive ?: return default
+    return when (primitive.content.lowercase()) {
+        "true" -> true
+        "false" -> false
+        else -> default
+    }
+}
+
 /** Agents routinely send numbers as strings, so accept both rather than failing the call. */
 internal fun JsonObject.int(key: String, default: Int, min: Int, max: Int): Int {
     val primitive = this[key] as? JsonPrimitive ?: return default

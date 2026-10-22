@@ -195,4 +195,11 @@ object JsonPaths {
     }
 
     private const val OLDER_PREFIX = "body:$"
+
+    /**
+     * What the Redactor writes in place of a value or a whole object, `Redaction.PLACEHOLDER` in
+     * `:inspector-core`. Written out because the daemon depends on the model alone. A leaf holding it
+     * was replaced at capture: detection does not scan it, and the diff does not compare it.
+     */
+    const val PLACEHOLDER = "‹redacted›"
 }

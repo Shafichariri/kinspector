@@ -484,11 +484,8 @@ internal class SensitiveAccumulator(
         const val MAX_EVIDENCE = 5
         const val SCAN_LIMIT = 1024 * 1024
 
-        /**
-         * The Redactor's placeholder, `Redaction.PLACEHOLDER` in `:inspector-core`. Written out
-         * because the daemon depends on the model alone; a value equal to it was replaced at capture.
-         */
-        const val PLACEHOLDER = "‹redacted›"
+        /** The Redactor's placeholder: a value equal to it was replaced at capture. */
+        const val PLACEHOLDER = JsonPaths.PLACEHOLDER
 
         fun raise(base: FindingSeverity, steps: Int): FindingSeverity =
             FindingSeverity.entries[maxOf(0, base.ordinal - steps)]

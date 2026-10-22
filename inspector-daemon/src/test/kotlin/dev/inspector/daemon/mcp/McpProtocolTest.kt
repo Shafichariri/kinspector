@@ -114,7 +114,7 @@ class McpProtocolTest : McpToolsFixture() {
         assertEquals(
             setOf(
                 "list_sessions", "session_summary", "list_transactions",
-                "get_transaction", "explain", "get_body", "route_stats", "list_findings", "add_marker",
+                "get_transaction", "explain", "get_body", "route_stats", "diff_sessions", "list_findings", "add_marker",
                 "timeline", "current", "list_signals", "get_signal", "request_signal",
                 "export_session",
             ),
