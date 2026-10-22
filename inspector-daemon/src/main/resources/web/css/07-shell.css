@@ -135,6 +135,22 @@
 .config-row input.config-tag { width: 110px; font-family: var(--sans); }
 .config-row input:disabled, .config-row input[readonly] { opacity: 0.6; }
 .config-now, .config-flag { font-size: 11px; }
+/* A list key's box takes what the row has left, down to nothing, so a narrow page wraps the row rather
+   than scrolling sideways; the label and the running count keep their own width. */
+.config-row-list { align-items: flex-start; }
+.config-row textarea.route-templates {
+  flex: 1 1 240px;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  resize: vertical;
+}
+.config-hint { margin: 0 0 4px; }
 
 /* Labelled from 1200px unless the person chose icons. After the rules it overrides. */
 @media (min-width: 1200px) {

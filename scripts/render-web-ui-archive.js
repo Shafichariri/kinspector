@@ -24,7 +24,7 @@ const { countNetworkPrimitives, NETWORK_EXPECTED } = require('./lib/web-audits')
 const { LONG_LABELS, LONG_SESSION_ID, readLongSession, waitFor } = require('./lib/long-session-probes');
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { probeStatsOffline } = require('./lib/stats-probes');
-const { probeKeysInExport } = require('./lib/polish-probes');
+const { probeKeysInExport, probeStatsNoteExport } = require('./lib/polish-probes');
 const { probeFindingsRailOffline, probeFindingsExport } = require('./lib/findings-probes');
 const { probeSensitiveOffline } = require('./lib/sensitive-probes');
 
@@ -277,6 +277,9 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   // The page keys offline, live pages' letters doing nothing; see lib/polish-probes.js. Back on Traffic after.
   const keysInExport = await probeKeysInExport(window, doc);
   check('keys in export', keysInExport.startsWith('yes'), keysInExport.replace(/^(yes|NO)\s*(- )?/, ''));
+  // The Stats note names config.json where the live page links Settings; see lib/polish-probes.js.
+  const noteExport = await probeStatsNoteExport(window, doc);
+  check('stats note export', noteExport.startsWith('yes'), noteExport.replace(/^(yes|NO)\s*(- )?/, ''));
 
   // The Stats page from the route table the export embeds; see lib/stats-probes.js. Back on Traffic after.
   // The Stats page, the Findings rail link, then the probe session's sensitive findings offline (lib/sensitive-probes.js).

@@ -795,6 +795,15 @@ the page and the caveat, `stats n<20` and `stats long session whole` red against
 threshold at 0 and its fold cut at 1000 rows, and `stats restored` leaves the page as it found it,
 proven by breaking the next probe's guard (`chip marks active`).
 
+**Settings edits `routeTemplates` as lines, and sends the key only when the lines differ from the
+file's.** `PUT /api/config` replaces a top-level key whole, so the editor sends the whole list,
+and an unchanged list sends nothing. Otherwise a save of retention alone would rewrite a
+hand-edited template list, and any entry the daemon skipped at start would then be refused by
+name, blocking a save that never touched it. It says the list applies when the daemon restarts,
+because `routeTemplates` is read at start (`daemon-and-mcp.md`). The Stats page's note links here
+live, and names `config.json` in an export, where Settings does not exist (`routes editor`,
+`stats note link`, `stats note export`).
+
 **The Findings page computes nothing, and a severity is drawn in words.** Rules, counts, order,
 messages, masked evidence and coverage come from the daemon, so there is no mirror block. The page
 asks once for every finding, with no category, and draws each category's coverage line as given.

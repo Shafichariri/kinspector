@@ -282,17 +282,109 @@ async function settingsCountsFollowLoad(ctx) {
 }
 
 /**
+ * Settings' route templates box, against `PUT /api/config` stubbed by the probe itself (`web-ui.md`: a
+ * probe that presses a button stubs `fetch`), so the daemon's file is never written. The box holds the
+ * file's list and counts the daemon's compiled one; a save that changes retention alone sends no
+ * `routeTemplates`; two lines typed among blank ones and spaces send exactly `["/a/{x}","/b"]`, alone,
+ * with the control header; a 400 is shown as the daemon words it. The form is read again after.
+ */
+async function routesEditor(ctx) {
+  const { window, doc } = ctx;
+  const earlier = window.eval('configReply');
+  await window.navigate({ page: 'settings' });
+  await waitFor(() => window.eval('configReply') !== earlier && doc.getElementById('route-templates'), 5000);
+  const reply = window.eval('configReply');
+  const area = () => doc.getElementById('route-templates');
+  if (!reply || !area()) return `NO - found no route templates box${reply ? '' : ' (the config was never read)'}, so this checked nothing`;
+  const listed = (reply.file && reply.file.routeTemplates) || [];
+  const n = reply.effective.routeTemplates.length;
+  const dueNow = `running: ${n} ${n === 1 ? 'template' : 'templates'}`;
+  const shownList = area().value;
+  const now = area().closest('.config-row').querySelector('.config-now')?.textContent;
+  const status = doc.getElementById('config-status');
+  const refusal = "routeTemplates entry 'x': a template starts with '/', as in \"/articles/{slug}\"";
+  let answer = [200, reply];
+  const stub = stubFetch(window, (p, init) => /\/api\/config$/.test(p) && init.method === 'PUT', () => answer);
+  const save = async () => {
+    doc.getElementById('config-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => !/saving/.test(status.textContent), 3000);
+    await pause(50);
+  };
+  const bad = [];
+  try {
+    const retention = doc.querySelector('#config-fields input[data-key="maxSessions"]');
+    retention.value = String(Number(retention.value) + 1);
+    await save();
+    const first = stub.sent[0] && JSON.parse(stub.sent[0].body);
+    if (!first || !('maxSessions' in first) || 'routeTemplates' in first) bad.push(`a retention save sent ${first ? JSON.stringify(first) : 'nothing'}`);
+    area().value = '  /a/{x}\n\n /b \n';
+    await save();
+    const second = stub.sent[1];
+    const body = second && JSON.parse(second.body);
+    if (!body || JSON.stringify(body) !== JSON.stringify({ routeTemplates: ['/a/{x}', '/b'] })) bad.push(`two lines sent ${body ? JSON.stringify(body) : 'nothing'}`);
+    else if (second.headers['X-Inspector-Control'] !== '1') bad.push('two lines were sent without X-Inspector-Control');
+    answer = [400, { error: refusal }];
+    area().value = 'x';
+    await save();
+    if (status.textContent !== refusal || !status.classList.contains('error')) bad.push(`a 400 read "${status.textContent}"${status.classList.contains('error') ? '' : ', not as an error'}`);
+  } finally {
+    stub.restore();
+    await window.loadConfig();
+    await window.navigate({ page: 'traffic' });
+    await pause(150);
+  }
+  if (shownList !== listed.join('\n')) bad.push(`the box held "${shownList}", the file lists ${JSON.stringify(listed)}`);
+  if (now !== dueNow) bad.push(`beside it "${now}", not "${dueNow}"`);
+  return bad.length ? `NO - ${bad.join('; ')}`
+    : `yes ("${dueNow}"; retention alone sent no routeTemplates; two lines sent ${stub.sent[1].body} with the header; the 400 shown verbatim)`;
+}
+
+/** The Stats note links Settings, where the templates are edited, and the export's words for it are hidden live. */
+async function statsNoteLink(ctx) {
+  const { window, doc } = ctx;
+  await window.navigate({ page: 'stats' });
+  const link = doc.querySelector('#stats-note a[href="#/settings"]');
+  const words = doc.querySelector('#stats-note .archive-only');
+  const shows = (node) => Boolean(node) && window.getComputedStyle(node).display !== 'none'
+    && window.getComputedStyle(node.closest('.live-only') || node).display !== 'none';
+  const seen = [shows(link), shows(words), link && link.textContent];
+  await window.navigate({ page: 'traffic' });
+  await pause(100);
+  if (!link) return 'NO - the Stats note has no link to #/settings';
+  return seen[0] && !seen[1] ? `yes ("${seen[2]}" shown, href #/settings; the export's words hidden)`
+    : `NO - the link ${seen[0] ? 'shown' : 'hidden'}, the export's words ${seen[1] ? 'shown' : 'hidden'}`;
+}
+
+/**
+ * In an export the Stats note names `config.json` and shows no link to Settings, which an export does
+ * not have. Read on the page as opened; back on Traffic after.
+ */
+async function probeStatsNoteExport(window, doc) {
+  await window.navigate({ page: 'stats' });
+  const live = doc.querySelector('#stats-note .live-only');
+  const words = doc.querySelector('#stats-note .archive-only');
+  const display = (node) => (node ? window.getComputedStyle(node).display : 'absent');
+  const seen = [display(live), display(words), words ? words.textContent.replace(/\s+/g, ' ').trim() : ''];
+  await window.navigate({ page: 'traffic' });
+  if (!live || !words) return `NO - the Stats note has ${live ? '' : 'no .live-only span'}${!live && !words ? ' and ' : ''}${words ? '' : 'no .archive-only span'}`;
+  return seen[0] === 'none' && seen[1] !== 'none' && seen[2].includes('config.json')
+    ? `yes (the Settings link hidden; "${seen[2]}" shown)`
+    : `NO - the Settings link's display is ${seen[0]}, the export's words' ${seen[1]} ("${seen[2]}")`;
+}
+
+/**
  * The page keys on the probe page, from Traffic and back to it, the legend shut, no prefix pending
- * and no row selected, then the empty states and Settings' counts. Wired right after the Stats page,
- * so `chip marks active` is the next guard to read the shared page (the Pace rule: it was shown red
- * with these lines present).
+ * and no row selected, then the empty states, Settings' counts, the route templates box and the
+ * Stats note's link. Wired right after the Stats page, so `chip marks active` is the next guard to
+ * read the shared page (the Pace rule: it was shown red with these lines present).
  */
 async function probePageKeys(ctx) {
   const lines = [['page keys live', await pageKeysLive(ctx)], ['keys legend', await keysLegend(ctx)],
     ['keys skip textarea', await keysSkipTextarea(ctx)], ['rail key titles', railKeyTitles(ctx)]];
   ctx.pageState().pageKeyAt = null;
   lines.push(['stats empty why', await statsEmptyWhy(ctx)], ['sessions empty why', sessionsEmptyWhy(ctx)],
-    ['settings counts follow load', await settingsCountsFollowLoad(ctx)]);
+    ['settings counts follow load', await settingsCountsFollowLoad(ctx)],
+    ['routes editor', await routesEditor(ctx)], ['stats note link', await statsNoteLink(ctx)]);
   return lines;
 }
 
@@ -324,4 +416,4 @@ async function probeKeysInExport(window, doc) {
   return bad.length ? `NO - ${bad.join('; ')}` : 'yes (g f opened Findings, g s Stats; g a and g p left it there; the legend lists Traffic, Stats and Findings)';
 }
 
-module.exports = { probeSessionRowTime, probePageKeys, probeKeysInExport };
+module.exports = { probeSessionRowTime, probePageKeys, probeKeysInExport, probeStatsNoteExport };
