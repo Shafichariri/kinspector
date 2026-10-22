@@ -82,8 +82,8 @@ jobs:
             --title "Inspector $VERSION" \
             --notes-file - <<NOTES
           One tag, both halves. This release page carries the **daemon**; the same version of the
-          **library** went to GitHub Packages from the job beside this one. There is no separate
-          daemon version and library version.
+          **library** is published to GitHub Packages and staged on Maven Central by the jobs beside
+          this one. There is no separate daemon version and library version.
 
           A release does not always change both halves — see \`docs/INTEGRATION.md\` section 14,
           which says per version what changed and what you have to do about it.
@@ -103,15 +103,29 @@ jobs:
 
           ### Library — capture and the in-app overlay
 
-          Seven modules at \`$VERSION\`, from GitHub Packages. That registry wants an
-          authenticated token even for public packages, which surprises people — \`docs/ACCESS.md\`
-          leads with it.
+          Seven modules at \`$VERSION\`, from Maven Central, as \`docs/ACCESS.md\` says: no token
+          and no account. Maven Central serves anonymously, and \`mavenCentral()\` is already in
+          most builds.
+
+          \`\`\`kotlin
+          repositories { mavenCentral() }
+          \`\`\`
 
           \`\`\`kotlin
           implementation("io.github.shafichariri:inspector-core:$VERSION")
           implementation("io.github.shafichariri:inspector-ui:$VERSION")
           implementation("io.github.shafichariri:inspector-stream:$VERSION")
           \`\`\`
+
+          **\`$VERSION\` reaches Maven Central once the maintainer publishes it.** The tag only
+          stages the bundle there, because a coordinate on Central can never be replaced or deleted
+          and so a person presses Publish. While the README's Maven Central badge still shows an
+          earlier version, this one is not on Central yet.
+
+          It is also on GitHub Packages, the older path, which needs a token: GitHub Packages
+          requires an authenticated token for downloads even when the package is public, and it has
+          to be a *classic* one with \`read:packages\`. \`docs/ACCESS.md\` → "The older path" has the
+          setup.
           NOTES
 
   library:
