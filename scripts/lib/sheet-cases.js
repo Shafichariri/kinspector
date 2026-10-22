@@ -14,13 +14,17 @@
  * taken on the payments session, served and from that session's own export, and so are the payments
  * session's list with its findings badges and the detail of its first flagged row. The probe session's
  * own Findings page, its planted sensitive values masked, is taken served and exported, and with a
- * dismiss form open served only, since an export offers none.
+ * dismiss form open served only, since an export offers none. The Diff page is taken served only, an
+ * export holding one session: as `#/diff` opens it, and with the baseline against the probe session
+ * and the orders route's detail open.
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
 const { PAYMENTS_SESSION_ID } = require('./findings-probes');
+const { BASE_SESSION_ID } = require('./diff-probes');
+const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
 const WIDTHS = [1440, 1000, 600, 400];
 const SCHEMES = ['dark', 'light'];
@@ -36,6 +40,11 @@ const OPEN_DISMISS = `new Promise((done) => { const at = Date.now(); const tick 
   const open = document.querySelector('#findings-body .finding-dismiss');
   if (open || Date.now() - at > 5000) { if (open) open.click(); done(Boolean(open)); } else setTimeout(tick, 100); }; tick(); })`;
 const PAYMENTS_LIST = `#/traffic/network?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`;
+// The orders route's detail, once the comparison is drawn.
+const OPEN_DIFF = `new Promise((done) => { const at = Date.now(); const tick = () => {
+  const open = document.querySelector('#diff-rows tr[data-route="/v3/shop/orders/submit"] .diff-open');
+  if (open || Date.now() - at > 10000) { if (open) open.click(); done(Boolean(open)); } else setTimeout(tick, 100); }; tick(); })`;
+const DIFF_PAIR = `#/diff?a=${encodeURIComponent(BASE_SESSION_ID)}&b=${encodeURIComponent(PROBE_SESSION_ID)}`;
 const SHOTS = [
   { name: 'list', hash: '#/traffic/network', exported: true },
   { name: 'detail', hash: '#/traffic/network', exported: true, open: OPEN_ROW, ready: `!document.getElementById('detail').hidden` },
@@ -52,6 +61,8 @@ const SHOTS = [
   { name: 'flagged list', hash: PAYMENTS_LIST, exported: true, payments: true, ready: `document.querySelector('#list .finding-badge')` },
   { name: 'flagged detail', hash: PAYMENTS_LIST, exported: true, payments: true, open: OPEN_FLAGGED,
     ready: `document.querySelector('#detail .detail-findings:not([hidden])')` },
+  { name: 'diff', hash: '#/diff', exported: false, ready: `document.querySelector('#diff-summary [data-session]')` },
+  { name: 'diff detail', hash: DIFF_PAIR, exported: false, open: OPEN_DIFF, ready: `document.querySelector('#diff-rows .diff-detail')` },
   { name: 'sessions', hash: '#/sessions', exported: false, ready: `document.querySelector('#session-rows .session-row')` },
   { name: 'processes', hash: '#/processes', exported: false },
   { name: 'settings', hash: '#/settings', exported: false },

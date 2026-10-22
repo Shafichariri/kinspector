@@ -48,7 +48,7 @@ const { probeCurrentAfterSwitch } = require('./lib/current-guard-probes');
 const { probeLiveRows } = require('./lib/live-filter-probes');
 const shell = require('./lib/shell-probes');
 const room = require('./lib/list-room-probes');
-const stats = require('./lib/stats-probes'), polish = require('./lib/polish-probes'), findings = require('./lib/findings-probes');
+const stats = require('./lib/stats-probes'), polish = require('./lib/polish-probes'), findings = require('./lib/findings-probes'), diff = require('./lib/diff-probes');
 const scan = require('./lib/scan-verdicts'); // each scan asserts it found something; see its header
 /*
  * The daemon to read. Overridable because 8099 is the port every consuming app dials by default:
@@ -622,7 +622,7 @@ function runScripts() {
   const sessionOnScreen = () => doc.querySelector('#session-picker')?.value || '';
   const markerFormProbe = await probeMarkerForm();
 
-  const statsLines = [...await stats.probeStatsPage(shellCtx), ...await polish.probePageKeys(shellCtx), ...await findings.probeFindings(shellCtx)]; // lib/stats-, polish- and findings-probes.js; each leaves Traffic as it found it
+  const statsLines = [...await stats.probeStatsPage(shellCtx), ...await polish.probePageKeys(shellCtx), ...await findings.probeFindings(shellCtx), ...await diff.probeDiff(shellCtx)]; // lib/stats-, polish-, findings- and diff-probes.js; each leaves Traffic as it found it
   const chipProbe = await probeEndpointChip();
 
   // Sort toggle: flip it, confirm the rendered order actually reverses, flip back. Comparing the

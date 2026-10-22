@@ -78,6 +78,10 @@
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 17.5V3M5 3.5h10l-2.5 3.5 2.5 3.5H5"/></svg>
       <span class="rail-text">Findings</span>
     </a>
+    <a class="rail-item" data-page="diff">
+      <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M3.5 7h12M12.5 4l3 3-3 3M16.5 13h-12M7.5 10l-3 3 3 3"/></svg>
+      <span class="rail-text">Diff</span>
+    </a>
     <a class="rail-item" data-page="sessions">
       <svg class="rail-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><rect x="3" y="3.5" width="14" height="5" rx="1"/><rect x="3" y="11.5" width="14" height="5" rx="1"/></svg>
       <span class="rail-text">Sessions</span>
@@ -107,15 +111,9 @@
   <nav id="tabs" class="tabs" aria-label="Views"></nav>
 
   <!--
-    Controls belong to the view they act on, not to the window.
-
-    These were a fixed 220px column beside every pane. The filter grammar, the quick filters and
-    the endpoint chips are all about HTTP calls, so on the cache, screens, state and storage tabs
-    they were a fifth of the width spent on controls that did nothing there — and a filter box
-    reading `status>=400` above a list of storage keys invites you to type something that cannot
-    work. Horizontal because everything in here is short and the list below wants the height:
-    the column also ran 1918px of content into 843px of space, which put the sort order, the
-    markers and the shortcut legend permanently below the fold.
+    Controls belong to the view they act on, not to the window: the filter, the quick filters and the
+    endpoint chips are about HTTP calls, so a fixed column of them did nothing on the other tabs.
+    Horizontal because everything here is short and the list below wants the height.
   -->
   <div id="toolbar" class="toolbar" hidden>
     <!--
@@ -199,19 +197,10 @@
   </div>
 
   <!--
-    The overview line: a map of the session and, on the timeline, what the app holds now. They were
-    two bands of the seven above the first row, each saying one thing; one line gives the rows back
-    about 60px on the list and 90 on the timeline. Hidden when both of its parts are.
-
-    The axis: the list answers "what happened"; it is very bad at "when, and how much of it at
-    once". Bursts, idle stretches, the moment everything went red — all of that is shape, and shape
-    is the one thing a scrolling list cannot show. Drag across it to narrow both panes to that
-    stretch.
-
-    Now: what the app currently holds. It was 1341px of the rail — 70% of it — for a summary, which
-    is header-shaped information, not a list. Collapsed it says how much there is and how stale the
-    oldest of it is; opened it is the same list as before, as a popover under its button rather than
-    a band that pushes the rows down.
+    The overview line, hidden when both of its parts are. The axis is the session's shape — bursts,
+    idle stretches, the moment everything went red — which a scrolling list cannot show; drag across
+    it to narrow both panes to that stretch. Now is what the app holds, a summary that opens as a
+    popover under its button rather than a band pushing the rows down (web-ui.md has the history).
   -->
   <div id="overview" class="overview" hidden>
     <div id="axis" class="axis" hidden>
@@ -390,6 +379,11 @@
     <p id="findings-count" class="findings-count" role="status"></p>
     <div id="findings-body"></div>
     <p id="findings-note" class="settings-note muted"></p>
+  </section>
+
+  <!-- Two sessions compared route by route, as `GET /api/diff` answers: the page decides nothing. js/96-diff.js builds its controls. -->
+  <section id="page-diff" class="page page-doc" aria-labelledby="diff-title" hidden>
+    <h1 id="diff-title" class="page-title" tabindex="-1">Diff</h1>
   </section>
 
   <!--

@@ -18,9 +18,10 @@ const declared = (sources, file, name) => {
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Nineteen addresses: each page, a view, an encoded tag and session, an unknown page, a call's own
+ * Twenty-three addresses: each page, a view, an encoded tag and session, an unknown page, a call's own
  * page with and without an id, Stats with and without a session, Findings with and without the
- * finding it marks, an `id` on a page that takes none, and round trips.
+ * finding it marks, Diff with neither session, one and both, an `id` or an `a` on a page that takes
+ * none, and round trips.
  */
 function checkRouteParse(sources) {
   const { parseRoute, routeHash } = declared(sources, 'js/08-routes.js', 'parseRoute');
@@ -47,12 +48,17 @@ function checkRouteParse(sources) {
     ['#/findings?id=x', { page: 'findings', view: null, session: null, known: true, id: 'x' }],
     ['#/findings?id=x&session=y', { page: 'findings', view: null, session: 'y', known: true, id: 'x' }],
     ['#/stats?id=x', { page: 'stats', view: null, session: null, known: true }],
+    // `#/diff?a=&b=` names the two sessions; with neither, the latest against its previous run.
+    ['#/diff', { page: 'diff', view: null, session: null, known: true, a: null, b: null }],
+    ['#/diff?a=x', { page: 'diff', view: null, session: null, known: true, a: 'x', b: null }],
+    ['#/diff?a=a%2Fb&b=y', { page: 'diff', view: null, session: null, known: true, a: 'a/b', b: 'y' }],
+    ['#/stats?a=x', { page: 'stats', view: null, session: null, known: true }],
   ];
   const wrong = cases.filter(([hash, due]) => !same({ ...parseRoute(hash) }, due))
     .map(([hash, due]) => `${hash || "''"} -> ${JSON.stringify(parseRoute(hash))}, where ${JSON.stringify(due)} was due`);
   const trips = ['#/traffic', '#/traffic/all', '#/traffic/cache?session=a%2Fb', '#/sessions', '#/settings?session=x', '#/traffic/my%20tag',
     '#/txn/t-42?session=s1', '#/txn/a%2Fb', '#/stats', '#/stats?session=a%2Fb', '#/findings', '#/findings?id=x',
-    '#/findings?id=a%2Fb&session=y'];
+    '#/findings?id=a%2Fb&session=y', '#/diff', '#/diff?a=x', '#/diff?a=a%2Fb&b=y', '#/diff?b=y'];
   const broken = trips.filter((hash) => routeHash(parseRoute(hash)) !== hash)
     .map((hash) => `${hash} came back ${routeHash(parseRoute(hash))}`);
   const all = [...wrong, ...broken];

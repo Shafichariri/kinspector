@@ -1,0 +1,100 @@
+/* diff: the Diff page's pickers, the route table and a route's detail */
+
+.diff-field { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.diff-pick {
+  min-height: var(--target-min);
+  max-width: 340px;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.diff-pick:focus { outline: none; border-color: var(--accent); }
+/* A link drawn as a button: inline, its `min-height` would be ignored and the target short. */
+#diff-md { display: inline-flex; align-items: center; text-decoration: none; }
+#diff-md[hidden] { display: none; }
+#page-diff .filter-error { border: 1px solid var(--divider); border-radius: 5px; margin: 0 0 8px; }
+.diff-summary { margin: 4px 0 8px; font-size: 12px; overflow-wrap: anywhere; }
+.diff-summary [data-session] { font-weight: 600; }
+.diff-note { color: var(--warn); }
+
+/* Seven columns do not fit 400px, and the page must never scroll sideways: the table scrolls in its
+   own box with the route held at the left, the Stats table's pattern. */
+/* `flex: none`: as an item of the page's flex column a scroll box may shrink to nothing, and it did,
+   scrolling the table inside itself and cutting every row below the window's height. */
+.diff-scroll { overflow-x: auto; margin: 0 0 8px; flex: none; }
+#diff-unchanged-toggle { align-self: flex-start; }
+.diff-table { width: auto; }
+.diff-table th, .diff-table td { white-space: nowrap; vertical-align: top; }
+.diff-table .diff-route {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+  text-align: left;
+  font-weight: 400;
+}
+.diff-table thead .diff-route { font-weight: 600; }
+.diff-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 420px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.diff-open:hover .diff-path, .diff-open:focus-visible .diff-path { color: var(--accent); text-decoration: underline; }
+.diff-open:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.diff-open::before { content: "▸"; color: var(--fg-muted); font-size: 11px; }
+.diff-open[aria-expanded="true"]::before { content: "▾"; }
+.diff-route .method { font-size: 11px; flex: none; }
+.diff-host { font-size: 11px; flex: none; }
+.diff-path { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.diff-open wbr { display: none; }
+
+/* A loud row is an order and a mark, never a severity: an edge in the warning hue, and its word. */
+.diff-loud > .diff-route { box-shadow: inset 2px 0 0 var(--warn); }
+.diff-tag {
+  display: inline-block;
+  margin: 0 4px 2px 0;
+  padding: 0 5px;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  font-size: 11px;
+}
+.diff-tag-loud { border-color: var(--warn); color: var(--warn); }
+.diff-verdict { margin-left: 6px; font-size: 11px; color: var(--fg-muted); }
+.diff-v-slower { color: var(--warn); }
+.diff-shape[title] { cursor: help; }
+
+.diff-detail > td { white-space: normal; background: var(--bg); }
+.diff-detail-body { max-width: var(--prose-max); font-size: 12px; }
+.diff-line { margin: 0 0 4px; overflow-wrap: anywhere; }
+.diff-line-label { display: inline-block; min-width: 110px; margin-right: 8px; color: var(--fg-muted); }
+.diff-dir { margin: 8px 0 0; }
+.diff-dir-title { margin: 0 0 2px; font-size: 12px; font-weight: 600; }
+.diff-list-title { margin: 6px 0 2px; font-size: 11px; font-weight: 600; color: var(--fg-muted); }
+.diff-tally, .diff-why { margin: 0 0 2px; overflow-wrap: anywhere; }
+.diff-list { margin: 0; padding-left: 18px; }
+.diff-list li { overflow-wrap: anywhere; }
+
+/* Narrow: the held route column wraps between the pieces `statsBreakable` cut, as on Stats. */
+@media (max-width: 699px) {
+  .diff-table .diff-route { white-space: normal; min-width: 120px; }
+  .diff-open { flex-wrap: wrap; gap: 2px 6px; max-width: 134px; min-width: min-content; }
+  .diff-host, .diff-path { flex: 0 1 auto; min-width: min-content; overflow: visible; }
+  .diff-host > span, .diff-path > span { white-space: nowrap; }
+  .diff-open wbr { display: inline; }
+  .diff-line-label { display: block; min-width: 0; }
+  /* The detail spans the whole table, which scrolls sideways; held at the box's left edge and as wide
+     as the window leaves, it reads without scrolling. 96px is the rail and the paddings at 400. */
+  .diff-detail-body { position: sticky; left: 8px; max-width: calc(100vw - 96px); }
+}

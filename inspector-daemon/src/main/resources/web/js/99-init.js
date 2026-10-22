@@ -98,6 +98,7 @@ wireSessionsPage();
 wireProcessesPage();
 wireSettingsPage();
 wireStatsPage();
+wireDiffPage();
 
 (async function init() {
   setSortOrder(state.newestFirst);   // paints the chips to match the remembered preference
@@ -141,11 +142,12 @@ wireStatsPage();
   // Not in an export: opened from disk, `location.host` is empty and the socket URL is malformed, so
   // the constructor throws and takes the rest of init with it.
   if (!ARCHIVE) connectLive();
-  // Opened on `#/stats` or `#/findings`, it had no session to ask about until now. Asked before the
+  // Opened on `#/stats`, `#/findings` or `#/diff`, it had no session to ask about until now. Asked before the
   // calls are read, not after: on a 160,000-call session that read takes half a minute, and neither
   // page needs any of it. Traffic's badges are asked for after its first page of calls, which is
   // what that page is opened to read.
   statsReload();
+  diffSessionsChanged();   // the pickers are the session list's; opened on `#/diff`, it reads now
   if (findingsShown()) findingsReload();
   await loadTransactions();
   if (!findingsShown()) findingsReload();

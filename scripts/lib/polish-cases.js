@@ -13,7 +13,7 @@
  * window, at least 24px tall and hit at its centre, and a click there leaves the page (`polish <w> txn
  * back <where>`).
  *
- * Served, at 1440 and 400, on the Stats, Findings, Sessions, Processes and Settings pages: every drawn `.btn` is
+ * Served, at 1440 and 400, on the Stats, Findings, Diff, Sessions, Processes and Settings pages: every drawn `.btn` is
  * at least 24px tall (`polish <w> page targets`); the density select is at least its longest
  * option's text plus 20px for the chevron, measured in the select's own font (`polish <w> density
  * whole`); and every Sessions row starts with its start time, whole and inside its cell (`polish <w>
@@ -130,7 +130,7 @@ async function iconTargets(page, url, rows) {
   }
 }
 
-const PAGES = ['stats', 'findings', 'sessions', 'processes', 'settings'];
+const PAGES = ['stats', 'findings', 'diff', 'sessions', 'processes', 'settings'];
 
 // The shown page's drawn buttons and notes, measured; the density select and the Sessions rows' times
 // when the page has them. Widths of text are a canvas's `measureText` in the element's own font.
@@ -163,6 +163,7 @@ async function pageDocs(page, url, rows) {
       await page.ev(`navigate({ page: ${JSON.stringify(name)} })`);
       await page.waitFor(`!document.getElementById('page-${name}').hidden`, 5000);
       if (name === 'sessions') await page.waitFor(`document.querySelector('#session-rows .session-row')`, 5000);
+      if (name === 'diff') await page.waitFor(`document.querySelector('#diff-summary [data-session]') || !document.getElementById('diff-error').hidden`, 15000);
       await sleep(500);
       reads[name] = await page.ev(PAGE_READ);
     }
