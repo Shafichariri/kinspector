@@ -78,6 +78,41 @@ function renderCounts() {
 }
 
 /**
+ * What a brushed stretch holds below the oldest call the list loaded, while the list is short of
+ * what it counts — the session with no filter, the route's `matched` under one — or null. `calls`
+ * is counted from the whole-session copy, only from the oldest mono at which that copy is whole,
+ * and `atLeast` says the stretch reaches below that. Null too where the copy shows no call there:
+ * the stretch then holds nothing older to reach, whatever the filter. One rule for the list's
+ * empty text (`olderThanLoaded`) and its note (`olderMatchesNote`), so the two cannot disagree.
+ */
+function belowLoaded() {
+  const held = state.transactions;
+  const counted = state.filter ? state.matched : state.sessionTotal;
+  if (!state.timeRange || !held.length || counted === null || held.length >= counted) return null;
+  const oldest = (rows) => rows.reduce((m, r) => (r.mono < m ? r.mono : m), Infinity);
+  const loadedFrom = oldest(held);
+  if (state.timeRange.from >= loadedFrom) return null;
+  const whole = state.allTransactions;
+  const wholeFrom = whole.length && whole.length < (state.sessionTotal ?? 0) ? oldest(whole) : -Infinity;
+  const calls = whole.filter((r) => r.mono < loadedFrom && r.mono >= wholeFrom && inRange(r.mono)).length;
+  const atLeast = state.timeRange.from < wholeFrom;
+  return calls || atLeast ? { held: held.length, counted, calls, atLeast } : null;
+}
+
+/**
+ * The list note's clause for a stretch it draws loaded matches in that reaches below the oldest of
+ * them, under a filter matching more calls than the list holds — or null. The note's "at least 10
+ * calls hidden by the filter" over the drawn rows read as every match in the stretch, while older
+ * ones in it were never loaded. It claims no count of them: the page evaluates no filter, and the
+ * copy it could count is unfiltered. A stretch the list draws none of says so in the empty text.
+ */
+function olderMatchesNote() {
+  const below = state.filter && belowLoaded();
+  if (!below || !state.transactions.some((r) => inRange(r.mono))) return null;
+  return `this stretch reaches below the oldest of the ${below.held} matches loaded, so any older matches in it are not drawn — narrow the filter to reach them`;
+}
+
+/**
  * How many calls the live list asks for, newest first: the page's own number rather than the
  * daemon's clamp happening to match it. The whole-session copy is read past it in pages
  * (`routePages`). An export asks for every call it embeds instead, because it has no filter to

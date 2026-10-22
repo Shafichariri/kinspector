@@ -3,7 +3,8 @@
  * The list draws the newest 1000 calls that match (`LIST_CEILING`). Under a filter matching more,
  * the header read `1000 of 3016 calls`, which reads as "1000 calls match" where 1200 did, and the
  * list was the one pane without the `newest N of M matches loaded` note. A stretch brushed below the
- * oldest call the list held read "no calls in the selected stretch" over calls the glance counted.
+ * oldest call the list held read "no calls in the selected stretch" over calls the glance counted,
+ * and one drawing loaded matches said nothing of older matches in it the list never loaded.
  * Each check runs the real files over `clampPage`'s 3016-call stub, clamped as the daemon clamps,
  * through the real `renderCounts`, `renderListNote` and `renderListEmpty`; only `$` is a stub, one
  * node per id. See `docs/decisions/web-ui.md`.
@@ -106,7 +107,38 @@ async function checkListHolds(sources) {
   lines.push(['stretch older than loaded', wrong.length === 0
     ? `yes (${stretch.length} stretches, "${stretch[0][0].slice(0, 48)}…", no count claimed under the filter, "at least" past the whole copy)`
     : `NO - ${wrong.map(([got, due]) => `"${got}" where "${due}" was due`).join('; ')}`]);
+  lines.push(await stretchBelowMatches(sources));
   return lines;
+}
+
+/**
+ * The list note over a stretch that draws loaded matches and reaches below the oldest of them: the
+ * matches loaded are even monos 400 to 2398, so 300 to 500 draws 51 of them and holds 50 older
+ * matches the list never loaded. The note said only "at least 50 calls hidden", which read as every
+ * match in the stretch; it now says older matches in it are not drawn, with no count of them. A
+ * stretch wholly above mono 400, and one the list draws none of, whose empty text says it, read as
+ * they did.
+ */
+async function stretchBelowMatches(sources) {
+  const { state, page, text } = listPage(sources);
+  state.filter = 'path:/v3/shop/bulk';
+  await page.loadTransactions();
+  const lead = 'hidden by the filter path:/v3/shop/bulk — newest 1000 of 1200 matches loaded';
+  const notes = [];
+  for (const [range, due] of [
+    [{ from: 300, to: 500 }, `at least 50 calls ${lead} — this stretch reaches below the oldest of the 1000 matches loaded, ` +
+      'so any older matches in it are not drawn — narrow the filter to reach them — clear filter'],
+    [{ from: 2000, to: 3015 }, `816 calls ${lead} — clear filter`],
+    [{ from: 0, to: 150 }, 'the filter path:/v3/shop/bulk — newest 1000 of 1200 matches loaded — clear filter'],
+  ]) {
+    state.timeRange = range;
+    page.renderListNote();
+    notes.push([text('list-note'), due]);
+  }
+  const wrong = notes.filter(([got, due]) => got !== due);
+  return ['stretch below loaded matches', wrong.length === 0
+    ? `yes ("…${notes[0][0].slice(notes[0][0].indexOf('this stretch'), notes[0][0].indexOf(', so'))}…" over 300..500, no count of the older matches; ${notes.length - 1} other stretches as before)`
+    : `NO - ${wrong.map(([got, due]) => `"${got}" where "${due}" was due`).join('; ')}`];
 }
 
 module.exports = { checkListHolds };

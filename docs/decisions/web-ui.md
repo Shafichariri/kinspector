@@ -275,11 +275,17 @@ evaluates no filter. The first build counted the copy there and told a stretch w
 that its 500 calls could be reached by narrowing the filter. It now says that none of the matches
 loaded is in the stretch and how many older ones are not loaded (`matched` less the rows held), with
 "narrow the filter to reach any here". A stretch the copy shows no calls in still reads "no calls in
-the selected stretch", which is true whatever the filter. `filtered count`,
-`list note past the clamp` and `stretch older than loaded` in `check-web-static.js` hold it over
-the 3016-call stub, and `long filtered count`, `long list note` and `long stretch older` in the live
-probe over the 1203-call session; each was proven red with the old wording or no note put back, and
-the filtered header and stretch cases against the first build's code. An
+the selected stretch", which is true whatever the filter. A stretch the list draws loaded matches
+in, reaching below the oldest of them, had its note say only `at least 10 calls hidden by the
+filter`, which read as every match in the stretch. The note now adds that the stretch reaches below
+the oldest of the `N` matches loaded, so any older matches in it are not drawn, and that narrowing
+the filter reaches them, with no count of those, for the same reason; a stretch wholly above that
+match reads as before, and one the list draws none of leaves it to the empty text (`belowLoaded` is
+the one rule both read). `filtered count`, `list note past the clamp`, `stretch older than loaded`
+and `stretch below loaded matches` in `check-web-static.js` hold it over the 3016-call stub, and
+`long filtered count`, `long list note`, `long stretch older` and `long stretch below matches` in
+the live probe over the 1203-call session; each was proven red with the old wording, the sentence
+removed or no note put back, and the filtered header and stretch cases against the first build's code. An
 export draws every call it embeds, so it never shows the note (`long list note absent`).
 
 The two cached copies have gone stale in the ways below, and all are closed; this is

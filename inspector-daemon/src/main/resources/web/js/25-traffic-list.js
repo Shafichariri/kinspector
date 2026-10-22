@@ -267,7 +267,7 @@ function hiddenByFilter({ signals = true, ranged = false, screens = true } = {})
  * someone to debug the app instead of the query. `lead` opens the emptied note; a pane that draws
  * only calls says "no calls match", since the filter may well have matched signals.
  */
-function filterNote(node, hidden, emptied, lead = 'nothing matches') {
+function filterNote(node, hidden, emptied, lead = 'nothing matches', more = null) {
   const count = (n, noun) => (n ? `${n} ${noun}${n === 1 ? '' : 's'}` : null);
   const calls = count(hidden.calls, 'call');
   const what = [calls && hidden.atLeast ? `at least ${calls}` : calls, count(hidden.signals, 'signal')].filter(Boolean).join(' and ');
@@ -282,6 +282,7 @@ function filterNote(node, hidden, emptied, lead = 'nothing matches') {
   if (state.matched !== null && state.transactions.length < state.matched) {
     node.append(` — newest ${state.transactions.length} of ${state.matched} matches loaded`);
   }
+  if (more) node.append(` — ${more}`);
   node.append(' — ');
   node.appendChild(clearFilterButton());
   return node;
@@ -318,47 +319,41 @@ function renderListEmpty() {
  * in the selected stretch" while the glance's THIS STRETCH counted them.
  *
  * With no filter the calls are counted from the whole-session copy, and only from the oldest mono
- * at which it is whole, saying "at least" when the stretch reaches below that, as `hiddenByFilter`
- * does for a stretch. Under a filter nothing on the page can count them: the copy is unfiltered and
- * no filter is evaluated here, and counting the copy said "500 calls … narrow the filter to reach
- * them" of a stretch where none matched. So it says only what is known — none of the matches
- * loaded is in the stretch, and how many older ones are not loaded — and only while the copy shows
- * calls there at all; with none, "no calls in the selected stretch" is true whatever the filter.
+ * at which it is whole, saying "at least" when the stretch reaches below that (`belowLoaded`), as
+ * `hiddenByFilter` does for a stretch. Under a filter nothing on the page can count them: the copy
+ * is unfiltered and no filter is evaluated here, and counting the copy said "500 calls … narrow
+ * the filter to reach them" of a stretch where none matched. So it says only what is known — none
+ * of the matches loaded is in the stretch, and how many older ones are not loaded — and only while
+ * the copy shows calls there at all; with none, "no calls in the selected stretch" is true whatever
+ * the filter.
  */
 function olderThanLoaded() {
-  const held = state.transactions;
-  const counted = state.filter ? state.matched : state.sessionTotal;
-  if (!state.timeRange || !held.length || counted === null || held.length >= counted) return null;
-  const oldest = (rows) => rows.reduce((m, r) => (r.mono < m ? r.mono : m), Infinity);
-  const loadedFrom = oldest(held);
-  if (state.timeRange.from >= loadedFrom) return null;
-  const whole = state.allTransactions;
-  const wholeFrom = whole.length && whole.length < (state.sessionTotal ?? 0) ? oldest(whole) : -Infinity;
-  const calls = whole.filter((r) => r.mono < loadedFrom && r.mono >= wholeFrom && inRange(r.mono)).length;
-  const atLeast = state.timeRange.from < wholeFrom;
-  if (!calls && !atLeast) return null;
+  const below = belowLoaded();
+  if (!below) return null;
+  const { held, counted, calls, atLeast } = below;
   if (state.filter) {
-    const older = counted - held.length;
-    return `none of the newest ${held.length} of ${counted} matches the list loaded is in this stretch, ` +
+    const older = counted - held;
+    return `none of the newest ${held} of ${counted} matches the list loaded is in this stretch, ` +
       `and the ${older} older ${older === 1 ? 'one is' : 'ones are'} not loaded — narrow the filter to reach any here`;
   }
   const what = calls
     ? `${atLeast ? 'at least ' : ''}${calls} ${calls === 1 ? 'call' : 'calls'} in this stretch ${calls === 1 && !atLeast ? 'is' : 'are'}`
     : 'the calls in this stretch are';
-  return `${what} older than the newest ${held.length} the list loaded — filter to reach them`;
+  return `${what} older than the newest ${held} the list loaded — filter to reach them`;
 }
 
 /**
  * The list's filter note: the same `filterNote` the path, the waterfall and the timeline draw,
  * drawn here only while the filter matched more calls than the list holds. Thinned within the
  * ceiling, the header's `N of M calls` already counts what is drawn; past it, the header counts
- * matches and this says how many are loaded and what the filter hid.
+ * matches and this says how many are loaded and what the filter hid, and, of a brushed stretch
+ * reaching below the oldest match loaded, that older matches in it are not drawn (`olderMatchesNote`).
  */
 function renderListNote() {
   const node = $('list-note');
   const capped = !!state.filter && state.matched !== null && state.transactions.length < state.matched;
   node.hidden = state.view !== 'network' || !capped;
-  if (capped) filterNote(node, hiddenByFilter({ signals: false, ranged: true }), false);
+  if (capped) filterNote(node, hiddenByFilter({ signals: false, ranged: true }), false, undefined, olderMatchesNote());
   else node.replaceChildren();
   findingsPaintFlagged();
 }
