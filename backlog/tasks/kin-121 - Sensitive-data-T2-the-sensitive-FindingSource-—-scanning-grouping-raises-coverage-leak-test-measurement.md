@@ -3,16 +3,18 @@ id: KIN-121
 title: >-
   Sensitive data T2: the sensitive FindingSource — scanning, grouping, raises,
   coverage, leak test, measurement
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 09:40'
-updated_date: '2026-10-22 10:47'
+updated_date: '2026-10-22 11:32'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
   - KIN-120
   - KIN-113
   - KIN-112
+  - KIN-127
 type: feature
 ordinal: 121000
 ---
@@ -49,5 +51,5 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-NOT STARTED, blocked (2026-10-22, bob): this ticket calls JsonPaths.walk, JsonPaths.group and JsonPaths.isAtOrUnder in service/BodyShape.kt, which item:session-diff's T1 adds (its design §10 fixes the names and signatures as a contract with this item). Session diff is not built and its tickets are not filed; main has only JsonPaths.redactedPaths, carved out as KIN-112. Building the walker here would be building another item's work (the KIN-34 trap), so it waits for the coordinator: either session diff T1 lands first, or the three functions are carved out of it into a ticket of their own as KIN-112 was. KIN-120 (T1) merged in #156; KIN-122 (T3, generic dismissals) was built ahead of this ticket because it needs nothing from it.
+Ready for QA once its PR merges (unblocked by KIN-127, the JsonPaths carve-out). Files: service/SensitiveSource.kt (new), archive/FindingSettings.kt (FindingRuleCatalog.SENSITIVE_RULES appended to ALL; FindingRuleInfo.defaultEnabled so email and phone ship off), service/Findings.kt (FindingSession.enabled reads defaultEnabled), service/FindingsEngine.kt (one line in FindingSources.all; the drop and enabled checks read source.rules, so a custom rule's findings are kept), http/ConfigRoutes.kt (effective enabled from defaultEnabled), service/SensitiveValues.kt (xapikey is a secret name, decided 2026-10-22), mcp-tools-list.json (category enum gains sensitive), DAEMON.md (§6 findings.sensitive, §7 rule table), daemon-and-mcp.md (three paragraphs), inspector-daemon/AGENTS.md. Tests: SensitiveSourceTest (19), SensitiveLeakTest, SensitiveParityTest; the payment tests that pinned a one-family catalogue now name both. DEVIATION, needed by the masked-only invariant: a route segment that matches a value rule is written • in the finding's route (a JWT holds dots and an IBAN has no lowercase, so the route heuristic leaves both literal and the route label would print them), and the source asks RouteTemplates.keyOf directly rather than FindingSession.routeOf, whose memo is keyed by the raw path and so kept a URL card in the cache. FOR FINDINGS: the payment source still uses that memo; its accumulator holds raw paths. Red proofs (each run, seen failing, restored): raise applied to response bodies -> 'a response is never raised for its host' expected <medium> but was <high>; dedupe removed (key per rule) -> fold count expected <6> but was <8>, accumulator expected <3> but was <4>, and the dedupe test; engine checking ids against FindingRuleCatalog.ALL -> the custom rule's count expected 1 but was 0; row written before its body in SessionWriter.append -> 'the row was written before its body'; fold through queryTransactions -> SensitiveParityTest expected <1203> but was <1000>; SensitiveLeakTest: hint returning the value (accumulator: the card and its windows), a note carrying the value (REST: the card), key masking removed (REST: the JWT key's windows), route masking removed (REST: NL91ABNA0417164300), session.routeOf memo (accumulator: the URL card). Measurement (one-off test, deleted): 10,000 POSTs with ~4 KB JSON bodies each side, 83 MB on disk, cold category=sensitive read 2706 ms (budget 5 s), after 100 appended rows 41 ms (budget 100 ms), heap delta of the cache entry ~3.7 MiB (~375 B per row, both sources); 160,000-row huge-shaped session (no body files) cold 316 ms (budget 3 s), 160000 bodies counted not captured. Memory only; no disk cache needed. — bob
 <!-- SECTION:NOTES:END -->
