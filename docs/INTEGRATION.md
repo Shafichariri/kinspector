@@ -1,6 +1,6 @@
 # Integrating Inspector into a Compose Multiplatform app
 
-**Document version: v63 — 2026-10-21.**
+**Document version: v64 — 2026-10-22.**
 Already integrated from an earlier copy? Go to **[§14 Changelog](#14-changelog)** first — it says
 what changed and, for each version, what you actually have to do about it. Most upgrades are a
 rebuild and nothing else.
@@ -485,8 +485,8 @@ Then, whichever launcher you have, whenever you want to watch traffic:
 Open **http://127.0.0.1:8099**. Sessions are archived to `~/.inspector/sessions/`, oldest pruned
 past 100 sessions or 300 MB.
 
-A rail down the left of the page holds five pages: **Traffic**, where every session opens (§6e),
-**Stats** (§6e), **Sessions**, **Processes** and **Settings**. Each page has its own address (`#/sessions`, and so
+A rail down the left of the page holds six pages: **Traffic**, where every session opens (§6e),
+**Stats** (§6e), **Findings** (§6e), **Sessions**, **Processes** and **Settings**. Each page has its own address (`#/sessions`, and so
 on), so the browser's back button and a bookmark both work.
 
 The **Processes** page has **restart** and **stop**. `restart` relaunches the daemon in place —
@@ -600,6 +600,35 @@ next starts, and then to every recorded session, because routes are computed whe
 The Settings page does not edit it; edit the file by hand. `docs/DAEMON.md` §6 → `routeTemplates`
 has the template rules, and → "Route stats" the REST route and `inspector stats`.
 
+**Findings** is what the daemon's rules flag in the selected session, worked out from every call
+when you ask and never stored. There are two families. **Payment safety** looks at POST, PUT, PATCH
+and DELETE calls: the same body sent twice with no idempotency key, a key reused with a changed
+body, an automatic retry without a key, a resubmit after a failure that may have reached the
+server, a payment path with no key, and (info) a retry with one. **Sensitive data** looks for card
+numbers, IBANs, JWTs and secrets in URLs, credentials sent over plain `http`, and field names such
+as `password`, `cvv` or `date_of_birth`. It detects and never redacts: what is captured, and what
+your app does, is unchanged. The page's header counts the findings by severity, and a coverage line
+per family says what could not be judged, such as a truncated body. Each finding shows its rule,
+severity, route, message and evidence, with a link to each call it names; a rule that found nothing
+is listed as checked. **Evidence never shows a captured value**: a card reads `•••• 4242`, an IBAN
+`GB82 •••• 5432`, a JWT `•••• HS256`, an idempotency key `•••• 9f3a`, anything else `••••`. With
+live on, the page refreshes at most once a second; in an HTML export it reads the report embedded in
+the file.
+
+The rules run with their defaults until you change them under `findings` in
+`~/.inspector/config.json` on your Mac. The Settings page's **Findings** section edits the same key:
+each rule on or off and its severity, the idempotency header names, the payment and ignored paths,
+and the two time windows. Sensitive data's own settings are in the file only: `firstPartyHosts`, your
+app's own hosts, raises the severity of sensitive data sent anywhere else, and while it is empty,
+the default, nothing is raised for where data was sent; `fieldNames` and `valueRules` add your own
+names and value shapes. The email and phone rules are off until you turn them on. To set a finding
+aside on purpose, list it under `findingDismissals` with a reason. It leaves the counts but is not
+deleted: every export lists it with its reason, and REST and MCP do when asked. **Unlike every other
+key in the file, `findings` and `findingDismissals` apply on the next read, with no restart**, in the
+daemon and in `inspector mcp`.
+`docs/DAEMON.md` §6 has the rules for both keys, and §7 → "Findings" the rule table, the REST route
+`GET /api/sessions/{id}/findings` and `inspector findings`.
+
 **Sessions** can be deleted from the UI, on the **Sessions** page: it lists every session with a
 checkbox and a per-row `✕`, presets that select for you (`keep last N`, `older than N` days),
 **delete selected**, and a **clear all**. Each arms on the first click and fires on the second, and
@@ -613,7 +642,9 @@ Inspector and they can open it — **Markdown** is a readable record for a ticke
 is everything for tools, and **HAR** is the calls alone for DevTools. The first three carry the
 Stats table for the whole session: the HTML on its Stats page (sorting and opening a route's calls
 need a daemon), the Markdown as a **Routes** section, and the JSON as `routeStats`. The HAR does
-not. Each holds the whole session,
+not. All four carry the session's findings: the HTML on its Findings page and the JSON as
+`findings`, the Markdown as a **Findings** section, and the HAR as a comment on each entry a finding
+names. Each holds the whole session,
 with no filter or page limit. They hold whatever capture recorded, credentials included unless you
 enabled redaction, so read one before you send it anywhere. `docs/DAEMON.md` → "Exporting a whole
 session" has the REST routes.
@@ -854,6 +885,14 @@ attempts, retries, failure rates and p50 to max latency, with p95 and p99 withhe
 `limit` defaults to 25, at most 200. Each row's `filterTerm`, passed to `list_transactions`,
 returns that route's calls, and possibly calls on paths the route keeps apart. `inspector mcp`
 reads `routeTemplates` when your editor starts it, so after editing them, restart the MCP server.
+
+`list_findings(session, category, limit, includeDismissed)` is the Findings page (§6e) for an agent:
+each finding's rule, severity, route, message, the calls it names and its evidence, which never
+shows a captured value. `category` is `payment` or `sensitive`, and absent means both; `limit`
+defaults to 50, at most 200, and `findingCount` says how many there are. Findings listed under
+`findingDismissals` are left out unless `includeDismissed` is true, and `dismissedCount` says how
+many were. Unlike `route_stats`, it reads the `findings` and `findingDismissals` keys on every call,
+so an edit needs no restart. No tool can dismiss a finding.
 
 `explain(id)` is the one to reach for when the question is **why** rather than **what**. It joins,
 in one call, what the others make you assemble by hand: the screen the app was on when the call
@@ -1343,7 +1382,49 @@ If your copy has no version line at the top, identify it by what it contains:
 | Methods are badges; web UI has a sort toggle | **v9** |
 | §1 says Kotlin 2.3.20 | **v10** |
 
-### v63 — 2026-10-21 (this document)
+### v64 — 2026-10-22 (this document)
+
+**Nothing to do in your app. Findings run by default in the next daemon release after 1.3.0. To
+turn a rule off, change its severity or set a finding aside, edit `findings` or `findingDismissals`
+in `~/.inspector/config.json` on your Mac (§6e); the next read picks it up, with no restart. If a
+script or agent of yours reads a route row's `host` from `route_stats` or `GET …/stats` for an IPv6
+server, it now reads `::1`, never `[::1]`.**
+
+Like v60 to v62, this describes the next daemon release after 1.3.0. Your code, your coordinates
+and your release build are untouched; the change reaches you when you download that daemon. Nothing
+changes on the device: findings are read from the archive on your Mac, and nothing captured is
+redacted or altered.
+
+- **Findings** (§6e): what the daemon's rules flag in a session, worked out when you ask and never
+  stored. Payment safety looks at POST, PUT, PATCH and DELETE calls for duplicate submits, reused
+  or missing idempotency keys, retries without a key and resubmits after an ambiguous failure.
+  Sensitive data looks for card numbers, IBANs, JWTs and secrets in URLs, credentials over plain
+  `http`, and sensitive field names. Evidence never shows a captured value.
+- **Where to read them:** a **Findings** page on the rail (§6c, §6e);
+  `GET /api/sessions/{id}/findings` with `category`, `limit` and `includeDismissed`;
+  `inspector findings --session … --category … --limit …`; and the MCP tool
+  `list_findings(session, category, limit, includeDismissed)` (§10). `docs/DAEMON.md` §7 →
+  "Findings" has the route, the CLI and the rule table.
+- **Every export carries them** (§6e): the HTML on its Findings page, the JSON as `findings`, the
+  Markdown as a Findings section, and the HAR as a comment on each entry a finding names.
+- **Two new keys in the daemon's `config.json`, and they apply on the next read.** `findings` turns
+  rules on or off, sets their severity, tells the payment rules your idempotency header and payment
+  paths, and gives the sensitive-data rules your `firstPartyHosts`, field names and value rules.
+  `findingDismissals` sets a finding aside with a reason. Unlike every other key in the file, both
+  are read again on the next findings read, by the daemon and by `inspector mcp`, so neither needs
+  a restart. The Settings page edits the rules and the payment settings; the rest is edited in the
+  file, or through `PUT /api/config`. `docs/DAEMON.md` §6 has the rules for both keys.
+- **On by default, except two.** Every rule runs unless `findings` turns it off, except
+  `sensitive.email` and `sensitive.phone`, which are off until you turn them on. While
+  `firstPartyHosts` is empty, the default, nothing is raised for where data was sent, and the
+  sensitive coverage line says so.
+- **An IPv6 server is one route row, and its `host` is the bare literal.** A server reached through
+  both OkHttp (which stores `::1`) and Ktor (which stores `[::1]`) is one row on the Stats page, in
+  the Markdown export's Routes table and in `route_stats`, where it was two rows with half the calls
+  each. The row's `host` reads `::1`. The page and the Markdown still draw `[::1]:8080`, and the
+  `host:` filter term is unchanged, as v63 says.
+
+### v63 — 2026-10-21
 
 **Nothing to do, unless your code parses `NetworkTransaction.url` or `hostPort` for calls to an
 IPv6 address, or a script or agent of yours reads the session summary's `byHost` keys as bare
@@ -1397,7 +1478,7 @@ menu at the end of the traffic toolbar; nothing else about exporting changed.**
 
 Like v60, this describes the web UI of the next daemon release after 1.3.0. Your code, your
 coordinates and your release build are untouched; the change reaches you when you download that
-daemon. Until then, the 1.3.0 daemon's web UI is the one v59 described.
+daemon. Until then, the 1.3.0 daemon's web UI is the one v57 and earlier describe.
 
 - **The traffic toolbar is one row** from 1000px wide (§6e). The session's endpoint shortcuts are
   behind **endpoints ▾**, and **⋮** holds the four exports, the keyboard shortcuts and
@@ -1420,7 +1501,7 @@ daemon. Until then, the 1.3.0 daemon's web UI is the one v59 described.
 
 This describes the web UI of the next daemon release after 1.3.0. Your code, your coordinates and
 your release build are untouched; the change reaches you when you download that daemon. Until
-then, the 1.3.0 daemon's web UI is the one v59 described.
+then, the 1.3.0 daemon's web UI is the one v57 and earlier describe.
 
 - **A rail on the left replaces the settings dialog**, with Traffic, Sessions, Processes and
   Settings pages (§6c).
