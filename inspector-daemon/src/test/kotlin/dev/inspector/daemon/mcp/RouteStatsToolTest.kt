@@ -4,6 +4,7 @@ import dev.inspector.daemon.LONG_SESSION_CALLS
 import dev.inspector.daemon.LONG_SESSION_ID
 import dev.inspector.daemon.PROBE_SESSION_ID
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.ipv6BothClients
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.mcpCallTool
 import dev.inspector.daemon.mcpExchange
@@ -94,6 +95,16 @@ class RouteStatsToolTest {
         val long = report("""{"session":"$LONG_SESSION_ID"}""")
         assertEquals(LONG_SESSION_CALLS, long.matched)
         assertEquals(LONG_SESSION_CALLS - 2, long.routes.single { it.route == "/v3/long/bulk" }.attempts)
+    }
+
+    // An agent asking how one IPv6 server behaves gets one answer, not two halves, whichever
+    // client each call went through.
+    @Test
+    fun `one IPv6 server reached by both clients is one route`() {
+        val id = "2026-03-04T10-00-00_ipv6_ci_debug"
+        writeSession(config, id, "2026-03-04T10:00:00.000Z", ipv6BothClients())
+        val routes = report("""{"session":"$id"}""").routes
+        assertEquals(listOf(Triple("::1", 8080, 6), Triple("::1", 9090, 1)), routes.map { Triple(it.host, it.port, it.attempts) })
     }
 
     @Test

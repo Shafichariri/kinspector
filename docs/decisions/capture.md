@@ -134,8 +134,10 @@ recorded before it read the same: OkHttp's `HttpUrl.host` gives `::1` and the in
 as it comes, which made `url` read `http://::1:8080/v6`, while Ktor's `Url.host` keeps `[::1]`, so a
 host already starting with `[` is not bracketed twice. `Ipv6CaptureTest` holds both paths to one
 `url` against a real server on `[::1]`, and skips with the reason where there is no IPv6 loopback.
-The session summary's `byHost` keys on `hostPort` too. The `host:` filter term does not: it still
-matches the stored `host`, which differs by capture path for an IPv6 literal.
+The session summary's `byHost` keys on `hostPort` too, and the route key on the bare literal
+(`daemon-and-mcp.md`). The `host:` filter term does neither: it still matches the stored `host`,
+which differs by capture path for an IPv6 literal, so `host:::1` finds both forms and `host:[::1]`
+only Ktor's.
 
 **`rawContent` is `@InternalAPI`.** There is no public accessor for the undecoded body channel;
 Ktor's own Logging plugin reads it the same way. Opted in explicitly, pinned to Ktor 3.5.0.

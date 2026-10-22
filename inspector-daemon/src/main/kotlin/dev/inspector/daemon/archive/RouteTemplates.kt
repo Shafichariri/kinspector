@@ -26,7 +26,8 @@ data class Route(val text: String, val placeholders: List<Boolean>, val source: 
  *
  * The origin is in the key because one template on two servers is two routes behaving differently,
  * and the diff and the findings that reuse this key must not call two servers' calls one route.
- * [port] is null when it is the scheme's default, as `NetworkTransaction.hostPort` decides.
+ * [port] is null when it is the scheme's default, as `NetworkTransaction.hostPort` decides. [host]
+ * is lowercased, and an IPv6 literal is bare whichever client stored it (see `serverHost`).
  */
 data class RouteKey(
     val method: String,
@@ -80,10 +81,14 @@ class RouteTemplates private constructor(
         return Route(text, placeholders, RouteSource.HEURISTIC)
     }
 
+    /**
+     * The one place a route key is built; the stats, the exports, MCP, and the diff and findings
+     * after them all key through here.
+     */
     fun keyOf(txn: NetworkTransaction): RouteKey = RouteKey(
         method = txn.method.uppercase(),
         scheme = txn.scheme.lowercase(),
-        host = txn.host.lowercase(),
+        host = serverHost(txn.host),
         port = txn.port?.takeIf { it != defaultPortFor(txn.scheme) },
         route = routeOf(txn.path),
     )
@@ -185,6 +190,22 @@ class RouteTemplates private constructor(
             val composed = if (routeTerm.isEmpty()) trimmed else "$trimmed $routeTerm"
             // Cannot fail for a filter that parsed, but a term that does not parse is no link at all.
             return if (FilterParser.parse(composed).isSuccess) composed to true else routeTerm to false
+        }
+
+        /**
+         * [host] as one server reads in a key: lowercased, and an IPv6 literal without its brackets.
+         *
+         * OkHttp stores `::1` and Ktor `[::1]` for the same server, and capture keeps them as they
+         * come (`capture.md` brackets on read), so a key on the stored host made one server two route
+         * rows with half the calls each. Bare rather than bracketed, because the row's `host:` term is
+         * a substring match: `::1` finds both stored forms, `[::1]` only Ktor's. The page and the
+         * Markdown export bracket it again on read, through `hostPortOf` and `hostPort`. Only a
+         * bracketed host holding a `:` is touched, so nothing that is not an IPv6 literal moves.
+         */
+        internal fun serverHost(host: String): String {
+            val lower = host.lowercase()
+            val bracketed = lower.length > 2 && lower.startsWith('[') && lower.endsWith(']') && ':' in lower
+            return if (bracketed) lower.substring(1, lower.length - 1) else lower
         }
 
         /** `/`-separated, empty segments kept: `/` is `[""]`, `/users/` is `["users", ""]`. */

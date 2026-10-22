@@ -700,7 +700,9 @@ curl -s 'http://127.0.0.1:8099/api/sessions/latest/stats?filter=method:POST&sort
 inspector stats 'host:api' --sort errors
 ```
 
-One row per method, host and route, over the whole session or what `filter` keeps: `calls`
+One row per method, host and route, over the whole session or what `filter` keeps. Calls to
+one IPv6 server and port are one row whichever client stored the host (`::1` from OkHttp, `[::1]`
+from Ktor), and the row's `host` is the bare literal. Each row holds `calls`
 (distinct calls) and `attempts` (each redirect hop or retry is one), `retries` and `retried`,
 counts per status class, `transportFailures`, rates over attempts that had an outcome, and
 `p50Ms`/`p90Ms`/`p95Ms`/`p99Ms`/`maxMs` over attempts that got a response. A transport failure is

@@ -77,6 +77,22 @@ class RouteTemplatesTest {
         assertEquals(t.keyOf(txn("f").copy(query = "a=1")), t.keyOf(txn("g").copy(query = "token=x")))
     }
 
+    // OkHttp stores an IPv6 literal bare and Ktor bracketed (`capture.md`), so a key on the stored
+    // host made one server two routes, each with half the calls.
+    @Test
+    fun `an IPv6 server is one key whichever client stored its host`() {
+        val t = RouteTemplates.NONE
+        fun at(host: String, port: Int?) = t.keyOf(txn("a", path = "/v6", host = host).copy(scheme = "http", port = port))
+        assertEquals(at("::1", 8080), at("[::1]", 8080))
+        assertEquals("::1", at("[::1]", 8080).host, "bare, the form whose host: term finds both")
+        assertEquals(at("fe80::a1", null), at("[FE80::A1]", 80))
+        assertNotEquals(at("::1", 8080), at("[::1]", 9090), "two ports are two servers")
+        // Not an IPv6 literal: kept as stored, lowercased, as before.
+        assertEquals("[example.invalid]", at("[Example.invalid]", 8080).host)
+        assertEquals("127.0.0.1", at("127.0.0.1", 8080).host)
+        assertEquals("[", at("[", 8080).host)
+    }
+
     @Test
     fun `an override wins in both directions and the first match wins`() {
         val t = templates("/reports/2024", "/articles/{slug}", "/v2/users/{userId}/avatar", "/v2/users/{other}/avatar")

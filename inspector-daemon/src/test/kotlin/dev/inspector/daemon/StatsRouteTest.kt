@@ -151,6 +151,29 @@ class StatsRouteTest {
         assertEquals("""{"error":"unknown sort 'p75'. Use one of: attempts, p50, p90, p95, p99, max, errors."}""", badSort.bodyAsText())
     }
 
+    /**
+     * OkHttp's `::1` and Ktor's `[::1]` on one port are one route row, and its filter term opens
+     * every call it counts through the transactions route the Traffic page reads. The term carries
+     * no port, so it also opens the `:9090` call: a superset, as every route term is.
+     */
+    @Test
+    fun `one IPv6 server reached by both clients is one row`() = runBlocking {
+        val id = "2026-02-03T10-00-00_ipv6_ci_debug"
+        val calls = ipv6BothClients()
+        writeSession(config, id, "2026-02-03T10:00:00.000Z", calls)
+        val rows = ok(id).routes()
+        assertEquals(listOf(8080 to 6, 9090 to 1), rows.map { it.int("port") to it.int("attempts") }, rows.toString())
+        val row = rows.first()
+        assertEquals(listOf("::1", "::1"), rows.map { it.getValue("host").jsonPrimitive.content })
+        assertEquals(6, row.int("calls"))
+        val term = row.getValue("filterTerm").jsonPrimitive.content
+        val page = Json.parseToJsonElement(
+            http.get(url("/api/sessions/$id/transactions")) { parameter("filter", term) }.bodyAsText(),
+        ).jsonObject
+        val opened = page.getValue("items").jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content }
+        assertTrue(opened.containsAll(calls.take(6).map { it.id }), "$term opened $opened")
+    }
+
     @Test
     fun `a session with no calls is an empty table`() = runBlocking {
         writeSession(config, "2026-02-02T10-00-00_empty_ci_debug", "2026-02-02T10:00:00.000Z")
