@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 13:28'
-updated_date: '2026-10-22 15:26'
+updated_date: '2026-10-22 17:31'
 labels:
   - 'item:release-rehearsal'
 dependencies: []
@@ -60,4 +60,30 @@ AC#3 (release-clean). Met on the build outputs, which is what the script scans. 
 - MINOR F3: with a long absolute --paths the script fails with "mkdir: ... File name too long". The temp directory name is the whole path with / replaced by _, which can exceed NAME_MAX. It then exits 1, the "canary found" code, instead of 2. I worked around it by copying the repository to a short temp path.
 
 AC#4 is the delivery tracker's. A STATUS paragraph is in the hand-over.
+
+ROUND 2, after the fixes KIN-132 (#171), KIN-133 (#172) and KIN-134 (#173). Ran 2026-10-22 on commit 0b364f5 (origin/main), on macOS with JDK 21.0.12. There is no Android SDK, no signing key was used, and nothing was uploaded or tagged. Ready for QA; the ACs are left unticked for the qa-verifier.
+
+AC#1 (POMs). MET, with 0 mismatches over 35 POMs, the seven Android ones included.
+- Command: ./gradlew :<m>:publish{KotlinMultiplatform,Jvm,IosArm64,IosSimulatorArm64}PublicationToMavenLocal :<m>:generatePomFileForAndroidPublication for all seven modules, with -Pinspector.version=1.4.0-rc -Dmaven.repo.local=<scratch>/m2. Result: BUILD SUCCESSFUL and 28 published POMs. generatePomFileForAndroidPublication ran for all 7 modules without the SDK, and each <m>/build/publications/android/pom-default.xml was generated fresh (the stale copies were deleted first).
+- Round 1's pomcheck.py, with the android POMs staged into the same layout as <m>-android: 35 POMs, 154 dependencies checked against each module's gradle.lockfile, "faults: 0", exit 0.
+- kotlin-stdlib is 2.3.21 in all 30 POMs of core, noop, ui, noop-ui, stream and noop-stream, and that is what their locks resolve. It is 2.3.20 in all 5 inspector-model POMs, which is also what its lock resolves. F1 is gone.
+- Coordinates are io.github.shafichariri:<artifact>:1.4.0-rc, and each <name> is "Inspector <module>". All 35 POMs have description, url, licenses, developers and scm. All 28 published artifacts have javadoc and sources jars. No test-only dependency appears in any POM.
+- Nothing is missing or added: the dependency sets (group:artifact:scope) of the 28 non-android POMs are identical to round 1's. Each android POM matches its jvm twin except for differences the build scripts declare: stream android has ktor-client-okhttp where jvm has cio (inspector-stream/build.gradle.kts:31-32); ui android has activity-compose (inspector-ui/build.gradle.kts:52); and the Compose artifacts are the android ones instead of -desktop.
+
+AC#2 (daemon zip). MET.
+- ./gradlew :inspector-daemon:distZip -Pinspector.version=1.4.0-rc built inspector-1.4.0-rc.zip, 11589662 bytes, sha256 13aa37ab529e72cca3f864e2588043b825964c4ae4b89e4ab5c225c30b8b9156. That is byte-identical to round 1.
+- release.yml's smoke step was extracted from the workflow file, and a diff shows only port 8123 changed to 18299 (RUNNER_TEMP is scratch). Result: "SMOKE PASSED" under bash -e, and serverInfo = {'name': 'inspector', 'version': '1.4.0-rc'}.
+- Red direction: with VERSION=1.4.0 it printed "MCP serverInfo.version is '1.4.0-rc', expected '1.4.0'" and exited 1. Port 18299 was released afterwards.
+
+AC#3 (release-clean). MET, with no gap.
+- --self-test exited 0: "SELF-TEST PASSED: canary detected in 5 core artifact(s)", both iOS klib trees included.
+- The real check exited 0: "PASSED: no capture code found in 8 artifact(s)".
+- --paths over the published 1.4.0-rc repository, run on the full deep scratch path (the F3 case), one run per artifact directory: 28 runs, 70 targets (56 jars plus 14 klibs; sources jars are excluded by design).
+  - All 4 inspector-core directories exited 1, with CANARY FOUND in inspector-core-1.4.0-rc.jar, inspector-core-jvm-1.4.0-rc.jar, inspector-core-iosarm64-1.4.0-rc.klib and inspector-core-iossimulatorarm64-1.4.0-rc.klib. The klibs are now caught, so F2 is gone.
+  - The other 24 directories (model, noop, ui, noop-ui, stream and noop-stream) exited 0.
+  - There was no UNREADABLE line and no exit 2 in any run.
+- Aggregate runs: core* exited 1 with 4 canaries; noop* exited 0 with "PASSED"; the whole repository exited 1 with exactly the same 4 core artifacts.
+- No aars: there is no SDK here, so none were built.
+
+Not verified: android aars and their contents (no SDK; CI's build and release-swap generate the android POMs and PublishedPomTest checks them), signing, the Central bundle. No new fault found.
 <!-- SECTION:NOTES:END -->
