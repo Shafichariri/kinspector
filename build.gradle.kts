@@ -409,6 +409,11 @@ val centralBundle = tasks.register<Zip>("centralBundle") {
     // left to be ignored, because an unsignable file in a bundle of signed ones is exactly the
     // kind of thing a validator changes its mind about between releases.
     exclude("**/maven-metadata.xml*")
+    // Central limits each organization's files per month, and counts checksums and signatures.
+    // Gradle writes four checksums for every file it publishes, the .asc signatures included;
+    // Central requires only .md5 and .sha1, and none on an .asc. Left in, those extras were 1,200
+    // of a 2,000-file release against a 1,000-file monthly limit. See docs/decisions/release.md.
+    exclude("**/*.asc.*", "**/*.sha256", "**/*.sha512")
     archiveFileName = "bundle-${project.version}.zip"
     destinationDirectory = layout.buildDirectory.dir("central")
 }

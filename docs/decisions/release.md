@@ -91,6 +91,19 @@ days before anyone checked. What the Portal wants is a zipped **Maven repository
 `file://` repository and zips that. GitHub Packages is a second `maven {}` entry and a separate task
 on purpose: both run, and a Central failure cannot take the Packages release with it.
 
+**The bundle carries only `.md5` and `.sha1` checksums, and none on a signature.** Central caps each
+organization's files per month, and the cap counts signatures and checksums. Gradle's file
+repository writes `.md5`, `.sha1`, `.sha256` and `.sha512` beside every file it publishes, `.asc`
+signatures included. That made 1.3.0 a 2,000-file release against a 1,000-file monthly limit:
+Central sent a grace-period warning after two releases. Sonatype's requirements page says `.md5` and
+`.sha1` are required, `.sha256` and `.sha512` are optional, and `.asc` files need no checksums. So
+`centralBundle` excludes `*.asc.*`, `*.sha256` and `*.sha512` when it zips, which brings the same
+release to 800 files. It filters at the zip, not in the staging repository, because Gradle has no
+public switch for either kind of checksum, and the GitHub Packages publication is not affected. Do
+not "restore" these files for completeness. The one cost is that each release still uses 80% of a
+month's allowance, so two Central releases in one month need Sonatype's raised limit, which open
+source projects request through central-support@sonatype.com.
+
 `publishToCentralPortal` defaults to `USER_MANAGED` rather than `AUTOMATIC`, so the upload validates
 and stages and then waits for a person to press publish. Releasing to Central is the one
 irreversible act in the whole sequence — a coordinate there can never be replaced or deleted — and
