@@ -1,0 +1,92 @@
+/* findings-dismiss: an evidence line at each width, the dismiss form, the dismissed fold and the no-hosts hint */
+
+/* --- an evidence line: tag, path, hint, note ------------------------------------------------------
+   One line while it fits. The hint never shrinks or wraps: it is the whole of what the daemon shows
+   of a value, and a cut `•••• 42` would read as a different card. The path gives way first, from its
+   start (`direction: rtl` on the box, the text itself in a left-to-right isolate), because its end is
+   the field that was found. Below 700px the note takes a line of its own; below 520px the tag and the
+   hint lead and the path takes the next line whole. */
+
+.finding-evidence li.ev { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 11px; }
+.ev-main { display: flex; align-items: baseline; gap: 2px 8px; min-width: 0; max-width: 100%; flex: 0 1 auto; }
+.ev-loc {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--divider);
+  border-radius: 3px;
+  color: var(--fg-muted);
+  line-height: 15px;
+}
+.ev-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.ev-masked { flex: none; white-space: nowrap; }
+.ev-note { min-width: 0; color: var(--fg-muted); }
+
+@media (max-width: 699px) {
+  .ev-note { flex-basis: 100%; }
+}
+@media (max-width: 519px) {
+  .ev-main { flex: 1 1 100%; flex-wrap: wrap; }
+  .ev-masked { margin-left: auto; }
+  .ev-path { order: 3; flex-basis: 100%; }
+}
+
+/* --- dismiss: a quiet control on the finding's header line, and the reason form under it --------- */
+
+.finding-head { display: flex; align-items: baseline; gap: 4px 8px; }
+.finding-head .finding-message { flex: 1 1 auto; min-width: 0; }
+.finding-dismiss { flex: none; }
+.dismiss-form { margin: 2px 0 8px; }
+.dismiss-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.dismiss-reason {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: var(--target-min);
+  box-sizing: border-box;
+  padding: 2px 6px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--divider);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.dismiss-actions { display: flex; gap: 6px; flex: none; }
+.dismiss-error { margin: 4px 0 0; color: var(--err); font-size: 12px; }
+@media (max-width: 519px) {
+  .dismiss-reason { flex-basis: 100%; }
+  .dismiss-actions { margin-left: auto; }
+}
+
+/* --- the dismissed fold at the end of a rule's section ------------------------------------------ */
+
+.findings-dismissed { margin: 8px 0 0; font-size: 12px; }
+.findings-dismissed-head { cursor: pointer; color: var(--fg-muted); min-height: var(--target-min); display: list-item; line-height: var(--target-min); }
+.findings-dismissed-list { margin: 0; padding-left: 18px; list-style: none; }
+.finding-dismissed { padding: 6px 0; border-top: 1px solid var(--divider); }
+.finding-dismissed-head { display: flex; align-items: baseline; gap: 4px 8px; }
+.finding-dismissed-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.finding-restore { flex: none; }
+.finding-dismissed-where { margin: 2px 0 0; font-size: 11px; color: var(--fg-muted); overflow-wrap: anywhere; }
+.finding-dismissed-reason { margin: 2px 0 0; color: var(--fg-muted); overflow-wrap: anywhere; }
+
+.findings-hosts-hint { margin: 2px 0 6px; }
+
+/* Each sends something, and an export has no daemon to send it to. */
+body.archive .finding-dismiss,
+body.archive .dismiss-form,
+body.archive .finding-restore { display: none !important; }
+
+/* Settings → Findings: the first-party hosts box takes the row below 700px, where 360px is most of it. */
+@media (max-width: 699px) {
+  .findings-hosts textarea { width: 100%; }
+}
+
+/* What a dismissal reaches, read before the reason: every finding with this key, in every session. */
+.dismiss-scope { margin: 0; font-size: 12px; color: var(--fg-muted); max-width: var(--prose-max); overflow-wrap: anywhere; }

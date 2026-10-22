@@ -9,7 +9,7 @@
  * 18; the probe session has none. Each returns `[label, verdict]` pairs, one per line the caller prints.
  */
 
-const { choose, waitFor } = require('./long-session-probes');
+const { LONG_SESSION_ID, choose, waitFor } = require('./long-session-probes');
 const { PAYMENTS_SESSION_ID, PAYMENTS, SECRETS, pause, pageShown, text } = require('./findings-probes');
 
 /** Each call's findings in reply order, dismissed ones left out, as the page builds `byTxn`. */
@@ -64,7 +64,8 @@ const TRAFFIC_LABELS = ['flagged none', 'flagged not remembered', 'findings badg
   'findings reply redraws', 'findings traffic restored'];
 
 /**
- * The report on Traffic: `⋮` → flagged rows only on the probe session, which has no findings, and that
+ * The report on Traffic: `⋮` → flagged rows only on a session with no findings (the long session when
+ * the one shown has some, as the probe session's planted values are), and that
  * it writes nothing a reload would read; then on the payments session the row badges against the
  * daemon's own report, flagged rows only, the detail's section on the list and on `#/txn/{id}`, and a
  * stubbed reply that moves one badge, which must redraw the list and the section without reading the
@@ -98,8 +99,14 @@ async function probeFindingsTraffic(ctx) {
   };
   try {
     if (!sessionId || !item) return TRAFFIC_LABELS.map((label) => [label, sessionId ? 'NO - found no flagged rows only item, so this checked nothing' : 'n/a (no session)']);
-    const own = await daemon(sessionId);
-    await waitFor(() => held(sessionId) && rows().length > 0, 8000);
+    let quiet = sessionId;
+    let own = await daemon(sessionId);
+    if (own.findingCount > 0 && [...picker.options].some((o) => o.value === LONG_SESSION_ID)) {
+      quiet = LONG_SESSION_ID;
+      choose(ctx, quiet);
+      own = await daemon(quiet);
+    }
+    await waitFor(() => held(quiet) && ctx.pageState().signalSessionId === quiet && rows().length > 0, 8000);
     const all = rows().length;
     const stored = () => JSON.stringify([Object.entries(window.localStorage), Object.entries(window.sessionStorage), window.location.hash]);
     const before = stored();
@@ -109,13 +116,13 @@ async function probeFindingsTraffic(ctx) {
     const said = text(empty);
     const bandSaid = text(band);
     const after = stored();
-    if (own.findingCount > 0) out.set('flagged none', `n/a (${sessionId} has ${own.findingCount} findings)`);
+    if (own.findingCount > 0) out.set('flagged none', `n/a (${quiet} has ${own.findingCount} findings)`);
     else {
       const ok = flagged() && rows().length === 0 && !empty.hidden && said.startsWith('No calls with findings among the calls loaded.') && showAll
         && !band.hidden && bandSaid.startsWith('Only calls with findings: 0 of');
       if (showAll) await click(showAll);
       out.set('flagged none', ok && !flagged() && rows().length === all && band.hidden
-        ? `yes ("${said}"; band "${bandSaid.slice(0, 60)}…"; show all calls gave back ${all} rows)`
+        ? `yes (${quiet}: "${said}"; band "${bandSaid.slice(0, 60)}…"; show all calls gave back ${all} rows)`
         : `NO - on: ${rows().length} rows, empty "${said}" (shown ${!empty.hidden}), band "${bandSaid}"; after show all: ${rows().length} of ${all} rows, on ${flagged()}`);
     }
     if (flagged()) await click(item);
@@ -125,6 +132,7 @@ async function probeFindingsTraffic(ctx) {
 
     if (![...picker.options].some((o) => o.value === PAYMENTS_SESSION_ID)) {
       for (const label of TRAFFIC_LABELS.slice(2, 7)) out.set(label, `n/a (no session ${PAYMENTS_SESSION_ID})`);
+      if (quiet !== sessionId) choose(ctx, sessionId);
     } else {
       const report = await daemon(PAYMENTS_SESSION_ID);
       const due = byTxn(report);

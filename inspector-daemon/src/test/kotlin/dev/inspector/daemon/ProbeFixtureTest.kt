@@ -4,9 +4,11 @@ import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsReport
 import dev.inspector.daemon.service.FindingsService
 import dev.inspector.model.SignalTags
 import dev.inspector.model.DEFAULT_DUPLICATE_WINDOW_MS
+import dev.inspector.model.InspectorJson
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.duplicateGroups
 import dev.inspector.model.endpointShortcuts
@@ -80,7 +82,7 @@ class ProbeFixtureTest {
     /**
      * The payments session, which the Findings probes read: older than the other two, so `latest` and
      * the picker stay put, and holding exactly the counts the probes print, under the default rules.
-     * The probe session has none, which `findings none` reads as checked and clean.
+     * The probe session's are the three planted values' alone (the next test).
      */
     @Test
     fun the_payments_session_holds_each_finding_the_probes_count() {
@@ -93,10 +95,51 @@ class ProbeFixtureTest {
         assertEquals(12, report.findings.flatMap { it.txnIds }.toSet().size, "flagged rows")
         assertTrue(report.coverage.toString().contains("13 mutation calls looked at; 6 request bodies compared, 2 unknown (2 truncated)."))
         val probe = service.report(dir, null, 5000)
-        assertEquals(listOf(16, 0), listOf(probe.total, probe.findingCount), "the probe session has findings")
         assertEquals(17, probe.rules.size, "six payment rules and eleven sensitive")
+        assertEquals(0, probe.findings.count { it.category == "payment" }, "a payment finding on the probe session")
         val rows = repo.readTransactions(payments)
         assertTrue(rows.all { it.host.endsWith(".example.invalid") }, "a host outside example.invalid")
+    }
+
+    /**
+     * The sensitive-data probes read the probe session's Findings page: each planted value makes one
+     * finding with a masked hint, in rows the fixture already had, so no other probe's count moves. The
+     * long session has none, so the probes that need a session with no findings read it instead.
+     */
+    @Test
+    fun the_probe_session_holds_each_planted_value_and_no_new_row() {
+        val txns = repo.readTransactions(dir)
+        assertEquals((1..16).map { "a" + it.toString(16).padStart(7, '0') }, txns.map { it.id }.sorted(), "rows added or lost")
+        val req = { id: String -> String(assertNotNull(repo.readBody(dir, id, "req"), "no request body on $id")) }
+        val res = { id: String -> String(assertNotNull(repo.readBody(dir, id, "res"), "no response body on $id")) }
+        assertTrue(PLANTED_CARD in req("a0000008") && "\"cvc\"" in req("a0000008"), "the card is not in the checkout POST")
+        assertEquals(req("a0000008").length.toLong(), txns.single { it.id == "a0000008" }.reqBytes, "the checkout's byte count")
+        assertEquals("api_key=$PLANTED_KEY", txns.single { it.id == "a0000004" }.query, "the key is not on the product GET")
+        assertTrue(PLANTED_IBAN in res("a000000b"), "the IBAN is not in the balance")
+        assertEquals(res("a000000b").length.toLong(), txns.single { it.id == "a000000b" }.resBytes, "the balance's byte count")
+
+        val service = FindingsService(repo, FindingsEngine(FindingSettingsSource(tmp), DaemonConfig(dataDir = tmp).routeTemplates))
+        val report = service.report(dir, null, 5000)
+        val seen = report.findings.map { Triple(it.ruleId, it.severity, it.evidence.single().masked) }.toSet()
+        assertEquals(
+            setOf(
+                Triple("sensitive.card-number", "medium", "•••• 5556"),
+                Triple("sensitive.field.payment", "medium", "••••"),
+                Triple("sensitive.secret-in-url", "high", "••••"),
+                Triple("sensitive.iban", "medium", "GB82 •••• 5432"),
+            ),
+            seen,
+        )
+        assertEquals(listOf(16, 4, 1, 3, 0, 0), listOf(report.total, report.findingCount, report.high, report.medium, report.info, report.dismissedCount))
+        val iban = report.findings.single { it.ruleId == "sensitive.iban" }
+        assertEquals(listOf("\$.accounts[*].iban", "\$.accounts[0].iban"), listOf(iban.path, iban.evidence.single().path), "the IBAN's group and concrete paths")
+        val coverage = report.coverage.toString()
+        assertTrue("\"firstPartyHosts\":0" in coverage && "\"line\"" in coverage, "no sensitive coverage line with no first-party hosts: $coverage")
+        val text = InspectorJson.encodeToString(FindingsReport.serializer(), report)
+        for (value in listOf(PLANTED_CARD, PLANTED_IBAN, PLANTED_KEY)) assertTrue(value !in text, "the report names $value")
+
+        val long = assertNotNull(repo.resolve(LONG_SESSION_ID), "no long session")
+        assertEquals(0, service.report(long, null, 5000).findingCount, "the long session has findings")
     }
 
     /**

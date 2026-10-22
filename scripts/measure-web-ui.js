@@ -249,6 +249,8 @@ async function main() {
         .then((rows) => results[side.name].push(...rows))));
       await Promise.all(sides.map((side) => onPage(chrome, `${side.name} findings fits`, (p) => findingsFits(p, side.urls.probe))
         .then((rows) => results[side.name].push(...rows))));
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} findings sensitive`, (p) => cases.findingsSensitive(p, side.urls.probe))
+        .then((rows) => results[side.name].push(...rows))));
     }
     // Against a daemon per tree with an empty data directory, so the streamed sessions are the only
     // ones it holds; one tree at a time, because the burst's bound is counted against a timer.

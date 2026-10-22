@@ -66,8 +66,9 @@ class FindingsCliTest {
     @Test
     fun `it prints the report REST serves`() {
         assertEquals(direct("payments", null, 1000), findings("--session", "payments"))
+        // With no --session, the latest: the probe session, whose planted values are its findings.
+        assertEquals(direct(PROBE_SESSION_ID, null, 1000), findings())
         assertEquals(PROBE_SESSION_ID, findings().sessionId)
-        assertEquals(0, findings().findingCount)
     }
 
     @Test

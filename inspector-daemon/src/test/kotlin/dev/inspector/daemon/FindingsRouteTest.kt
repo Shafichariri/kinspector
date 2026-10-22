@@ -122,9 +122,10 @@ class FindingsRouteTest {
     }
 
     @Test
-    fun `the probe session has no findings, and every rule says it was checked`() = runBlocking {
-        val report = ok(PROBE_SESSION_ID)
-        assertEquals(16, report.int("total"))
+    fun `a session with no findings says every rule was checked`() = runBlocking {
+        // The long session: the probe session holds planted sensitive values, which are findings.
+        val report = ok(LONG_SESSION_ID)
+        assertEquals(LONG_SESSION_CALLS, report.int("total"))
         assertEquals(0, report.int("findingCount"))
         assertEquals(emptyList(), report.list("findings"))
         assertEquals(17, report.list("rules").size)

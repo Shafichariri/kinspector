@@ -57,6 +57,7 @@ const findingsMayRefresh = () => state.liveTail && findingsWanted();
  */
 function findingsEnter() {
   findingsState.marked = null;
+  findingsDismissReset();
   findingsLoad();
 }
 
@@ -137,7 +138,9 @@ async function findingsRead(live) {
   let report = null;
   let error = null;
   try {
-    report = await api(`/api/sessions/${encodeURIComponent(sessionId)}/findings?limit=${FINDINGS_LIMIT}`);
+    // Dismissed findings too, for the page's fold: the daemon leaves them out otherwise. An export
+    // embeds them already and refuses the parameter, which needs the daemon.
+    report = await api(`/api/sessions/${encodeURIComponent(sessionId)}/findings?limit=${FINDINGS_LIMIT}${ARCHIVE ? '' : '&includeDismissed=true'}`);
   } catch (e) {
     error = e.message;
   }
@@ -195,6 +198,7 @@ function findingsEmptyWhy() {
 
 /** Draws whatever `findingsState` holds: the count, then each category's rules and findings, or why there are none. */
 function findingsRender() {
+  if (findingsDismissHolds()) return;   // drawn again when the reason form closes
   const count = $('findings-count');
   const body = $('findings-body');
   count.replaceChildren();
@@ -214,8 +218,9 @@ function findingsRender() {
     if (!ARCHIVE) line.append(' ', findingsSettingsLink('Settings'));
     count.append(el('br'), line);
   }
-  if (report.findingCount > report.findings.length) {
-    body.appendChild(el('p', 'settings-note muted', `first ${report.findings.length} of ${report.findingCount} findings, in severity order`));
+  const shown = report.findings.filter((f) => !f.dismissed).length;
+  if (report.findingCount > shown) {
+    body.appendChild(el('p', 'settings-note muted', `first ${shown} of ${report.findingCount} findings, in severity order`));
   }
   const target = findingsTarget();
   if (target && !report.findings.some((f) => f.id === target)) {
@@ -233,6 +238,7 @@ function findingsCategory(report, category) {
   section.appendChild(el('h2', 'findings-category-title', rules[0].categoryTitle));
   const line = report.coverage && report.coverage[category] && report.coverage[category].line;
   if (line) section.appendChild(el('p', 'settings-note muted findings-coverage', line));
+  findingsHostsHint(section, report, category);
   for (const rule of rules) section.appendChild(findingsRule(rule, report.findings.filter((f) => f.ruleId === rule.id)));
   return section;
 }
@@ -251,15 +257,23 @@ function findingsRule(rule, findings) {
   else head.appendChild(el('span', 'findings-rule-count', `(${rule.count})`));
   section.appendChild(head);
   section.appendChild(el('p', 'settings-note muted findings-rule-summary', rule.note ? `${rule.summary} ${rule.note}` : rule.summary));
-  for (const finding of findings) section.appendChild(findingsArticle(finding));
+  for (const finding of findings) if (!finding.dismissed) section.appendChild(findingsArticle(finding));
+  const dismissed = findings.filter((f) => f.dismissed);
+  if (dismissed.length) section.appendChild(findingsDismissedFold(rule.id, dismissed));
   return section;
 }
 
-/** One finding: the message, its route, a link per call, and the evidence lines, masked by the daemon. */
+/**
+ * One finding: the message with `dismiss…` at the end of its line, its route, a link per call, and the
+ * evidence lines, masked by the daemon.
+ */
 function findingsArticle(finding) {
   const article = el('article', 'finding');
   article.dataset.finding = finding.id;
-  article.appendChild(el('p', 'finding-message', finding.message));
+  const head = el('div', 'finding-head');
+  head.appendChild(el('p', 'finding-message', finding.message));
+  findingsDismissControl(head, finding);
+  article.appendChild(head);
   if (finding.route) article.appendChild(el('p', 'finding-route mono', finding.route));
   const calls = el('ul', 'finding-txns');
   for (const id of finding.txnIds) calls.appendChild(el('li')).appendChild(findingsTxnLink(id));
@@ -269,15 +283,26 @@ function findingsArticle(finding) {
   return article;
 }
 
-/** Evidence lines as the daemon wrote them: what was seen, where, and a masked hint, never a value. */
+/**
+ * Evidence lines as the daemon wrote them, never a value: the location as a tag, the path, the masked
+ * hint and the note. The hint never shrinks; a long path gives way from its start, where it is least
+ * specific, inside a left-to-right isolate so its `$` and brackets stay where they were written, with
+ * the whole path as its tooltip. How the parts wrap at each width is `92-findings-dismiss.css`'s.
+ */
 function findingsEvidence(lines) {
   const evidence = el('ul', 'finding-evidence');
   for (const line of lines) {
-    const li = el('li');
-    if (line.note) li.appendChild(el('span', null, line.note));
-    const where = [line.location, line.path].filter(Boolean).join(' ');
-    if (where) li.appendChild(el('span', 'mono finding-where', where));
-    if (line.masked) li.appendChild(el('span', 'mono finding-masked', line.masked));
+    const li = el('li', 'ev');
+    const main = el('span', 'ev-main');
+    if (line.location) main.appendChild(el('span', 'ev-loc', line.location));
+    if (line.path) {
+      const path = main.appendChild(el('span', 'mono ev-path'));
+      path.title = line.path;
+      path.appendChild(el('bdi', null, line.path)).dir = 'ltr';
+    }
+    if (line.masked) main.appendChild(el('span', 'mono ev-masked', line.masked));
+    if (main.childNodes.length) li.appendChild(main);
+    if (line.note) li.appendChild(el('span', 'ev-note', line.note));
     evidence.appendChild(li);
   }
   return evidence;

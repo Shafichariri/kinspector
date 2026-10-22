@@ -52,8 +52,6 @@
 .finding-txn .method { font-size: 11px; flex: none; }
 .finding-evidence { margin: 0; padding-left: 18px; }
 .finding-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
-.finding-where, .finding-masked { margin-left: 6px; font-size: 11px; color: var(--fg-muted); }
-.finding-evidence li > :first-child { margin-left: 0; }
 
 /* --- Traffic: a row's badge, the detail's section, the flagged rows band ----------------------- */
 
