@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-22 09:40'
+updated_date: '2026-10-22 10:47'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -44,3 +45,9 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+NOT STARTED, blocked (2026-10-22, bob): this ticket calls JsonPaths.walk, JsonPaths.group and JsonPaths.isAtOrUnder in service/BodyShape.kt, which item:session-diff's T1 adds (its design §10 fixes the names and signatures as a contract with this item). Session diff is not built and its tickets are not filed; main has only JsonPaths.redactedPaths, carved out as KIN-112. Building the walker here would be building another item's work (the KIN-34 trap), so it waits for the coordinator: either session diff T1 lands first, or the three functions are carved out of it into a ticket of their own as KIN-112 was. KIN-120 (T1) merged in #156; KIN-122 (T3, generic dismissals) was built ahead of this ticket because it needs nothing from it.
+<!-- SECTION:NOTES:END -->

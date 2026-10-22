@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 09:40'
-updated_date: '2026-10-22 09:52'
+updated_date: '2026-10-22 10:47'
 labels:
   - 'item:sensitive-data-detection'
 dependencies:
@@ -45,4 +45,6 @@ Order row 30, docs/ROADMAP.md §6 → Sensitive-data detection — detect, never
 
 <!-- SECTION:NOTES:BEGIN -->
 Ready for QA once its PR merges. archive/SensitiveConfig.kt (ValueShape and its grammar, ShapeCheck, CustomValueRule, SensitiveSettings with firstParty(), DismissalEntry, SensitiveConfig.read/problem/readDismissals/dismissalsProblem/normalise), archive/FindingSettings.kt (sensitive sub-object, KEYS, canonical(), findings.rules refuses sensitive.custom.*), archive/DaemonConfig.kt (FileConfig.findingDismissals: JsonArray so a non-list makes the file malformed), archive/ConfigFile.kt (KNOWN_KEYS + validation), service/SensitiveValues.kt (cards, test numbers, JSON-number rule, IBAN table of 89 countries + mod-97, JWT, email, phone, custom shapes, secret names, host classes, FieldNames), service/SensitiveMask.kt (hint, pathKey). Tests: SensitiveValuesTest, SensitiveFieldNamesTest, SensitiveConfigTest, ConfigFileTest (+3). Red proofs (each run, seen failing, restored): Luhn sum check removed -> 'Luhn passes a valid number…' (Expected value to be false), the JSON-number test and the luhn custom-shape test (expected <1> but was <2>); GB length 22->23 -> 'every IBAN table entry…' (was [GB29NWBK…, GB82WEST…]) and the text-finder test; issuer digit removed -> 'a card starts 2 to 6…' (1000123412341230); alg bound widened to [A-Za-z0-9-]+ -> 'every mask is exactly as tabled' and 'every mask kind at its longest passes the findings engine's guard' (was [•••• ABCDEFGHIJKLMNOP]); suffix rule at every length -> 'a shorter listed name matches only whole' and the add/remove test (patientMrn read as IDENTITY); findings and findingDismissals validation skipped on PUT -> both ConfigFileTest refusal tests (Written instead of Invalid). Known miss pinned in SensitiveValuesTest: secret names are whole, so X-Api-Key (xapikey) is not a secret name. IBAN table: lengths and one example per country transcribed from the SWIFT IBAN Registry; every example passes mod-97 at its table length, so a typo in either fails. — bob
+
+Merged in PR #156 (merge f0c53a2), CI build, release-swap, repo and web all pass. — bob
 <!-- SECTION:NOTES:END -->
