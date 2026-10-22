@@ -585,7 +585,11 @@ its own item, reading `2×` below 520px, the overlay's form, because a tint alon
 many times. `room 400 rows` measures every row of the probe session, red with the 519px row block
 removed; `narrow row css` reads the rules, and the live probe's `row parts` holds that the segment is
 the last one of the path the row shows, after the scope bar's prefix, and that both forms of the mark
-count the calls.
+count the calls. "Before" is a shrink weight, not a proportion: with the path's basis 0 the path took
+every pixel a row lacked while the host kept its 64px, which a session with a scope bar never showed.
+`room 400 payments rows` reads the payments session, which has none and so draws its host on every
+row; judged inside the path's own box, it was red with the old weights on six rows, and on twelve once
+a findings badge took its room.
 
 **The now strip and the time axis are one overview line.** Two bands of the seven above the first
 row said one thing each; the axis keeps its brush and its ids, and the now list opens as a popover
@@ -777,20 +781,28 @@ proven by breaking the next probe's guard (`chip marks active`).
 **The Findings page computes nothing, and a severity is drawn in words.** Rules, counts, order,
 messages, masked evidence and coverage come from the daemon, so there is no mirror block. The page
 asks once for every finding, with no category, and draws each category's coverage line as given.
+That one reply also feeds Traffic: a row's badge is its call's first finding in reply order, which is
+severity order, so the page ranks nothing itself, and it reads `⚑ high`, or `⚑` below 520px like the
+repeat mark, in a box no taller than the row's text (`room 400 payments rows`, red when a flagged row
+was 1px taller). A call's detail, and so `#/txn/{id}`, has a Findings section with each finding's
+title, message, the evidence about that call and `open in Findings`. A reply that moves a badge
+redraws the list and that section alone, never `renderDetail`, which would read the bodies again.
+Traffic asks after its first page of calls, and again on entering it, by the refresh rule below.
 Every rule is listed, checked or disabled, with its count and what it could not judge, so an empty
 page cannot read as a clean bill of health from a rule that never ran. The severity is `⚑ high` in
 the text colour, because every hue already means a status or a method (`shared-rules.md`). Calls open
 through `#/txn/{id}` and push, so Back returns to Findings, and `#/findings?id=` marks one finding
 and scrolls to it once, so a live redraw leaves the reader where they are. In an export it reads the
 embedded report and refuses a category. Live, it asks again by the Stats page's rule: at most once a
-second, never twice at once, and only while it is shown with live tail on. Its settings are a
+second, never twice at once, and only while it or Traffic is shown with live tail on. Its settings are a
 fieldset in the Settings page's `config.json` form, drawn from `effective.findings`, so a family that
 adds rules adds rows with no page change. A save sends the whole `findings` key, since a top-level
 key is replaced whole: a rule only where it differs from its defaults, a payment field only where it
 differs from the file, and every sub-object the form does not draw as the file holds it; it says
 "findings use it now", because that key alone is read live (`daemon-and-mcp.md`). `findings …` in
-`render-web-ui.js` and `check-web-static.js`, the archive probe's `findings offline drawn`, `findings
-txn in export` and `findings category refused`, and `findings <w> payments fits` in Chrome hold it,
+`render-web-ui.js` and `check-web-static.js`, the archive probe's
+`findings offline drawn`, `findings txn in export`, `findings category refused`, `findings badge in
+export` and `findings detail in export`, and `findings <w> payments fits` in Chrome hold it,
 each shown red with its rule removed; the payments session they read is `ProbeFixture.kt`'s third.
 
 **Under 700px a route cell breaks only between whole pieces: a server after a `.`, `:` or `/`, a

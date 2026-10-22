@@ -39,7 +39,8 @@
  *     none while paused or not shown, and no answer drawn for a filter, sort or session since changed;
  *     and a route's server named through the `urlOf` block, so an IPv6 one is bracketed;
  *   - the Findings page's live refresh, by the same rule: at most two requests a burst, one out at a
- *     time, none while paused or not shown, and no answer drawn for a session since changed;
+ *     time, none while paused or neither it nor Traffic is shown, and no answer drawn for a session
+ *     since changed;
  *   - the polish rules: an icon-only control is an SVG in a box sized by one rule from `--target-min`,
  *     a page document's buttons are as tall and its prose stops at `--prose-max`; and the page keys,
  *     `g` and a letter for each page `PAGES` offers, `g g` the top, and no key while typing.

@@ -12,7 +12,8 @@
  * On the probe session: its 500 is the row opened, since its header draws the most actions. The
  * pages an export does not offer (Sessions, Processes, Settings) are taken served only. Findings is
  * taken on the payments session, served and from that session's own export, since the probe session
- * has none to draw.
+ * has none to draw, and so are the payments session's list with its findings badges and the detail of
+ * its first flagged row.
  */
 const fs = require('fs');
 const os = require('os');
@@ -25,6 +26,11 @@ const SCHEMES = ['dark', 'light'];
 // `hash` is the address the shot is loaded at; `open` runs on the loaded page and is awaited.
 const OPEN_ROW = `(() => { const rows = [...document.querySelectorAll('#list .row')];
   const row = rows.find((r) => r.querySelector('.status').textContent === '500') || rows[0]; if (row) row.click(); return Boolean(row); })()`;
+// The first row with a findings badge, once the report has drawn one; the badges follow the first page.
+const OPEN_FLAGGED = `new Promise((done) => { const at = Date.now(); const tick = () => {
+  const row = document.querySelector('#list .row .finding-badge')?.closest('.row');
+  if (row || Date.now() - at > 5000) { if (row) row.click(); done(Boolean(row)); } else setTimeout(tick, 100); }; tick(); })`;
+const PAYMENTS_LIST = `#/traffic/network?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`;
 const SHOTS = [
   { name: 'list', hash: '#/traffic/network', exported: true },
   { name: 'detail', hash: '#/traffic/network', exported: true, open: OPEN_ROW, ready: `!document.getElementById('detail').hidden` },
@@ -35,6 +41,9 @@ const SHOTS = [
   { name: 'stats', hash: '#/stats', exported: true, ready: `document.querySelector('#page-stats tbody tr')` },
   { name: 'findings', hash: `#/findings?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`, exported: true, payments: true,
     ready: `document.querySelector('#findings-body article.finding')` },
+  { name: 'flagged list', hash: PAYMENTS_LIST, exported: true, payments: true, ready: `document.querySelector('#list .finding-badge')` },
+  { name: 'flagged detail', hash: PAYMENTS_LIST, exported: true, payments: true, open: OPEN_FLAGGED,
+    ready: `document.querySelector('#detail .detail-findings:not([hidden])')` },
   { name: 'sessions', hash: '#/sessions', exported: false, ready: `document.querySelector('#session-rows .session-row')` },
   { name: 'processes', hash: '#/processes', exported: false },
   { name: 'settings', hash: '#/settings', exported: false },

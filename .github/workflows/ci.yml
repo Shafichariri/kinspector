@@ -71,8 +71,8 @@ jobs:
       # How many checks each probe must pass against the fixture session. A probe that stops
       # running reports less rather than failing; these numbers are what notice. Update them in
       # the same change that adds or removes a check.
-      UI_EXPECT_CHECKS: '281'
-      ARCHIVE_EXPECT_CHECKS: '54'
+      UI_EXPECT_CHECKS: '286'
+      ARCHIVE_EXPECT_CHECKS: '56'
       # Never 8099: that is the port every consuming app dials by default.
       PROBE_PORT: '8231'
 

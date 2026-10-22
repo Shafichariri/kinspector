@@ -490,7 +490,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     paymentsWindow.close();
   } else {
     // Information: CI sets INSPECTOR_UI_ARCHIVE_PAYMENTS, and its expected count notices these missing.
-    for (const label of ['findings offline drawn', 'findings txn in export', 'findings category refused', 'payments no page errors']) {
+    for (const label of ['findings badge in export', 'findings detail in export', 'findings offline drawn', 'findings txn in export', 'findings category refused', 'payments no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_PAYMENTS is not set)');
     }
   }

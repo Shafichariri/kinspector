@@ -480,10 +480,7 @@ function rowFor(txn) {
   path.title = shown;
   path.appendChild(el('span', 'path-head', head));
   path.appendChild(el('span', 'path-tail', tail));
-  if (attemptOf(txn) > 1) {
-    const badge = el('span', 'attempt', ` ·attempt ${attemptOf(txn)}`);
-    path.appendChild(badge);
-  }
+  if (attemptOf(txn) > 1) path.appendChild(el('span', 'attempt', ` ·attempt ${attemptOf(txn)}`));
   row.appendChild(path);
   if (duplicate) {
     // Colour alone is invisible to some readers and unexplained to the rest. Its own item rather
@@ -494,6 +491,8 @@ function rowFor(txn) {
     badge.appendChild(el('span', 'dup-short', `${duplicate.count}×`));
     row.appendChild(badge);
   }
+  const flag = findingBadgeFor(txn);
+  if (flag) row.appendChild(flag);
 
   row.appendChild(el('span', 'ms', fmtMs(txn.ms)));
   row.appendChild(el('span', 'size', fmtBytes(Math.max(txn.reqBytes || 0, txn.resBytes || 0))));

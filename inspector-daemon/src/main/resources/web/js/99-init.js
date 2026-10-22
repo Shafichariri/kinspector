@@ -140,10 +140,12 @@ wireStatsPage();
   if (!ARCHIVE) connectLive();
   // Opened on `#/stats` or `#/findings`, it had no session to ask about until now. Asked before the
   // calls are read, not after: on a 160,000-call session that read takes half a minute, and neither
-  // page needs any of it.
+  // page needs any of it. Traffic's badges are asked for after its first page of calls, which is
+  // what that page is opened to read.
   statsReload();
-  findingsReload();
+  if (findingsShown()) findingsReload();
   await loadTransactions();
+  if (!findingsShown()) findingsReload();
   // Then the view, which a session must have loaded to offer.
   await applyRoute();
 })();

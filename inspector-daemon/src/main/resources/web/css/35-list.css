@@ -170,12 +170,16 @@ body.density-compact .row { padding-top: 3px; padding-bottom: 3px; }
 /* At 400px the fixed columns kept their width and every path was cut to four characters. Below
    520px the columns narrow, the host gives way first and stops at 64px, and the path's last
    segment does not shrink; the clock and the long repeat mark go in `55-duplicates.css`, where
-   their rules are. */
+   their rules are. "First" is the shrink weight: with the path's basis 0, the path took every
+   pixel the row lacked and the host kept its 64, so on a session with no scope bar `transfers`
+   read `transi`, and a findings badge cut six more (`room 400 payments rows`). With the path's
+   basis its content and the host's weight far above it, the host empties before the path loses any. */
 @media (max-width: 519px) {
   .row { gap: 6px; }
   .row .method { width: 44px; }
   .row .ms, .row .size { width: 46px; flex: none; }
-  .row .host { max-width: 64px; flex-shrink: 3; }
+  .row .host { max-width: 64px; flex-shrink: 1000; }
+  .row .path { flex: 1 1 auto; }
   .row .path-tail { flex: none; }
   .scope-long { display: none; }
   .scope-short { display: inline; }

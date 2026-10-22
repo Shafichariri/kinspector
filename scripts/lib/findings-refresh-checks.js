@@ -6,7 +6,8 @@
  * request goes out while one is held, that nothing is asked while live tail is paused or the page is
  * not shown, and that an answer for a session no longer selected is not drawn. Each runs the real
  * file in its own context with a findings route that holds a request until told to answer, and
- * drawing is replaced after the file loads, so a check counts what would have been drawn.
+ * drawing is replaced after the file loads, so a check counts what would have been drawn. "Not shown"
+ * is the Sessions page: Traffic draws the report too, as row badges, and asks as the page does.
  *
  * Zero dependencies, like the rest of `check-web-static.js`.
  */
@@ -39,17 +40,18 @@ function findingsRoute() {
   return route;
 }
 
-/** The findings file over `state`, shown or not, with `findingsRender` counting the draws. */
-function page(sources, route, state, { shown = true } = {}) {
+/** The findings file over `state` on [shown]'s page, or Sessions, with `findingsRender` counting the draws. */
+function page(sources, route, state, { shown = 'findings' } = {}) {
   const context = runFile(sources, FILE, {
-    state, api: route.api, ARCHIVE: null, clearTimeout, currentPage: () => (shown ? 'findings' : 'sessions'),
+    state, api: route.api, ARCHIVE: null, clearTimeout, currentPage: () => shown || 'sessions',
   });
-  for (const name of ['oweFindings', 'findingsRefresh', 'findingsLoad', 'findingsRender']) {
+  for (const name of ['oweFindings', 'findingsRefresh', 'findingsLoad', 'findingsRender', 'findingsApply']) {
     if (typeof context[name] !== 'function') throw new HarnessError(`${name} is not declared in ${FILE}`);
   }
   const draws = [];
   const findings = vm.runInContext('findingsState', context);
   context.findingsRender = () => draws.push(findings.report);
+  context.findingsApply = () => {};   // Traffic's badges and detail section, not timed here
   return { context, findings, draws };
 }
 
@@ -94,13 +96,27 @@ async function checkOneFlight(sources) {
 async function checkQuiet(sources, why) {
   const route = findingsRoute();
   const state = { ...live(), liveTail: why !== 'paused' };
-  const { context } = page(sources, route, state, { shown: why !== 'hidden' });
+  const { context } = page(sources, route, state, { shown: why === 'hidden' ? null : 'findings' });
   for (let n = 0; n < 20; n++) context.oweFindings();
   await pause(1400);
   const what = why === 'paused' ? 'with live tail paused' : 'with the page not shown';
   return route.asked.length === 0
     ? `yes (20 calls owed ${what} sent no request)`
     : `NO - 20 calls owed ${what} sent ${route.asked.length} request(s)`;
+}
+
+/**
+ * Calls owed on Traffic ask once: its rows carry the findings as badges, and its detail has a section
+ * of them, so a live call there owes the report as it does on the Findings page.
+ */
+async function checkTraffic(sources) {
+  const route = findingsRoute();
+  const { context } = page(sources, route, live(), { shown: 'traffic' });
+  for (let n = 0; n < 20; n++) context.oweFindings();
+  await pause(1400);
+  return route.asked.length === 1
+    ? 'yes (20 calls owed on Traffic sent 1 request)'
+    : `NO - 20 calls owed on Traffic sent ${route.asked.length} request(s); 1 was due`;
 }
 
 /**
@@ -141,6 +157,7 @@ async function checkFindingsRefresh(sources) {
     ['findings refresh one flight', await checkOneFlight(sources)],
     ['findings refresh paused', await checkQuiet(sources, 'paused')],
     ['findings refresh hidden', await checkQuiet(sources, 'hidden')],
+    ['findings refresh traffic', await checkTraffic(sources)],
     ['findings refresh stale dropped', await checkStaleDropped(sources)],
   ];
 }

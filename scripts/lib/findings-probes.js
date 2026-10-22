@@ -355,17 +355,19 @@ function probeFindingsRailOffline(window, doc) {
 }
 
 /**
- * The payments session's export, network forbidden: the page draws the embedded report, a call link
- * opens the call from the embedded rows and Back returns, and the router refuses a category, which
- * needs the daemon, while cutting a limit as the daemon cuts and keeping `findingCount`. `attempts`
- * is the caller's record of network attempts; none may be added. Leaves the page on Traffic.
+ * The payments session's export, network forbidden: first Traffic's badges and a call's section
+ * (`findings-traffic-probes.js`), then the page draws the embedded report, a call link opens the call
+ * from the embedded rows and Back returns, and the router refuses a category, which needs the daemon,
+ * while cutting a limit as the daemon cuts and keeping `findingCount`. `attempts` is the caller's
+ * record of network attempts; none may be added. Leaves the page on Traffic.
  */
 async function probeFindingsExport(window, doc, archive, attempts) {
   const labels = ['findings offline drawn', 'findings txn in export', 'findings category refused'];
   const report = archive.findings;
-  if (!report) return labels.map((label) => [label, 'NO - the export embeds no findings']);
+  const { probeFindingsTrafficOffline } = require('./findings-traffic-probes');
+  const lines = await probeFindingsTrafficOffline(window, doc, archive, attempts);
+  if (!report) return [...lines, ...labels.map((label) => [label, 'NO - the export embeds no findings'])];
   const before = attempts.length;
-  const lines = [];
   window.location.hash = '#/findings';
   const due = countDue(report);
   await waitFor(() => !doc.getElementById('page-findings').hidden && drawn(doc).count === due
@@ -408,12 +410,17 @@ async function probeFindingsExport(window, doc, archive, attempts) {
   return lines;
 }
 
-/** Both live probes, the page then the Settings fieldset, for `render-web-ui.js`'s one call. */
+/**
+ * The live probes, the page, the Settings fieldset, then Traffic (`findings-traffic-probes.js`, which
+ * reads this file's fixture counts, so it is required here once this file has loaded), for
+ * `render-web-ui.js`'s one call.
+ */
 async function probeFindings(ctx) {
-  return [...await probeFindingsPage(ctx), ...await probeFindingsSettings(ctx)];
+  const { probeFindingsTraffic } = require('./findings-traffic-probes');
+  return [...await probeFindingsPage(ctx), ...await probeFindingsSettings(ctx), ...await probeFindingsTraffic(ctx)];
 }
 
 module.exports = {
-  PAYMENTS_SESSION_ID, FINDINGS_LABELS, SETTINGS_LABELS,
+  PAYMENTS_SESSION_ID, PAYMENTS, SECRETS, FINDINGS_LABELS, SETTINGS_LABELS, pause, pageShown, text,
   probeFindings, probeFindingsPage, probeFindingsSettings, probeFindingsRailOffline, probeFindingsExport,
 };
