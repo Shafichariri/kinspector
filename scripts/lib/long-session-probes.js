@@ -12,7 +12,9 @@
  *
  * Past the ceiling the list says what it holds: under a filter matching 1201 the header reads
  * `newest 1000 of 1201 matches shown` and the list draws the panes' `filterNote`, and a stretch over
- * the oldest calls says they are older than what the list loaded (`probeCapped`, live only).
+ * the oldest calls says they are older than what the list loaded, and under the filter a stretch
+ * reaching below the oldest match loaded says older matches in it are not drawn (`probeCapped`,
+ * live only).
  *
  * `render-web-ui.js` switches its page to the session and back through `probeLongSession`;
  * `render-web-ui-archive.js` opens the session's export and asks `readLongSession` the same
@@ -133,7 +135,7 @@ function readLongSession(doc, calls, { exported = false } = {}) {
 }
 
 /** The capped list's lines, live only: an export draws every call it embeds and has no filter. */
-const CAPPED_LABELS = ['long filtered count', 'long list note', 'long stretch older'];
+const CAPPED_LABELS = ['long filtered count', 'long list note', 'long stretch older', 'long stretch below matches'];
 
 /**
  * The list past its ceiling, on the page showing the long session with no filter. Under
@@ -141,7 +143,8 @@ const CAPPED_LABELS = ['long filtered count', 'long list note', 'long stretch ol
  * note the other panes draw; with no filter, a stretch over the oldest 151 calls, all below the
  * newest 1000, says they are older than what the list loaded rather than that there are none. Under
  * the filter a stretch keeps the matches in the header, and the oldest stretch claims no count of
- * matches, which the page cannot know. Leaves the page unfiltered and unbrushed.
+ * matches, which the page cannot know; a stretch drawing matches below the oldest loaded says
+ * older ones in it are not drawn. Leaves the page unfiltered and unbrushed.
  */
 async function probeCapped(ctx, calls) {
   const { doc, window } = ctx;
@@ -154,7 +157,8 @@ async function probeCapped(ctx, calls) {
   await typeFilter(ctx, 'path:/v3/long/bulk');
   const filtered = counts();
   const note = doc.getElementById('list-note');
-  const noteText = note ? note.textContent : '';
+  const noteText = () => (note && !note.hidden ? note.textContent : '(hidden)');
+  const filteredNote = note ? note.textContent : '';
   const noteHidden = !note || note.hidden;
   const rows = doc.querySelectorAll('#list .row').length;
   const byMono = calls.slice().sort((a, b) => a.mono - b.mono);
@@ -168,6 +172,17 @@ async function probeCapped(ctx, calls) {
   window.setTimeRange({ from: byMono[0].mono, to: byMono[150].mono });
   await ctx.settle();
   const filteredStretch = emptyText();
+  // Still filtered: a stretch drawing loaded matches and reaching 50 matches below the oldest of
+  // them, and one starting at that oldest match, wholly above it. Both from the daemon's rows.
+  const matches = calls.filter((t) => String(t.path).endsWith('/bulk')).sort((a, b) => a.mono - b.mono);
+  const oldestLoaded = matches[matches.length - 1000];
+  window.setTimeRange({ from: matches[matches.length - 1050].mono, to: matches[matches.length - 950].mono });
+  await ctx.settle();
+  const belowNote = noteText();
+  window.setTimeRange({ from: oldestLoaded.mono, to: byMono[byMono.length - 1].mono });
+  await ctx.settle();
+  const aboveNote = noteText();
+  const aboveHidden = calls.filter((t) => t.mono >= oldestLoaded.mono && !String(t.path).endsWith('/bulk')).length;
   window.setTimeRange(null);
   await typeFilter(ctx, '');
   window.setTimeRange({ from: byMono[0].mono, to: byMono[150].mono });
@@ -182,16 +197,22 @@ async function probeCapped(ctx, calls) {
   const stretchDue = '151 calls in this stretch are older than the newest 1000 the list loaded — filter to reach them';
   const filteredDue = `none of the newest 1000 of ${bulk} matches the list loaded is in this stretch, ` +
     `and the ${bulk - 1000} older ones are not loaded — narrow the filter to reach any here`;
+  const belowDue = 'this stretch reaches below the oldest of the 1000 matches loaded, so any older matches in it are not drawn — narrow the filter to reach them';
+  const aboveDue = `${aboveHidden ? `${aboveHidden} call${aboveHidden === 1 ? '' : 's'} hidden by the filter` : 'the filter'} ` +
+    `path:/v3/long/bulk — ${noteDue} — clear filter`;
   return [
     [CAPPED_LABELS[0], filtered === countDue && wholeStretch === wholeDue
       ? `yes ("${filtered}", and "${wholeStretch}" over the whole session; ${bulk} matched by the route, ${rows} rows drawn)`
       : `NO - "${filtered}" and "${wholeStretch}" over the whole session, where "${countDue}" and "${wholeDue}" were due`],
-    [CAPPED_LABELS[1], !noteHidden && noteText.includes(noteDue)
-      ? `yes ("${noteText.slice(0, noteText.indexOf(noteDue) + noteDue.length)}")`
-      : `NO - ${note ? `"${noteText}"${noteHidden ? ' (hidden)' : ''}` : 'no #list-note'}, where "… ${noteDue}" was due`],
+    [CAPPED_LABELS[1], !noteHidden && filteredNote.includes(noteDue)
+      ? `yes ("${filteredNote.slice(0, filteredNote.indexOf(noteDue) + noteDue.length)}")`
+      : `NO - ${note ? `"${filteredNote}"${noteHidden ? ' (hidden)' : ''}` : 'no #list-note'}, where "… ${noteDue}" was due`],
     [CAPPED_LABELS[2], stretchText === stretchDue && filteredStretch === filteredDue
       ? `yes ("${stretchText.slice(0, 60)}…", and no count claimed under the filter)`
       : `NO - "${stretchText}" and, filtered, "${filteredStretch}", where "${stretchDue}" and "${filteredDue}" were due`],
+    [CAPPED_LABELS[3], belowNote.includes(` — ${belowDue} — clear filter`) && aboveNote === aboveDue
+      ? `yes ("…${belowDue.slice(0, belowDue.indexOf(','))}…" over 50 matches older than ${oldestLoaded.id}, no count of them; wholly above it "${aboveNote}")`
+      : `NO - "${belowNote}" below ${oldestLoaded.id}, and "${aboveNote}" wholly above it, where "… ${belowDue} — clear filter" and "${aboveDue}" were due`],
   ];
 }
 
