@@ -380,9 +380,10 @@
   <section id="page-sessions" class="page page-doc" aria-labelledby="sessions-title" hidden>
     <h1 id="sessions-title" class="page-title" tabindex="-1">Sessions</h1>
     <p class="settings-note muted">
-      Every run of the app is a folder under <code>~/.inspector/sessions</code>. Deleting one is
-      permanent — there is no trash — and a session the app is still writing to is never removed,
-      because pulling the folder out from under an open writer loses the traffic on screen.
+      Every run of the app is a folder under <code id="sessions-dir">&lt;data dir&gt;/sessions</code>.
+      Deleting one is permanent — there is no trash — and a session the app is still writing to is
+      never removed, because pulling the folder out from under an open writer loses the traffic on
+      screen.
     </p>
     <div class="page-actions">
       <span class="muted">select</span>
