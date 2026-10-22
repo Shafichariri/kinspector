@@ -115,6 +115,17 @@ one, *and* still grep the directory itself, because klib output is an unpacked t
 archive. Proved both ways: a raw grep of `inspector-core/build/libs` finds nothing, and the script
 now exits 1 on it.
 
+**A published klib is a zip, and a script error is never exit 1.** The build output scanned by
+default and by `--self-test` is the *unpacked* klib tree. A published or downloaded `.klib` is a
+deflate zip, where the canary sits in `default/ir/strings.knt` and a raw grep counts 0, so
+`--paths` over core's own iOS klib said `PASSED` until `*.klib` joined the archive list. A folder
+is scanned as a folder whatever its name, because `unzip` on a folder fails quietly and reads as
+clean. Exit 1 means "canary found", but under `set -e` a failing command exits with its own
+status, usually 1, and a temp folder named after a deep absolute path hit NAME_MAX, so a clean
+artifact reported capture code. Unpack folders are numbered now, and an `ERR` trap turns every
+failure the script did not decide on into exit 2. Found by the 1.4.0 release rehearsal; CI's
+build job pins each case's exit code against freshly packed klibs.
+
 Publishing the library locally, to try a build from a consuming app:
 
 ```bash
