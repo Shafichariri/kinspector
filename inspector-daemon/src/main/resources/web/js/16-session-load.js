@@ -77,6 +77,15 @@ function followSession() {
 }
 
 /**
+ * What a page that reads the session's calls draws again once a load has landed them; each page
+ * adds its own from its `wire…Page`, so this file names none of them. `init` routes before it reads
+ * the calls, so a first load straight to a page drew from nothing: Settings counted no repeats and
+ * `showing 0 of 0` endpoints in a session with 3 and 13, and Stats asked why it was empty before
+ * `/api/recording` had answered whether the app is still connected.
+ */
+const callsLanded = [];
+
+/**
  * The list, its markers and the signals, drawn at once, then the whole-session copy read behind
  * them and drawn again where it is read (`drawWhole`), for the filter as it stands. It resolves only
  * once the copy has landed, so a caller that awaits a load sees it landed.
@@ -140,7 +149,10 @@ async function loadTransactions() {
   // A new filter, session or re-read is a new list, which the timeline follows from its newest end.
   state.timelineFresh = true;
   renderTimeline();
-  if (await whole && isLatest()) drawWhole();
+  const landed = await whole;
+  if (!isLatest()) return;
+  if (landed) drawWhole();
+  for (const paint of callsLanded) paint();
 }
 
 /**

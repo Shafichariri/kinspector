@@ -68,6 +68,10 @@ tooltip.
 (with a `clear filter` button, because clearing it is the whole fix), a session with no calls,
 and no session at all. "Waiting for an app with inspector-stream to connect" is said only in the
 last case: on an archived session it sent people to check the app when the app had come and gone.
+The three sentences that do not involve a filter or a stretch are `noCallsWhy()` in
+`js/15-session-data.js`, and the Stats page asks it too. Stats had its own copy and said "No calls
+in this session yet" of an ended session, the claim this paragraph removed from the list
+(`no calls why`, red with that copy put back; `stats empty why` in the live probe).
 
 **Nothing in the web UI is under 11px except a named list, and `render-web-ui.js` reads the
 stylesheet to hold it.** The method badge, `kbd` key caps and the three fold glyphs (`.jt-tw`,

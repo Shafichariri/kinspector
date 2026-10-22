@@ -20,6 +20,9 @@
  * whole inside the window, lists page keys, is what a pointer at its centre finds, and Escape shuts
  * it (`polish <w> legend inside`). jsdom proves it opens there; only a browser can say where.
  *
+ * Served, at 1440 and 400, each page's empty-state sentence is whole in the window, wrapped where it
+ * must be (`polish <w> empty whole`): Stats in its three cases, Sessions, and the detail pane at 1440.
+ *
  * Each reading leaves the page as it found it: colour scheme the system's.
  */
 const fs = require('fs');
@@ -214,11 +217,97 @@ async function legendInside(page, url, rows) {
   }
 }
 
+// Whether [node]'s text is all on screen: each line box inside the window and inside every ancestor
+// that clips, and none cut by an ellipsis (wraps are fine). `said` is the text as drawn.
+const WHOLE = (node) => `((node) => {
+  if (!node) return { said: null, rects: 0, out: ['not drawn'] };
+  // The text's own line boxes: a range over the element would add a box for each inline element too.
+  const rects = [];
+  const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let text = walk.nextNode(); text; text = walk.nextNode()) {
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    for (const r of range.getClientRects()) if (r.width > 0) rects.push(r);
+  }
+  const out = [];
+  for (const r of rects) {
+    if (r.left < -0.5 || r.right > innerWidth + 0.5) out.push('past the window (' + Math.round(r.left) + '..' + Math.round(r.right) + ' of ' + innerWidth + ')');
+    for (let a = node; a && a !== document.documentElement; a = a.parentElement) {
+      if (getComputedStyle(a).overflowX === 'visible') continue;
+      const b = a.getBoundingClientRect();
+      if (r.left < b.left - 0.5 || r.right > b.right + 0.5) { out.push('clipped by ' + (a.id ? '#' + a.id : a.className || a.tagName)); break; }
+    }
+  }
+  if (node.scrollWidth > node.clientWidth + 1) out.push('wider than its box');
+  return { said: node.textContent.trim(), rects: rects.length, out: [...new Set(out)] };
+})(${node})`;
+
+// The empty states as each page draws them, the page's own functions asked with its state emptied:
+// Stats for an ended session, a recording one and none, the Sessions page with no session, and the
+// detail pane of a session with nothing in it. The page is loaded again after, so nothing is put back.
+const EMPTIES = `(async () => {
+  const seen = [];
+  const read = (what, node) => seen.push({ what, ...${WHOLE('node')} });
+  const settle = () => new Promise((r) => setTimeout(r, 200));
+  if (innerWidth >= 1200) {
+    state.allTransactions = []; state.transactions = []; state.allSignals = [];
+    renderSessionGlance();
+    read('detail', document.getElementById('detail-empty'));
+  }
+  navigate({ page: 'stats' });
+  await settle();
+  const id = state.sessionId;
+  Object.assign(statsState, { report: { total: 0, matched: 0, routeCount: 0, routes: [] }, error: null });
+  for (const [what, recording, sessionId] of [['stats ended', [], id], ['stats recording', [id], id], ['stats no session', [], null]]) {
+    state.recording = recording; state.sessionId = sessionId;
+    statsRender();
+    read(what, document.getElementById('stats-empty'));
+  }
+  state.sessionId = id;
+  navigate({ page: 'sessions' });
+  await settle();
+  state.sessions = [];
+  renderSessionRows();
+  read('sessions', document.querySelector('#session-rows td'));
+  return seen;
+})()`;
+
+const EMPTY_DUE = {
+  detail: 'select a call',
+  'stats ended': 'no calls were recorded in this session',
+  'stats recording': 'the app is connected — no calls yet',
+  'stats no session': 'waiting for an app with inspector-stream to connect',
+  sessions: 'No sessions yet. A session is recorded when an app with inspector-stream connects to this daemon.',
+};
+
+/**
+ * Served, at 1440 and 400: each empty state's sentence is the one due and is whole in the window,
+ * wrapped if it must be, never cut. The detail pane only at 1440: below 1200px it is a drawer, closed
+ * while no call is open, so its sentence is never on screen.
+ */
+async function emptyWhole(page, url, rows) {
+  for (const width of [1440, 400]) {
+    await load(page, `${url}#/traffic/network`, width);
+    const seen = await page.ev(EMPTIES);
+    if (!Array.isArray(seen)) {
+      rows.push({ key: `polish ${width} empty whole`, ok: false, value: 'not measured', detail: String(seen && seen.evalError) });
+      continue;
+    }
+    const due = Object.keys(EMPTY_DUE).filter((what) => width >= 1200 || what !== 'detail');
+    const bad = due.map((what) => [what, seen.find((s) => s.what === what)])
+      .filter(([what, s]) => !s || s.said !== EMPTY_DUE[what] || !s.rects || s.out.length)
+      .map(([what, s]) => (!s ? `${what}: not read` : s.said !== EMPTY_DUE[what] ? `${what}: "${s.said}"` : `${what}: ${s.rects ? s.out.join(', ') : 'no line drawn'}`));
+    rows.push({ key: `polish ${width} empty whole`, ok: !bad.length, value: bad.length ? 'cut' : 'whole',
+      detail: bad.length ? bad.join('; ') : seen.map((s) => `${s.what} in ${s.rects} line box${s.rects === 1 ? '' : 'es'}`).join(', ') });
+  }
+}
+
 async function polish(page, urls) {
   const rows = [];
   await iconTargets(page, urls.probe, rows);
   await pageDocs(page, urls.probe, rows);
   await legendInside(page, urls.probe, rows);
+  await emptyWhole(page, urls.probe, rows);
   return rows;
 }
 

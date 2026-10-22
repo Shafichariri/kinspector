@@ -176,14 +176,90 @@ function railKeyTitles(ctx) {
 }
 
 /**
+ * Replaces the page's `fetch` for requests [match] accepts, answering each with [answer]'s
+ * `[status, body]`, and keeps what was sent; everything else reaches the daemon. A second copy of
+ * `lib/shell-probes.js`'s, which requires this file and so cannot be required from it.
+ */
+function stubFetch(window, match, answer) {
+  const real = window.fetch;
+  const sent = [];
+  window.fetch = (path, init = {}) => {
+    if (!match(String(path), init)) return real(path, init);
+    sent.push({ path: String(path), method: init.method || 'GET', headers: init.headers || {}, body: init.body });
+    const [status, reply] = answer(sent.length);
+    return Promise.resolve(new Response(JSON.stringify(reply), { status, headers: { 'Content-Type': 'application/json' } }));
+  };
+  return { sent, restore: () => { window.fetch = real; } };
+}
+
+/**
+ * Stats on a session with no calls says the list's sentence for it (`noCallsWhy`): `/stats` answered
+ * by the probe with `total: 0`, the probe session as ended, then placed in `state.recording`, then no
+ * session at all. Each sentence is due from the state the probe set, never from what was drawn. The
+ * table is read again from the daemon after, and the session and recording put back.
+ */
+async function statsEmptyWhy(ctx) {
+  const { window, doc } = ctx;
+  const state = ctx.pageState();
+  const { sessionId, recording } = state;
+  if (!sessionId) return 'n/a (no session to empty)';
+  await window.navigate({ page: 'stats' });
+  const empty = doc.getElementById('stats-empty');
+  const said = () => (empty.hidden ? '' : empty.textContent.trim());
+  const stub = stubFetch(window, (p) => /\/stats\?/.test(p), () => [200, { total: 0, matched: 0, routeCount: 0, routes: [] }]);
+  const read = async (due) => {
+    await window.statsLoad();
+    await waitFor(() => said() === due, 1500);
+    return said();
+  };
+  const seen = [];
+  try {
+    state.recording = (recording || []).filter((id) => id !== sessionId);
+    seen.push(['ended', await read('no calls were recorded in this session'), 'no calls were recorded in this session']);
+    state.recording = [...state.recording, sessionId];
+    seen.push(['recording', await read('the app is connected — no calls yet'), 'the app is connected — no calls yet']);
+    state.sessionId = null;
+    seen.push(['no session', await read('waiting for an app with inspector-stream to connect'), 'waiting for an app with inspector-stream to connect']);
+  } finally {
+    stub.restore();
+    state.sessionId = sessionId;
+    state.recording = recording;
+    await window.statsLoad();
+    await window.navigate({ page: 'traffic' });
+    await pause(150);
+  }
+  const wrong = seen.filter(([, got, due]) => got !== due);
+  return wrong.length ? `NO - ${wrong.map(([what, got, due]) => `${what}: "${got}", not "${due}"`).join('; ')}`
+    : `yes (${seen.map(([what, got]) => `${what}: "${got}"`).join('; ')})`;
+}
+
+/** The Sessions page with no session says why, and what would make one; then the rows are drawn again. */
+function sessionsEmptyWhy(ctx) {
+  const { window, doc } = ctx;
+  const state = ctx.pageState();
+  const sessions = state.sessions;
+  const due = 'No sessions yet. A session is recorded when an app with inspector-stream connects to this daemon.';
+  state.sessions = [];
+  window.renderSessionRows();
+  const said = doc.getElementById('session-rows')?.textContent.trim();
+  state.sessions = sessions;
+  window.renderSessionRows();
+  const back = doc.querySelectorAll('#session-rows .session-row').length;
+  if (said !== due) return `NO - an empty list reads "${said}", not "${due}"`;
+  return back === sessions.length ? `yes ("${said}"; ${back} rows drawn again)` : `NO - ${back} rows drawn again of ${sessions.length}`;
+}
+
+/**
  * The page keys on the probe page, from Traffic and back to it, the legend shut, no prefix pending
- * and no row selected. Wired right after the Stats page, so `chip marks active` is the next guard to
- * read the shared page (the Pace rule: it was shown red with these lines present).
+ * and no row selected, then the empty states. Wired right after the Stats page,
+ * so `chip marks active` is the next guard to read the shared page (the Pace rule: it was shown red
+ * with these lines present).
  */
 async function probePageKeys(ctx) {
   const lines = [['page keys live', await pageKeysLive(ctx)], ['keys legend', await keysLegend(ctx)],
     ['keys skip textarea', await keysSkipTextarea(ctx)], ['rail key titles', railKeyTitles(ctx)]];
   ctx.pageState().pageKeyAt = null;
+  lines.push(['stats empty why', await statsEmptyWhy(ctx)], ['sessions empty why', sessionsEmptyWhy(ctx)]);
   return lines;
 }
 

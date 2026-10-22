@@ -26,6 +26,18 @@ async function loadSessions() {
 }
 
 /**
+ * Why the selected session shows no calls, when no filter or stretch is the reason: the list and
+ * the Stats page both ask, so neither can say what the other has stopped saying. Stats had its own
+ * copy and said "yet" of an ended session, which sent people to check an app that had gone. Being
+ * recorded is `/api/recording`'s answer, never `endedAt`: a killed daemon leaves neither.
+ */
+function noCallsWhy() {
+  if (!state.sessionId) return 'waiting for an app with inspector-stream to connect';
+  if ((state.recording || []).includes(state.sessionId)) return 'the app is connected — no calls yet';
+  return 'no calls were recorded in this session';
+}
+
+/**
  * The header count, over whatever is actually on screen.
  *
  * The daemon reports how many rows the *text filter* matched, which was the whole story until
