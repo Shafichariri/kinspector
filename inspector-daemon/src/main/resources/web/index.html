@@ -170,12 +170,12 @@
 
   <div id="filter-error" class="filter-error" hidden></div>
   <!--
-    Shown while the filter is the term a Stats row opened Traffic on, and gone with any other filter
-    or a session switch. A filter cannot say a route exactly: its `*` crosses `/`. Beside the filter
-    error and outside the toolbar row, which must stay one line; a band only while shown.
+    Shown while the filter is the term a Stats or Diff row opened Traffic on, and gone with any other
+    filter or a session switch. A filter cannot say a route exactly: its `*` crosses `/`. Beside the
+    filter error and outside the toolbar row, which must stay one line; a band only while shown.
   -->
   <div id="filter-caveat" class="filter-caveat" role="status" hidden>
-    <span>From Stats: <span id="filter-caveat-route" class="mono"></span>. A filter cannot say a route
+    <span>From <span id="filter-caveat-from">Stats</span>: <span id="filter-caveat-route" class="mono"></span>. A filter cannot say a route
       exactly, so this list may include paths the route keeps apart.</span>
     <button id="filter-caveat-back" class="btn btn-sm" type="button">back to Stats</button>
   </div>
@@ -414,6 +414,8 @@
         <span class="muted">days</span>
       </span>
       <span class="spacer"></span>
+      <button id="sessions-compare" class="btn btn-sm" type="button" disabled
+              title="Compare the two ticked sessions, the older as A. A recording session cannot be ticked: compare it from its row's diff">compare (0)</button>
       <button id="sessions-delete-selected" class="btn btn-sm btn-danger" type="button" disabled>delete selected (0)</button>
       <button id="sessions-clear" class="btn btn-sm btn-danger" type="button">clear all</button>
       <button id="sessions-refresh" class="btn btn-sm" type="button">refresh</button>

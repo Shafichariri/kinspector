@@ -362,6 +362,21 @@ function diffDetail(r) {
   for (const [label, shape] of [['request body', r.requestShape], ['response body', r.responseShape]]) {
     if (shape) body.appendChild(diffDirection(label, shape));
   }
+  // Each side's calls on Traffic, through the Stats page's caveat; only on a side the route is on.
+  const report = diffState.report;
+  const opens = el('div', 'page-actions diff-calls');
+  for (const side of ['a', 'b']) {
+    if (!r[side] || !report) continue;
+    const word = side.toUpperCase();
+    const button = el('button', 'btn btn-sm diff-calls-open', `calls in ${word}`);
+    button.type = 'button';
+    button.dataset.side = side;
+    button.title = `This route's calls in ${word}, ${report[side].sessionId}, on the Traffic page`;
+    const back = { page: 'diff', a: diffState.a, b: diffState.b };
+    button.addEventListener('click', () => statsOpenRoute(r[side], { from: 'diff', back, sessionId: report[side].sessionId }));
+    opens.appendChild(button);
+  }
+  if (opens.children.length) body.appendChild(opens);
   td.appendChild(body);
   tr.appendChild(td);
   return tr;

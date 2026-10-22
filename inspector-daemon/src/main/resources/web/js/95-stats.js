@@ -19,7 +19,8 @@ const STATS_LIMIT = 1000;
 /**
  * The page's own state. `sent`/`written` are the ticket pair: of a load and a refresh, the one sent
  * last is kept whichever lands last. `owed`, `timer` and `busy` are the refresh rule. `caveat` is the
- * route a row opened Traffic on, `{ term, label, sessionId }`, drawn while the filter is that term.
+ * route a row opened Traffic on, `{ term, label, sessionId, from, back }`, drawn while the filter is
+ * that term: `from` is the page the row was on, `stats` or `diff`, and `back` the route returning to it.
  */
 const statsState = {
   filter: '', sort: 'attempts', report: null, error: null, sessionId: null,
@@ -338,13 +339,17 @@ function statsSetFilter(text) {
 }
 
 /**
- * A row opens Traffic on the daemon's term for it. `navigate` pushes, so Back returns here, and the
- * term goes through `applyFilter`, the one funnel every way of setting a filter takes. The caveat is
- * set first, so it is there when `applyFilter`'s timer writes the filter it describes.
+ * A route row opens Traffic on the daemon's term for it: a Stats row, and a Diff route's `calls in A`
+ * or `calls in B`, which name [from], the address to go [back] to, and the side's [sessionId]. The
+ * session is switched first, since a switch clears a caveat for another session; the caveat is set
+ * next, so it is there when `applyFilter`'s timer writes the filter it describes. `navigate` pushes,
+ * so Back returns to the page, and the term goes through `applyFilter`, the one funnel every way of
+ * setting a filter takes.
  */
-async function statsOpenRoute(row) {
+async function statsOpenRoute(row, { from = 'stats', back = { page: 'stats' }, sessionId = state.sessionId } = {}) {
   if (ARCHIVE) return;
-  statsState.caveat = { term: row.filterTerm, label: `${row.method} ${row.route}`, sessionId: state.sessionId };
+  if (sessionId !== state.sessionId) await switchSession(sessionId);
+  statsState.caveat = { term: row.filterTerm, label: `${row.method} ${row.route}`, sessionId, from, back };
   await navigate({ page: 'traffic', view: 'network' });
   $('filter').value = row.filterTerm;
   applyFilter();
@@ -359,13 +364,17 @@ function statsFilterChanged() {
   statsPaintCaveat();
 }
 
-/** `#filter-caveat`, shown exactly while the Traffic filter is the term a Stats row opened. */
+/** `#filter-caveat`, shown exactly while the Traffic filter is the term a route row opened, naming its page. */
 function statsPaintCaveat() {
   const node = $('filter-caveat');
   const caveat = statsState.caveat;
   const shown = Boolean(caveat) && state.filter === caveat.term;
   node.hidden = !shown;
-  if (shown) $('filter-caveat-route').textContent = caveat.label;
+  if (!shown) return;
+  const page = PAGES.find((p) => p.id === caveat.from)?.label || 'Stats';
+  $('filter-caveat-from').textContent = page;
+  $('filter-caveat-route').textContent = caveat.label;
+  $('filter-caveat-back').textContent = `back to ${page}`;
 }
 
 /** Wiring, from `99-init.js`. In an export the filter is disabled, as Traffic's is, and the note says why. */
@@ -373,7 +382,7 @@ function wireStatsPage() {
   const input = $('stats-filter');
   // Its empty state asks `noCallsWhy`, which reads what the load learnt of the recording sessions.
   callsLanded.push(() => { if (statsShown()) statsRender(); });
-  $('filter-caveat-back').addEventListener('click', () => navigate({ page: 'stats' }));
+  $('filter-caveat-back').addEventListener('click', () => navigate(statsState.caveat ? statsState.caveat.back : { page: 'stats' }));
   if (ARCHIVE) {
     input.disabled = true;
     input.placeholder = 'filters need the daemon — this is an exported session';

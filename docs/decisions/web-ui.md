@@ -913,22 +913,27 @@ runner's preinstalled Chrome, found by `measure-cdp.js` at `/usr/bin/google-chro
 installed. At 821 to 885 px the page is still wider than the window, in two columns, at `638119e`
 too, which this item did not take on.
 
-**The Diff page draws the daemon's comparison and decides nothing.** Kinds, order, verdicts and
-the reason a shape could not be compared come from `GET /api/diff`, so the page has no mirror
-block and no case file. `#/diff?a=&b=` carries the two sessions and nothing else, as Stats keeps
-its filter out of the address; `#/diff` alone means the latest run against its previous one, and
-the page never rewrites it to the ids it resolved, so a bookmark follows the newest run. Choosing a
-session replaces the address, because Back walks places, not data. It is `live` in `PAGES`, since an
-export holds one session. It does not re-read on a live message: a comparison reordering under the
-reader is hard to read, and a re-read costs body reads, so a recording B says so and offers
-refresh. The daemon's refusals (no previous run, one session twice, a filter it cannot parse) are
-drawn verbatim in one line under the controls, because the page cannot tell which parameter a 400
-is about without parsing the daemon's words. `wireDiffPage` builds the controls rather than
-`index.html`, which holds every other page's markup within its 600 lines.
+**The Diff page draws the daemon's comparison and decides nothing.** Kinds, order, verdicts and the
+reason a shape could not be compared come from `GET /api/diff`, so the page has no mirror block and
+no case file. `#/diff?a=&b=` carries the two sessions and nothing else, as Stats keeps its filter
+out of the address; `#/diff` alone means the latest run against its previous one, and the page never
+rewrites it to the ids it resolved, so a bookmark follows the newest run. Choosing a session
+replaces the address, because Back walks places, not data. It is `live` in `PAGES`, since an export
+holds one session. It does not re-read on a live message: a comparison reordering under the reader
+is hard to read, and a re-read costs body reads, so a recording B says so and offers refresh. On the
+Sessions page `compare (2)` reads the delete selection, which a recording session cannot join, so
+every row also has `diff`, which compares it with its previous run; letting a recording row be
+ticked would make `delete selected` count rows the daemon refuses. A route's `calls in A` and `calls
+in B` open Traffic through the Stats page's caveat, which now names the page it came from and goes
+back to the address it left, switching to that side's session first, since a switch clears a caveat
+for another session. The daemon's refusals (no previous run, one session twice, a filter it cannot
+parse) are drawn verbatim in one line under the controls, because the page cannot tell which
+parameter a 400 is about without parsing the daemon's words. `wireDiffPage` builds the controls
+rather than `index.html`, which holds every other page's markup within its 600 lines.
 `check-web-static.js`'s `diff …` lines hold the drawing against canned replies, over a stub DOM
 because that script needs nothing installed; the live probe's `diff …` lines hold the page against
 the fixture's baseline run, and the archive probe's `diff hidden in export` the export. Each was red
-as recorded in KIN-139's notes, and `diff restored` is proven by breaking the next probe's guard
-(`chip marks active`). `diff mutation loud` looks the orders row up rather than reading the first:
-the probe session's added `DELETE /v3/shop/cart/items` is loud too and sorts above it, so the line
-holds that every row above it is loud.
+as recorded in KIN-139's and KIN-140's notes, and `diff restored` is proven by breaking the next
+probe's guard (`chip marks active`). `diff mutation loud` looks the orders row up rather than
+reading the first: the probe session's added `DELETE /v3/shop/cart/items` is loud too and sorts
+above it, so the line holds that every row above it is loud.

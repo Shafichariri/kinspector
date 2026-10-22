@@ -7,7 +7,10 @@
  * holds) reads removed; and the baseline session, against the probe session, holds one route per
  * rule — `POST …/orders/submit` called 2 → 1 times, 200 → 500, `$.price` number → string on the
  * products detail, the feed truncated in the baseline, the token's redacted `$.expires_in` and its
- * new `x-request-id`, and stock's 5 → 4 attempts, too few to judge latency.
+ * new `x-request-id`, and stock's 5 → 4 attempts, too few to judge latency. On the Sessions page,
+ * ticking two sessions offers `compare (2)` with the older as A, and a row's `diff` compares it with
+ * its previous run; a route's `calls in A` and `calls in B` open Traffic on that side's session
+ * through the Stats page's caveat, which then names Diff and goes back to the diff's address.
  *
  * The orders row is looked up, not read as the first row: the daemon puts loud rows first, and the
  * probe session's added `DELETE /v3/shop/cart/items` is loud too and sorts above it (PR A's order
@@ -19,13 +22,13 @@
  * `[label, verdict]` pairs, one per line the caller prints.
  */
 
-const { LONG_SESSION_ID, waitFor } = require('./long-session-probes');
+const { LONG_SESSION_ID, choose, waitFor } = require('./long-session-probes');
 
 const BASE_SESSION_ID = '2025-12-30T09-00-00_probe_ci_debug';
 const DIFF_LABELS = [
   'diff default pair', 'diff long session whole', 'diff explicit pair', 'diff mutation loud', 'diff status mix',
   'diff type changed', 'diff truncated unknown', 'diff redacted not compared', 'diff latency not judged',
-  'diff header added', 'diff same session', 'diff restored',
+  'diff header added', 'diff sessions compare', 'diff row action', 'diff opens calls', 'diff same session', 'diff restored',
 ];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -163,6 +166,76 @@ async function probeDiff(ctx) {
     out.set('diff latency not judged', stockDue?.verdict === 'notJudged' && verdict === stockDue.reason
       ? `yes (stock's p50 reads ${verdict}, the daemon's reason)` : `NO - stock's verdict "${verdict}", the daemon's ${JSON.stringify(stockDue)}`);
 
+    // Sessions: tick two and compare, older as A; any other number leaves compare disabled.
+    const compare = doc.getElementById('sessions-compare');
+    const sessionRow = (id) => doc.querySelector(`#session-rows .session-row[data-id="${id}"]`);
+    const tick = (id, on) => {
+      const box = sessionRow(id)?.querySelector('input[type="checkbox"]');
+      if (!box) return false;
+      box.checked = on;
+      box.dispatchEvent(new window.Event('change', { bubbles: true }));
+      return true;
+    };
+    await press(rail('sessions'), 300);
+    await waitFor(() => sessionRow(sessionId) && sessionRow(BASE_SESSION_ID), 5000);
+    const states = [];
+    for (const [id, on] of [[sessionId, true], [BASE_SESSION_ID, true], [LONG_SESSION_ID, true], [LONG_SESSION_ID, false]]) {
+      tick(id, on);
+      states.push(`${compare.textContent} ${compare.disabled ? 'disabled' : 'enabled'}`);
+    }
+    const dueStates = ['compare (1) disabled', 'compare (2) enabled', 'compare (3) disabled', 'compare (2) enabled'];
+    const pairHash = `#/diff?a=${encodeURIComponent(BASE_SESSION_ID)}&b=${encodeURIComponent(sessionId)}`;
+    await press(compare, 100);
+    await settled(pair);
+    out.set('diff sessions compare', states.join() === dueStates.join() && window.location.hash === pairHash && shown(doc, 'diff')
+      ? `yes (${states.join(', ')}; compare opened ${window.location.hash}, the older as A)`
+      : `NO - ${states.join(', ')} where ${dueStates.join(', ')} were due; compare opened ${window.location.hash}, ${pairHash} due`);
+
+    // A row's diff: B is the row, A the daemon's choice. The ticks are taken off first, by hand.
+    await press(rail('sessions'), 300);
+    await waitFor(() => sessionRow(sessionId), 5000);
+    tick(sessionId, false);
+    tick(BASE_SESSION_ID, false);
+    const cleared = compare.textContent === 'compare (0)' && compare.disabled;
+    const rowDiff = sessionRow(sessionId)?.querySelector('.row-diff');
+    if (rowDiff) await press(rowDiff, 100);
+    await settled({ b: sessionId });
+    const rowHash = `#/diff?b=${encodeURIComponent(sessionId)}`;
+    const drawnA = doc.querySelector('#diff-summary .diff-side-a')?.dataset.session;
+    out.set('diff row action', rowDiff && cleared && window.location.hash === rowHash && drawnA === LONG_SESSION_ID
+      ? `yes (${sessionId}'s diff opened ${window.location.hash}; the daemon chose A ${drawnA}; the ticks cleared)`
+      : `NO - ${rowDiff ? `opened ${window.location.hash}, A ${drawnA}, ticks cleared ${cleared}` : 'no .row-diff on the probe session\'s row'}`);
+
+    // A route's calls in B, then in A: Traffic on that side's session with its term and the caveat
+    // naming Diff, and back to the address it came from.
+    const caveat = doc.getElementById('filter-caveat');
+    const callsIn = async (side) => {
+      await goTo(pairHash, pair);
+      const detail = await drawn(window, doc).open(drawn(window, doc).row('GET', '/v3/shop/stock'));
+      const button = detail?.querySelector(`.diff-calls-open[data-side="${side}"]`);
+      const due = report.routes.find((r) => r.route === '/v3/shop/stock')?.[side];
+      const id = side === 'a' ? BASE_SESSION_ID : sessionId;
+      if (!button || !due) return `no calls in ${side.toUpperCase()} on stock`;
+      await press(button, 100);
+      await waitFor(() => shown(doc, 'traffic') && ctx.pageState().sessionId === id && ctx.pageState().filter === due.filterTerm, 15000);
+      await ctx.settle();
+      const said = text(caveat);
+      const back = doc.getElementById('filter-caveat-back');
+      const wrong = [];
+      if (picker.value !== id) wrong.push(`session ${picker.value}, ${id} due`);
+      if (doc.getElementById('filter').value !== due.filterTerm) wrong.push(`filter "${doc.getElementById('filter').value}", "${due.filterTerm}" due`);
+      if (caveat.hidden || !said.startsWith('From Diff: GET /v3/shop/stock') || text(back) !== 'back to Diff') wrong.push(`caveat shown ${!caveat.hidden}, "${said.slice(0, 60)}", button "${text(back)}"`);
+      await press(back, 100);
+      await settled(pair);
+      if (window.location.hash !== pairHash || !shown(doc, 'diff')) wrong.push(`back to Diff went to ${window.location.hash}`);
+      return wrong.join('; ');
+    };
+    const inB = await callsIn('b');
+    const inA = await callsIn('a');
+    out.set('diff opens calls', !inB && !inA
+      ? `yes (stock's calls in B and in A each opened Traffic on that session with its filterTerm, "From Diff", and back to Diff returned to ${pairHash})`
+      : `NO - ${[inB && `B: ${inB}`, inA && `A: ${inA}`].filter(Boolean).join(' | ')}`);
+
     // Both pickers on one session: the daemon refuses, and the page says so in its words.
     const refusal = (await daemon({ a: sessionId, b: sessionId })).error;
     const pickA = doc.getElementById('diff-a');
@@ -177,10 +250,19 @@ async function probeDiff(ctx) {
     await press(rail('traffic'), 300);
     await ctx.settle();
   } finally {
-    if (!shown(doc, 'traffic')) {
-      await press(rail('traffic'), 300);
-      await ctx.settle();
+    // `calls in A` left Traffic on the baseline session under stock's term: put both back.
+    if (!shown(doc, 'traffic')) await press(rail('traffic'), 300);
+    if (ctx.pageState().sessionId !== sessionId && sessionId) {
+      choose(ctx, sessionId);
+      await waitFor(() => ctx.pageState().sessionId === sessionId && ctx.pageState().signalSessionId === sessionId, 8000);
     }
+    const filterBox = doc.getElementById('filter');
+    if (filterBox.value) {
+      filterBox.value = '';
+      filterBox.dispatchEvent(new window.Event('input', { bubbles: true }));
+      await pause(400);
+    }
+    await ctx.settle();
   }
   const after = ctx.pageState();
   const clean = shown(doc, 'traffic') && doc.getElementById('filter-caveat').hidden && after.filter === ''

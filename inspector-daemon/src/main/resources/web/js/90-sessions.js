@@ -242,6 +242,7 @@ async function afterSessionChange() {
   renderSessionRows();
   statsSessionChanged();
   findingsSessionChanged();
+  diffSessionsChanged();
   if (state.sessionId) {
     await loadTransactions();
   } else {
@@ -357,6 +358,13 @@ function sessionRow(meta) {
   open.title = `Show ${meta.sessionId} on the Traffic page`;
   open.addEventListener('click', () => navigate({ page: 'traffic', session: meta.sessionId }));
   actions.appendChild(open);
+  // On every row, a recording one too: the run being recorded against the one before it is the
+  // commonest diff, and a recording session cannot be ticked for `compare (2)`.
+  const diff = el('button', 'btn btn-sm btn-quiet row-diff', 'diff');
+  diff.type = 'button';
+  diff.title = 'Compare with the previous run of this app';
+  diff.addEventListener('click', () => navigate({ page: 'diff', b: meta.sessionId }));
+  actions.appendChild(diff);
   // Text in the icon box, not an SVG: arming swaps the text to `sure?` (`confirmThen`).
   const remove = el('button', 'btn btn-sm btn-quiet btn-icon row-delete', '✕');
   remove.type = 'button';
@@ -380,18 +388,33 @@ const cellOf = (child, cls) => {
   return cell;
 };
 
-/** The bulk button's count and the select-all box, from the selection as it stands. */
+/** The bulk buttons' counts and the select-all box, from the selection as it stands. */
 function updateSessionActions() {
   const button = $('sessions-delete-selected');
   if (!button) return;
   const n = selectedSessions.size;
   if (button.dataset.armed !== '1') button.textContent = `delete selected (${n})`;
   button.disabled = n === 0;
+  const compare = $('sessions-compare');
+  compare.textContent = `compare (${n})`;
+  compare.disabled = n !== 2;
   const deletable = state.sessions.filter((m) => !sessionIsRecording(m, state.recording));
   const all = $('sessions-all');
   all.checked = deletable.length > 0 && deletable.every((m) => selectedSessions.has(m.sessionId));
   all.indeterminate = n > 0 && !all.checked;
   all.disabled = deletable.length === 0;
+}
+
+/**
+ * The two ticked sessions, older first, or null unless exactly two are ticked. Older by `startedAt`
+ * and then the id, compared as strings, which is the order the daemon finds a previous run in.
+ */
+function sessionsToCompare() {
+  const pair = state.sessions.filter((m) => selectedSessions.has(m.sessionId));
+  if (pair.length !== 2) return null;
+  const key = (m) => [m.startedAt || '', m.sessionId];
+  const [x, y] = pair.map(key);
+  return x[0] < y[0] || (x[0] === y[0] && x[1] < y[1]) ? pair : [pair[1], pair[0]];
 }
 
 /** A preset replaces the selection rather than adding to it, so what it ticks is what it says. */
@@ -455,6 +478,11 @@ function wireSessionsPage() {
     const button = $('sessions-delete-selected');
     confirmThen(button, `delete selected (${selectedSessions.size})`,
       `delete ${selectedSessions.size}? permanent`, deleteSelectedSessions);
+  });
+  // The two ticked sessions as A and B; pushed, because it goes to another page.
+  $('sessions-compare').addEventListener('click', () => {
+    const pair = sessionsToCompare();
+    if (pair) navigate({ page: 'diff', a: pair[0].sessionId, b: pair[1].sessionId });
   });
   $('sessions-clear').addEventListener('click', () => {
     confirmThen($('sessions-clear'), 'clear all', 'delete every session?', clearSessions);
