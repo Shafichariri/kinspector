@@ -44,7 +44,7 @@ data class Finding(
     val txnCount: Int,
     /** At most [MAX_EVIDENCE]. */
     val evidence: List<Evidence>,
-    /** Always null until dismissals exist. */
+    /** The `findingDismissals` entry that set this finding aside, applied when a reply is built. */
     val dismissed: Dismissal? = null,
 ) {
     companion object {
@@ -94,8 +94,10 @@ data class FindingsReport(
     val category: String? = null,
     /** Rows read, as the traffic list counts them. */
     val total: Int,
-    /** Findings in the category, before the limit. */
+    /** Findings in the category, before the limit, dismissed ones left out. */
     val findingCount: Int,
+    /** Findings in the category a `findingDismissals` entry set aside; listed only when asked for. */
+    val dismissedCount: Int,
     val high: Int,
     val medium: Int,
     val info: Int,

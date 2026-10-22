@@ -19,6 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.writeText
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -89,7 +90,7 @@ class FindingsRouteTest {
     fun `the report has the documented shape`() = runBlocking {
         val report = ok("payments")
         assertEquals(
-            listOf("sessionId", "ruleVersion", "total", "findingCount", "high", "medium", "info", "rules", "findings", "coverage"),
+            listOf("sessionId", "ruleVersion", "total", "findingCount", "dismissedCount", "high", "medium", "info", "rules", "findings", "coverage"),
             report.keys.toList(),
             "absent nulls: no configError, no category",
         )
@@ -152,6 +153,26 @@ class FindingsRouteTest {
         val bad = findings("payments", "category" to "pay")
         assertEquals(400, bad.status.value)
         assertEquals("""{"error":"unknown category 'pay'. Use one of: payment."}""", bad.bodyAsText())
+    }
+
+    @Test
+    fun `a dismissal in config json hides a finding on the next read unless includeDismissed, which must be a boolean`() = runBlocking {
+        val first = ok("payments").list("findings").first()
+        tmp.resolve("config.json").writeText(
+            """{"findingDismissals":[{"ruleId":${first.getValue("ruleId")},"route":${first.getValue("route")},""" +
+                """"location":${first["location"] ?: "null"},"path":${first["path"] ?: "null"},"reason":"a batch job"}]}""",
+        )
+        val hidden = ok("payments")
+        assertEquals(listOf(4, 1), listOf("findingCount", "dismissedCount").map { hidden.int(it) })
+        assertFalse(hidden.list("findings").any { it.getValue("id") == first.getValue("id") })
+        val listed = ok("payments", "includeDismissed" to "true").list("findings").first()
+        assertEquals(first.getValue("id"), listed.getValue("id"))
+        assertEquals("a batch job", listed.getValue("dismissed").jsonObject.getValue("reason").jsonPrimitive.content)
+        assertEquals(4, ok("payments", "includeDismissed" to "false").list("findings").size)
+
+        val bad = findings("payments", "includeDismissed" to "yes")
+        assertEquals(400, bad.status.value)
+        assertEquals("""{"error":"includeDismissed must be true or false"}""", bad.bodyAsText())
     }
 
     @Test

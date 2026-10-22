@@ -413,11 +413,12 @@ curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
   "flags": [] }
 ```
 
-- **Nothing but `findings` applies until the daemon restarts.** `effective` is what this daemon
-  runs on and stays so; `file` is what the next start reads. A port cannot move under a listening
-  socket. The one exception is `findings` (below): it is read again on the next findings read, so
-  `effective.findings` is the file as last read, and `findingsConfigError` appears when the key on
-  disk could not be read.
+- **Nothing but `findings` and `findingDismissals` applies until the daemon restarts.** `effective`
+  is what this daemon runs on and stays so; `file` is what the next start reads. A port cannot move
+  under a listening socket. The exceptions are `findings` and `findingDismissals` (below): they are
+  read again on the next findings read, so `effective.findings` and `effective.findingDismissals`
+  are the file as last read (a bad dismissal skipped), and `findingsConfigError` appears when either
+  key on disk could not be read.
 - **Flags still win.** A key in `flags` was set on the command line and overrides the file, so
   saving it changes nothing until the daemon starts without that flag.
 - **A save is a merge.** The keys you send replace those keys; every other key in the file is kept
@@ -485,7 +486,7 @@ a year from reading as `{id}`; `/articles/{slug}` groups slugs the heuristic wou
 Trailing slashes count, so `/users/{id}` does not match `/users/1/`. No regular expressions. At
 most 200 entries.
 
-Like every key here but `findings`, `routeTemplates` applies when the daemon next starts, and then to every
+Like every key here but `findings` and `findingDismissals`, `routeTemplates` applies when the daemon next starts, and then to every
 recorded session, because routes are computed when they are read. `PUT /api/config` accepts it
 and refuses an invalid entry with a 400 that names it. An invalid entry written by hand is
 reported on stderr at start and skipped, and the rest apply. `inspector mcp` reads the file when
@@ -532,6 +533,29 @@ and tells the payment rules what an idempotency key and a payment path look like
   `findings` that is not an object, keeps the settings last read and says so in the findings
   reply's `configError`. A `findings` that is not an object also makes the file malformed for every
   other key, as any wrong-typed key does.
+
+#### `findingDismissals` — findings set aside on purpose, with the reason
+
+```json
+{ "findingDismissals": [
+    { "ruleId": "payment.retry-with-key", "route": "POST https://api.example.invalid/v1/payments",
+      "location": null, "path": null, "reason": "the batch job retries by design", "at": "2026-10-22" } ] }
+```
+
+- **An entry names a finding by its `ruleId`, `route`, `location` and `path`**, exactly as the
+  findings reply prints them, and matches only when all four are equal; a `null` matches only a
+  `null`. Nothing in it names a session or a call, so the list carries between machines and
+  outlives retention. `reason` is required, 1 to 200 characters; `at` is optional. At most 1000
+  entries; no other key is accepted.
+- **It applies on the next findings read**, like `findings`, in the daemon and in `inspector mcp`,
+  with no restart. A dismissal does not change `ruleVersion` and rescans nothing.
+- **A dismissed finding is not deleted.** `findingCount` and the `high`/`medium`/`info` counts leave
+  it out, `dismissedCount` says how many were set aside, and the findings list shows them, each with
+  `dismissed.reason`, when asked with `includeDismissed=true`. A rule's `count` still includes them.
+- **A route renamed by a `routeTemplates` edit stops matching**, and the finding comes back. That is
+  the safe direction: a dismissal never silences a finding it was not written for.
+- `PUT /api/config` refuses a bad list whole with a 400 naming the entry; a bad entry written by
+  hand is named on stderr and in `configError`, and skipped. No MCP tool writes this key.
 
 Nothing here is encrypted and, with redaction off (the default), bodies and headers contain real
 credentials. Treat `~/.inspector` as you would a log directory full of tokens.
@@ -779,10 +803,12 @@ inspector findings --session latest --category payment
 What the daemon's rules flag in a session, worked out from every call when you ask and never
 stored. `category` narrows to one family (`payment` for now); an unknown one is a 400 naming those
 there are. `limit` defaults to 1000, at most 5000. There is no `filter`: a finding is about calls
-next to each other, and hiding one of them would make the rest look safe.
+next to each other, and hiding one of them would make the rest look safe. `includeDismissed=true`
+also lists findings set aside in `findingDismissals` (§6), each with `dismissed.reason`.
 
 The reply holds `ruleVersion` (a hash of the rules and their settings), `total` rows read,
-`findingCount` and the `high`/`medium`/`info` counts before the limit, `rules` (every rule checked,
+`findingCount` and the `high`/`medium`/`info` counts before the limit (dismissed findings left out),
+`dismissedCount`, `rules` (every rule checked,
 with `enabled`, its `severity` and `count`, so a 0 is "checked, none found"), `findings`, and
 `coverage`, which says per category what could not be judged (a body capture truncated cannot be
 compared). Each finding has `ruleId`, `severity`, `route`, `message`, `txnIds` and `callIds` (at
@@ -855,8 +881,10 @@ It speaks JSON-RPC on stdout, so never expect log output there — diagnostics g
 CLI it reads the archive off disk and works with no daemon running, except `add_marker`, which needs
 a session that is currently recording.
 
-`list_findings` reads `config.json`'s `findings` key on every call, so it needs no restart after a
-findings edit, unlike `routeTemplates`.
+`list_findings` reads `config.json`'s `findings` and `findingDismissals` keys on every call, so it
+needs no restart after a findings edit or a dismissal, unlike `routeTemplates`. It leaves dismissed
+findings out unless `includeDismissed` is true and always reports `dismissedCount`. No tool can
+dismiss a finding: `findingDismissals` is written only through `PUT /api/config` or by hand.
 
 Registration for Claude Code, Cursor and Codex is in [`INTEGRATION.md`](INTEGRATION.md) §10.
 

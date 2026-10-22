@@ -80,8 +80,8 @@ class ConfigRoutesTest {
             setBody(TextContent(body, type))
         }
 
-    /** `effective` without `findings`, which is read live and has its own tests below. */
-    private fun startKeys(reply: JsonObject) = JsonObject(reply.getValue("effective").jsonObject - "findings")
+    /** `effective` without `findings` and `findingDismissals`, which are read live and have their own tests below. */
+    private fun startKeys(reply: JsonObject) = JsonObject(reply.getValue("effective").jsonObject - "findings" - "findingDismissals")
 
     private fun findings(reply: JsonObject) = reply.getValue("effective").jsonObject.getValue("findings").jsonObject
 
@@ -243,6 +243,27 @@ class ConfigRoutesTest {
         val reply = json(http.get(url("/api/config")).bodyAsText())
         assertEquals("5000", payment(reply, "duplicateWindowMs"))
         assertContains(reply.getValue("findingsConfigError").jsonPrimitive.content, "not a JSON object")
+    }
+
+    @Test
+    fun `effective findingDismissals follows a save and a hand edit, bad entries skipped`() = runBlocking {
+        val entry = """{"ruleId":"payment.retry-with-key","route":"POST https://api.example.invalid/pay","reason":"expected"}"""
+        assertEquals("[]", json(http.get(url("/api/config")).bodyAsText()).getValue("effective").jsonObject.getValue("findingDismissals").toString())
+        val saved = json(save("""{"findingDismissals":[$entry]}""").bodyAsText())
+        assertEquals(
+            """[{"ruleId":"payment.retry-with-key","route":"POST https://api.example.invalid/pay","location":null,"path":null,"reason":"expected"}]""",
+            saved.getValue("effective").jsonObject.getValue("findingDismissals").toString(),
+            "the save's own reply",
+        )
+
+        file.writeText("""{"findingDismissals":[{"ruleId":"r.x","route":"GET /x"},$entry]}""")
+        val edited = json(http.get(url("/api/config")).bodyAsText())
+        assertEquals(1, edited.getValue("effective").jsonObject.getValue("findingDismissals").jsonArray.size)
+        assertContains(edited.getValue("findingsConfigError").jsonPrimitive.content, "findingDismissals entry 1 needs a reason")
+
+        val refused = save("""{"findingDismissals":[{"ruleId":"r.x","route":"GET /x"}]}""")
+        assertEquals(400, refused.status.value)
+        assertContains(refused.bodyAsText(), "findingDismissals entry 1 needs a reason")
     }
 
     @Test

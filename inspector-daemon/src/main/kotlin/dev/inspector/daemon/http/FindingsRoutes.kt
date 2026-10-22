@@ -30,9 +30,14 @@ internal fun Route.findingsRoutes(repository: SessionRepository, findings: Findi
             return@get call.respondError(HttpStatusCode.BadRequest, it.message.orEmpty())
         }
         val limit = (parameters["limit"]?.toIntOrNull() ?: DEFAULT_LIMIT).coerceIn(1, MAX_LIMIT)
+        val includeDismissed = when (parameters["includeDismissed"]) {
+            null, "false" -> false
+            "true" -> true
+            else -> return@get call.respondError(HttpStatusCode.BadRequest, "includeDismissed must be true or false")
+        }
         // A cold read of a large session decodes every row; off the CIO workers the live socket and
         // /ingest share.
-        val report = withContext(Dispatchers.IO) { findings.report(dir, category, limit) }
+        val report = withContext(Dispatchers.IO) { findings.report(dir, category, limit, includeDismissed) }
         call.respondJson(InspectorJson.encodeToString(FindingsReport.serializer(), report))
     }
 }
