@@ -68,6 +68,10 @@ tooltip.
 (with a `clear filter` button, because clearing it is the whole fix), a session with no calls,
 and no session at all. "Waiting for an app with inspector-stream to connect" is said only in the
 last case: on an archived session it sent people to check the app when the app had come and gone.
+The three sentences that do not involve a filter or a stretch are `noCallsWhy()` in
+`js/15-session-data.js`, and the Stats page asks it too. Stats had its own copy and said "No calls
+in this session yet" of an ended session, the claim this paragraph removed from the list
+(`no calls why`, red with that copy put back; `stats empty why` in the live probe).
 
 **Nothing in the web UI is under 11px except a named list, and `render-web-ui.js` reads the
 stylesheet to hold it.** The method badge, `kbd` key caps and the three fold glyphs (`.jt-tw`,
@@ -643,6 +647,16 @@ the address, the live probe's `txn route` and `txn route past ceiling` the page,
 and the archive probe's `txn route in export` the export, the last two red with the lookup made in
 the list's rows alone and with the page's class not set.
 
+**A page's counts are drawn again when the session's calls land, not only when the page is
+opened.** Settings drew its repeat and endpoint counts on entry. A first load straight to
+`#/settings` enters before the calls are read, so it said `0 row(s)` and `showing 0 of 0` of a
+session with 3 and 13 (`settings counts follow load`, red with the repaint removed). A page that
+reads the calls adds its repaint to `callsLanded` in `js/16-session-load.js` from its own wiring,
+and `loadTransactions` runs them once the load has landed; Stats joins it too, so its empty state
+asks `noCallsWhy` again once `/api/recording` has answered. The counts now say what they count:
+`3 rows in this session` and `showing 10 of 13 endpoints in this session` (`polish settings first
+load counts` in Chrome, at 1440 and 400, red with Settings' repaint taken out of the list).
+
 **The web UI parses JSON itself, and `JSON.parse` is the thing it is avoiding.** `JSON.parse`
 turns every number into a double, so a 64-bit id `1234567890123456789` came back as
 `…800` — a different id, shown confidently in a debugger — and it also hoists integer-like keys to
@@ -780,6 +794,15 @@ hold the refresh rule, each shown red with its check removed; the live probe's `
 the page and the caveat, `stats n<20` and `stats long session whole` red against a daemon with the
 threshold at 0 and its fold cut at 1000 rows, and `stats restored` leaves the page as it found it,
 proven by breaking the next probe's guard (`chip marks active`).
+
+**Settings edits `routeTemplates` as lines, and sends the key only when the lines differ from the
+file's.** `PUT /api/config` replaces a top-level key whole, so the editor sends the whole list,
+and an unchanged list sends nothing. Otherwise a save of retention alone would rewrite a
+hand-edited template list, and any entry the daemon skipped at start would then be refused by
+name, blocking a save that never touched it. It says the list applies when the daemon restarts,
+because `routeTemplates` is read at start (`daemon-and-mcp.md`). The Stats page's note links here
+live, and names `config.json` in an export, where Settings does not exist (`routes editor`,
+`stats note link`, `stats note export`).
 
 **The Findings page computes nothing, and a severity is drawn in words.** Rules, counts, order,
 messages, masked evidence and coverage come from the daemon, so there is no mirror block. The page

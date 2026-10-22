@@ -8,12 +8,26 @@ function applyDuplicateWindow(valueMs) {
   state.duplicateWindowMs = ms;
   prefs.set('inspector.duplicateWindowMs', String(ms));
   $('dup-window').value = ms;
+  paintSettingsCounts();
+  renderList();
+}
+
+/**
+ * The repeat and endpoint counts, from the session's calls and the preferences as they stand, writing
+ * no preference. Drawn on entry and again once a load lands the calls (`callsLanded`): a first load
+ * straight to `#/settings` enters before they are read, and said there were no repeats and no endpoints.
+ */
+function paintSettingsCounts() {
+  const ms = state.duplicateWindowMs;
   // The unfiltered set, matching what the list actually highlights. Counting the filtered rows
   // instead made the summary read 0 while the list showed two tinted rows.
-  $('dup-summary').textContent = ms === 0
-    ? 'off'
-    : `${computeDuplicates(state.allTransactions, ms).size} row(s) in this session`;
-  renderList();
+  const repeats = ms === 0 ? 0 : computeDuplicates(state.allTransactions, ms).size;
+  $('dup-summary').textContent = ms === 0 ? 'off' : `${repeats} ${repeats === 1 ? 'row' : 'rows'} in this session`;
+  const limit = state.endpointLimit;
+  const total = new Set(state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean)).size;
+  $('endpoint-summary').textContent = limit === 0
+    ? 'hidden'
+    : `showing ${Math.min(limit, total)} of ${total} ${total === 1 ? 'endpoint' : 'endpoints'} in this session`;
 }
 
 // --- settings: row density ------------------------------------------------------------------
@@ -48,13 +62,7 @@ function applyEndpointLimit(value) {
   state.endpointLimit = limit;
   prefs.set('inspector.endpointChipLimit', String(limit));
   $('endpoint-limit').value = limit;
-
-  const total = new Set(
-    state.allTransactions.map((t) => lastSegment(t.path)).filter(Boolean),
-  ).size;
-  $('endpoint-summary').textContent = limit === 0
-    ? 'hidden'
-    : `showing ${Math.min(limit, total)} of ${total} in this session`;
+  paintSettingsCounts();
   renderEndpointChips();
 }
 
@@ -151,7 +159,48 @@ function renderConfig(reply) {
       box.lastChild.appendChild(input);
     }
   }
+  routeTemplatesRender(reply);
   findingsConfigRender(reply);
+}
+
+// --- settings: route templates, read at start --------------------------------------------------
+
+/** A list box's entries: its lines trimmed, blank ones dropped, in the order typed (first match wins). */
+function configLines(text) {
+  return text.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
+/**
+ * `routeTemplates`, one per line, from the file, beside how many this daemon compiled at start. The
+ * box holds the file's list, not `effective`'s, so an entry the daemon skipped at start is shown where
+ * it can be fixed. No flag sets the key, so the box is never disabled.
+ */
+function routeTemplatesRender(reply) {
+  const box = $('config-fields');
+  const listed = reply.file && Array.isArray(reply.file.routeTemplates) ? reply.file.routeTemplates : [];
+  const running = (reply.effective.routeTemplates || []).length;
+  const area = el('textarea', 'route-templates');
+  area.id = 'route-templates';
+  Object.assign(area, { rows: 6, spellcheck: false, placeholder: '/articles/{slug}', value: listed.join('\n') });
+  const line = el('label', 'config-row config-row-list');
+  line.append(el('span', 'config-label', 'route templates'), area,
+    el('span', 'config-now muted', `running: ${running} ${running === 1 ? 'template' : 'templates'}`));
+  box.append(line, el('p', 'settings-note muted config-hint',
+    'One path per line, first match wins; {name} matches one segment. Applies when the daemon restarts.'));
+}
+
+/**
+ * The whole `routeTemplates` list to send, or `undefined` when the box says what the file says. A
+ * top-level key is replaced whole, so a change sends every line; and an unchanged box sends nothing, or
+ * a save of retention alone would rewrite a hand-edited list and be refused for an entry it never touched.
+ */
+function routeTemplatesPatch() {
+  const area = $('route-templates');
+  if (!area) return undefined;
+  const file = (configReply && configReply.file) || {};
+  const was = configLines((Array.isArray(file.routeTemplates) ? file.routeTemplates : []).join('\n'));
+  const now = configLines(area.value);
+  return now.join('\n') === was.join('\n') ? undefined : now;
 }
 
 // --- settings: the findings rules, the one key read live --------------------------------------
@@ -327,6 +376,8 @@ function configPatch() {
   const before = { ...effective.signalCaps, ...(file.signalCaps || {}) };
   const changed = Object.keys(caps).some((tag) => (before[tag] ?? null) !== caps[tag]);
   if (changed) patch.signalCaps = { ...(file.signalCaps || {}), ...caps };
+  const routes = routeTemplatesPatch();
+  if (routes !== undefined) patch.routeTemplates = routes;
   const findings = findingsConfigPatch();
   if (findings !== undefined) patch.findings = findings;
   return patch;
@@ -363,6 +414,7 @@ async function saveConfig() {
 }
 
 function wireSettingsPage() {
+  callsLanded.push(() => { if (currentPage() === 'settings') paintSettingsCounts(); });
   $('dup-window').value = state.duplicateWindowMs;
   $('dup-window').addEventListener('change', (e) => applyDuplicateWindow(Number(e.target.value)));
   $('density').addEventListener('change', (e) => setDensity(e.target.value));

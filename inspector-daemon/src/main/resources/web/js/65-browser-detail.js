@@ -48,7 +48,7 @@ function renderSessionGlance() {
   }
   if (!txns.length && !state.allSignals.length) {
     pane.className = 'empty muted';
-    pane.textContent = 'select a transaction';
+    pane.textContent = 'select a call';
     return;
   }
   pane.className = 'glance';

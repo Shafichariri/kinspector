@@ -304,7 +304,8 @@ function renderSessionRows() {
   for (const id of [...selectedSessions]) if (!present.has(id)) selectedSessions.delete(id);
   if (!state.sessions.length) {
     const row = el('tr');
-    const cell = el('td', 'muted', 'no sessions');
+    // Why, and what would change it: "no sessions" alone read as a fault in the page.
+    const cell = el('td', 'muted', 'No sessions yet. A session is recorded when an app with inspector-stream connects to this daemon.');
     cell.colSpan = 7;
     row.appendChild(cell);
     box.appendChild(row);

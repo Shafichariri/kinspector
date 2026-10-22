@@ -48,7 +48,8 @@ a.menu-item[hidden] { display: none; }
  * An exported session, opened from disk. There is no daemon, so nothing that would send something
  * to one is drawn: process control, the live toggle, the filter chips (the grammar is evaluated by
  * the daemon), adding a marker, pulls, replay and export itself — and the rail's pages but Traffic,
- * since each of them sends something or reads the machine (deletion lives on Sessions).
+ * since each of them sends something or reads the machine (deletion lives on Sessions), and any
+ * `.live-only` words that point at one of those pages.
  *
  * `!important` because two of these are toggled by script on every render — `renderBrowser`
  * un-hides the pull button, and the replay menu is rebuilt with each detail pane — and an author
@@ -66,7 +67,10 @@ body.archive #marker-status,
 body.archive #browser-pull,
 body.archive #browser-pull-status,
 body.archive .replay-menu,
-body.archive .replay-menu + .menu { display: none !important; }
+body.archive .replay-menu + .menu,
+body.archive .live-only { display: none !important; }
+/* The export's words for what a live page links to: Settings does not exist in a file opened from disk. */
+body:not(.archive) .archive-only { display: none !important; }
 .server-banner.archive {
   display: flex;
   flex-wrap: wrap;

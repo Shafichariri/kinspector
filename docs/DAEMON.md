@@ -488,7 +488,8 @@ most 200 entries.
 
 Like every key here but `findings` and `findingDismissals`, `routeTemplates` applies when the daemon next starts, and then to every
 recorded session, because routes are computed when they are read. `PUT /api/config` accepts it
-and refuses an invalid entry with a 400 that names it. An invalid entry written by hand is
+and refuses an invalid entry with a 400 that names it. The web UI's Settings page edits the list too, one
+template per line, and sends it only when you changed it. An invalid entry written by hand is
 reported on stderr at start and skipped, and the rest apply. `inspector mcp` reads the file when
 your editor starts it, so after an edit, kill it under Processes and the editor starts a fresh
 one. Until then an agent's `route_stats` groups by the old templates.

@@ -309,14 +309,17 @@ function statsRender() {
   }
 }
 
-/** Why there is no table, in the four cases the traffic list's empty state also tells apart. */
+/**
+ * Why there is no table, in the four cases the traffic list's empty state also tells apart. A session
+ * with no calls, and no session, are the list's own sentences (`noCallsWhy`), not a second wording.
+ */
 function statsEmptyWhy() {
   const { report, error } = statsState;
   if (!state.sessionsLoaded) return 'loading…';
-  if (!state.sessionId) return 'No session yet. The table fills once an app with inspector-stream has recorded one.';
+  if (!state.sessionId) return noCallsWhy();
   if (error) return statsState.filter ? 'The daemon refused the filter; it says why above.' : error;
   if (!report) return 'loading…';
-  if (report.total === 0) return 'No calls in this session yet.';
+  if (report.total === 0) return noCallsWhy();
   if (report.routes.length === 0) return `No calls match the filter \`${statsState.filter}\`.`;
   return null;
 }
@@ -368,6 +371,8 @@ function statsPaintCaveat() {
 /** Wiring, from `99-init.js`. In an export the filter is disabled, as Traffic's is, and the note says why. */
 function wireStatsPage() {
   const input = $('stats-filter');
+  // Its empty state asks `noCallsWhy`, which reads what the load learnt of the recording sessions.
+  callsLanded.push(() => { if (statsShown()) statsRender(); });
   $('filter-caveat-back').addEventListener('click', () => navigate({ page: 'stats' }));
   if (ARCHIVE) {
     input.disabled = true;
