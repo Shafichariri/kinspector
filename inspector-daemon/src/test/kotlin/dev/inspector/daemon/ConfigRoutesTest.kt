@@ -18,7 +18,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.Path
@@ -78,6 +80,14 @@ class ConfigRoutesTest {
             setBody(TextContent(body, type))
         }
 
+    /** `effective` without `findings`, which is read live and has its own tests below. */
+    private fun startKeys(reply: JsonObject) = JsonObject(reply.getValue("effective").jsonObject - "findings")
+
+    private fun findings(reply: JsonObject) = reply.getValue("effective").jsonObject.getValue("findings").jsonObject
+
+    private fun payment(reply: JsonObject, field: String) =
+        findings(reply).getValue("payment").jsonObject.getValue(field).toString()
+
     private fun effective(maxSessions: Int) = json(
         """{"port":${config.port},"maxSessions":$maxSessions,"maxTotalMb":300,"signalCaps":{"cache":500,"state":500},"routeTemplates":[]}"""
     )
@@ -90,7 +100,7 @@ class ConfigRoutesTest {
         val reply = json(response.bodyAsText())
         assertEquals(file.toString(), reply.getValue("path").toString().trim('"'))
         assertEquals(JsonNull, reply.getValue("file"), "no config.json yet")
-        assertEquals(effective(maxSessions = 5), reply.getValue("effective"))
+        assertEquals(effective(maxSessions = 5), startKeys(reply))
         assertEquals(Json.parseToJsonElement("""["maxSessions","port"]"""), reply.getValue("flags"))
     }
 
@@ -101,7 +111,7 @@ class ConfigRoutesTest {
         assertEquals(200, response.status.value, response.bodyAsText())
         val reply = json(response.bodyAsText())
         assertEquals(json("""{"maxSessions":9,"maxTotalMb":50}"""), reply.getValue("file"))
-        assertEquals(effective(maxSessions = 5), reply.getValue("effective"), "a save applied before a restart")
+        assertEquals(effective(maxSessions = 5), startKeys(reply), "a save applied before a restart")
         assertEquals(Json.parseToJsonElement("""["maxSessions","port"]"""), reply.getValue("flags"))
         // And a later GET reads the file back, still with the daemon's own values beside it.
         assertEquals(reply, json(http.get(url("/api/config")).bodyAsText()))
@@ -176,5 +186,70 @@ class ConfigRoutesTest {
         } finally {
             second.stop()
         }
+    }
+
+    @Test
+    fun `effective findings lists every shipped rule and the payment defaults`() = runBlocking {
+        val reply = json(http.get(url("/api/config")).bodyAsText())
+        val rules = findings(reply).getValue("rules").jsonArray.map { it.jsonObject }
+        assertEquals(
+            listOf(
+                "payment.duplicate-mutation", "payment.key-reused-body-changed", "payment.retry-without-key",
+                "payment.ambiguous-resubmit", "payment.key-missing-payment-path", "payment.retry-with-key",
+            ),
+            rules.map { it.getValue("id").jsonPrimitive.content },
+        )
+        assertEquals(
+            json(
+                """{"id":"payment.duplicate-mutation","category":"payment","categoryTitle":"Payment safety",""" +
+                    """"title":"Duplicate mutation","enabled":true,"severity":"high","defaultSeverity":"high"}""",
+            ),
+            rules.first(),
+        )
+        assertEquals(
+            json(
+                """{"idempotencyHeaders":["Idempotency-Key","X-Idempotency-Key"],""" +
+                    """"paymentPaths":["payment","checkout","charge","transfer","refund","payout"],""" +
+                    """"ignorePaths":[],"duplicateWindowMs":3000,"resubmitWindowMs":60000}""",
+            ),
+            findings(reply).getValue("payment"),
+        )
+        assertEquals(null, reply["findingsConfigError"])
+    }
+
+    @Test
+    fun `effective findings follows a save and a hand edit without a restart`() = runBlocking {
+        val saved = json(
+            save("""{"findings":{"rules":{"payment.retry-with-key":{"enabled":false}},"payment":{"duplicateWindowMs":5000}}}""").bodyAsText(),
+        )
+        val retryWithKey = findings(saved).getValue("rules").jsonArray.map { it.jsonObject }
+            .single { it.getValue("id").jsonPrimitive.content == "payment.retry-with-key" }
+        assertEquals("false", retryWithKey.getValue("enabled").toString(), "the save's own reply")
+        assertEquals("5000", payment(saved, "duplicateWindowMs"))
+
+        file.writeText("""{"findings":{"rules":{"payment.duplicate-mutation":{"severity":"medium"}}}}""" + "\n")
+        val edited = json(http.get(url("/api/config")).bodyAsText())
+        val duplicate = findings(edited).getValue("rules").jsonArray.first().jsonObject
+        assertEquals("medium", duplicate.getValue("severity").jsonPrimitive.content, "a hand edit, read on the next GET")
+        assertEquals("3000", payment(edited, "duplicateWindowMs"))
+    }
+
+    @Test
+    fun `a hand edit that breaks the findings key keeps the last good settings and says so`() = runBlocking {
+        file.writeText("""{"findings":{"payment":{"duplicateWindowMs":5000}}}""")
+        assertEquals("5000", payment(json(http.get(url("/api/config")).bodyAsText()), "duplicateWindowMs"))
+
+        file.writeText("""{"findings":{"payment":{"duplicateWindowMs":5000""")
+        val reply = json(http.get(url("/api/config")).bodyAsText())
+        assertEquals("5000", payment(reply, "duplicateWindowMs"))
+        assertContains(reply.getValue("findingsConfigError").jsonPrimitive.content, "not a JSON object")
+    }
+
+    @Test
+    fun `a bad findings value is a 400 in the validator's words`() = runBlocking {
+        val response = save("""{"findings":{"rules":{"payment.no-such-rule":{"enabled":false}}}}""")
+        assertEquals(400, response.status.value)
+        assertContains(response.bodyAsText(), "unknown rule 'payment.no-such-rule'")
+        assertEquals(false, file.toFile().exists(), "a refused save wrote the file")
     }
 }

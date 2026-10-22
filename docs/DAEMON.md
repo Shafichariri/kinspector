@@ -409,13 +409,15 @@ curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
 { "path": "/Users/you/.inspector/config.json",
   "file": { "maxSessions": 50, "signalCaps": { "cache": 2000 } },
   "effective": { "port": 8099, "maxSessions": 100, "maxTotalMb": 300, "signalCaps": { "cache": 500, "state": 500 },
-                 "routeTemplates": [] },
+                 "routeTemplates": [], "findings": { "rules": [ … ], "payment": { … } } },
   "flags": [] }
 ```
 
-- **Nothing applies until the daemon restarts.** `effective` is what this daemon runs on and stays
-  so; `file` is what the next start reads. A port cannot move under a listening socket, and one
-  rule for every key is simpler than a list of which ones apply live.
+- **Nothing but `findings` applies until the daemon restarts.** `effective` is what this daemon
+  runs on and stays so; `file` is what the next start reads. A port cannot move under a listening
+  socket. The one exception is `findings` (below): it is read again on the next findings read, so
+  `effective.findings` is the file as last read, and `findingsConfigError` appears when the key on
+  disk could not be read.
 - **Flags still win.** A key in `flags` was set on the command line and overrides the file, so
   saving it changes nothing until the daemon starts without that flag.
 - **A save is a merge.** The keys you send replace those keys; every other key in the file is kept
@@ -423,7 +425,8 @@ curl -s -X PUT -H "X-Inspector-Control: 1" -H "Content-Type: application/json" \
   again (inside `signalCaps`, `null` still means uncapped).
 - **An unknown key is refused by name** with `400`, as is a value out of range (`port` 1–65535,
   `maxSessions` and `maxTotalMb` at least 1, a `signalCaps` cap `null` or at least 0, a
-  `routeTemplates` entry that is not a valid template).
+  `routeTemplates` entry that is not a valid template, anything in `findings` its section below
+  does not allow).
 - **A malformed file is refused with `409` and left untouched**: a save will not overwrite settings
   it could not read. Fix or remove it by hand; `GET` reports it as `fileError`.
 - **The write is atomic.** The new file is written beside the old one and renamed over it, so a
@@ -482,12 +485,53 @@ a year from reading as `{id}`; `/articles/{slug}` groups slugs the heuristic wou
 Trailing slashes count, so `/users/{id}` does not match `/users/1/`. No regular expressions. At
 most 200 entries.
 
-Like every key here, `routeTemplates` applies when the daemon next starts, and then to every
+Like every key here but `findings`, `routeTemplates` applies when the daemon next starts, and then to every
 recorded session, because routes are computed when they are read. `PUT /api/config` accepts it
 and refuses an invalid entry with a 400 that names it. An invalid entry written by hand is
 reported on stderr at start and skipped, and the rest apply. `inspector mcp` reads the file when
 your editor starts it, so after an edit, kill it under Processes and the editor starts a fresh
 one. Until then an agent's `route_stats` groups by the old templates.
+
+#### `findings` — what the findings rules look for, and which are on
+
+Findings (§7) come from rules the daemon ships. This key turns rules off, changes their severity,
+and tells the payment rules what an idempotency key and a payment path look like here:
+
+```json
+{ "findings": {
+    "rules": {
+      "payment.retry-with-key": { "enabled": false },
+      "payment.duplicate-mutation": { "severity": "medium" } },
+    "payment": {
+      "idempotencyHeaders": ["Idempotency-Key", "X-Idempotency-Key"],
+      "paymentPaths": ["payment", "checkout", "charge", "transfer", "refund", "payout"],
+      "ignorePaths": [],
+      "duplicateWindowMs": 3000,
+      "resubmitWindowMs": 60000 } } }
+```
+
+- **`rules`** is keyed by rule id (the table in §7, "Findings"). Each entry takes `enabled`
+  (`true` or `false`) and `severity` (`high`, `medium` or `info`), and nothing else; a rule with no
+  entry runs at its default.
+- **`payment`**: a field you set replaces its default; the values above are the defaults.
+  - `idempotencyHeaders`: 1 to 20 header names, matched in any case. The first one with a
+    non-blank value is the call's key.
+  - `paymentPaths` and `ignorePaths`: up to 100 patterns each, written as `path:` takes them but
+    without `path:`, at most 256 characters. A pattern with a `*` is a glob (`*/charges` matches
+    `/v1/charges` and not `/v1/charges/1`); one without is a substring (`payment` matches
+    `/v1/payments/7`), in any case. `path:<pattern>` in the traffic filter finds the same calls.
+    `charge` also matches `/recharge`; list such paths in `ignorePaths`, whose calls no payment
+    rule looks at.
+  - `duplicateWindowMs` (Duplicate mutation) and `resubmitWindowMs` (Ambiguous resubmit): whole
+    milliseconds, 1 to 600000.
+- **It applies on the next findings read, unlike every other key.** The daemon and `inspector mcp`
+  check the file's size and modified time on each read of findings and parse the key again when
+  either changed; no restart, for either.
+- `PUT /api/config` refuses a bad value with a 400 naming it. A hand edit with a bad entry has that
+  entry named on stderr and skipped, and the rest applies; a hand edit that is not JSON, or a
+  `findings` that is not an object, keeps the settings last read and says so in the findings
+  reply's `configError`. A `findings` that is not an object also makes the file malformed for every
+  other key, as any wrong-typed key does.
 
 Nothing here is encrypted and, with redaction off (the default), bodies and headers contain real
 credentials. Treat `~/.inspector` as you would a log directory full of tokens.
@@ -722,6 +766,44 @@ a row on the web UI's Stats page opens Traffic on it, and says so above the list
 The JSON and HTML exports carry the whole session's table as `routeStats`, and the Markdown
 export as a Routes section. A HAR does not.
 
+### Findings
+
+```bash
+curl -s 'http://127.0.0.1:8099/api/sessions/latest/findings'
+curl -s 'http://127.0.0.1:8099/api/sessions/latest/findings?category=payment&limit=20'
+inspector findings --session latest --category payment
+```
+
+What the daemon's rules flag in a session, worked out from every call when you ask and never
+stored. `category` narrows to one family (`payment` for now); an unknown one is a 400 naming those
+there are. `limit` defaults to 1000, at most 5000. There is no `filter`: a finding is about calls
+next to each other, and hiding one of them would make the rest look safe.
+
+The reply holds `ruleVersion` (a hash of the rules and their settings), `total` rows read,
+`findingCount` and the `high`/`medium`/`info` counts before the limit, `rules` (every rule checked,
+with `enabled`, its `severity` and `count`, so a 0 is "checked, none found"), `findings`, and
+`coverage`, which says per category what could not be judged (a body capture truncated cannot be
+compared). Each finding has `ruleId`, `severity`, `route`, `message`, `txnIds` and `callIds` (at
+most 200 each; `txnCount` is all of them) and `evidence`, one line per row. **Evidence never
+carries a captured value**: bodies are compared by hash in memory and never shown, an
+idempotency key shows only as `•••• 9f3a`, and a transport failure only by its exception class.
+
+The payment rules look at POST, PUT, PATCH and DELETE calls:
+
+| Rule id | Fires when | Severity |
+|---|---|---|
+| `payment.duplicate-mutation` | Two or more calls send the same request body to one route, each within `duplicateWindowMs` of the last, with no idempotency key | high |
+| `payment.key-reused-body-changed` | One idempotency key goes out with two different request bodies | high |
+| `payment.retry-without-key` | A call is retried automatically and some attempt has no key, or the key changed | high |
+| `payment.ambiguous-resubmit` | A call ends in a timeout or transport failure that may have reached the server, and the same route is called again within `resubmitWindowMs` without the same key | medium |
+| `payment.key-missing-payment-path` | A call to a path matching `paymentPaths` carries no key | medium |
+| `payment.retry-with-key` | A call is retried automatically with the same key on every attempt: the safe case | info |
+
+A duplicate is never claimed from a body capture did not keep whole, or with a redacted path. A
+redirect hop is not a retry, and a failure that never reached a server (`UnknownHostException`,
+`ConnectException` and the like) is not an ambiguous resubmit. Rules and their settings are the
+`findings` key in §6.
+
 ---
 
 ## 8. The MCP server
@@ -766,6 +848,9 @@ inspector mcp
 It speaks JSON-RPC on stdout, so never expect log output there — diagnostics go to stderr. Like the
 CLI it reads the archive off disk and works with no daemon running, except `add_marker`, which needs
 a session that is currently recording.
+
+`list_findings` reads `config.json`'s `findings` key on every call, so it needs no restart after a
+findings edit, unlike `routeTemplates`.
 
 Registration for Claude Code, Cursor and Codex is in [`INTEGRATION.md`](INTEGRATION.md) §10.
 

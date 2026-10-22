@@ -232,4 +232,48 @@ class ConfigFileTest {
         assertEquals(json("""{"maxSessions":9}"""), written("""{"routeTemplates":null}"""))
         assertEquals(RouteTemplates.NONE, DaemonConfig.load(dataDir = tmp).routeTemplates)
     }
+
+    @Test
+    fun `a valid findings key is written as sent`() {
+        val findings = """{"rules":{"payment.retry-with-key":{"enabled":false}},"payment":{"paymentPaths":["*/charges"]}}"""
+        assertEquals(json("""{"findings":$findings}"""), written("""{"findings":$findings}"""))
+    }
+
+    @Test
+    fun `a bad findings value is refused in the validator's words and nothing is written`() {
+        path.writeText("""{"maxSessions":3}""")
+        val before = path.readBytes()
+        val cases = mapOf(
+            """{"findings":{"rules":{"payment.nope":{}}}}""" to "findings.rules has an unknown rule 'payment.nope'",
+            """{"findings":{"payment":{"window":1}}}""" to "findings.payment has an unknown key 'window'",
+            """{"findings":{"payment":{"paymentPaths":["path:/pay"]}}}""" to "write the pattern without path:",
+            """{"findings":{"payment":{"duplicateWindowMs":600001}}}""" to "duplicateWindowMs must be a whole number of milliseconds from 1 to 600000",
+            """{"findings":"on"}""" to "findings must be an object",
+        )
+        val wrong = cases.mapNotNull { (patch, expected) ->
+            val result = file.merge(json(patch))
+            if (result is ConfigMergeResult.Invalid && expected in result.message) null else "$patch → $result"
+        }
+        assertEquals(emptyList(), wrong)
+        assertContentEquals(before, path.readBytes(), "a refused save changed the file")
+    }
+
+    @Test
+    fun `a null removes findings, and a findings save keeps routeTemplates and unknown keys byte for byte`() {
+        path.writeText("{\n  \"routeTemplates\": [\"/articles/{slug}\"],\n  \"later\": {\"x\": 2.50}\n}\n")
+        val kept = listOf("\"routeTemplates\": [\n    \"/articles/{slug}\"\n  ]", "\"later\": {\n    \"x\": 2.50\n  }")
+
+        written("""{"findings":{"payment":{"duplicateWindowMs":5000}}}""")
+        kept.forEach { assertContains(path.readText(), it) }
+
+        written("""{"findings":null}""")
+        assertFalse("findings" in path.readText())
+        kept.forEach { assertContains(path.readText(), it) }
+    }
+
+    @Test
+    fun `a findings key that is not an object makes the file malformed, as any wrong-typed known key does`() {
+        path.writeText("""{"findings":[]}""")
+        assertIs<ConfigFileState.Malformed>(file.read())
+    }
 }

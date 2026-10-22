@@ -3,9 +3,11 @@ id: KIN-113
 title: >-
   Findings T2: framework, live findings settings, engine, cache, REST, MCP
   list_findings, CLI
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-22 08:24'
+updated_date: '2026-10-22 08:49'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -42,3 +44,9 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA once its PR merges (findings T2+T3 PR). Built: archive/FindingSettings.kt (catalogue, findings key, problem/read), archive/FindingSettingsSource.kt (live read: stat on every read, re-parse on size/mtime/fileKey change, last good kept on a broken edit with configError), service/Findings.kt (model, FindingMask, FindingSource/FindingSession/FindingRow/FindingAccumulator; FindingSource gains note(ruleId) for the rule row's note), service/FindingsEngine.kt (FindingSources.all, ruleVersion, collect, report, compute, parseCategory), service/FindingsService.kt (LRU 4 by real path + ruleVersion, IndexCursor fold), http/FindingsRoutes.kt, mcp/FindingsTool.kt (description verbatim; golden regenerated), Main.kt (inspector findings), ConfigFile/DaemonConfig/ConfigRoutes (effective.findings, findingsConfigError), daemon-and-mcp.md (config.json sentence narrowed, routeTemplates sentence, three paragraphs), DAEMON.md §6/§7/§8, inspector-daemon/AGENTS.md. Tests: FindingSettingsTest, FindingSettingsSourceTest, ConfigFileTest (+4), ConfigRoutesTest (+4; two existing asserts compare effective without findings), FindingsEngineTest, FindingMaskGuardTest, FindingsServiceTest, FindingsRouteTest, mcp/FindingsToolTest, FindingsCliTest (bad category exits 1, in a child JVM), McpProtocolTest list. Red proofs run (each failed, restored): PathTerm check dropped; parse cached forever (edit unseen, also in the second service); parse on every call (counter 5 not 1); ConfigFile skipping FindingSettings.problem (400 became 200); effective.findings fixed at start (5000 expected, 3000 seen); severity dropped from the order; registered ids read from FindingRuleCatalog.ALL (custom-rule test: expected [test.custom.mine] but was []); mask check removed (raw 4111111111111111 survives); every hint rejected (•••• 4242 became ••••); collect on every read (expected 1 but was 4); fold through queryTransactions (expected 1203 but was 1000); cache key without ruleVersion (edit unseen); description reworded (golden fails); CLI ignoring --category. Deviation: the row-1203 case puts the finding on the OLDEST of 1203 rows, because queryTransactions keeps the newest 1000 and would still see the 1203rd. — bob
+<!-- SECTION:NOTES:END -->

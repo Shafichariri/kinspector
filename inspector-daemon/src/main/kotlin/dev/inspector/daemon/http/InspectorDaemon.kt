@@ -1,6 +1,7 @@
 package dev.inspector.daemon.http
 
 import dev.inspector.daemon.archive.ConfigFile
+import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
@@ -11,6 +12,8 @@ import dev.inspector.daemon.service.ProcessHandlePeerRegistry
 import dev.inspector.daemon.service.ProcessMcpControl
 import dev.inspector.daemon.service.ProcessServerControl
 import dev.inspector.daemon.service.Replayer
+import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.daemon.service.ServerControl
 import dev.inspector.daemon.service.SessionDeleter
@@ -75,6 +78,10 @@ class InspectorDaemon(
     private val manager = SessionManager(config, repository, retention)
     private val deleter = SessionDeleter(repository, config.sessionsDir, manager::activeSessionIds)
     private val stats = RouteStatsService(repository, config.routeTemplates)
+
+    /** The live read of `config.json`'s `findings` key: the findings and the Settings page share it. */
+    private val findingSettings = FindingSettingsSource(config.dataDir)
+    private val findings = FindingsService(repository, FindingsEngine(findingSettings, config.routeTemplates))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var server: EmbeddedServer<*, *>? = null
@@ -160,11 +167,12 @@ class InspectorDaemon(
             sessionRoutes(repository, manager, deleter)
             exportRoutes(repository, config)
             statsRoutes(repository, stats)
+            findingsRoutes(repository, findings)
             signalRoutes(repository, liveApps)
             markerRoutes(repository, manager)
             lifecycleRoutes()
             peerRoutes(peers)
-            configRoutes(config, ConfigFile(config.dataDir))
+            configRoutes(config, ConfigFile(config.dataDir), findingSettings)
             replayRoutes(replayLazy)
             mcpRoutes(mcpControlLazy)
             webUiRoutes()

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-22 08:24'
-updated_date: '2026-10-22 08:24'
+updated_date: '2026-10-22 08:49'
 labels:
   - 'item:findings-payment-safety'
 dependencies:
@@ -33,3 +33,9 @@ Order row 26 (26a for Shared body evidence), docs/ROADMAP.md §6 → Findings. B
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ready for QA. Merged in PR #151 (merge 428745a). RouteKey.mutation (computed, outside the constructor) in archive/RouteTemplates.kt; service/BodyShape.kt: BodySide, BodyState (7 states, key words), BodyEvidence.state (row only, never UNPARSED; a ref whose file is gone is read() == null and callers name it missing), BodyEvidence.read(repository, dir, txn, side) (empty array for EMPTY, bytes for COMPLETE/NOT_JSON, null otherwise), JsonPaths.redactedPaths (both forms). BodyShapeTest. Red: truncated check removed -> 'a truncated body is truncated and never read' fails (expected TRUNCATED but was COMPLETE); omitted check removed -> 'an omitted body is omitted for each reason' fails (expected OMITTED but was MISSING); DELETE dropped from the mutation set fails the mutation test. For diff T1: UNPARSED is assigned by the diff's own parse step; state() never returns it. The findings T2/T3 PR adds an overload read(state, file) for a fold that keeps only the row's state; read(repository, dir, txn, side) calls it. — bob
+<!-- SECTION:NOTES:END -->

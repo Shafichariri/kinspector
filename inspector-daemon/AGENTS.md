@@ -50,6 +50,7 @@ Sessions land in `/tmp/demo/sessions/`; `/tmp/demo/latest` symlinks the newest.
 | `inspector-daemon/.../service/Export.kt` | `SessionExport`: the one document all three exports render from. `ExportMarkdown.kt` and `HtmlExport.kt` beside it are the other two forms. |
 | `inspector-daemon/.../archive/SessionRepository.kt` | Every archive read. The MCP tools wrap this. |
 | `inspector-daemon/.../service/RouteStats.kt` | Route stats: the accumulator `GET …/stats`, `route_stats`, `inspector stats` and the exports share, and its order. `RouteStatsService.kt` beside it is the cache that folds `index.jsonl` from where the last read stopped; the route rule is `archive/RouteTemplates.kt`. |
+| `inspector-daemon/.../service/FindingsEngine.kt` | Findings: the engine every family plugs into (`FindingSources.all` is the one registry; the extension point is in `Findings.kt` beside it), its order, caps and masking check. The payment rules are `PaymentRules.kt` and `PaymentLedger.kt`; `FindingsService.kt` is the cache; the `findings` key of `config.json`, read live, is `archive/FindingSettings.kt` and `FindingSettingsSource.kt`. |
 | `repo-checks/.../DaemonLayersTest.kt` | Holds the layer table below, from the imports and inline qualified names in the daemon's main sources. |
 
 ## Layers
@@ -59,8 +60,8 @@ so `DaemonLayersTest` does; the reasoning is in `docs/decisions/daemon-and-mcp.m
 
 | Package | Holds | May import, beyond `kotlin.`, `kotlinx.serialization.`, `kotlinx.coroutines.`, `java.` and `dev.inspector.model.` |
 |---|---|---|
-| `archive/` | the on-disk archive: config, layout, reader, writer, retention, route templates (the config's `routeTemplates` and the heuristic they override) | nothing else in the daemon |
-| `service/` | live sessions, live apps, replay, peers, MCP control, exports, `daemonVersion()` | `archive/` |
+| `archive/` | the on-disk archive: config, layout, reader, writer, retention, route templates (the config's `routeTemplates` and the heuristic they override), findings settings (the `findings` key, read live) and the rule catalogue | nothing else in the daemon |
+| `service/` | live sessions, live apps, replay, peers, MCP control, exports, route stats, findings, `daemonVersion()` | `archive/` |
 | `http/` | the Ktor server, its route groups and the control gate | `archive/`, `service/`, `io.ktor.` |
 | `mcp/` | the MCP server and its tools | `archive/`, `service/` |
 | `usb/` | the USB bridge and the usbmuxd protocol | `javax.xml.`, `org.w3c.dom.`, `org.xml.sax.`; no daemon package, because the bridge goes through `WS /ingest` |

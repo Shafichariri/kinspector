@@ -3,6 +3,7 @@ package dev.inspector.daemon.archive
 import dev.inspector.model.SignalTags
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import java.nio.file.Path
 import kotlin.io.path.Path
 import kotlin.io.path.exists
@@ -169,6 +170,11 @@ data class DaemonConfig(
         val signalCaps: Map<String, Int?>? = null,
         /** Each entry checked on its own at start; an invalid one is reported and skipped. */
         val routeTemplates: List<String>? = null,
+        /**
+         * Not read from here: `FindingSettingsSource` reads the key live. Declared so a `findings`
+         * that is not an object makes the file malformed, as any wrong-typed known key does.
+         */
+        val findings: JsonObject? = null,
     )
 }
 
