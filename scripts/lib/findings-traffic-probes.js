@@ -1,6 +1,6 @@
 /* Probes of the findings report on Traffic, live for `render-web-ui.js` (through `findings-probes.js`'s
- * `probeFindings`) and offline for `render-web-ui-archive.js`: the row badges and the detail's
- * Findings section, on the list and on `#/txn/{id}`.
+ * `probeFindings`) and offline for `render-web-ui-archive.js`: the row badges, `⋮` → flagged rows
+ * only, and the detail's Findings section, on the list and on `#/txn/{id}`.
  *
  * As on the Findings page, the page computes nothing, so each probe compares what Traffic drew with
  * the report the daemon answers the probe itself, or the one an export embeds: a row is badged exactly
@@ -60,13 +60,15 @@ function detailFaults(drawn, report, txnId) {
   return faults;
 }
 
-const TRAFFIC_LABELS = ['findings badge', 'findings detail', 'findings txn page', 'findings reply redraws', 'findings traffic restored'];
+const TRAFFIC_LABELS = ['flagged none', 'flagged not remembered', 'findings badge', 'flagged only', 'findings detail', 'findings txn page',
+  'findings reply redraws', 'findings traffic restored'];
 
 /**
- * The report on Traffic, on the payments session: the row badges against the daemon's own report, the
- * detail's section on the list and on `#/txn/{id}`, and a stubbed reply that moves one badge, which
- * must redraw the list and the section without reading the call's bodies again. Leaves Traffic as it
- * found it (`findings traffic restored`).
+ * The report on Traffic: `⋮` → flagged rows only on the probe session, which has no findings, and that
+ * it writes nothing a reload would read; then on the payments session the row badges against the
+ * daemon's own report, flagged rows only, the detail's section on the list and on `#/txn/{id}`, and a
+ * stubbed reply that moves one badge, which must redraw the list and the section without reading the
+ * call's bodies again. Leaves Traffic as it found it, flagged rows only off (`findings traffic restored`).
  */
 async function probeFindingsTraffic(ctx) {
   const { window, doc, ORIGIN } = ctx;
@@ -79,7 +81,10 @@ async function probeFindingsTraffic(ctx) {
     await pause(ms);
   };
   const rows = () => [...doc.querySelectorAll('#list .row')];
+  const flagged = () => window.eval('findingsState.flaggedOnly');
   const held = (id) => window.eval(`findingsState.sessionId === ${JSON.stringify(id)} && findingsState.report !== null`);
+  const band = doc.getElementById('flagged-note');
+  const item = doc.getElementById('flagged-item');
   const asked = [];
   let stub = null;   // a findings reply the page gets instead of the daemon's
   const realFetch = window.fetch;
@@ -92,9 +97,34 @@ async function probeFindingsTraffic(ctx) {
     return realFetch(path, init);
   };
   try {
-    if (!sessionId) return TRAFFIC_LABELS.map((label) => [label, 'n/a (no session)']);
+    if (!sessionId || !item) return TRAFFIC_LABELS.map((label) => [label, sessionId ? 'NO - found no flagged rows only item, so this checked nothing' : 'n/a (no session)']);
+    const own = await daemon(sessionId);
+    await waitFor(() => held(sessionId) && rows().length > 0, 8000);
+    const all = rows().length;
+    const stored = () => JSON.stringify([Object.entries(window.localStorage), Object.entries(window.sessionStorage), window.location.hash]);
+    const before = stored();
+    await click(item);
+    const empty = doc.getElementById('list-empty');
+    const showAll = [...empty.querySelectorAll('button')].find((b) => text(b) === 'show all calls');
+    const said = text(empty);
+    const bandSaid = text(band);
+    const after = stored();
+    if (own.findingCount > 0) out.set('flagged none', `n/a (${sessionId} has ${own.findingCount} findings)`);
+    else {
+      const ok = flagged() && rows().length === 0 && !empty.hidden && said.startsWith('No calls with findings among the calls loaded.') && showAll
+        && !band.hidden && bandSaid.startsWith('Only calls with findings: 0 of');
+      if (showAll) await click(showAll);
+      out.set('flagged none', ok && !flagged() && rows().length === all && band.hidden
+        ? `yes ("${said}"; band "${bandSaid.slice(0, 60)}…"; show all calls gave back ${all} rows)`
+        : `NO - on: ${rows().length} rows, empty "${said}" (shown ${!empty.hidden}), band "${bandSaid}"; after show all: ${rows().length} of ${all} rows, on ${flagged()}`);
+    }
+    if (flagged()) await click(item);
+    out.set('flagged not remembered', before === after && !flagged()
+      ? `yes (local and session storage and the address unchanged by the toggle: ${JSON.parse(after)[0].length} stored keys)`
+      : `NO - the toggle wrote ${after} where ${before} was`);
+
     if (![...picker.options].some((o) => o.value === PAYMENTS_SESSION_ID)) {
-      for (const label of TRAFFIC_LABELS.slice(0, 4)) out.set(label, `n/a (no session ${PAYMENTS_SESSION_ID})`);
+      for (const label of TRAFFIC_LABELS.slice(2, 7)) out.set(label, `n/a (no session ${PAYMENTS_SESSION_ID})`);
     } else {
       const report = await daemon(PAYMENTS_SESSION_ID);
       const due = byTxn(report);
@@ -106,6 +136,15 @@ async function probeFindingsTraffic(ctx) {
         : !faults.length && badged.length === PAYMENTS.rows && due.size === PAYMENTS.rows
           ? `yes (${badged.length} of ${rows().length} rows badged, each its first finding's severity in words: ${[...new Set(badged.map((r) => text(r.querySelector('.fb-long'))))].join(', ')}; none says duplicate or repeat)`
           : `NO - ${badged.length} rows badged, ${due.size} due (the fixture's ${PAYMENTS.rows}); ${faults.slice(0, 4).join('; ')}`);
+
+      await click(item);
+      const kept = rows().map((r) => r.dataset.id);
+      const onBand = band.hidden ? '(hidden)' : text(band);
+      await click(item);
+      out.set('flagged only', kept.length === PAYMENTS.rows && kept.every((id) => due.has(id)) && band.hidden && rows().length === report.total
+        && onBand.startsWith(`Only calls with findings: ${PAYMENTS.rows} of ${report.total} calls in this session.`)
+        ? `yes (${kept.length} rows, band "${onBand.slice(0, 60)}…"; off: ${rows().length} rows, band hidden)`
+        : `NO - on: ${kept.length} rows (${kept.filter((id) => !due.has(id)).length} unflagged), band "${onBand}"; off: ${rows().length} of ${report.total}, band shown ${!band.hidden}`);
 
       // The detail: a row with two findings, then a row with none, then `open in Findings` and Back.
       const [twice] = [...due].find(([, list]) => list.length > 1) || [...due][0];
@@ -170,12 +209,13 @@ async function probeFindingsTraffic(ctx) {
   } finally {
     stub = null;
     window.fetch = realFetch;
+    if (flagged()) window.eval('findingsSetFlagged(false)');
   }
   const after = ctx.pageState();
-  const clean = pageShown(doc, 'traffic') && after.sessionId === sessionId && after.liveTail && window.location.hash.startsWith('#/traffic');
+  const clean = pageShown(doc, 'traffic') && after.sessionId === sessionId && after.liveTail && !flagged() && band.hidden && window.location.hash.startsWith('#/traffic');
   out.set('findings traffic restored', clean
-    ? `yes (Traffic, ${sessionId}, live, ${window.location.hash})`
-    : `NO - Traffic ${pageShown(doc, 'traffic')}, session ${after.sessionId}, live ${after.liveTail}, ${window.location.hash}`);
+    ? `yes (Traffic, ${sessionId}, live, flagged rows only off, ${window.location.hash})`
+    : `NO - Traffic ${pageShown(doc, 'traffic')}, session ${after.sessionId}, live ${after.liveTail}, flagged ${flagged()}, ${window.location.hash}`);
   return [...out];
 }
 

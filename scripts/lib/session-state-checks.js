@@ -319,8 +319,8 @@ function clampPage(sources) {
     availableViews: () => [{ id: 'network' }],
     renderTabs() {}, renderCurrent() {}, applyView() {}, renderSessionGlance() {}, showFilterError() {},
     renderMarkers() {}, markerFormState() {}, renderList() {}, renderTimeline() {}, $: () => element,
-    // 97-findings.js, which is not run here.
-    findingBadgeFor: () => null,
+    // 97-findings.js, which is not run here, with flagged rows only off.
+    findingsKeep: () => true, findingBadgeFor: () => null, findingsPaintFlagged() {},
   });
   // The files declare their own renderers over the stubs; drawing is not what is checked here. The
   // real header count and empty text are kept aside for the checks that read them.

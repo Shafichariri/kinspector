@@ -124,7 +124,7 @@ const visibleTransactions = () => state.transactions.filter((txn) => inRange(txn
  * navigation, so "next row" always means the row visually below the current one.
  */
 const orderedRows = () => {
-  const rows = visibleTransactions().sort((a, b) => a.mono - b.mono);
+  const rows = visibleTransactions().filter(findingsKeep).sort((a, b) => a.mono - b.mono);
   return state.newestFirst ? rows.reverse() : rows;
 };
 
@@ -364,6 +364,7 @@ function renderListNote() {
   node.hidden = state.view !== 'network' || !capped;
   if (capped) filterNote(node, hiddenByFilter({ signals: false, ranged: true }), false);
   else node.replaceChildren();
+  findingsPaintFlagged();
 }
 
 function renderList() {
@@ -394,7 +395,7 @@ function renderList() {
   // is `timelineEntries`, the mirror of the model's `timeline()` that the mirror cases check,
   // rather than a second copy of it here.
   const markers = state.markers.filter((m) => inRange(m.mono));
-  const sequence = timelineEntries(visibleTransactions(), markers, []);
+  const sequence = timelineEntries(visibleTransactions().filter(findingsKeep), markers, []);
   if (state.newestFirst) sequence.reverse();
 
   for (const entry of sequence) {

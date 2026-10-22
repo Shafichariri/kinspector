@@ -285,7 +285,7 @@ async function probeEndpointsMenu(ctx) {
 }
 
 /**
- * `⋮` holds the four exports, the shortcut legend and compact rows; `exportMenu` presses it and
+ * `⋮` holds the four exports, the shortcut legend, compact rows and flagged rows only; `exportMenu` presses it and
  * requests every export link, because the hrefs are filled in as it opens. It moved here from the
  * top bar's probe with the menu. With no session the exports are hidden: there is nothing to export.
  */
@@ -296,9 +296,10 @@ async function probeMoreMenu(ctx) {
     const items = [...menu.querySelectorAll('.menu-item')];
     const exports = items.filter((i) => i.classList.contains('export-item'));
     const rest = items.filter((i) => !i.classList.contains('export-item')).map((i) => i.textContent);
-    const listed = exports.length === 4 && rest.length === 2 && rest[0] === 'keyboard shortcuts' && rest[1].startsWith('compact rows');
+    const listed = exports.length === 4 && rest.length === 3 && rest[0] === 'keyboard shortcuts' && rest[1].startsWith('compact rows')
+      && rest[2].startsWith('flagged rows only');
     if (!hasSession) {
-      return [['more menu', listed ? 'yes (4 exports, keyboard shortcuts, compact rows)' : `NO - ${exports.length} exports, then ${rest.join(', ')}`],
+      return [['more menu', listed ? 'yes (4 exports, keyboard shortcuts, compact rows, flagged rows only)' : `NO - ${exports.length} exports, then ${rest.join(', ')}`],
         ['exportMenu', !exports.length ? 'NO - found no export item, so this checked nothing'
           : exports.every((a) => a.hidden) ? `yes (${exports.length} hidden: nothing to export)` : 'NO - offered with no session']];
     }

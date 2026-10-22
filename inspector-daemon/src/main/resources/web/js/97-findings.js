@@ -1,4 +1,4 @@
-/* findings: the Findings page, and the same report on Traffic as row badges and the detail's section */
+/* findings: the Findings page, and the same report on Traffic as row badges, the detail's section and flagged rows only */
 'use strict';
 
 /*
@@ -6,7 +6,7 @@
  * all come from `GET …/findings`, so there is no mirror block and no case file: the daemon's
  * `service/FindingsEngine.kt` and its sources are the only copy of each rule. The page asks once for
  * every finding, with no category, as an export embeds them, and that one reply feeds the Findings
- * page, the row badges and the detail's section.
+ * page, the row badges, the detail's section and flagged rows only.
  */
 
 /** Every finding one reply may carry; the daemon's own most. `findingCount` says how many there were. */
@@ -26,9 +26,11 @@ const FINDINGS_SLOW_MS = 300;
  * set once a read has taken `FINDINGS_SLOW_MS`; `marked` is the `?id=` already scrolled to, so a
  * live redraw does not scroll the reader back to it. `byTxn` is each call's findings, built in reply
  * order, which is severity order, so a call's first entry is its highest and nothing here ranks.
+ * `flaggedOnly` is the `⋮` toggle, a view of the list and never a preference: it is not stored, so a
+ * reload shows every call again.
  */
 const findingsState = {
-  sessionId: null, report: null, error: null, byTxn: new Map(),
+  sessionId: null, report: null, error: null, byTxn: new Map(), flaggedOnly: false,
   sent: 0, written: 0, owed: false, timer: null, inFlight: false, slow: false, marked: null,
 };
 
@@ -345,7 +347,7 @@ function findingsMark() {
   article.scrollIntoView?.({ block: 'start' });
 }
 
-// --- Traffic: row badges and the detail's section --------------------------------------------
+// --- Traffic: row badges, the detail's section, flagged rows only ----------------------------
 
 /**
  * A row's badge, or null: the severity of the call's first finding in words, `⚑ high`, and `⚑` alone
@@ -397,4 +399,59 @@ function findingsPaintDetail(txn) {
     if (lines.length) item.appendChild(findingsEvidence(lines));
     box.appendChild(item);
   }
+}
+
+/** Whether the list draws [row]: every row, or with flagged rows only on, those with a finding. */
+const findingsKeep = (row) => !findingsState.flaggedOnly || findingsState.byTxn.has(row.id);
+
+/** `⋮` → flagged rows only, built for `wireMoreMenu`'s list; checkbox-style, as compact rows is. */
+function findingsFlaggedItem() {
+  const item = menuItem('flagged rows only', 'List only the calls with findings; the timeline, the waterfall and the path still draw every call',
+    () => findingsSetFlagged(!findingsState.flaggedOnly));
+  item.id = 'flagged-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('aria-checked', 'false');
+  return item;
+}
+
+function findingsSetFlagged(on) {
+  findingsState.flaggedOnly = on;
+  const item = document.getElementById('flagged-item');
+  if (item) {
+    item.setAttribute('aria-checked', String(on));
+    item.textContent = on ? 'flagged rows only ✓' : 'flagged rows only';
+  }
+  renderList();
+}
+
+/**
+ * While flagged rows only is on: the band above the list saying so and what it counts, and, when it
+ * leaves no row in view, the list's fifth empty reason. `renderListNote` calls it, so a view change
+ * draws it as a list redraw does. List only, because the other views draw every call.
+ */
+function findingsPaintFlagged() {
+  const band = $('flagged-note');
+  const on = findingsState.flaggedOnly && state.view === 'network';
+  band.hidden = !on;
+  band.replaceChildren();
+  if (!on) return;
+  const showAll = el('button', 'btn btn-sm', 'show all calls');
+  showAll.type = 'button';
+  showAll.addEventListener('click', () => findingsSetFlagged(false));
+  const held = findingsState.sessionId === state.sessionId && findingsState.report;
+  const rows = orderedRows();
+  const loaded = state.transactions.length;
+  const whole = !state.filter && state.sessionTotal !== null && loaded >= state.sessionTotal;
+  const counted = whole ? findingsCalls(loaded) : `${findingsPlural(loaded, 'call', 'calls')} loaded`;
+  const what = held ? `${rows.length} of ${counted}.${whole ? '' : ' Findings on older calls are on the Findings page.'}`
+    : findingsState.error && findingsState.sessionId === state.sessionId ? `the findings could not be read: ${findingsState.error}.`
+      : 'checking this session\'s calls…';
+  band.append(`Only calls with findings: ${what} List only: the timeline, the waterfall and the path draw every call. `, showAll);
+  // Calls in view and none kept: the toggle emptied the list, which would otherwise say no calls were recorded.
+  if (rows.length || !visibleTransactions().length || sessionPending() || wholePending()) return;
+  const again = el('button', 'btn btn-sm', 'show all calls');
+  again.type = 'button';
+  again.addEventListener('click', () => findingsSetFlagged(false));
+  $('list-empty').replaceChildren(held ? 'No calls with findings among the calls loaded. ' : `Only calls with findings: ${what} `, again);
+  $('list-empty').hidden = false;
 }

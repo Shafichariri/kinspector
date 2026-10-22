@@ -788,6 +788,9 @@ was 1px taller). A call's detail, and so `#/txn/{id}`, has a Findings section wi
 title, message, the evidence about that call and `open in Findings`. A reply that moves a badge
 redraws the list and that section alone, never `renderDetail`, which would read the bodies again.
 Traffic asks after its first page of calls, and again on entering it, by the refresh rule below.
+"Flagged rows only" is a view toggle in `⋮`, never a filter term, because the grammar is frozen; it
+is not stored, so a reload shows every call, and a band held under the scope bar says it is on and
+what it counts. It thins the list only: the timeline, the waterfall and the path draw every call.
 Every rule is listed, checked or disabled, with its count and what it could not judge, so an empty
 page cannot read as a clean bill of health from a rule that never ran. The severity is `⚑ high` in
 the text colour, because every hue already means a status or a method (`shared-rules.md`). Calls open
@@ -800,7 +803,7 @@ adds rules adds rows with no page change. A save sends the whole `findings` key,
 key is replaced whole: a rule only where it differs from its defaults, a payment field only where it
 differs from the file, and every sub-object the form does not draw as the file holds it; it says
 "findings use it now", because that key alone is read live (`daemon-and-mcp.md`). `findings …` in
-`render-web-ui.js` and `check-web-static.js`, the archive probe's
+`render-web-ui.js` and `check-web-static.js`, with `flagged …` for the toggle, the archive probe's
 `findings offline drawn`, `findings txn in export`, `findings category refused`, `findings badge in
 export` and `findings detail in export`, and `findings <w> payments fits` in Chrome hold it,
 each shown red with its rule removed; the payments session they read is `ProbeFixture.kt`'s third.
