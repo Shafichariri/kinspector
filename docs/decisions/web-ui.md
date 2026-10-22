@@ -470,7 +470,11 @@ at `623c571` at 26,378 and 26,482 ms. `being read huge` holds what the page says
 and `copy lands huge` the redraw in place after it. `check-web-static.js`'s `first draw before
 copy`, `copy lands redraws`, `overtaken read stops` and `reading notes`, and the live probe's
 `long first draw` and `long copy lands` on the 1203-call session, hold the same rules without a
-browser. Each was proven red with its rule removed.
+browser. Each was proven red with its rule removed. The band's reserved height,
+`.axis-hint.axis-reading`'s `min-height`, is held in CI by `check-web-static.js`'s `overview band
+css`, and in Chrome by `copy lands huge` bounding the move at the scope bar's measured height: its
+fixed 48 px let the band's missing 11 px through, rows moving 44 px. Both were red with the rule
+removed (KIN-110).
 
 **A pane a filter emptied or thinned says so, names the filter and offers `clear filter`.** The
 list always did; the waterfall, the path and the timeline did not. Under a filter that matched

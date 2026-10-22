@@ -258,7 +258,9 @@ function beingReadRow(r) {
 }
 
 // KIN-42: the copy landing redraws in place. The list pane is scrolled during the read; after it,
-// the scroll is where it was left and its first visible row moved by at most the scope bar's height.
+// the scroll is where it was left and its first visible row moved by at most the scope bar's height,
+// measured, which the bar is the one band allowed to add. A fixed 48 px let the overview band's 11 px
+// through with its reserved height removed (KIN-110): 44 px, green.
 const FIRST_VISIBLE = `(() => {
   const pane = document.getElementById('list').parentElement;
   const top = pane.getBoundingClientRect().top;
@@ -269,7 +271,9 @@ const AFTER_LANDING = `(() => {
   const pane = document.getElementById('list').parentElement;
   const row = [...document.querySelectorAll('#detail-empty.glance .glance-row')]
     .find((r) => (r.querySelector('.glance-label') || {}).textContent === 'calls in session');
-  return { scrollTop: pane.scrollTop, endpoints: !document.getElementById('endpoints-button').hidden,
+  const bar = document.getElementById('scope-bar');
+  return { scrollTop: pane.scrollTop, scope: bar && !bar.hidden ? bar.getBoundingClientRect().height : 0,
+    endpoints: !document.getElementById('endpoints-button').hidden,
     chips: document.querySelectorAll('#endpoint-chips .chip').length,
     glance: row ? 'calls in session ' + row.querySelector('.glance-value').textContent : null, total: state.sessionTotal };
 })()`;
@@ -290,14 +294,16 @@ async function copyLandsRow(page, start) {
   const after = await page.ev(AFTER_LANDING);
   const row = await page.ev(`(() => { const r = document.querySelector('#list .row[data-id="${before.id}"]'); return r ? r.getBoundingClientRect().top : null; })()`);
   const moved = row === null ? null : Math.round(row - before.y);
+  // One pixel over the bar for rounding: `moved` is rounded, the bar's height is not.
+  const bound = Math.round(after.scope) + 1;
   const wrong = [
     ...(after.scrollTop === 4000 ? [] : [`moved (scrollTop ${after.scrollTop} where 4000 was left)`]),
-    ...(moved !== null && Math.abs(moved) <= 48 ? [] : [`the first visible row moved ${moved === null ? 'out of the list' : `${moved} px`}`]),
+    ...(moved !== null && Math.abs(moved) <= bound ? [] : [`the first visible row moved ${moved === null ? 'out of the list' : `${moved} px`}, over the scope bar's ${after.scope} px`]),
     ...(after.endpoints && after.chips ? [] : ['endpoints hidden after the copy landed']),
     ...(after.glance === `calls in session ${after.total}` ? [] : [`the glance reads "${after.glance}"`]),
   ];
   return { key, value: wrong.length ? 'moved or stale' : 'in place', ok: !wrong.length,
-    detail: `${wrong.join('; ') || `row moved ${moved} px, ${after.chips} chips, ${after.glance}`}; landed at ${Date.now() - start} ms` };
+    detail: `${wrong.join('; ') || `row moved ${moved} px, scope bar ${after.scope} px, ${after.chips} chips, ${after.glance}`}; landed at ${Date.now() - start} ms` };
 }
 
 // KIN-37 and KIN-42: how long a session takes to draw its first rows and to connect.

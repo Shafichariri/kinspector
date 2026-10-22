@@ -68,7 +68,7 @@ const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks'
 const { checkShell } = require('./lib/shell-checks');
 const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
 const { checkPolish } = require('./lib/polish-checks');
-const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow } = require('./lib/layout-audits');
+const { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow, auditOverviewBand } = require('./lib/layout-audits');
 
 const results = [];
 const report = (label, value) => {
@@ -150,6 +150,7 @@ async function main() {
   report('sticky top', auditStickyTop(styles));
   report('closed drawer css', auditClosedDrawer(styles));
   report('narrow row css', auditNarrowRow(styles));
+  report('overview band css', auditOverviewBand(styles));
 
   console.error('--- stats ---');
   for (const [label, value] of await checkStatsRefresh(scripts)) report(label, value);
