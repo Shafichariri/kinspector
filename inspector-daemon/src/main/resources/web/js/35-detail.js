@@ -84,6 +84,10 @@ async function renderDetail(txn) {
   head.appendChild(el('span', `method ${methodClass(txn.method)}`, txn.method));
   head.appendChild(el('span', 'path', txn.path));
   pane.appendChild(head);
+  // The daemon's findings on this call (97-findings.js), drawn before the bodies are read; a findings
+  // reply repaints this box alone.
+  pane.appendChild(el('div', 'detail-findings'));
+  findingsPaintDetail(txn);
 
   const [reqBody, resBody] = await Promise.all([
     fetchBody(txn, 'req'),

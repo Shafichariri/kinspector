@@ -14,7 +14,7 @@
  * has declared anything, and hoisting does not cross files.
  */
 const PAGES = [
-  { id: 'traffic', label: 'Traffic', live: false },
+  { id: 'traffic', label: 'Traffic', live: false, enter: () => findingsReload() },
   { id: 'stats', label: 'Stats', live: false, enter: () => statsEnter() },
   { id: 'findings', label: 'Findings', live: false, enter: () => findingsEnter() },
   { id: 'sessions', label: 'Sessions', live: true },

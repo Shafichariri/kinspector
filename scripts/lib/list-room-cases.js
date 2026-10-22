@@ -9,7 +9,9 @@
  * (`room <w> tab never enters closed`), and casts no shadow in either colour scheme (`room <w> closed
  * shadow <scheme>`); the open drawer's `✕` overlaps no header action, served and in an HTML export
  * opened from disk (`room 1000 close disjoint served` / `… export`); at 400px every row of the probe
- * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`);
+ * session keeps its path's last segment, its byte count and its repeat mark whole (`room 400 rows`),
+ * and on the payments session its findings badge too, short, in the text colour and no taller than the
+ * row beside it (`room 400 payments rows`);
  * and at 1440 the list pane starts no lower than 160px (`room 1440 bands list`), the timeline's
  * start reported beside it, with every band's height in the detail; the toolbar is one row at
  * 1440 and 1000 (`room <w> toolbar one row`) and wraps without overflowing at 600 and 400 (`room <w>
@@ -24,6 +26,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 
 const LOADED = `typeof state !== 'undefined' && state.sessionId && document.querySelectorAll('#list .row').length > 0`;
 const DRAWER_OPEN = `document.getElementById('panes').classList.contains('drawer-open') && !document.getElementById('detail').hidden
@@ -142,8 +145,10 @@ async function drawer(page, url, rows) {
 }
 
 // Every row at this width: its path's last segment, its byte count and its repeat mark whole and
-// inside the row, the clock gone, the short repeat mark the one shown.
+// inside the row, the clock gone, the short repeat mark the one shown. The segment is judged inside
+// its path's box, which clips it: inside the row alone, `transi` passed for `transfers`.
 const ROWS = `(() => {
+  const rowBox = (row) => row.getBoundingClientRect();
   const whole = (e, box) => { const r = e.getBoundingClientRect();
     return e.getClientRects().length > 0 && e.scrollWidth <= e.clientWidth + 0.5 && r.left >= box.left - 0.5 && r.right <= box.right + 0.5; };
   const rows = [...document.querySelectorAll('#list .row')];
@@ -155,7 +160,7 @@ const ROWS = `(() => {
     const size = row.querySelector('.size');
     const badge = row.querySelector('.dup-badge');
     const said = (tail ? tail.textContent : '?') + ' ' + (size ? size.textContent : '?');
-    if (!tail || !whole(tail, box)) bad.push('tail of ' + said);
+    if (!tail || !whole(tail, box) || !whole(tail, tail.parentElement.getBoundingClientRect())) bad.push('tail of ' + said);
     if (!size || !whole(size, box)) bad.push('size of ' + said);
     if (badge) {
       repeats++;
@@ -166,22 +171,37 @@ const ROWS = `(() => {
   const clocks = [...document.querySelectorAll('#list .row .clock')].filter((c) => c.getClientRects().length).length;
   // How many held rows are repeats, from the session's duplicates rather than the marks scanned.
   const due = state.transactions.filter((t) => state.duplicates.has(t.id)).length;
-  return { rows: rows.length, repeats, due, bad, clocks };
+  // Findings badges: whole, short, the row's text colour (muted for info) and the row no taller for one.
+  let flags = 0;
+  const heights = new Set(rows.map((r) => Math.round(r.getBoundingClientRect().height)));
+  for (const row of rows) {
+    const flag = row.querySelector('.finding-badge');
+    if (!flag) continue;
+    flags++;
+    const short = flag.querySelector('.fb-short');
+    const ink = getComputedStyle(flag.classList.contains('sev-info') ? row.querySelector('.ms') : row).color;
+    if (!whole(flag, rowBox(row)) || !short || getComputedStyle(short).display === 'none' || getComputedStyle(flag).color !== ink) {
+      bad.push('badge of ' + row.querySelector('.path-tail').textContent + ' (' + getComputedStyle(flag).color + ', ' + ink + ')');
+    }
+  }
+  const flagsDue = typeof findingsState === 'undefined' || !findingsState.byTxn ? 0 : state.transactions.filter((t) => findingsState.byTxn.has(t.id)).length;
+  return { rows: rows.length, repeats, due, bad, clocks, flags, flagsDue, heights: [...heights] };
 })()`;
 
 /** Below 520px a row gives up its clock and its host before its last segment, bytes or repeat mark. */
-async function narrowRows(page, url, rows) {
+async function narrowRows(page, url, rows, key = 'room 400 rows') {
   await load(page, url, 400);
+  if (key !== 'room 400 rows') await page.waitFor(`document.querySelectorAll('#list .finding-badge').length > 0`, 10000);
   const r = await page.ev(ROWS);
-  // The repeat marks are a scan of their own: none drawn where the list holds a repeat checked nothing.
-  const noMarks = Boolean(r) && !r.evalError && r.repeats === 0 && r.due > 0;
-  const ok = Boolean(r) && !r.evalError && r.rows > 0 && r.bad.length === 0 && !noMarks;
-  rows.push({ key: 'room 400 rows', ok,
-    value: noMarks ? `NO - found no repeat mark (${r.due} rows held are repeats), so this checked nothing`
-      : ok ? 'whole' : r && r.bad ? 'cut' : 'not measured',
+  // The repeat marks and the badges are scans of their own: none drawn where the list holds one checked nothing.
+  const noMarks = Boolean(r) && !r.evalError && ((r.repeats === 0 && r.due > 0) || (r.flags === 0 && r.flagsDue > 0));
+  const ok = Boolean(r) && !r.evalError && r.rows > 0 && r.bad.length === 0 && !noMarks && r.heights.length === 1;
+  rows.push({ key, ok,
+    value: noMarks ? `NO - found no ${r.flags === 0 && r.flagsDue > 0 ? 'findings badge' : 'repeat mark'}, so this checked nothing`
+      : ok ? 'whole' : r && r.bad ? (r.bad.length ? 'cut' : 'uneven') : 'not measured',
     detail: !r || r.evalError ? String(r && r.evalError)
-      : `${r.rows} rows, ${r.repeats} repeat marks${r.due ? '' : ' (n/a: no row held is a repeat)'}, ${r.clocks} clocks drawn`
-        + `${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
+      : `${r.rows} rows, ${r.repeats} repeat marks${r.due ? '' : ' (n/a: no row held is a repeat)'}, ${r.flags} findings badges, ${r.clocks} clocks drawn; `
+        + `row heights ${r.heights.join('/')}px${r.bad.length ? `; cut: ${r.bad.slice(0, 4).join(', ')}` : ''}` });
 }
 
 // Every band above the list, by height, and where the list pane starts. Base and head name their
@@ -336,6 +356,7 @@ async function room(page, urls) {
   await drawer(page, url, rows);
   await divider(page, url, rows);
   await narrowRows(page, url, rows);
+  await narrowRows(page, `${url}#/traffic?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`, rows, 'room 400 payments rows');
   await bands(page, url, rows);
   await toolbar(page, url, rows);
   await hint(page, url, rows);

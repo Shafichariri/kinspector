@@ -365,6 +365,17 @@ apply; `enabled: false` is the way to silence a rule. Published test card number
 loopback or an emulator's host alias are `info` and never raised. `SensitiveSourceTest` pins it, red
 with the raise applied to response bodies.
 
+**Duplicate mutation and the repeat tag are two claims, kept apart and named apart.** Decided
+2026-10-22 by the maintainer's proxy: keep both. The `repeat` tag (`duplicateGroups`,
+`shared-rules.md`) marks rows indistinguishable at row level, for every method, keyed on URL, status
+and sizes, inside a per-browser window. The finding marks separate mutation calls with the same route
+and request body and no idempotency key, inside a `config.json` window. They disagree both ways by
+design: a resent POST that first got a 500 is a finding and not a repeat. So the finding is drawn
+only as a severity badge, never uses the word "duplicate" or "repeat" on a row, in its text or its
+title, and cites no repeat group, because the daemon cannot see the window the page drew it with.
+Both chain consecutive gaps, so "within 3 s" means the same for a run of three. The probe `findings
+badge` pins the badge, red with every row badged.
+
 **A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization
 quotes a class's serial name in `MissingFieldException`, and a serial name defaults to the fully
 qualified class name. The replay and signal-pull routes echo that message into their 400 body, and

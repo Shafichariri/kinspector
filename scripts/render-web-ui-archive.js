@@ -230,14 +230,14 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   const visible = daemonOnly.filter((sel) => !hiddenByCss(doc.querySelector(sel)));
   check('daemon controls hidden', !absent.length && visible.length === 0,
     absent.length ? `found no ${absent.join(', ')}, so this checked nothing` : visible.join(', ') || `all ${daemonOnly.length} hidden`);
-  // `⋮` is offered, for the shortcut legend and compact rows; the exports in it would ask a daemon
-  // for this session, so opened, it draws none of them.
+  // `⋮` is offered, for the shortcut legend, compact rows and flagged rows only; the exports in it would
+  // ask a daemon for this session, so opened, it draws none of them.
   const more = doc.getElementById('more-button');
   click(more);
   const moreItems = more ? [...more.parentElement.querySelectorAll('.menu-item')] : [];
   const exportsShown = moreItems.filter((i) => i.classList.contains('export-item') && !hiddenByCss(i));
   const othersShown = moreItems.filter((i) => !i.classList.contains('export-item') && !hiddenByCss(i)).map((i) => i.textContent);
-  check('export items hidden', Boolean(more) && moreItems.length === 6 && exportsShown.length === 0 && othersShown.length === 2,
+  check('export items hidden', Boolean(more) && moreItems.length === 7 && exportsShown.length === 0 && othersShown.length === 3,
     more ? `${exportsShown.length} exports shown; offered: ${othersShown.join(', ') || 'nothing'}` : 'no ⋮');
   click(more);
   // The rail offers Traffic and Stats (`stats rail in export`, below): every other page sends
@@ -490,7 +490,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     paymentsWindow.close();
   } else {
     // Information: CI sets INSPECTOR_UI_ARCHIVE_PAYMENTS, and its expected count notices these missing.
-    for (const label of ['findings offline drawn', 'findings txn in export', 'findings category refused', 'payments no page errors']) {
+    for (const label of ['findings badge in export', 'findings detail in export', 'findings offline drawn', 'findings txn in export', 'findings category refused', 'payments no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_PAYMENTS is not set)');
     }
   }

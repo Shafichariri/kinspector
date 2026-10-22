@@ -1,11 +1,12 @@
-/* findings: the Findings page, the daemon's findings for one session drawn as it answers them */
+/* findings: the Findings page, and the same report on Traffic as row badges, the detail's section and flagged rows only */
 'use strict';
 
 /*
  * The page computes nothing. Rules, counts, order, severity, messages, masked evidence and coverage
  * all come from `GET …/findings`, so there is no mirror block and no case file: the daemon's
  * `service/FindingsEngine.kt` and its sources are the only copy of each rule. The page asks once for
- * every finding, with no category, as an export embeds them.
+ * every finding, with no category, as an export embeds them, and that one reply feeds the Findings
+ * page, the row badges, the detail's section and flagged rows only.
  */
 
 /** Every finding one reply may carry; the daemon's own most. `findingCount` says how many there were. */
@@ -23,20 +24,26 @@ const FINDINGS_SLOW_MS = 300;
  * The page's own state. `sent`/`written` are the ticket pair: of a load and a refresh, the one sent
  * last is kept whichever lands last. `owed`, `timer` and `inFlight` are the refresh rule. `slow` is
  * set once a read has taken `FINDINGS_SLOW_MS`; `marked` is the `?id=` already scrolled to, so a
- * live redraw does not scroll the reader back to it.
+ * live redraw does not scroll the reader back to it. `byTxn` is each call's findings, built in reply
+ * order, which is severity order, so a call's first entry is its highest and nothing here ranks.
+ * `flaggedOnly` is the `⋮` toggle, a view of the list and never a preference: it is not stored, so a
+ * reload shows every call again.
  */
 const findingsState = {
-  sessionId: null, report: null, error: null,
+  sessionId: null, report: null, error: null, byTxn: new Map(), flaggedOnly: false,
   sent: 0, written: 0, owed: false, timer: null, inFlight: false, slow: false, marked: null,
 };
 
 const findingsShown = () => currentPage() === 'findings';
 
+/** Where the report is drawn: the Findings page, and Traffic, a call's page included, as badges and the detail's section. */
+const findingsUsed = () => findingsShown() || currentPage() === 'traffic';
+
 /**
- * Whether the findings are worth asking for again: the page shown, a session selected, and not an
- * export, whose report is fixed at the moment it was written.
+ * Whether the findings are worth asking for again: drawn, a session selected, and not an export,
+ * whose report is fixed at the moment it was written.
  */
-const findingsWanted = () => !ARCHIVE && findingsShown() && Boolean(state.sessionId);
+const findingsWanted = () => !ARCHIVE && findingsUsed() && Boolean(state.sessionId);
 
 /**
  * Whether a live row may ask again: live tail on, and wanted. One predicate for owing and for
@@ -62,9 +69,12 @@ function findingsLoad() {
   return findingsRead(false);
 }
 
-/** Reads again when shown; resuming live tail, the socket reopening and `init` call it. */
+/**
+ * Reads again where the report is drawn; resuming live tail, the socket reopening, entering Traffic
+ * and `init` call it. In an export that is the one read of the embedded report.
+ */
 function findingsReload() {
-  if (findingsShown()) findingsLoad();
+  if (findingsUsed()) findingsLoad();
 }
 
 /** The session may have changed: a switch, a delete, or the daemon coming back. */
@@ -73,6 +83,7 @@ function findingsSessionChanged() {
     findingsState.report = null;
     findingsState.error = null;
     findingsState.marked = null;
+    findingsApply();
   }
   findingsReload();
 }
@@ -113,6 +124,7 @@ async function findingsRead(live) {
   if (!sessionId) {
     findingsState.written = ticket;
     Object.assign(findingsState, { report: null, error: null, sessionId: null });
+    findingsApply();
     findingsRender();
     return;
   }
@@ -132,7 +144,29 @@ async function findingsRead(live) {
   clearTimeout(slow);
   if (!stands() || ticket < findingsState.written) return;
   Object.assign(findingsState, { written: ticket, report, error, sessionId, slow: false });
+  findingsApply();
   if (findingsShown()) findingsRender();
+}
+
+/**
+ * The report held, applied to Traffic: `byTxn` built again, dismissed findings left out. The list is
+ * drawn again only when some call's first severity moved, and the shown call's section only when its
+ * findings did. Never `renderDetail`, which reads the call's bodies again for a change to neither.
+ */
+function findingsApply() {
+  const before = findingsState.byTxn;
+  const byTxn = new Map();
+  const report = findingsState.sessionId === state.sessionId ? findingsState.report : null;
+  for (const finding of report ? report.findings : []) {
+    if (finding.dismissed) continue;
+    for (const id of finding.txnIds) byTxn.set(id, [...(byTxn.get(id) || []), finding]);
+  }
+  findingsState.byTxn = byTxn;
+  const firsts = (map) => [...map].map(([id, list]) => `${id} ${list[0].severity}`).join('\n');
+  if (firsts(before) !== firsts(byTxn)) renderList();
+  const shown = $('detail').hidden ? null : state.selectedId;
+  const said = (map) => JSON.stringify(map.get(shown) || []);
+  if (shown && said(before) !== said(byTxn)) findingsPaintDetail({ id: shown });
 }
 
 // --- drawing --------------------------------------------------------------
@@ -231,8 +265,14 @@ function findingsArticle(finding) {
   for (const id of finding.txnIds) calls.appendChild(el('li')).appendChild(findingsTxnLink(id));
   if (finding.txnCount > finding.txnIds.length) calls.appendChild(el('li', 'muted', `and ${finding.txnCount - finding.txnIds.length} more calls`));
   article.appendChild(calls);
+  article.appendChild(findingsEvidence(finding.evidence));
+  return article;
+}
+
+/** Evidence lines as the daemon wrote them: what was seen, where, and a masked hint, never a value. */
+function findingsEvidence(lines) {
   const evidence = el('ul', 'finding-evidence');
-  for (const line of finding.evidence) {
+  for (const line of lines) {
     const li = el('li');
     if (line.note) li.appendChild(el('span', null, line.note));
     const where = [line.location, line.path].filter(Boolean).join(' ');
@@ -240,8 +280,7 @@ function findingsArticle(finding) {
     if (line.masked) li.appendChild(el('span', 'mono finding-masked', line.masked));
     evidence.appendChild(li);
   }
-  article.appendChild(evidence);
-  return article;
+  return evidence;
 }
 
 /**
@@ -306,4 +345,113 @@ function findingsMark() {
   if (!target || !article || findingsState.marked === target) return;
   findingsState.marked = target;
   article.scrollIntoView?.({ block: 'start' });
+}
+
+// --- Traffic: row badges, the detail's section, flagged rows only ----------------------------
+
+/**
+ * A row's badge, or null: the severity of the call's first finding in words, `⚑ high`, and `⚑` alone
+ * below 520px as the repeat mark shortens. It never says "duplicate" or "repeat", in its text or its
+ * title: the repeat tag is the page's claim about rows, for every method, and Duplicate mutation the
+ * daemon's about mutation calls, and the two disagree both ways by design (`daemon-and-mcp.md`). So
+ * the title counts severities and leaves the rules' names to the detail and the Findings page.
+ */
+function findingBadgeFor(txn) {
+  const findings = findingsState.byTxn.get(txn.id);
+  if (!findings) return null;
+  const severity = findings[0].severity;
+  const badge = el('span', `finding-badge sev-${severity}`);
+  badge.append(el('span', 'fb-long', `⚑ ${severity}`), el('span', 'fb-short', '⚑'));
+  badge.title = `${findingsPlural(findings.length, 'finding', 'findings')} on this call (${findings.map((f) => f.severity).join(', ')}); `
+    + 'open the call to read them';
+  return badge;
+}
+
+/**
+ * The detail's Findings section for [txn], of which only the id is read: each finding naming the call,
+ * with its badge, its rule's title, its message, the evidence lines about this call and a link to it
+ * on the Findings page. Nothing at all when there are none. `renderDetail` draws the box and calls
+ * this, so `#/txn/{id}` has it too; a reply that changed this call's findings calls it alone.
+ */
+function findingsPaintDetail(txn) {
+  const box = document.querySelector('#detail .detail-findings');
+  if (!box) return;
+  const findings = findingsState.byTxn.get(txn.id) || [];
+  box.replaceChildren();
+  box.hidden = !findings.length;
+  if (!findings.length) return;
+  box.appendChild(el('div', 'section-title', `Findings (${findings.length})`));
+  const titles = new Map(findingsState.report.rules.map((rule) => [rule.id, rule.title]));
+  for (const finding of findings) {
+    const item = el('div', 'detail-finding');
+    item.dataset.finding = finding.id;
+    const open = el('a', 'detail-finding-open', 'open in Findings');
+    open.href = routeHash({ page: 'findings', id: finding.id, session: state.sessionId });
+    open.addEventListener('click', (e) => {
+      if (e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      navigate({ page: 'findings', id: finding.id });
+    });
+    const head = el('div', 'detail-finding-head');
+    head.append(findingsBadge(finding.severity), el('span', 'detail-finding-title', titles.get(finding.ruleId) || finding.ruleId), open);
+    item.append(head, el('p', 'finding-message', finding.message));
+    const lines = finding.evidence.filter((line) => line.txnId === txn.id);
+    if (lines.length) item.appendChild(findingsEvidence(lines));
+    box.appendChild(item);
+  }
+}
+
+/** Whether the list draws [row]: every row, or with flagged rows only on, those with a finding. */
+const findingsKeep = (row) => !findingsState.flaggedOnly || findingsState.byTxn.has(row.id);
+
+/** `⋮` → flagged rows only, built for `wireMoreMenu`'s list; checkbox-style, as compact rows is. */
+function findingsFlaggedItem() {
+  const item = menuItem('flagged rows only', 'List only the calls with findings; the timeline, the waterfall and the path still draw every call',
+    () => findingsSetFlagged(!findingsState.flaggedOnly));
+  item.id = 'flagged-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('aria-checked', 'false');
+  return item;
+}
+
+function findingsSetFlagged(on) {
+  findingsState.flaggedOnly = on;
+  const item = document.getElementById('flagged-item');
+  if (item) {
+    item.setAttribute('aria-checked', String(on));
+    item.textContent = on ? 'flagged rows only ✓' : 'flagged rows only';
+  }
+  renderList();
+}
+
+/**
+ * While flagged rows only is on: the band above the list saying so and what it counts, and, when it
+ * leaves no row in view, the list's fifth empty reason. `renderListNote` calls it, so a view change
+ * draws it as a list redraw does. List only, because the other views draw every call.
+ */
+function findingsPaintFlagged() {
+  const band = $('flagged-note');
+  const on = findingsState.flaggedOnly && state.view === 'network';
+  band.hidden = !on;
+  band.replaceChildren();
+  if (!on) return;
+  const showAll = el('button', 'btn btn-sm', 'show all calls');
+  showAll.type = 'button';
+  showAll.addEventListener('click', () => findingsSetFlagged(false));
+  const held = findingsState.sessionId === state.sessionId && findingsState.report;
+  const rows = orderedRows();
+  const loaded = state.transactions.length;
+  const whole = !state.filter && state.sessionTotal !== null && loaded >= state.sessionTotal;
+  const counted = whole ? findingsCalls(loaded) : `${findingsPlural(loaded, 'call', 'calls')} loaded`;
+  const what = held ? `${rows.length} of ${counted}.${whole ? '' : ' Findings on older calls are on the Findings page.'}`
+    : findingsState.error && findingsState.sessionId === state.sessionId ? `the findings could not be read: ${findingsState.error}.`
+      : 'checking this session\'s calls…';
+  band.append(`Only calls with findings: ${what} List only: the timeline, the waterfall and the path draw every call. `, showAll);
+  // Calls in view and none kept: the toggle emptied the list, which would otherwise say no calls were recorded.
+  if (rows.length || !visibleTransactions().length || sessionPending() || wholePending()) return;
+  const again = el('button', 'btn btn-sm', 'show all calls');
+  again.type = 'button';
+  again.addEventListener('click', () => findingsSetFlagged(false));
+  $('list-empty').replaceChildren(held ? 'No calls with findings among the calls loaded. ' : `Only calls with findings: ${what} `, again);
+  $('list-empty').hidden = false;
 }

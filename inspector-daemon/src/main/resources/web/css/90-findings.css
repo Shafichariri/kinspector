@@ -1,4 +1,4 @@
-/* findings: the Findings page, and the findings fieldset on the Settings page */
+/* findings: the Findings page, a row's badge, the detail's section, flagged rows only, and the Settings fieldset */
 
 /* --- the page: stacked blocks, no table, so nothing scrolls sideways at 400px ------------------ */
 
@@ -54,6 +54,37 @@
 .finding-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
 .finding-where, .finding-masked { margin-left: 6px; font-size: 11px; color: var(--fg-muted); }
 .finding-evidence li > :first-child { margin-left: 0; }
+
+/* --- Traffic: a row's badge, the detail's section, the flagged rows band ----------------------- */
+
+/* Its own item after the repeat mark, never shrunk, in a fixed box shorter than the row's 15px of
+   path text: at the Findings page's 16px line every flagged row was 1px taller than the rest
+   (`room 400 payments rows`). `⚑` alone below 520px, where the repeat mark reads `2×`. */
+.row .finding-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  line-height: 12px;
+  box-sizing: border-box;
+}
+.fb-short { display: none; }
+@media (max-width: 519px) {
+  .fb-long { display: none; }
+  .fb-short { display: inline; }
+}
+
+.detail-findings { margin: 0 0 10px; }
+.detail-finding { padding: 6px 0; border-top: 1px solid var(--divider); font-size: 12px; }
+.detail-finding-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.detail-finding-title { font-weight: 600; }
+.detail-finding-open { margin-left: auto; display: inline-flex; align-items: center; min-height: var(--target-min); }
+.detail-finding .finding-message { margin: 4px 0; }
+
+/* Held under the scope bar, as the list's filter note is. Both at once would stack at one top, the
+   later covering the earlier, so beside that note this one scrolls with the list. */
+#flagged-note { position: sticky; top: var(--sticky-top); z-index: 2; }
+#list-note:not([hidden]) ~ #flagged-note { position: static; }
 
 /* --- Settings: the findings fieldset inside the config.json form -------------------------------- */
 

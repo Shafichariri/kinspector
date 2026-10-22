@@ -362,8 +362,8 @@ function wireMoreMenu() {
   const more = menuButton({
     label: '',
     className: 'btn btn-sm btn-quiet btn-icon more-button',
-    title: 'Export this session, keyboard shortcuts, row density',
-    items: [...links, keys, density],
+    title: 'Export this session, keyboard shortcuts, row density, flagged rows only',
+    items: [...links, keys, density, findingsFlaggedItem()],
     onOpen: () => {
       const id = encodeURIComponent(state.sessionId || '');
       EXPORTS.forEach((spec, i) => {
@@ -376,7 +376,7 @@ function wireMoreMenu() {
   // Drawn, not the `⋮` glyph, whose size is whichever font has it (`.btn-icon` in 40-detail.css).
   more.button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="3.5" r="1.4"/>'
     + '<circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="12.5" r="1.4"/></svg>';
-  more.button.setAttribute('aria-label', 'More: exports, keyboard shortcuts, row density');
+  more.button.setAttribute('aria-label', 'More: exports, keyboard shortcuts, row density, flagged rows only');
   more.wrap.id = 'more-menu';
   $('more-host').replaceChildren(more.wrap);
   paintDensity();
