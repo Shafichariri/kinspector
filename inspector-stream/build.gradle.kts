@@ -40,6 +40,17 @@ kotlin {
         kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/shared/src"))
         kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/stream/src"))
     }
+    // The same parity tests, run again on the Android host against the JVM golden file: Android
+    // output is JVM bytecode, and every split that reaches Android also reaches the JVM. Read-only;
+    // see docs/decisions/twins-and-api.md.
+    sourceSets.named("androidHostTest") {
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/shared/src"))
+        kotlin.srcDir(rootProject.layout.projectDirectory.dir("api-parity/stream/src"))
+        dependencies {
+            implementation(kotlin("test"))
+            implementation(kotlin("reflect"))
+        }
+    }
 }
 
 tasks.named<Test>("jvmTest") {
@@ -50,9 +61,17 @@ tasks.named<Test>("jvmTest") {
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
-// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly.
+// Registered by AGP after this script runs, so matched by name rather than looked up.
+tasks.withType<Test>().named { it == "testAndroidHostTest" }.configureEach {
+    // The same golden file as jvmTest, read and never written: see the regenerate property below.
+    inputs.files(rootProject.layout.projectDirectory.file("api/inspector-stream-public-api.txt"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly. To jvmTest
+// only: the Android host test asserts the same golden file and must never rewrite it.
 private val regenerateApi = providers.systemProperty("inspector.api.regenerate").orElse("false")
 
-tasks.withType<Test>().configureEach {
+tasks.named<Test>("jvmTest") {
     systemProperty("inspector.api.regenerate", regenerateApi.get())
 }

@@ -215,8 +215,9 @@ as it does for `StreamSink.kt`. So renaming either file is a breaking change. `U
 names the facade and the golden file records it, and renaming either file fails that module's
 `UiApiParityTest`. Proven by renaming each in turn.
 
-**The iOS surface is read from the klib by the toolchain's own `klib dump-abi`.** Every parity test
-above reads JVM output, so a public declaration in one module's iOS source alone passed every pair. Each pair's module now runs `iosApiTest`,
+**The iOS surface is read from the klib by the toolchain's own `klib dump-abi`; Android asserts the
+JVM golden file in its host test.** Every parity test above reads JVM output, so a public declaration in
+one module's iOS or Android source alone passed every pair. Each pair's module now runs `iosApiTest`,
 which runs `bin/klib dump-abi` from the Kotlin/Native distribution every iOS compile already provisions
 in `~/.konan`, on both iOS targets' klibs, and asserts the result against the pair's iOS golden file
 (`api/*.ios.txt`, the fourth column of `structure/twins.txt`). The distribution is found by the
@@ -246,3 +247,10 @@ surface, so a declaration in `iosArm64Main` or `iosSimulatorArm64Main` alone fai
 `jvmAndAndroidMain` turns the default hierarchy template off, so no `iosMain` source set exists and a
 file there, even one that is not Kotlin, builds clean and ships nowhere. Their iOS-only code would go in
 `iosArm64Main` and `iosSimulatorArm64Main`, which is where the red proof put its probe.
+
+Android's output is JVM bytecode, so each pair's two tests also run in `testAndroidHostTest`, against
+the pair's JVM golden file, read only: `inspector.api.regenerate` reaches `jvmTest` alone. Every platform
+split that reaches Android also reaches the JVM (`jvmAndAndroidMain`, and `@file:JvmName("StreamSinkKt")`
+on both `Platform.android.kt` and `Platform.jvm.kt`), so the two surfaces are equal by construction, and
+this is the first guard on the Android facade pin. The first Android-only API added to both twins splits
+the file then. Pinned by the six `testAndroidHostTest` tasks.

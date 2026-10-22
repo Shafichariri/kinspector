@@ -6,8 +6,9 @@ halves of a pair assert the same golden file. The `*IosApiParityTest` classes co
 the root build's `iosApiTest` task, against the pair's iOS golden file.
 
 Every pair runs two tests in both of its modules: its golden file, and a completeness test that fails
-when a class outside the pair's contract list holds public API. Each module declares the golden file
-as a `jvmTest` input, and `structure/twins.txt` names it on the pair's line.
+when a class outside the pair's contract list holds public API. Both also run in each module's
+`testAndroidHostTest`, against the same golden file, which only `jvmTest` regenerates. Each module declares
+the golden file as an input of both tasks, and `structure/twins.txt` names it on the pair's line.
 
 Read before changing anything here: `docs/decisions/twins-and-api.md`.
 
