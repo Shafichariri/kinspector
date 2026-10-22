@@ -119,6 +119,8 @@
 .markers li { padding: 3px 0; cursor: pointer; color: var(--accent); }
 .markers li.muted { color: var(--fg-muted); cursor: default; }
 .keys li { padding: 2px 0; }
+/* The page keys under the list's, which work on Traffic only. */
+.keys + .keys { border-top: 1px solid var(--divider); margin-top: 6px; padding-top: 6px; }
 
 kbd {
   background: var(--bg-elevated);

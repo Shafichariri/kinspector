@@ -40,6 +40,8 @@ const state = {
   transactions: [],
   markers: [],
   selectedId: null,
+  // When `g` was pressed, while it waits for a page's letter or a second `g` (`readPageKey`).
+  pageKeyAt: null,
   filter: '',
   liveTail: true,
   activeSessionId: null,
