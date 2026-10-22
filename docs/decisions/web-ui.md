@@ -76,6 +76,20 @@ and each is named in `auditMinTextSize` rather than matched by pattern, so a new
 the audit until someone decides it belongs on the list. The design pass named four selectors to
 raise; nine more were at 10px, and fixing only the four would have left the rule false on day one.
 
+**An icon-only control is an SVG in a box at least `--target-min` (24px) square, never a text
+glyph.** A glyph is drawn by whichever font has it: `⤢` fell back to a symbol font and drew well
+under its 13px em, a 23×20 target. `⋮`'s own 13px rule lost the cascade to `.btn-sm` declared
+later and rendered at 11px, which nobody noticed because the rule was there. `.btn.btn-icon` is the
+one rule that sizes them: two classes outrank `.btn-sm` and `.btn-quiet` wherever either loads, and
+`icon target css` refuses any other rule that sizes an icon control by name, whichever of the two
+would win. Its centring is set under `:where()`, at no specificity, because what decides whether each
+control is drawn at all is a single class or `[hidden]` (`.drawer-close`, `.detail-hide`), and a
+`display` with two classes would outrank them. 24px is WCAG 2.2's minimum target. A control whose
+text changes, such as the Sessions row's `✕` that arms as `sure?`, keeps its text in the same box.
+`icon target css` and `icon controls svg` read the rules; `measure-web-ui.js`'s `polish <w> icon
+targets …` readings are the behaviour, at 1440, 1000 and 400, served and exported, dark and light,
+each red with its rule removed.
+
 **The tab bar is always drawn.** It used to hide when a session had only the traffic view, which
 made the bar appear and disappear between sessions and moved everything under it. The order control
 is a segmented pair rather than two more chips, because it arranges the list where the chips beside

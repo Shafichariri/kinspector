@@ -94,6 +94,18 @@ body.archive .replay-menu + .menu { display: none !important; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 
 .btn-sm { padding: 2px 8px; font-size: 11px; }
+/* An icon-only control: an SVG in a box at least `--target-min` square, never a text glyph. A glyph
+   is drawn by whichever font has it, at that font's size: `⤢` fell back to a symbol font and drew
+   well under its 13px em, a 23x20 target, and at `.btn-sm`'s 11px it had read as a speck. `⋮` had a
+   13px rule of its own that lost to `.btn-sm`, declared later, so it drew at 11px with the rule in
+   plain sight. Two classes, after `.btn-sm`, outrank `.btn-sm` and `.btn-quiet` wherever they load.
+   It is the only rule that sizes these controls; `icon target css` fails on another. */
+.btn.btn-icon { min-width: var(--target-min); min-height: var(--target-min); padding: 0 4px; line-height: 1; font-size: 16px; }
+/* The centring at no specificity: whether each control is drawn at all is decided by `.drawer-close`,
+   `.detail-hide` and `[hidden]` rules, which a `display` here with two classes would outrank. */
+:where(.btn.btn-icon) { display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon[hidden] { display: none; }
+.btn-icon svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .btn-danger { color: var(--err); }
 .btn-danger:hover { background: var(--err); color: #fff; border-color: var(--err); }
 

@@ -350,7 +350,8 @@ function sessionRow(meta) {
   open.title = `Show ${meta.sessionId} on the Traffic page`;
   open.addEventListener('click', () => navigate({ page: 'traffic', session: meta.sessionId }));
   actions.appendChild(open);
-  const remove = el('button', 'btn btn-sm btn-quiet row-delete', '✕');
+  // Text in the icon box, not an SVG: arming swaps the text to `sure?` (`confirmThen`).
+  const remove = el('button', 'btn btn-sm btn-quiet btn-icon row-delete', '✕');
   remove.type = 'button';
   if (live) {
     remove.disabled = true;

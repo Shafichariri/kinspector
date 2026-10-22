@@ -6,9 +6,10 @@
  * the pane where it is), and scale (first rows on a 160,000-call session). Every defect it pins was
  * found by hand in a verify panel, after the build that caused it. `traffic` streams real rows into
  * a daemon of its own through `/ingest` and judges the page's filtered re-read
- * (`lib/live-traffic-cases.js`). `sheet`, opt-in, judges nothing: it writes a PNG of every page and
- * view at four widths, dark and light, served and exported, and an `index.html` grid of them to
- * `--out` (`lib/sheet-cases.js`), for a person to look at.
+ * (`lib/live-traffic-cases.js`). `polish` reads the icon controls' targets (`lib/polish-cases.js`).
+ * `sheet`, opt-in, judges nothing: it writes a PNG of every page and view at four widths, dark and
+ * light, served and exported, and an `index.html` grid of them to `--out` (`lib/sheet-cases.js`),
+ * for a person to look at.
  *
  *   node scripts/measure-web-ui.js                       # this working tree's web/, judged
  *   node scripts/measure-web-ui.js --base "$P/base"      # ... and what moved against another tree
@@ -24,7 +25,7 @@
  * a base whose routes differ is measured against today's routes, which the output says.
  *
  * Options: --head <dir> (default: this repository), --base <dir>, --install <dir>,
- * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,shell,traffic,first,sheet,
+ * --probe <dir> (the probe fixture; written with gradle when absent), --only layout,run,live,topbar,room,polish,shell,traffic,first,sheet,
  * --first-rows-ms <n> (default 3000), --keep (keep the temp directory), --out <dir> (where `--only sheet`
  * writes; with --base, each tree in a folder of its own).
  * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run, 130 or 143
@@ -43,6 +44,7 @@ const { topBar } = require('./lib/topbar-cases');
 const { shell, statsFirstDraw, statsRouteBreaks } = require('./lib/shell-cases');
 const { room } = require('./lib/list-room-cases');
 const { liveTraffic } = require('./lib/live-traffic-cases');
+const { polish } = require('./lib/polish-cases');
 const { sheet } = require('./lib/sheet-cases');
 
 const REPO = path.resolve(__dirname, '..');
@@ -51,7 +53,7 @@ const WEB = 'inspector-daemon/src/main/resources';
 function parseArgs(argv) {
   const opts = {
     head: REPO, base: null, install: path.join(REPO, 'inspector-daemon/build/install/inspector'),
-    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'shell', 'traffic', 'first'], firstRowsMs: 3000, keep: false, out: null,
+    probe: null, only: ['layout', 'run', 'live', 'topbar', 'room', 'polish', 'shell', 'traffic', 'first'], firstRowsMs: 3000, keep: false, out: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -223,6 +225,10 @@ async function main() {
     // DevTools endpoint drop a request, failing the whole run before anything was measured.
     if (opts.only.includes('room')) {
       await Promise.all(sides.map((side) => onPage(chrome, `${side.name} room`, (p) => room(p, side.urls))
+        .then((rows) => results[side.name].push(...rows))));
+    }
+    if (opts.only.includes('polish')) {
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} polish`, (p) => polish(p, side.urls))
         .then((rows) => results[side.name].push(...rows))));
     }
     if (opts.only.includes('shell')) {

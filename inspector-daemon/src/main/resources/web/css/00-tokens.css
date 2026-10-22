@@ -47,6 +47,9 @@
   --tag-5: #f08fb0;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Sizes, not colours, so not the overlay's. The smallest box a pointer is asked to hit: WCAG 2.2's
+     minimum target (2.5.8, AA). */
+  --target-min: 24px;
 }
 
 @media (prefers-color-scheme: light) {
