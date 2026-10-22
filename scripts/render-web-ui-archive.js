@@ -25,6 +25,7 @@ const { LONG_LABELS, LONG_SESSION_ID, readLongSession, waitFor } = require('./li
 const { loadScripts, loadStyles } = require('./lib/web-sources');
 const { probeStatsOffline } = require('./lib/stats-probes');
 const { probeKeysInExport } = require('./lib/polish-probes');
+const { probeFindingsRailOffline, probeFindingsExport } = require('./lib/findings-probes');
 
 let JSDOM, VirtualConsole;
 try {
@@ -41,6 +42,8 @@ if (!FILE) {
 }
 // Optional: the long session's export, opened second and asked what the page read past the clamp.
 const LONG_FILE = process.env.INSPECTOR_UI_ARCHIVE_LONG;
+// Optional: the payments session's export, opened last, whose findings the Findings page draws offline.
+const PAYMENTS_FILE = process.env.INSPECTOR_UI_ARCHIVE_PAYMENTS;
 
 // A forbidden call throws inside the page. The page's async init does not catch it, so it surfaces
 // here as an unhandled rejection — recorded, so the report names the call instead of node dying
@@ -275,7 +278,7 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
   check('keys in export', keysInExport.startsWith('yes'), keysInExport.replace(/^(yes|NO)\s*(- )?/, ''));
 
   // The Stats page from the route table the export embeds; see lib/stats-probes.js. Back on Traffic after.
-  for (const [label, value] of await probeStatsOffline(window, doc, archive, attempts)) {
+  for (const [label, value] of [...await probeStatsOffline(window, doc, archive, attempts), ...probeFindingsRailOffline(window, doc)]) {
     check(label, value.startsWith('yes'), value.replace(/^(yes|NO)\s*(- )?/, ''));
   }
 
@@ -471,6 +474,24 @@ const hiddenByCss = (node) => !node || window.getComputedStyle(node).display ===
     // Information: CI sets INSPECTOR_UI_ARCHIVE_LONG, and its expected count notices these missing.
     for (const label of [...LONG_LABELS, 'long offset 1000 sliced', 'long stretch oldest', 'long list note absent', 'long no network attempts', 'long no page errors']) {
       note(label, 'n/a (INSPECTOR_UI_ARCHIVE_LONG is not set)');
+    }
+  }
+  // --- the payments session's export: the Findings page from the findings it embeds, offline ---
+  // See lib/findings-probes.js. Its own window, opened as the others were, network forbidden.
+  if (PAYMENTS_FILE) {
+    const payments = openExport(PAYMENTS_FILE);
+    const paymentsWindow = payments.dom.window;
+    await waitFor(() => paymentsWindow.INSPECTOR_ARCHIVE && paymentsWindow.document.querySelector('#list .row'));
+    console.error(`--- exported session ${paymentsWindow.INSPECTOR_ARCHIVE?.meta?.sessionId ?? '(no metadata)'} ---`);
+    for (const [label, value] of await probeFindingsExport(paymentsWindow, paymentsWindow.document, paymentsWindow.INSPECTOR_ARCHIVE, payments.attempts)) {
+      check(label, value.startsWith('yes'), value.replace(/^(yes|NO)\s*(- )?/, ''));
+    }
+    check('payments no page errors', payments.errors.length === 0, payments.errors.slice(0, 3).join(' | ') || 'none');
+    paymentsWindow.close();
+  } else {
+    // Information: CI sets INSPECTOR_UI_ARCHIVE_PAYMENTS, and its expected count notices these missing.
+    for (const label of ['findings offline drawn', 'findings txn in export', 'findings category refused', 'payments no page errors']) {
+      note(label, 'n/a (INSPECTOR_UI_ARCHIVE_PAYMENTS is not set)');
     }
   }
   process.exit(verdict());

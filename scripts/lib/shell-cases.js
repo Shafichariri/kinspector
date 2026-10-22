@@ -8,9 +8,10 @@
  * connection controls each inside the window, hit by `elementFromPoint` at their centre
  * and focusable (`controls`); the picker's start time whole and inside its face (`picker time`);
  * every view a visible tab or an item of a visible `views ▾` with the tab bar not overflowing
- * (`tabs reachable`); each rail link inside the window (`rail`); and the Stats, Sessions, Processes
- * and Settings pages never scrolling the window sideways nor clipping themselves (`page <name>
- * fits`). Once: rail clicks, then Back (`shell back`). And, in measure-web-ui.js's `first` group,
+ * (`tabs reachable`); each rail link inside the window (`rail`); and the Stats, Findings, Sessions,
+ * Processes and Settings pages never scrolling the window sideways nor clipping themselves (`page
+ * <name> fits`). The Findings page again on the payments session, whose messages, routes and
+ * evidence are the longest text it draws (`findings <w> payments fits`). Once: rail clicks, then Back (`shell back`). And, in measure-web-ui.js's `first` group,
  * how long the Stats page takes to draw its first row on the 160,000-call session, reported and not
  * judged (`stats huge first draw`): the daemon folds the whole session on a cold read.
  *
@@ -27,11 +28,12 @@ const path = require('path');
 const { sleep } = require('./measure-cdp');
 const { LONG_SESSION_ID } = require('./long-session-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
+const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 
 const WIDTHS = [1440, 1000, 600, 400];
 const CONTROLS = ['#session-picker', '#live-btn', '#conn'];
 // Stats draws fifteen columns; its table scrolls in its own box, so the page must still fit.
-const PAGES = ['stats', 'sessions', 'processes', 'settings'];
+const PAGES = ['stats', 'findings', 'sessions', 'processes', 'settings'];
 
 const READ = `(() => {
   const inside = (r) => r.left >= -0.5 && r.right <= innerWidth + 0.5 && r.top >= -0.5 && r.bottom <= innerHeight + 0.5;
@@ -156,6 +158,34 @@ async function shell(page, url, session) {
   return rows;
 }
 
+/**
+ * The Findings page on the payments session at each width: the document no wider than the window,
+ * the page not clipping itself, and every finding inside the page's box. A page that drew no finding
+ * checked nothing, and fails.
+ */
+async function findingsFits(page, url) {
+  const rows = [];
+  for (const width of WIDTHS) {
+    await page.setWidth(width);
+    await page.navigate('about:blank');
+    await page.navigate(`${url}#/findings?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`);
+    const drawn = await page.waitFor(`document.querySelectorAll('#findings-body article.finding').length > 0`, 20000);
+    await sleep(300);
+    const r = drawn === null ? null : await page.ev(`(() => {
+      const fits = ${PAGE_FITS('findings')};
+      const box = document.getElementById('page-findings').getBoundingClientRect();
+      const articles = [...document.querySelectorAll('#findings-body article.finding')];
+      const out = articles.filter((a) => a.getBoundingClientRect().right > box.right + 0.5 || a.scrollWidth > a.clientWidth + 0.5);
+      return { ...fits, articles: articles.length, out: out.length };
+    })()`);
+    const ok = Boolean(r) && !r.evalError && r.doc <= r.width && r.page <= r.client + 1 && r.out === 0;
+    rows.push({ key: `findings ${width} payments fits`, ok,
+      value: !r ? 'NO - found no finding, so this checked nothing' : r.evalError ? 'threw' : ok ? 'fits' : 'overflows',
+      detail: !r || r.evalError ? String(r && r.evalError || '') : `${r.articles} findings, ${r.out} wider than the page; document ${r.doc} of ${r.width}, page ${r.page} of ${r.client}` });
+  }
+  return rows;
+}
+
 /** Opens `#/stats` on [url]'s session and times its first row; `ok: null`, a reading, not a verdict. */
 async function statsFirstDraw(page, url, session) {
   await page.setWidth(1440);
@@ -256,4 +286,4 @@ async function statsRouteBreaks(page, url) {
   return rows;
 }
 
-module.exports = { shell, statsFirstDraw, statsRouteBreaks };
+module.exports = { shell, findingsFits, statsFirstDraw, statsRouteBreaks };

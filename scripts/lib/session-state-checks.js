@@ -279,7 +279,7 @@ async function checkAfterSessionChange(sources) {
     state, api: async (path) => (path === '/api/recording' ? [] : []), document: { querySelector: () => null },
     $: (id) => (id === 'session-rows' ? null : element),
     renderList() {}, renderMarkers() {}, renderCurrent() {}, renderTabs() {}, applyView() {},
-    renderTimeline() {}, renderSessionGlance() {}, statsSessionChanged() {}, paintDetailTools() {},
+    renderTimeline() {}, renderSessionGlance() {}, statsSessionChanged() {}, findingsSessionChanged() {}, paintDetailTools() {},
   });
   await page.afterSessionChange();
   const ok = state.allSessionId === null && state.allSignalsSessionId === null && state.callLoad > 4 && state.signalLoad > 7;

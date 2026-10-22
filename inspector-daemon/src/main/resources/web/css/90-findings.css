@@ -1,0 +1,56 @@
+/* findings: the Findings page */
+
+/* --- the page: stacked blocks, no table, so nothing scrolls sideways at 400px ------------------ */
+
+.findings-count { font-size: 12px; margin: 4px 0 8px; }
+.findings-config-error { color: var(--err); }
+.findings-category { margin: 8px 0 0; }
+.findings-category-title { font-size: 14px; font-weight: 600; margin: 8px 0 2px; }
+.findings-rule { padding: 10px 0; border-top: 1px solid var(--divider); }
+.findings-rule-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+.findings-rule-title { font-weight: 600; }
+.findings-rule-summary { margin: 4px 0 0; }
+
+/* A severity in words, in the text colour: every hue already means a status or a method, and amber
+   means 4xx and stale and nothing else. */
+.finding-badge {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.finding-badge.sev-high { font-weight: 700; }
+.finding-badge.sev-info { color: var(--fg-muted); }
+
+.finding {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  font-size: 12px;
+}
+.finding.finding-target { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.finding-message { margin: 0 0 4px; max-width: var(--prose-max); overflow-wrap: anywhere; }
+.finding-route { margin: 0 0 6px; font-size: 11px; color: var(--fg-muted); overflow-wrap: anywhere; }
+.finding-txns { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 6px; padding: 0; list-style: none; }
+.finding-txns li { display: flex; align-items: center; min-width: 0; }
+/* A call link is a target at least `--target-min` tall, as a page's buttons are. */
+.page-doc a.finding-txn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--target-min);
+  min-width: 0;
+  color: var(--fg);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.page-doc a.finding-txn:hover .mono { text-decoration: underline; }
+.finding-txn .method { font-size: 11px; flex: none; }
+.finding-evidence { margin: 0; padding-left: 18px; }
+.finding-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
+.finding-where, .finding-masked { margin-left: 6px; font-size: 11px; color: var(--fg-muted); }
+.finding-evidence li > :first-child { margin-left: 0; }

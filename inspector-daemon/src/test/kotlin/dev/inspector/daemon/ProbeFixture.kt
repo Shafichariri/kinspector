@@ -45,6 +45,13 @@ private const val LONG_STARTED_AT = "2025-12-31T09:00:00.000Z"
 /** How many calls the long session holds: past the clamp by 203, so the oldest 203 are off the first page. */
 const val LONG_SESSION_CALLS = 1203
 
+/**
+ * A third session, for the Findings page: each payment-safety rule's trigger once, beside calls that
+ * must trigger none. Older than both others, so the picker and `latest` stay on the probe session.
+ * Its rows are [paymentsSessionCalls]; `PaymentRulesTest` counts the findings on the same list.
+ */
+const val PAYMENTS_SESSION_ID = "2025-12-31T08-00-00_probe-payments_ci_debug"
+
 /** The call that repeats call #0: the oldest of the newest 1000, so it is on the first page and #0 is not. */
 const val LONG_REPEAT_INDEX = LONG_SESSION_CALLS - 1000
 private const val API = "api.example.invalid"
@@ -57,24 +64,26 @@ fun main(args: Array<String>) {
 }
 
 /**
- * Writes the probe session and the long session under [dataDir] and points `latest` at the probe
- * session.
+ * Writes the probe session, the long session and the payments session under [dataDir] and points
+ * `latest` at the probe session.
  *
  * Replaces either session if one is already there. `SessionWriter` appends, so a second run into
  * the same directory used to double every row — and the probes, which count rows against the
- * daemon's own answers, would then pass or fail on how many times the task had run. Only the two
+ * daemon's own answers, would then pass or fail on how many times the task had run. Only the three
  * sessions' own folders are removed; anything else under [dataDir] is left alone.
  */
 fun writeProbeFixture(dataDir: Path): Path {
     val config = DaemonConfig(dataDir = dataDir)
     Files.createDirectories(config.sessionsDir)
-    for (id in listOf(PROBE_SESSION_ID, LONG_SESSION_ID)) {
+    for (id in listOf(PROBE_SESSION_ID, LONG_SESSION_ID, PAYMENTS_SESSION_ID)) {
         val previous = config.sessionsDir.resolve(id)
         if (Files.exists(previous)) {
             Files.walk(previous).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::delete) }
         }
     }
     writeSession(config, LONG_SESSION_ID, LONG_STARTED_AT, transactions = longSessionCalls(), signals = longSessionSignals())
+    // Started at 2025-12-31T08:00:00Z, the instant `writeFindingsSession` stamps every session with.
+    writeFindingsSession(config, PAYMENTS_SESSION_ID, paymentsSessionCalls())
     val fixture = probeFixture()
     val dir = writeSession(
         config, PROBE_SESSION_ID, PROBE_STARTED_AT,
@@ -287,4 +296,40 @@ fun longSessionSignals(): List<Pair<Signal, ByteArray?>> {
                 tag = SignalTags.STATE, name = name, bytes = data.size.toLong(),
             ) to data
         }
+}
+
+/**
+ * The payments session's rows, oldest first: 18 rows, 13 mutation calls on `api.example.invalid`.
+ *
+ * Each payment-safety rule fires on it: a double POST 1.2 s apart with no key (Duplicate mutation),
+ * one key sent with two bodies (Key reused, body changed), a retry with no key and one with a key, a
+ * timeout sent again as a new call 14 s later (Ambiguous resubmit), and five payment-path rows with no
+ * key. Beside them, what must fire nothing: an `UnknownHostException` resent (it never reached a
+ * server), two GETs, and a 307 followed by attempt 2 (a redirect hop, not a retry). Two of the bodies
+ * are truncated, so the coverage line has something it could not compare. That is 10 findings on 12
+ * rows: R1 1, R2 1, R3 1, R4 1, R5 5, R6 1; 3 high, 6 medium, 1 info. The keys hold `PLANTED`, which
+ * no page may print. The wall clock follows `mono`, as in the probe session.
+ */
+fun paymentsSessionCalls(): List<Captured> {
+    val start = Instant.parse("2025-12-31T08:00:00.000Z")
+    return listOf(
+        mutation("b0000001", 1_000, "c-dup-a"),
+        mutation("b0000002", 2_200, "c-dup-b"),
+        mutation("b0000003", 4_000, "c-retry", path = "/v1/transfers", status = 503),
+        mutation("b0000004", 4_300, "c-retry", path = "/v1/transfers", attempt = 2),
+        mutation("b0000005", 6_000, "c-retry-key", path = "/v1/orders", status = 503, key = "k-PLANTED-0001-aaaa"),
+        mutation("b0000006", 6_300, "c-retry-key", path = "/v1/orders", attempt = 2, key = "k-PLANTED-0001-aaaa"),
+        mutation("b0000007", 8_000, "c-key-a", path = "/v1/orders", body = """{"qty":1}""", key = "k-PLANTED-7a1f-SECRET-9f3a"),
+        mutation("b0000008", 9_000, "c-key-b", path = "/v1/orders", body = """{"qty":2}""", key = "k-PLANTED-7a1f-SECRET-9f3a"),
+        mutation("b0000009", 11_000, "c-timeout", path = "/v1/checkout", status = null, error = "SocketTimeoutException: after 10000ms", ms = 10_000, key = "k-PLANTED-0003-cccc"),
+        mutation("b000000a", 25_000, "c-resend", path = "/v1/checkout", key = "k-PLANTED-0004-dddd"),
+        mutation("b000000b", 30_000, "c-offline", path = "/v1/checkout", status = null, error = "UnknownHostException: api.example.invalid", key = "k-PLANTED-0005-eeee"),
+        mutation("b000000c", 31_000, "c-offline-2", path = "/v1/checkout", key = "k-PLANTED-0006-ffff"),
+        getCall("b000000d", 33_000, "c-get-a"),
+        getCall("b000000e", 34_000, "c-get-b"),
+        mutation("b000000f", 36_000, "c-trunc-a", truncated = true),
+        mutation("b0000010", 36_500, "c-trunc-b", truncated = true),
+        mutation("b0000011", 38_000, "c-promo", path = "/v1/promo/apply", status = 307),
+        mutation("b0000012", 38_100, "c-promo", path = "/v1/promo/apply", attempt = 2),
+    ).map { it.copy(row = it.row.copy(ts = start.plusMillis(it.row.mono).toString())) }
 }

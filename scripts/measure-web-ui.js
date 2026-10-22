@@ -42,7 +42,7 @@ const { launchChrome, sleep } = require('./lib/measure-cdp');
 const { writeSessions } = require('./lib/measure-fixtures');
 const cases = require('./lib/measure-cases');
 const { topBar } = require('./lib/topbar-cases');
-const { shell, statsFirstDraw, statsRouteBreaks } = require('./lib/shell-cases');
+const { shell, findingsFits, statsFirstDraw, statsRouteBreaks } = require('./lib/shell-cases');
 const { room } = require('./lib/list-room-cases');
 const { liveTraffic } = require('./lib/live-traffic-cases');
 const { polish } = require('./lib/polish-cases');
@@ -236,6 +236,8 @@ async function main() {
       await Promise.all(sides.map((side) => onPage(chrome, `${side.name} shell`, (p) => shell(p, side.urls.big, 'long'))
         .then((rows) => results[side.name].push(...rows))));
       await Promise.all(sides.map((side) => onPage(chrome, `${side.name} stats routes`, (p) => statsRouteBreaks(p, side.urls.routes))
+        .then((rows) => results[side.name].push(...rows))));
+      await Promise.all(sides.map((side) => onPage(chrome, `${side.name} findings fits`, (p) => findingsFits(p, side.urls.probe))
         .then((rows) => results[side.name].push(...rows))));
     }
     // Against a daemon per tree with an empty data directory, so the streamed sessions are the only

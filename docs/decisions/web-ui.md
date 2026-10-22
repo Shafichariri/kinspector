@@ -193,7 +193,8 @@ exercising it while every probe goes on passing against the old shape. Its conte
 sampled, because a probe with nothing to look at says `n/a`: a shared prefix and a second host, a
 500, a retry chain, a redirect chain, a repeat that swept up a retry, a marker at exactly a call's
 `mono`, a full tie on chip count and recency, both cache payload shapes and a run of five identical
-observations. A second run replaces the probe session rather than appending to it — `SessionWriter`
+observations; and beside it, older so the picker still opens on it, a 1203-call session past the
+route's clamp and a payments session on which each payment-safety rule fires. A second run replaces the probe session rather than appending to it — `SessionWriter`
 appends, and doubled rows would make every count depend on how often the task had run — and leaves
 anything else in the directory alone. `ProbeFixtureTest` reads it back through `SessionRepository` and asserts each of those
 is there, so a fixture edit that loses one fails a unit test rather than turning a CI check into a
@@ -687,7 +688,8 @@ and the live probe's `page keys live`, `keys legend` and `keys skip textarea`, h
 red with its rule removed.
 
 **The page is a rail over hash-routed pages, and the rail holds navigation and nothing else.**
-`#/traffic[/<view>]`, `#/sessions`, `#/processes` and `#/settings`, each optionally ending
+`#/traffic[/<view>]`, `#/stats`, `#/findings[?id=<finding>]`, `#/sessions`, `#/processes` and
+`#/settings`, each optionally ending
 `?session=<id>`, are read by `parseRoute` and written by `routeHash` in `js/08-routes.js`, and
 nothing else reads `location.hash`. Hash routes keep the one `index.html` and no build step, make
 Back walk the pages, and give a view and a session an address. A page or a tab pushes a history
@@ -697,7 +699,7 @@ panel, and it was taken out because it spent a fifth of the window on controls t
 most views — the Now panel alone ran 1341px. This rail is navigation, which applies on every page,
 so `render-web-ui.js`'s `rail is navigation` fails if `#rail` holds anything but its links and its
 collapse button. A view control put back there is a red run, not a precedent. In an export the rail
-offers Traffic and Stats, which read only the embedded session, and every other route lands on
+offers Traffic, Stats and Findings, which read only the embedded session, and every other route lands on
 Traffic, because the other pages send something or read the machine (`pages hidden in export`,
 `routes fall back in export`, `stats rail in export`); `route parse` in
 `check-web-static.js` holds the parser. An export is a file opened from disk, where some engines,
@@ -771,6 +773,20 @@ hold the refresh rule, each shown red with its check removed; the live probe's `
 the page and the caveat, `stats n<20` and `stats long session whole` red against a daemon with the
 threshold at 0 and its fold cut at 1000 rows, and `stats restored` leaves the page as it found it,
 proven by breaking the next probe's guard (`chip marks active`).
+
+**The Findings page computes nothing, and a severity is drawn in words.** Rules, counts, order,
+messages, masked evidence and coverage come from the daemon, so there is no mirror block. The page
+asks once for every finding, with no category, and draws each category's coverage line as given.
+Every rule is listed, checked or disabled, with its count and what it could not judge, so an empty
+page cannot read as a clean bill of health from a rule that never ran. The severity is `⚑ high` in
+the text colour, because every hue already means a status or a method (`shared-rules.md`). Calls open
+through `#/txn/{id}` and push, so Back returns to Findings, and `#/findings?id=` marks one finding
+and scrolls to it once, so a live redraw leaves the reader where they are. In an export it reads the
+embedded report and refuses a category. Live, it asks again by the Stats page's rule: at most once a
+second, never twice at once, and only while it is shown with live tail on. `findings …` in
+`render-web-ui.js` and `check-web-static.js`, the archive probe's `findings offline drawn`, `findings
+txn in export` and `findings category refused`, and `findings <w> payments fits` in Chrome hold it,
+each shown red with its rule removed; the payments session they read is `ProbeFixture.kt`'s third.
 
 **Under 700px a route cell breaks only between whole pieces: a server after a `.`, `:` or `/`, a
 path after a `/`.** The held column wraps inside a 150px cap, and `overflow-wrap: anywhere` broke

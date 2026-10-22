@@ -361,25 +361,6 @@ class PaymentRulesTest {
         assertTrue(Regex("[0-9a-f]{20,}").find(text) == null, "a digest-length hex run in the reply")
     }
 
-    /** The payments session as the design's fixture table lays it out: 18 rows, 10 findings. */
-    private fun paymentsSession(): List<Captured> = listOf(
-        mutation("b0000001", 1_000, "c-dup-a"),
-        mutation("b0000002", 2_200, "c-dup-b"),
-        mutation("b0000003", 4_000, "c-retry", path = "/v1/transfers", status = 503),
-        mutation("b0000004", 4_300, "c-retry", path = "/v1/transfers", attempt = 2),
-        mutation("b0000005", 6_000, "c-retry-key", path = "/v1/orders", status = 503, key = "k-PLANTED-0001-aaaa"),
-        mutation("b0000006", 6_300, "c-retry-key", path = "/v1/orders", attempt = 2, key = "k-PLANTED-0001-aaaa"),
-        mutation("b0000007", 8_000, "c-key-a", path = "/v1/orders", body = """{"qty":1}""", key = "k-PLANTED-7a1f-SECRET-9f3a"),
-        mutation("b0000008", 9_000, "c-key-b", path = "/v1/orders", body = """{"qty":2}""", key = "k-PLANTED-7a1f-SECRET-9f3a"),
-        mutation("b0000009", 11_000, "c-timeout", path = "/v1/checkout", status = null, error = "SocketTimeoutException: after 10000ms", ms = 10_000, key = "k-PLANTED-0003-cccc"),
-        mutation("b000000a", 25_000, "c-resend", path = "/v1/checkout", key = "k-PLANTED-0004-dddd"),
-        mutation("b000000b", 30_000, "c-offline", path = "/v1/checkout", status = null, error = "UnknownHostException: api.example.invalid", key = "k-PLANTED-0005-eeee"),
-        mutation("b000000c", 31_000, "c-offline-2", path = "/v1/checkout", key = "k-PLANTED-0006-ffff"),
-        getCall("b000000d", 33_000, "c-get-a"),
-        getCall("b000000e", 34_000, "c-get-b"),
-        mutation("b000000f", 36_000, "c-trunc-a", truncated = true),
-        mutation("b0000010", 36_500, "c-trunc-b", truncated = true),
-        mutation("b0000011", 38_000, "c-promo", path = "/v1/promo/apply", status = 307),
-        mutation("b0000012", 38_100, "c-promo", path = "/v1/promo/apply", attempt = 2),
-    )
+    /** The payments session the web probes read, from `ProbeFixture.kt`: 18 rows, 10 findings. */
+    private fun paymentsSession(): List<Captured> = paymentsSessionCalls()
 }

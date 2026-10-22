@@ -10,12 +10,15 @@
  * them was kept: the next reviewer started again, at other widths, on other pages.
  *
  * On the probe session: its 500 is the row opened, since its header draws the most actions. The
- * pages an export does not offer (Sessions, Processes, Settings) are taken served only.
+ * pages an export does not offer (Sessions, Processes, Settings) are taken served only. Findings is
+ * taken on the payments session, served and from that session's own export, since the probe session
+ * has none to draw.
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 
 const WIDTHS = [1440, 1000, 600, 400];
 const SCHEMES = ['dark', 'light'];
@@ -30,6 +33,8 @@ const SHOTS = [
   { name: 'timeline', hash: '#/traffic/all', exported: true },
   { name: 'path', hash: '#/traffic/path', exported: true },
   { name: 'stats', hash: '#/stats', exported: true, ready: `document.querySelector('#page-stats tbody tr')` },
+  { name: 'findings', hash: `#/findings?session=${encodeURIComponent(PAYMENTS_SESSION_ID)}`, exported: true, payments: true,
+    ready: `document.querySelector('#findings-body article.finding')` },
   { name: 'sessions', hash: '#/sessions', exported: false, ready: `document.querySelector('#session-rows .session-row')` },
   { name: 'processes', hash: '#/processes', exported: false },
   { name: 'settings', hash: '#/settings', exported: false },
@@ -83,7 +88,9 @@ async function sheet(page, url, outDir, tree) {
   try {
     const exportFile = path.join(tmp, 'export.html');
     fs.writeFileSync(exportFile, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
-    for (const [where, base] of [['served', url], ['export', `file://${exportFile}`]]) {
+    const paymentsFile = path.join(tmp, 'payments.html');
+    fs.writeFileSync(paymentsFile, Buffer.from(await (await fetch(`${url}api/sessions/${encodeURIComponent(PAYMENTS_SESSION_ID)}/export.html`)).arrayBuffer()));
+    for (const [where, base, payments] of [['served', url, url], ['export', `file://${exportFile}`, `file://${paymentsFile}`]]) {
       for (const scheme of SCHEMES) {
         await page.colorScheme(scheme);
         let count = 0;
@@ -92,7 +99,7 @@ async function sheet(page, url, outDir, tree) {
           await page.setWidth(width);
           for (const shot of SHOTS.filter((s) => where === 'served' || s.exported)) {
             const name = file(where, scheme, width, shot.name);
-            const { png, ready } = await take(page, base, shot);
+            const { png, ready } = await take(page, shot.payments ? payments : base, shot);
             fs.writeFileSync(path.join(outDir, name), png);
             taken.set(name, { ready });
             for (const e of page.exceptions) thrown.add(e);
