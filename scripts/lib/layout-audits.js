@@ -153,4 +153,25 @@ function auditNarrowRow(styles) {
   return missing.length ? `NO - ${missing.join('; ')}` : 'yes (below 520px: no clock, the repeat mark as N×, the last segment never shrinks)';
 }
 
-module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow };
+/**
+ * While the whole-session copy is read the overview line holds its band alone, as tall as the axis
+ * it stands in for, so rows move only by the scope bar's height when the axis takes its place
+ * (KIN-42). `.axis-hint.axis-reading` sets a `min-height` equal to `.axis-svg`'s `height`, both in
+ * `css/25-axis.css`. Without it rows moved 44 px, and `measure-web-ui.js`, which CI does not run,
+ * was the only other reader (KIN-110). `copy lands huge` there measures the move itself.
+ */
+function auditOverviewBand(styles) {
+  const css = sheet(styles, 'css/25-axis.css');
+  const px = (body, property) => {
+    const m = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(\\d+(?:\\.\\d+)?)px\\s*(?:;|$)`).exec(body.trim());
+    return m ? Number(m[1]) : null;
+  };
+  const axis = px(rule(css, '.axis-svg'), 'height');
+  const band = px(rule(css, '.axis-hint.axis-reading'), 'min-height');
+  if (axis === null) return 'NO - .axis-svg sets no height in px in css/25-axis.css';
+  if (band === null) return 'NO - .axis-hint.axis-reading sets no min-height in px: the band collapses while the copy is read';
+  if (band !== axis) return `NO - .axis-hint.axis-reading's min-height is ${band}px, the axis is ${axis}px`;
+  return `yes (the reading band holds ${band}px, the axis's height)`;
+}
+
+module.exports = { auditNarrowTopBar, auditNarrowTabs, auditStickyTop, auditClosedDrawer, auditNarrowRow, auditOverviewBand };
