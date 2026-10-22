@@ -141,6 +141,15 @@ artifact reported capture code. Unpack folders are numbered now, and an `ERR` tr
 failure the script did not decide on into exit 2. Found by the 1.4.0 release rehearsal; CI's
 build job pins each case's exit code against freshly packed klibs.
 
+**An archive the guard cannot unpack proves nothing, and exits 2.** `unzip` ran with `|| true`,
+so a truncated jar or a text file named `.klib` unpacked to an empty folder, which greps clean:
+half of core's own jar said `PASSED`. `unzip` exits 1 for a warning with everything extracted and
+2 or more when it could not read the archive (9 for both of those), so 2 and above, on the target
+or on a jar nested in it, is now `UNREADABLE`, and the run ends with exit 2 and the file named,
+the same answer as a missing target. The status is tested inline: under `set -E` a function that
+returns non-zero inside `$(...)` runs the `ERR` trap and prints a false internal error beside the
+real one. CI's packed-klib step pins both cases.
+
 Publishing the library locally, to try a build from a consuming app:
 
 ```bash
