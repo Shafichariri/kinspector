@@ -36,4 +36,180 @@ function probeSessionRowTime(ctx) {
     : `yes (${rows.length} rows lead with their start time; ${errorFree ? `${errorFree} error-free read 0` : 'n/a for 0: every session has errors'})`]];
 }
 
-module.exports = { probeSessionRowTime };
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+const shown = (doc) => [...doc.querySelectorAll('#pages > .page')].filter((p) => !p.hidden).map((p) => p.id.replace(/^page-/, ''));
+// Each page's key, as the design gave them: a second copy on purpose, so a key moved in `PAGE_KEYS`
+// is a red line here rather than a legend that agrees with whatever the table says.
+const KEYS = { traffic: 't', stats: 's', findings: 'f', diff: 'd', sessions: 'a', processes: 'p', settings: ',' };
+
+/** Presses [keys] one by one on [target] (the body unless given), as keydowns that bubble to the document. */
+async function keys(ctx, list, target = ctx.doc.body) {
+  for (const key of list) {
+    target.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    await pause(30);
+  }
+}
+
+async function waitFor(ready, ms = 3000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline && !ready()) await pause(50);
+  return ready();
+}
+
+/**
+ * `g` and a page's letter reach each page from Traffic, its heading focused as `navigate` focuses it,
+ * and `g t` comes back; on Traffic, `g g` selects the first row of `orderedRows()`, from the last.
+ */
+async function pageKeysLive(ctx) {
+  const { window, doc } = ctx;
+  const pages = window.eval('PAGES').map((p) => p.id);
+  const bad = [];
+  let reached = 0;
+  for (const page of pages.filter((p) => p !== 'traffic')) {
+    // Nothing focused, so a heading focused by an earlier probe cannot pass for one `navigate` focused.
+    doc.activeElement?.blur?.();
+    await keys(ctx, ['g', KEYS[page]]);
+    const there = await waitFor(() => shown(doc).join() === page && doc.activeElement?.id === `${page}-title`);
+    if (there) reached++;
+    else bad.push(`g ${KEYS[page]} left ${shown(doc).join() || 'no page'} shown, focus on ${doc.activeElement?.id || doc.activeElement?.tagName}`);
+    await keys(ctx, ['g', 't']);
+    if (!await waitFor(() => shown(doc).join() === 'traffic')) bad.push(`g t from ${page} left ${shown(doc).join()} shown`);
+  }
+  const rows = window.eval('orderedRows()'); // a `const`, which only the page's global scope can name
+  if (rows.length < 2) return bad.length ? `NO - ${bad.join('; ')}` : `n/a for g g (${rows.length} rows); ${reached} pages reached`;
+  // The last row clicked, so `g g` has somewhere to move from. `move` scrolls the row it selects into
+  // view, which jsdom does not implement and every browser does; stubbed only while this runs.
+  const last = doc.querySelector(`#list .row[data-id="${rows[rows.length - 1].id}"]`);
+  last?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await pause(100);
+  const fromLast = ctx.pageState().selectedId === rows[rows.length - 1].id;
+  const proto = window.Element.prototype;
+  const scrolls = Object.prototype.hasOwnProperty.call(proto, 'scrollIntoView');
+  if (!scrolls) proto.scrollIntoView = () => {};
+  await keys(ctx, ['g', 'g']);
+  if (!scrolls) delete proto.scrollIntoView;
+  const top = ctx.pageState().selectedId;
+  if (!fromLast || top !== rows[0].id) bad.push(`g g selected ${top ?? 'nothing'}${fromLast ? '' : ' (the last row was not selected first)'}, the first row is ${rows[0].id}`);
+  await keys(ctx, ['Escape']);
+  return bad.length ? `NO - ${bad.join('; ')}` : `yes (${reached} pages by g and their letter, each heading focused, g t back; g g from the last row to ${rows[0].id})`;
+}
+
+/**
+ * `?` on Settings shows the legend, outside the Traffic page (which is hidden there), listing `g g`
+ * and exactly the page keys of the pages this build offers; Escape closes it.
+ */
+async function keysLegend(ctx) {
+  const { window, doc } = ctx;
+  const pop = doc.getElementById('keys-pop');
+  await keys(ctx, ['g', ',']);
+  if (!await waitFor(() => shown(doc).join() === 'settings')) return `NO - g , left ${shown(doc).join()} shown, so ? was not tried on Settings`;
+  await keys(ctx, ['?']);
+  const inTraffic = doc.getElementById('page-traffic').contains(pop);
+  let hiddenBy = null;
+  for (let node = pop; node && node !== doc; node = node.parentElement) if (node.hidden) { hiddenBy = node.id || node.tagName; break; }
+  const due = window.eval('PAGES').map((p) => `g ${KEYS[p.id]} ${p.label}`);
+  const listed = [...doc.querySelectorAll('#keys-pages li')].map((li) => li.textContent.replace(/\s+/g, ' ').trim());
+  const top = /g g\/G top\/bottom/.test(pop.textContent.replace(/\s+/g, ' '));
+  await keys(ctx, ['Escape']);
+  const closed = pop.hidden;
+  await keys(ctx, ['g', 't']);
+  await waitFor(() => shown(doc).join() === 'traffic');
+  const bad = [];
+  if (inTraffic || hiddenBy) bad.push(inTraffic ? 'the legend is inside #page-traffic, hidden on Settings' : `hidden by ${hiddenBy}`);
+  if (!listed.length) bad.push('found no page key in #keys-pages, so this checked nothing');
+  else if (listed.slice().sort().join('|') !== due.slice().sort().join('|')) bad.push(`lists ${listed.join(', ')}; due ${due.join(', ')}`);
+  if (!top) bad.push('no g g line');
+  if (!closed) bad.push('Escape left it open');
+  return bad.length ? `NO - ${bad.join('; ')}` : `yes (shown on Settings outside the Traffic page: g g and ${listed.length} page keys, ${listed.join(', ')}; Escape closed it)`;
+}
+
+/**
+ * Keys typed in the replay editor's body are text: `f`, `o` and `g` `s` leave the focus in the
+ * textarea, the order as it was and the page on Traffic. The guard skipped only inputs and selects,
+ * so `f` moved focus to the filter and lost the letter, and `o` reversed the list.
+ */
+async function keysSkipTextarea(ctx) {
+  const { window, doc } = ctx;
+  const row = doc.querySelector('#list .row');
+  if (!row) return 'NO - found no row to open the replay editor from, so this checked nothing';
+  row.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await pause(300);
+  const click = (node) => node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  const trigger = [...doc.querySelectorAll('#detail .detail-head .btn')].find((b) => b.textContent === 'replay ▾');
+  if (trigger) click(trigger);
+  await pause(40);
+  const item = [...doc.querySelectorAll('#detail .menu-item')].find((b) => b.textContent === 'edit & replay');
+  if (!item) return 'NO - found no edit & replay item, so this checked nothing';
+  click(item);
+  await waitFor(() => doc.querySelectorAll('.replay-editor textarea').length === 2);
+  const body = doc.querySelectorAll('.replay-editor textarea')[1];
+  if (!body) return 'NO - the replay editor drew no body textarea, so this checked nothing';
+  const newestFirst = ctx.pageState().newestFirst;
+  const hash = window.location.hash;
+  body.focus();
+  await keys(ctx, ['f', 'o', 'g', 's'], body);
+  await pause(200);
+  const focus = doc.activeElement === body ? 'the body' : doc.activeElement?.id || doc.activeElement?.tagName;
+  const order = ctx.pageState().newestFirst;
+  const page = shown(doc).join();
+  const address = window.location.hash;
+  // Back as it was found, whatever the keys did: order, page, the editor shut and no row selected.
+  if (order !== newestFirst) window.setSortOrder(newestFirst);
+  if (page !== 'traffic') { await window.navigate({ page: 'traffic' }); await pause(200); }
+  if (doc.querySelector('.replay-editor')) click(item);
+  body.blur();
+  await keys(ctx, ['Escape']);
+  return focus === 'the body' && order === newestFirst && page === 'traffic' && address === hash
+    ? `yes (f, o, g s typed in the body: focus stayed, order ${newestFirst ? 'newest' : 'oldest'} first, page traffic)`
+    : `NO - after f, o, g s in the body: focus on ${focus}, order flipped ${order !== newestFirst}, page ${page}, address ${address}`;
+}
+
+/** Each rail link's title names its key, `Stats (g s)`; its `aria-label` is the bare name. */
+function railKeyTitles(ctx) {
+  const links = [...ctx.doc.querySelectorAll('#rail .rail-item')];
+  if (!links.length) return 'NO - found no rail link, so this checked nothing';
+  const bad = links.filter((a) => {
+    const label = a.getAttribute('aria-label');
+    return a.title !== `${label} (g ${KEYS[a.dataset.page]})` || /\(g /.test(label || '(g ');
+  }).map((a) => `${a.dataset.page}: title "${a.title}", aria-label "${a.getAttribute('aria-label')}"`);
+  return bad.length ? `NO - ${bad.join('; ')}` : `yes (${links.length} links: ${links.map((a) => a.title).join(', ')}; aria-labels bare)`;
+}
+
+/**
+ * The page keys on the probe page, from Traffic and back to it, the legend shut, no prefix pending
+ * and no row selected. Wired right after the Stats page, so `chip marks active` is the next guard to
+ * read the shared page (the Pace rule: it was shown red with these lines present).
+ */
+async function probePageKeys(ctx) {
+  const lines = [['page keys live', await pageKeysLive(ctx)], ['keys legend', await keysLegend(ctx)],
+    ['keys skip textarea', await keysSkipTextarea(ctx)], ['rail key titles', railKeyTitles(ctx)]];
+  ctx.pageState().pageKeyAt = null;
+  return lines;
+}
+
+/**
+ * The export's page keys: `g s` opens Stats, `g a` and `g p` (live pages, which an export does not
+ * offer) leave the page where it was, and the legend lists Traffic and Stats only. Back on Traffic.
+ */
+async function probeKeysInExport(window, doc) {
+  const ctx = { window, doc };
+  const bad = [];
+  await keys(ctx, ['g', 's']);
+  if (!await waitFor(() => shown(doc).join() === 'stats')) bad.push(`g s left ${shown(doc).join()} shown`);
+  for (const letter of ['a', 'p']) {
+    await keys(ctx, ['g', letter]);
+    await pause(200);
+    if (shown(doc).join() !== 'stats' || window.location.hash !== '#/stats') bad.push(`g ${letter} moved to ${shown(doc).join()} (${window.location.hash})`);
+  }
+  await keys(ctx, ['?']);
+  const listed = [...doc.querySelectorAll('#keys-pages li')].map((li) => li.dataset.page);
+  const open = !doc.getElementById('keys-pop').hidden;
+  await keys(ctx, ['Escape']);
+  await keys(ctx, ['g', 't']);
+  await waitFor(() => shown(doc).join() === 'traffic');
+  if (!open) bad.push('? opened no legend');
+  else if (listed.join() !== 'traffic,stats') bad.push(`the legend lists ${listed.join(', ') || 'nothing'}, not traffic, stats`);
+  return bad.length ? `NO - ${bad.join('; ')}` : 'yes (g s opened Stats; g a and g p left it there; the legend lists Traffic and Stats)';
+}
+
+module.exports = { probeSessionRowTime, probePageKeys, probeKeysInExport };

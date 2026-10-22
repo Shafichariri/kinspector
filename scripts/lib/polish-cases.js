@@ -16,6 +16,10 @@
  * session time whole`). At 1440, every drawn `.settings-note` is at most 72 widths of `0` in its own
  * font (`polish 1440 prose width`); at 400 the window is narrower than that anyway.
  *
+ * Served, at 1440 and 400, `?` pressed on Settings as the browser receives a key: the legend is drawn
+ * whole inside the window, lists page keys, is what a pointer at its centre finds, and Escape shuts
+ * it (`polish <w> legend inside`). jsdom proves it opens there; only a browser can say where.
+ *
  * Each reading leaves the page as it found it: colour scheme the system's.
  */
 const fs = require('fs');
@@ -181,10 +185,40 @@ async function pageDocs(page, url, rows) {
   }
 }
 
+const LEGEND_READ = `(() => {
+  const pop = document.getElementById('keys-pop');
+  if (!pop || pop.hidden || !pop.getClientRects().length) return { shown: false };
+  const r = pop.getBoundingClientRect();
+  const at = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+  return { shown: true, l: r.left, t: r.top, r: r.right, b: r.bottom, w: innerWidth, h: innerHeight,
+    hit: Boolean(at) && pop.contains(at), keys: pop.querySelectorAll('#keys-pages li').length };
+})()`;
+
+/** `?` on Settings at 1440 and 400, served: the legend inside the window, on top, and shut by Escape. */
+async function legendInside(page, url, rows) {
+  for (const width of [1440, 400]) {
+    await load(page, `${url}#/traffic/network`, width);
+    await page.ev(`navigate({ page: 'settings' })`);
+    await page.waitFor(`!document.getElementById('page-settings').hidden`, 5000);
+    await sleep(300);
+    await page.key('?', 'Slash', 191);
+    await sleep(200);
+    const r = await page.ev(LEGEND_READ);
+    await page.key('Escape', 'Escape', 27);
+    await sleep(100);
+    const shut = await page.ev(`document.getElementById('keys-pop').hidden`);
+    const ok = Boolean(r && !r.evalError && r.shown) && r.keys > 0 && r.l >= -0.5 && r.t >= -0.5 && r.r <= r.w + 0.5 && r.b <= r.h + 0.5 && r.hit && shut === true;
+    rows.push({ key: `polish ${width} legend inside`, ok,
+      value: !r || r.evalError ? 'not measured' : !r.shown ? 'NO - ? drew no legend on Settings, so this checked nothing' : ok ? 'inside, on top' : 'outside or covered',
+      detail: r && r.shown ? `${Math.round(r.l)},${Math.round(r.t)} to ${Math.round(r.r)},${Math.round(r.b)} in ${r.w}x${r.h}; ${r.keys} page keys; hit ${r.hit}; Escape shut it ${shut}` : String(r && r.evalError || '') });
+  }
+}
+
 async function polish(page, urls) {
   const rows = [];
   await iconTargets(page, urls.probe, rows);
   await pageDocs(page, urls.probe, rows);
+  await legendInside(page, urls.probe, rows);
   return rows;
 }
 

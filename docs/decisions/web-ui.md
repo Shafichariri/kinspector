@@ -668,6 +668,20 @@ and one dot, which read as "the daemon is up" whichever it was describing. Pausi
 rather than queueing them, so resuming re-reads the session — without that, a list resumed after a
 burst is missing the burst with nothing on screen to say so. The probe watches for the re-read.
 
+**`g` is a prefix: `g` then a page's letter goes to that page, and `g g` is the top of the list.**
+The roadmap asked for `g s`-style keys, and a `g` that selected the first row at once could not
+also wait for a second key. So `g` waits 1500 ms, `g g` is top, and any other second key is
+consumed. The letters are `PAGE_KEYS` in `js/08-routes.js`: `t` Traffic, `s` Stats, `f` Findings,
+`d` Diff, `a` Sessions (the archive), `p` Processes and `,` Settings. A letter whose page this build
+does not offer, or that an export hides, does nothing and is not in the legend, so a page that
+arrives later needs no key work of its own. `?` opens the legend on every page, and the legend
+lives outside the Traffic page for that reason. **No key fires while the target takes typing**
+(`typingTarget`: an input, a select, a textarea or editable content). The guard skipped textareas
+until this item, so typing `f` in the replay editor's body moved focus to the filter and lost the
+letter, and `o` reversed the list. `check-web-static.js`'s `page keys` and `typing skips keys`,
+and the live probe's `page keys live`, `keys legend` and `keys skip textarea`, hold it. Each was
+red with its rule removed.
+
 **The page is a rail over hash-routed pages, and the rail holds navigation and nothing else.**
 `#/traffic[/<view>]`, `#/sessions`, `#/processes` and `#/settings`, each optionally ending
 `?session=<id>`, are read by `parseRoute` and written by `routeHash` in `js/08-routes.js`, and

@@ -288,13 +288,31 @@ function closePops() {
   $('keys-pop').hidden = true;
 }
 
-/** The shortcut legend, under the `⋮` button it was chosen from. */
+/**
+ * The shortcut legend: under the `⋮` button it was chosen from, or, opened by `?` with no [event],
+ * under the top bar at the right, since `⋮` is drawn on the Traffic page only.
+ */
 function showKeys(event) {
   // The menu item's click would reach the document and close the legend it just opened.
-  event.stopPropagation();
+  event?.stopPropagation();
   closePops();
-  $('keys-pop').style.top = `${$('more-button').getBoundingClientRect().bottom + 4}px`;
+  renderKeyLegend();
+  const anchor = event ? $('more-button') : $('topbar');
+  $('keys-pop').style.top = `${anchor.getBoundingClientRect().bottom + 4}px`;
   $('keys-pop').hidden = false;
+}
+
+/** The page keys this build and this page offer (`pageKeyAvailable`), one line each, in `PAGE_KEYS` order. */
+function renderKeyLegend() {
+  const list = $('keys-pages');
+  list.replaceChildren();
+  for (const [letter, id] of PAGE_KEYS) {
+    if (!pageKeyAvailable(id)) continue;
+    const li = document.createElement('li');
+    li.dataset.page = id;
+    li.append(el('kbd', null, 'g'), ' ', el('kbd', null, letter), ` ${PAGES.find((p) => p.id === id).label}`);
+    list.appendChild(li);
+  }
 }
 
 // `[button, pop, anchored]`: an anchored pop is placed under its button by the stylesheet, inside a
