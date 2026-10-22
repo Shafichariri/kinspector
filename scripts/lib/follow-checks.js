@@ -138,7 +138,12 @@ function socketPage(sources, view, newestFirst) {
     if (at.endsWith('/signals')) return state.allSignals.slice();
     return [];
   };
-  const fetch = async (path) => ({ ok: true, status: 200, text: async () => JSON.stringify(answer(path)) });
+  // Every path asked, so a check can count the `/current` and payload reads a live row cost.
+  const asked = [];
+  const fetch = async (path) => {
+    asked.push(new URL(path, 'http://stub.invalid').pathname);
+    return { ok: true, status: 200, text: async () => JSON.stringify(answer(path)) };
+  };
   const { page, pane } = stubPage(sources, state, {
     before: ['js/05-network.js', 'js/15-session-data.js', 'js/30-repeats-endpoints.js'],
     globals: {
@@ -164,7 +169,7 @@ function socketPage(sources, view, newestFirst) {
   const send = (message) => ws.onmessage({ data: JSON.stringify({ sessionId: 'S', ...message }) });
   // A call's timeline row, findable by id; the list's own row shape is not checked here.
   page.rowFor = (txn) => Object.assign(page.el('div', 'row'), { dataset: { id: txn.id } });
-  return { state, page, pane, send };
+  return { state, page, pane, send, asked };
 }
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -240,6 +245,7 @@ async function checkSocketFollow(sources) {
   }
   lines.push(['timeline asked follows', all ? `yes (${asked.join(', ')})` : `NO - ${asked.join(', ')}; each was due to follow`]);
   lines.push(...await checkLiveCallDrawn(sources, message.txn));
+  lines.push(...await checkLiveSignalBurst(sources));
   return lines;
 }
 
@@ -298,6 +304,116 @@ async function checkLiveCallDrawn(sources, txn) {
     lines.push(['live draw burst of 100', timelines <= bound && glances <= bound && all
       ? `yes (100 calls in ${took} ms: ${timelines} timeline and ${glances} glance redraws, bound ${bound}; every call drawn)`
       : `NO - 100 calls in ${took} ms: ${timelines} timeline and ${glances} glance redraws, bound ${bound}; every call drawn: ${all}`]);
+  }
+  return lines;
+}
+
+/**
+ * A signal or a marker rides the same redraw as a call. The signal branch redrew the timeline, the
+ * waterfall and the path and read `/current` for every signal, and the marker branch redrew the
+ * timeline and the path for every marker, so a burst of 100 signals cost 300 whole-session redraws
+ * and 100 reads. Each burst here counts the renderers' calls, not what they drew: a pane that is
+ * not shown returns at once, and the bound is on the calls.
+ */
+async function checkLiveSignalBurst(sources) {
+  const lines = [];
+  const counted = (page, names) => {
+    const n = Object.fromEntries(names.map((name) => [name, 0]));
+    for (const name of names) {
+      const real = page[name];
+      page[name] = (...args) => { n[name]++; return real(...args); };
+    }
+    return n;
+  };
+  const burst = async (send, count, every, make) => {
+    const started = Date.now();
+    for (let i = 0; i < count; i++) {
+      send(make(i));
+      await pause(every);
+    }
+    return Date.now() - started;
+  };
+  const onTimeline = (page) => page.$('timeline').children;
+  // The stub's querySelectorAll finds nothing, so the path's stations are counted by walking it.
+  const stations = (node) => (/(^|\s)pv-stop(\s|$)/.test(node.className || '') ? 1 : 0)
+    + (node.children || []).reduce((sum, child) => sum + stations(child), 0);
+  // 100 signals over a second, on the timeline and then on the path with a screen in every ten.
+  for (const view of ['all', 'path']) {
+    const { state, page, send, asked } = socketPage(sources, view, false);
+    const n = counted(page, ['renderTimeline', 'renderWaterfall', 'renderPath']);
+    const before = state.allSignals.length;
+    asked.length = 0;
+    const took = await burst(send, 100, 10, (i) => ({ type: 'signal', signal: i % 10 === 0 && view === 'path'
+      ? { id: `burst-s${i}`, mono: 60 + i, tag: 'screen', name: `Screen ${i}`, dataRef: `signals/burst-s${i}.json` }
+      : { id: `burst-s${i}`, mono: 60 + i, tag: 'state', name: `Vm${i}`, trigger: 'push' } }));
+    await drawn(state);
+    await pause(20);
+    const bound = Math.ceil(took / 250) + 1;
+    const arrived = state.allSignals.length - before;
+    const reads = asked.filter((p) => p.endsWith('/current')).length;
+    const counts = `${arrived} signals arrived in ${took} ms: ${n.renderTimeline} timeline, ${n.renderWaterfall} waterfall and ${n.renderPath} path redraws, ${reads} /current reads, bound ${bound}`;
+    const shown = view === 'all'
+      ? Array.from({ length: 100 }, (_, i) => `burst-s${i}`).filter((id) => onTimeline(page).some((c) => c.dataset && c.dataset.id === id)).length
+      : stations(page.$('path'));
+    const label = `live signal burst ${view === 'all' ? 'timeline' : 'path'}`;
+    if (!arrived) { lines.push([label, `NO - found no signal arriving, so this checked nothing (${counts})`]); continue; }
+    const within = [n.renderTimeline, n.renderWaterfall, n.renderPath, reads].every((c) => c <= bound) && reads > 0;
+    const drawnAll = view === 'all' ? shown === 100 : shown >= 11;
+    lines.push([label, within && drawnAll
+      ? `yes (${counts}; ${view === 'all' ? `${shown} of 100 drawn on the timeline` : `${shown} stations drawn`})`
+      : `NO - ${counts}; ${view === 'all' ? `${shown} of 100 drawn on the timeline` : `${shown} stations drawn, 11 due`}`]);
+  }
+  // 50 markers over a second: the timeline and the path, each once per redraw.
+  {
+    const { state, page, send } = socketPage(sources, 'all', false);
+    const n = counted(page, ['renderTimeline', 'renderPath']);
+    const before = state.markers.length;
+    const took = await burst(send, 50, 20, (i) => ({ type: 'marker', marker: { id: `bm${i}`, label: `burst ${i}`, mono: 60 + i } }));
+    await drawn(state);
+    const bound = Math.ceil(took / 250) + 1;
+    const arrived = state.markers.length - before;
+    const dividers = onTimeline(page).filter((c) => c.dataset && c.dataset.kind === 'marker' && /^burst \d+$/.test(c.textContent)).length;
+    const counts = `${arrived} markers arrived in ${took} ms: ${n.renderTimeline} timeline and ${n.renderPath} path redraws, bound ${bound}`;
+    lines.push(['live marker burst', !arrived ? `NO - found no marker arriving, so this checked nothing (${counts})`
+      : n.renderTimeline <= bound && n.renderPath <= bound && dividers === 50
+        ? `yes (${counts}; ${dividers} of 50 drawn on the timeline)`
+        : `NO - ${counts}; ${dividers} of 50 drawn on the timeline`]);
+  }
+  // Paused, for another session, or owed by a session the page has since left: nothing is drawn
+  // for the row and no `/current` is read. The last is the switch window: the switch's own load
+  // reads the strip, and the timer's read would put the new session's values up before it lands.
+  {
+    const moved = [];
+    for (const [why, setup, sessionId] of [
+      ['paused', (state) => { state.liveTail = false; }, 'S'],
+      ['for another session', () => {}, 'O'],
+    ]) {
+      const { state, page, send, asked } = socketPage(sources, 'all', false);
+      const n = counted(page, ['renderTimeline', 'renderWaterfall', 'renderPath']);
+      setup(state);
+      asked.length = 0;
+      send({ sessionId, type: 'signal', signal: { id: 'still-s', mono: 70, tag: 'state', name: 'Vm', trigger: 'push' } });
+      send({ sessionId, type: 'marker', marker: { id: 'still-m', label: 'still', mono: 71 } });
+      const armed = state.liveDraw.timer !== null;
+      await pause(300);
+      const total = n.renderTimeline + n.renderWaterfall + n.renderPath + asked.length;
+      if (armed || total) moved.push(`${why}: redraw armed ${armed}, ${total} redraws and reads`);
+    }
+    const { state, send, asked } = socketPage(sources, 'all', false);
+    send({ type: 'signal', signal: { id: 'left-s', mono: 70, tag: 'state', name: 'Vm', trigger: 'push' } });
+    const armed = state.liveDraw.timer !== null;
+    asked.length = 0;
+    // A switch inside the window: the session is another one and not yet read.
+    state.sessionId = 'T';
+    state.signalSessionId = null;
+    await drawn(state);
+    await pause(20);
+    const currents = asked.filter((p) => p.endsWith('/current')).length;
+    if (!armed) moved.push('a signal before the switch armed no redraw, so the switch case checked nothing');
+    if (currents) moved.push(`switched before the redraw: ${currents} /current reads`);
+    lines.push(['live signal still', moved.length
+      ? `NO - ${moved.join('; ')}`
+      : 'yes (paused and for another session a signal and a marker armed nothing and read nothing; a switch before the redraw read no /current)']);
   }
   return lines;
 }

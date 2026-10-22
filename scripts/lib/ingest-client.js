@@ -4,7 +4,7 @@
  * put real rows into a real daemon. The rows go through `/ingest`, the archive and the `/api/live`
  * broadcast exactly as an app's do, which no stubbed route or hand-fed `onmessage` reaches.
  * The wire is `docs/schema.md` → Wire protocol: a `hello`, the daemon's `helloAck`, and then
- * fire-and-forget `txn` and `signal` frames.
+ * fire-and-forget `txn`, `signal` and `marker` frames.
  *
  * It refuses any daemon that is not on 127.0.0.1, and any host that does not end in `.invalid`
  * (RFC 2606), so nothing it streams can name or reach a real server, whatever a caller passes.
@@ -57,6 +57,11 @@ async function openApp(origin, appId) {
       const id = `${appId}-s${++seq}`;
       ws.send(JSON.stringify({ type: 'signal', signal: { v: 1, id, ts: new Date().toISOString(), mono: nextMono(), tag, name }, data }));
       return id;
+    },
+    /** One marker from the app, as `MarkerMsg` carries it; markers have no id, so the label is returned. */
+    marker(label) {
+      ws.send(JSON.stringify({ type: 'marker', marker: { v: 1, ts: new Date().toISOString(), mono: nextMono(), label, source: 'app' } }));
+      return label;
     },
     close() { ws.close(); },
   };
