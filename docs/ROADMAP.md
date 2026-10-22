@@ -619,6 +619,8 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 - **Redirect collapsing** on engines other than CIO is unresolved for the target app's engine.
 - **The Auth0 adapter** compiles against the real SDK and has never run against a live tenant.
 - **Nobody has judged how the web UI looks.** It renders correctly; that is a different claim.
+  *(2026-10-22: `item:web-ui-polish` no longer closes this. It hands the maintainer a contact sheet;
+  this stays open until the maintainer says they have looked, or picks an outside designer.)*
 
 
 ---
@@ -763,13 +765,13 @@ here. Phases A to I are merged, and so are the rows listed in `ROADMAP-DONE.md` 
 | 21 | KIN-42: draw the first page at once, read the whole-session copy in the background *(undeferred 2026-10-21 by the maintainer; builds from a fresh design note; merged 2026-10-22 as PR #136, open until QA verifies it)* | §3 → Guards, under the signals sort and clamp | `item:signals-query-one-rule` | one ticket | W, the same engineer as `item:web-switch-clears-call-panes` |
 | 21a | One IPv6 server reached by both clients is two route rows | §3 → Bugs found, not fixed, under the 2026-10-22 follow-ups | `item:route-key-one-ipv6-host` | S | D, before `item:session-diff` PR A and `item:findings-payment-safety` PR A |
 | 23 | A burst of live signals redraws once, not per message | §3 → Bugs found, not fixed | `item:web-live-signal-burst-bounded` | S | W |
-| 24 | Session diff (waits: design Q2 and Q3 confirmations, non-blocking) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
+| 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after the advisory's batch; PR B in W |
 | 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 26 | Findings, and the payment-safety rules (waits: the shared STOP before T2, Q1 before T7) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after diff PR A merges; PR B and C in W |
-| 27 | Web UI polish (waits: Q2 to Q5) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
+| 26 | Findings, and the payment-safety rules (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Findings | `item:findings-payment-safety` | L | PR A in D, after diff PR A merges; PR B and C in W |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before diff PR B, PR B last of all |
 | 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
 | 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
-| 30 | Sensitive-data detection — detect, never redact (waits: the shared STOP, Q2, Q3) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D; T5 in W after findings PR B |
+| 30 | Sensitive-data detection — detect, never redact (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M | T1 to T4 in D; T5 in W after findings PR B |
 
 **Rows after the advisory decided 2026-10-21 by the maintainer**, on the architect's and the
 product owner's joint proposal; the order is approved, and each "(waits: …)" is a decision still
@@ -790,6 +792,16 @@ the measure runner, which goes before the W lane's next fix round because every 
 `item:findings-payment-safety`, because both reuse the route key; fixed after them, it would change
 three surfaces' answers instead of one. KIN-42 merged on 2026-10-22 as PR #136; its row stays until QA
 verifies it.
+
+**The design questions on four rows were answered 2026-10-22 by the maintainer's proxy**, each on the
+architect's recommended default, and are reversible if the maintainer reopens them. Findings and
+sensitive-data detection share one answer to the shared STOP: `findings` and `findingDismissals`
+are re-read live, every other `config.json` key stays read at start, and the narrowing is written
+into `docs/decisions/daemon-and-mcp.md` by the item, not left implicit. Both ship on by default,
+with `list_findings` open to agents and no MCP tool able to dismiss a finding. Web UI polish closes
+on merge and QA like any item; the contact sheet its last PR produces goes to the maintainer, and
+§3's open question "Nobody has judged how the web UI looks" stays open until they have looked or
+picked a designer. Two questions became unordered candidates, in §6 → "Candidates, not ordered".
 
 §6 items 3 to 6 were **not scheduled** by the 2026-10-18 decision. They keep their place in §6's table and
 wait for the next one.
@@ -991,7 +1003,8 @@ and the findings); *where the cache lives* (a disk cache is acceptable under the
 *regional defaults* (generic rules only). **Nothing in the table is blocked by an open decision
 now**; all of it waits on the structure pass above. Still open, and neither stops an item from
 starting: *truncated bodies* adds an acceptance criterion to the Session diff; *two notions of
-duplicate* gates the Findings row badge.
+duplicate* gates the Findings row badge. *(Both decided 2026-10-22 by the maintainer's proxy;
+see each item.)*
 
 ### Web UI foundation
 
@@ -1107,7 +1120,12 @@ Endpoint identity here is the **route** — the template decided under Endpoint 
 
 The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
 
-**Open decision — "unknown" must cover truncated bodies, not only omitted ones.** *(Review,
+**Decided 2026-10-22 by the maintainer's proxy: the recommendation below, made stricter.** A key
+path is "removed" only when every JSON body on the other side was read complete, and nothing at or
+under a redacted path is compared. Cross-origin matching is not in this item; it is in "Candidates,
+not ordered" below.
+
+*Was an open decision —* **"unknown" must cover truncated bodies, not only omitted ones.** *(Review,
 2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
 around bodies capture did not keep, which reads as `reqBodyOmitted`/`resBodyOmitted`. A body over
 the cap is a different case: capture keeps a prefix, writes it to disk with a `*BodyRef`, sets
@@ -1162,7 +1180,12 @@ view toggle. Changing the grammar is a separate decision.
 `GET /api/sessions/{id}/findings?category=`, MCP `list_findings`, a Findings page grouped by rule,
 a row badge, a section in the detail pane, and disclosure in every export (HAR's entry `comment`).
 
-**Open decision — two notions of "duplicate" on one row.** *(Review, 2026-10-17. Does not block
+**Decided 2026-10-22 by the maintainer's proxy: keep both**, as recommended below. The rule is
+Duplicate mutation, drawn only as a severity badge, and its evidence never cites a repeat group.
+The same body sent twice with different keys is not in this item; it is in "Candidates, not
+ordered" below.
+
+*Was an open decision —* **two notions of "duplicate" on one row.** *(Review, 2026-10-17. Does not block
 the start; gates the row badge for this rule.)* The page already marks repeats: `duplicateGroups` in
 `:inspector-model`, mirrored in `app.js`, keys on method + full URL + status + both byte counts,
 requires a different `callId`, excludes headers, and chains members whose consecutive gap is within
@@ -1263,13 +1286,83 @@ config already covers.
 ### Web UI polish
 
 The notes from use, applied once the new screens exist; the first human design pass the web UI
-has had (still listed under open questions); `g s` / `g f`-style keys for the new pages; and empty
+has had (still listed under open questions; *decided 2026-10-22 by the maintainer's proxy: the item
+does not wait for that pass. It closes on merge and QA, hands the maintainer the contact sheet, and
+the pass and its notes become their own items*); `g s` / `g f`-style keys for the new pages; and empty
 states that say why they are empty, as the traffic list already does.
 
 The `⤢` and `⇥` glyphs in the detail pane's tools row, drawn at 13px since 1b, which nobody has judged
 (placed 2026-10-21 from the coordinated run's follow-ups; §3 → Bugs found, not fixed has the table).
 
 An editor for `routeTemplates` on the Settings page. 1a's editor covers retention and signal caps, and `item:endpoint-latency-stats` left templates to `config.json` and `PUT /api/config`, which validates them.
+
+### Candidates, not ordered
+
+Added 2026-10-22 by the product owner, out of questions the maintainer's proxy answered that day
+for `item:session-diff` and `item:findings-payment-safety`. Each is kept out of its parent item on
+purpose. Neither is in "Order from here", and neither gets tickets until it is placed there. Each
+names what would decide it. If that evidence says no, it moves to a "Not worth doing" entry with the
+reason.
+
+#### Match routes across origins in the diff
+
+*Ticket label:* `item:diff-match-across-origins`
+
+**The user and the problem.** A web UI user on a Mac, or an agent calling `diff_sessions`, compares
+a run against a staging server with a run against production. A route keys on host, so every route
+is different and the diff shows the whole app as removed and re-added. The answer is correct and
+tells the user nothing.
+
+**Why not now.** It would grow an L item. Nobody knows yet how often two runs of one app reach
+different hosts. **Decide after `item:session-diff` is verified by QA**, from how often the
+comparison comes up. One check for that QA, which belongs to the diff and not to this candidate: a
+diff of two sessions with no host in common must say so, not show only a wall of added and removed
+routes.
+
+**Acceptance criteria, if placed.**
+- With a host pairing set in `config.json` (for example `staging.example.test` →
+  `api.example.test`), a diff of those two sessions pairs routes whose method, scheme, port and
+  template match, and labels each paired row with both hosts.
+- With no pairing set, nothing is paired. The diff never guesses that two hosts are "the same
+  server".
+- `diff_sessions` and the Markdown form report the same pairing as the page.
+
+**Out of scope.** Changing the route key. `docs/decisions/daemon-and-mcp.md` records that "the
+host is part of the key because one template on two servers is two routes, and the diff and the
+findings reuse the key". A pairing is a diff-time view over two keys, not a new key. If the design
+finds it has to change the key, **this overturns a recorded decision** and must say so. Findings and
+stats are not affected.
+
+**Surfaces.** Daemon, web UI, MCP. A new `config.json` key, read at start like every key except the
+two findings keys. No library API. **Size:** M, the product owner's guess.
+
+#### Same body sent twice with different idempotency keys
+
+*Ticket label:* `item:finding-same-body-new-key`
+
+**The user and the problem.** A web UI user or an agent checking a payment flow. The client mints a
+fresh idempotency key on each tap, so a double tap sends the same body twice and the server treats
+the two calls as two payments. None of the six rules sees it: Duplicate mutation needs no key, and
+"Key reused, body changed" needs the same key.
+
+**Why not now.** It is a seventh rule, and the six are not built. Two identical payments a few
+seconds apart are sometimes intended, so the false-positive rate decides the rule's severity and
+whether it ships on by default. **Decide after `item:findings-payment-safety` has run on one real
+session.**
+
+**Acceptance criteria, if placed.**
+- Two mutations with the same method, route and body hash, different `callId`s and different
+  idempotency keys, within the duplicate window, raise one finding that cites both calls.
+- A body capture did not keep, or kept only in part, raises nothing. The rule never claims a
+  duplicate without both bodies, the same as Duplicate mutation.
+- Evidence is masked like every other finding's. The rule has a stable id and lives in the one rule
+  registry, and the findings JSON only gains entries.
+
+**Out of scope.** Matching across sessions, a filter-grammar term (the grammar is frozen for v1),
+and any knowledge of a particular backend's payment API.
+
+**Surfaces.** Daemon only. The page, MCP and exports get it through the findings framework. No
+library API. **Size:** S.
 
 ### Deferred: mocking, fault injection, breakpoints
 
