@@ -211,6 +211,13 @@ class FindingsEngine internal constructor(
             else -> Result.failure(IllegalArgumentException(unknownCategory(text)))
         }
 
+        /** Each txn id a finding lists, with its findings in report order: the HAR's entry notes. */
+        fun byTxn(report: FindingsReport): Map<String, List<Finding>> {
+            val map = LinkedHashMap<String, MutableList<Finding>>()
+            for (finding in report.findings) finding.txnIds.forEach { map.getOrPut(it) { ArrayList() } += finding }
+            return map
+        }
+
         fun unknownCategory(text: String): String =
             "unknown category '$text'. Use one of: ${FindingRuleCatalog.CATEGORIES.joinToString(", ")}."
 

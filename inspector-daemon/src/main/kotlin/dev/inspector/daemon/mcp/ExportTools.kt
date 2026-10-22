@@ -3,6 +3,7 @@ package dev.inspector.daemon.mcp
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.ExportMarkdown
+import dev.inspector.daemon.service.FindingsEngine
 import dev.inspector.daemon.service.HtmlExport
 import dev.inspector.daemon.service.SessionExport
 import dev.inspector.daemon.service.SessionExportDocument
@@ -24,6 +25,7 @@ private val EXPORT_FORMATS: Map<String, (SessionExportDocument) -> String> = lin
 internal class ExportTools(
     config: DaemonConfig,
     repository: SessionRepository,
+    private val findings: FindingsEngine,
 ) : ToolContext(config, repository), ToolGroup {
 
     override val tools: List<Tool> = listOf(
@@ -70,7 +72,7 @@ internal class ExportTools(
         val target = args.string("dir")?.let { java.nio.file.Path.of(it) } ?: config.dataDir.resolve("exports")
         java.nio.file.Files.createDirectories(target)
 
-        val document = SessionExport.build(dir, repository, config.routeTemplates, daemonVersion())
+        val document = SessionExport.build(dir, repository, config.routeTemplates, findings, daemonVersion())
         val written = formats.map { ext ->
             val file = target.resolve(SessionExport.fileName(document, dir, ext))
             java.nio.file.Files.writeString(file, EXPORT_FORMATS.getValue(ext)(document))

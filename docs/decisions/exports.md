@@ -79,6 +79,20 @@ red with an empty-list default on `routes` and with the table built from `queryT
 archive probe's `stats offline` lines pin the page: red with the `/stats` branch taken out of
 `archiveSource`, when the 404 is drawn instead of the table.
 
+**Every export discloses the findings, and a HAR does so in the comment of each entry a finding
+names.** The JSON and HTML carry `findings`, the whole session's report, with no default; the
+Markdown has a Findings section before the timeline. HAR has no field for it, so each named entry
+gains one `finding <severity> <ruleId>: <message>` note, as attempts and redactions already do, and
+nothing else changes: a session with no findings exports a HAR byte-identical to one from before
+findings existed. `SessionExport.build` takes the findings engine as a required parameter, so no
+export runs on default rules while the daemon runs on the config's. `Har.export` takes the
+findings by row with an empty default, the one place the design's "required" gave way: `HarTest`
+calls it unedited and is what pins a no-finding HAR, and `HarFindingsTest` pins that the route
+passes the whole session's findings, filter or not, and that an entry with nothing to say still
+has no comment. `ExportTest`, `HarTest` and `HarFindingsTest` pin it; `ExportTest` was shown red
+with the findings computed from `queryTransactions` and with unfound rules left out, and
+`HarFindingsTest` with the route passing no findings and with a note added to every entry.
+
 **Export payloads are the captured text, never `Signal.data`.** Filling `data` means parsing the
 payload, and a parse keeps only the last of a duplicated key. The JSON tree in the HTML needs the
 bytes the app sent, so payloads travel in `signalData` with the same utf8/base64 rule bodies use.

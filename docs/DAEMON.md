@@ -684,8 +684,8 @@ can call the MCP tool `export_session`, which writes the files to `~/.inspector/
 | File | What it is |
 |---|---|
 | `.html` | **This web UI, working from disk.** Double-click it on a machine with no Inspector: the list, timeline, time axis, waterfall, signal browsers, detail pane, JSON tree and the Stats page's route table all work, because they are the same code with the session embedded. What needs a daemon is hidden, and a banner says so: the filter box (the grammar is evaluated by the daemon), sorting the route table or opening a route's calls from it, replay, adding markers, pulls, and process control. The time axis still narrows the view. |
-| `.md` | **A readable record.** The session's details, then a Routes table (calls, attempts and retries, failures and latency per route), then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
-| `.json` | **The complete document**: session metadata and summary, the route table as `routeStats`, the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
+| `.md` | **A readable record.** The session's details, then a Routes table (calls, attempts and retries, failures and latency per route), then a Findings section (each rule that found something, with its findings, the rows they name and their evidence; then the rules that found nothing or are off, and what could not be judged), then the merged timeline as a table, then one section per call in time order: URL, start time and duration, attempts, request and response headers and bodies. JSON bodies are re-indented, never re-serialised, so ids keep every digit. A body that is absent says why, from what capture recorded, and a binary one points at the JSON. |
+| `.json` | **The complete document**: session metadata and summary, the route table as `routeStats`, the findings report as `findings` (§7, "Findings"; the HTML page reads it from the same place), the merged timeline, every transaction row exactly as archived with its bodies beside it, every signal with its payload, and every marker. A body is `{"encoding": "utf8" \| "base64", "text": …}`. |
 
 All three are the **whole session** — no filter, no page limit. That differs from the live web
 UI, which lists at most 1000 calls, so the export of a long session holds more than the page shows.
@@ -729,7 +729,9 @@ present and complete, so nothing is lost.
 Two things the export discloses per entry, in `comment`, that a HAR has no field for: that a row is
 one **attempt** of a call that redirected or retried, and **what redaction removed**. Handing
 somebody a redacted capture as though it were complete is the kind of omission that gets read as
-"no credential was sent".
+"no credential was sent". A third joins them when there is one: each finding that names the entry,
+as `finding <severity> <ruleId>: <message>`, from the whole session's findings whatever `filter`
+kept. An entry no finding names is exactly what it was before findings existed.
 
 A response body that is not valid UTF-8 travels base64-encoded, which the format supports. A
 **request** body that is not valid UTF-8 does not: `postData.text` is a string and HAR offers no
@@ -803,6 +805,10 @@ A duplicate is never claimed from a body capture did not keep whole, or with a r
 redirect hop is not a retry, and a failure that never reached a server (`UnknownHostException`,
 `ConnectException` and the like) is not an ambiguous resubmit. Rules and their settings are the
 `findings` key in §6.
+
+Every export carries them: the JSON and HTML as `findings`, the whole session's report with no
+category or limit; the Markdown as a Findings section before the timeline; the HAR as a note on
+each entry a finding names.
 
 ---
 

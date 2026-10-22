@@ -3,6 +3,7 @@ package dev.inspector.daemon.http
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.service.ExportMarkdown
+import dev.inspector.daemon.service.FindingsEngine
 import dev.inspector.daemon.service.Har
 import dev.inspector.daemon.service.HtmlExport
 import dev.inspector.daemon.service.SessionExport
@@ -19,7 +20,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 
-internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonConfig) {
+internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonConfig, findings: FindingsEngine) {
     /**
      * HAR 1.2, for sharing a session with a tool that is not Inspector.
      *
@@ -39,11 +40,16 @@ internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonCon
             return@get call.respondError(HttpStatusCode.BadRequest, e.message ?: "invalid filter")
         }
         val meta = repository.readMeta(dir)
+        val bodyOf = { txnId: String, side: String -> repository.readBody(dir, txnId, side) }
+        // The whole session's findings whatever the filter: a finding is about calls next to each
+        // other, and each entry the filter keeps carries the findings that name it.
+        val report = findings.compute(dir.fileName.toString(), dir, repository.readTransactions(dir), bodyOf)
         val har = Har.export(
             meta = meta,
             transactions = transactions,
-            bodyOf = { txnId, side -> repository.readBody(dir, txnId, side) },
+            bodyOf = bodyOf,
             creatorVersion = daemonVersion(),
+            findingsByTxn = FindingsEngine.byTxn(report),
         )
         val name = meta?.sessionId ?: dir.fileName.toString()
         call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name.har\"")
@@ -58,15 +64,15 @@ internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonCon
      * is the question these answer. Read-only, so no control header.
      */
     get("/api/sessions/{id}/export.json") {
-        call.respondExport(repository, config, "json", ContentType.Application.Json) { SessionExport.toJson(it) }
+        call.respondExport(repository, config, findings, "json", ContentType.Application.Json) { SessionExport.toJson(it) }
     }
     get("/api/sessions/{id}/export.md") {
-        call.respondExport(repository, config, "md", ContentType("text", "markdown").withCharset(Charsets.UTF_8)) {
+        call.respondExport(repository, config, findings, "md", ContentType("text", "markdown").withCharset(Charsets.UTF_8)) {
             ExportMarkdown.render(it)
         }
     }
     get("/api/sessions/{id}/export.html") {
-        call.respondExport(repository, config, "html", ContentType.Text.Html.withCharset(Charsets.UTF_8)) { HtmlExport.render(it) }
+        call.respondExport(repository, config, findings, "html", ContentType.Text.Html.withCharset(Charsets.UTF_8)) { HtmlExport.render(it) }
     }
 }
 
@@ -74,12 +80,13 @@ internal fun Route.exportRoutes(repository: SessionRepository, config: DaemonCon
 private suspend fun ApplicationCall.respondExport(
     repository: SessionRepository,
     config: DaemonConfig,
+    findings: FindingsEngine,
     extension: String,
     contentType: ContentType,
     render: (SessionExportDocument) -> String,
 ) {
     val dir = resolveSession(repository) ?: return
-    val document = SessionExport.build(dir, repository, config.routeTemplates, daemonVersion())
+    val document = SessionExport.build(dir, repository, config.routeTemplates, findings, daemonVersion())
     val name = SessionExport.fileName(document, dir, extension)
     response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
     respondText(render(document), contentType)
