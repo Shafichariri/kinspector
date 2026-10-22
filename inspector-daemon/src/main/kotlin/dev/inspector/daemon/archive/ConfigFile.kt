@@ -34,7 +34,8 @@ sealed interface ConfigMergeResult {
 
 /**
  * `config.json` as a file to edit, for `PUT /api/config`. [DaemonConfig.load] stays the reader the
- * daemon starts from; nothing written here applies before the next start.
+ * daemon starts from; nothing written here applies before the next start, except the `findings` key,
+ * which [FindingSettingsSource] reads on the next findings read.
  *
  * A save merges into the file rather than replacing it. The file is also edited by hand and will
  * carry settings this build does not know, so a key it does not recognise is kept as it was; a
@@ -157,6 +158,7 @@ class ConfigFile(private val dataDir: Path) {
                     .let { if (it == null) "maxTotalMb must be a whole number of megabytes, at least 1" else null }
                 "signalCaps" -> validateSignalCaps(value)
                 "routeTemplates" -> validateRouteTemplates(value)
+                "findings" -> FindingSettings.problem(value)
                 else -> null
             }
             if (problem != null) return problem
@@ -206,6 +208,6 @@ class ConfigFile(private val dataDir: Path) {
         /** The most megabytes [DaemonConfig.maxTotalBytes] can hold as bytes. */
         const val MAX_TOTAL_MB = Long.MAX_VALUE / (1024L * 1024L)
 
-        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps", "routeTemplates")
+        val KNOWN_KEYS = listOf("port", "maxSessions", "maxTotalMb", "signalCaps", "routeTemplates", "findings")
     }
 }

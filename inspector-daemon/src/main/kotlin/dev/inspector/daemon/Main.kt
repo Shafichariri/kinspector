@@ -1,6 +1,7 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.Retention
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.SessionSummary
@@ -9,6 +10,9 @@ import dev.inspector.daemon.http.InspectorDaemon
 import dev.inspector.daemon.http.PortUnavailableException
 import dev.inspector.daemon.mcp.McpServer
 import dev.inspector.daemon.mcp.McpTools
+import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsReport
+import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsReport
 import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.daemon.service.StatsSort
@@ -26,12 +30,15 @@ Usage:
   inspector summary  [--session ID]
   inspector query    '<filter>' [--session ID] [--limit N] [--offset N]
   inspector stats    ['<filter>'] [--session ID] [--sort KEY] [--limit N]
+  inspector findings [--session ID] [--category C] [--limit N]
   inspector body     <txnId> --side req|res [--session ID]
   inspector prune
 
 --session accepts the literal 'latest' (the default).
 stats prints per-route latency and failure rates; --sort is attempts (the default), p50,
 p90, p95, p99, max or errors, and --limit defaults to 1000.
+findings prints what the findings rules flag (payment safety); --category narrows to one
+family, and --limit defaults to 1000.
 
 serve also bridges a USB-attached iPhone when usbmuxd is present (every Mac): the app
 listens on the phone's own 127.0.0.1:<port> and the daemon dials it over the cable.
@@ -132,6 +139,15 @@ fun main(args: Array<String>) {
                 fail(e.message ?: "invalid filter")
             }
             println(dev.inspector.model.InspectorJsonPretty.encodeToString(RouteStatsReport.serializer(), report))
+        }
+
+        "findings" -> {
+            val dir = repository.resolve(flags["session"] ?: "latest") ?: fail("no such session")
+            val category = FindingsEngine.parseCategory(flags["category"]).getOrElse { fail(it.message.orEmpty()) }
+            val limit = (flags["limit"]?.toIntOrNull() ?: 1000).coerceIn(1, 5000)
+            val engine = FindingsEngine(FindingSettingsSource(config.dataDir), config.routeTemplates)
+            val report = FindingsService(repository, engine).report(dir, category, limit)
+            println(dev.inspector.model.InspectorJsonPretty.encodeToString(FindingsReport.serializer(), report))
         }
 
         "body" -> {

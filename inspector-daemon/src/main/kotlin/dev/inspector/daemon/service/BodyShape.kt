@@ -82,11 +82,17 @@ object BodyEvidence {
      * mistake it for the body.
      */
     fun read(repository: SessionRepository, dir: Path, txn: NetworkTransaction, side: BodySide): ByteArray? =
-        when (state(txn, side)) {
-            BodyState.EMPTY -> ByteArray(0)
-            BodyState.COMPLETE, BodyState.NOT_JSON -> repository.readBody(dir, txn.id, side.key)
-            else -> null
-        }
+        read(state(txn, side)) { repository.readBody(dir, txn.id, side.key) }
+
+    /**
+     * [read] for a caller that kept only the row's [state], as a fold does: the bytes from [file]
+     * when the state is whole, an empty array when there was no body, otherwise null.
+     */
+    fun read(state: BodyState, file: () -> ByteArray?): ByteArray? = when (state) {
+        BodyState.EMPTY -> ByteArray(0)
+        BodyState.COMPLETE, BodyState.NOT_JSON -> file()
+        else -> null
+    }
 }
 
 /** JSON paths in the Redactor's own syntax (`$`, `$.key`, `$.items[2]`). */

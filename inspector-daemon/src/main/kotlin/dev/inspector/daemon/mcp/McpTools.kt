@@ -1,7 +1,10 @@
 package dev.inspector.daemon.mcp
 
 import dev.inspector.daemon.archive.DaemonConfig
+import dev.inspector.daemon.archive.FindingSettingsSource
 import dev.inspector.daemon.archive.SessionRepository
+import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsService
 import dev.inspector.model.FilterParseException
 import kotlinx.serialization.json.Json
@@ -46,6 +49,11 @@ class McpTools(
         SessionTools(config, repository),
         TransactionTools(config, repository),
         RouteStatsTool(config, repository, RouteStatsService(repository, config.routeTemplates)),
+        FindingsTool(
+            config,
+            repository,
+            FindingsService(repository, FindingsEngine(FindingSettingsSource(config.dataDir), config.routeTemplates)),
+        ),
         SignalTools(config, repository, signalPuller),
         MarkerTools(markerPoster),
         ExportTools(config, repository),

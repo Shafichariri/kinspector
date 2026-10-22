@@ -69,7 +69,8 @@ temporary file in the same directory and moves it over the old one atomically, s
 old file or the new one, never half of each. A malformed file is refused with 409 and left untouched:
 a save must never overwrite settings it could not read. An unknown key in the request is a 400 that
 names it, since a misspelt key silently dropped is a setting the user believes they made. Nothing
-applies until the next start — a port cannot move live and `Retention` reads the config it was built
+but the `findings` key applies until the next start (see "The findings settings are read on the
+next findings read" below) — a port cannot move live and `Retention` reads the config it was built
 with — and `GET` reports the flags that override the file so the page can say why a value will not
 change. `ConfigFileTest` pins each rule.
 
@@ -205,8 +206,8 @@ Trailing slashes and path case are kept, and the query never takes part. The seg
 heuristic; among what it misses: a long camelCase name with a digit reads as `{id}`, and slugs,
 short tokens and ids with an extension stay literal. `routeTemplates` in `config.json` overrides
 it, first match wins, matched segment by segment with no regular expressions, so no entry can
-make a stats read slow. Like every key in `config.json` it is read at start (see "`config.json`
-is written by merging …" above). The daemon and `inspector mcp` are two processes, so after an
+make a stats read slow. Like every key in `config.json` but `findings` it is read at start (see
+"`config.json` is written by merging …" above). The daemon and `inspector mcp` are two processes, so after an
 edit each groups by the new templates once it has restarted. `RouteTemplatesTest` pins each
 class and each miss, and `ConfigFileTest` pins the key's validation.
 
@@ -249,6 +250,50 @@ shrank or was replaced, or a markers file that grew under a filter, rebuilds fro
 Memory only, four entries. `RouteStatsServiceTest` holds a fold equal to a cold compute, and was
 shown red with the offset advanced past an incomplete line. `StatsRouteTest` and
 `RouteStatsToolTest` pin 1203 rows on both adapters.
+
+**Findings are computed on read from every call, cached in memory, and never written to the
+archive.** The rules run in `service/`, not `:inspector-model` (ROADMAP §5, decided 2026-10-18), so
+the web UI mirrors nothing and the overlay has no findings. Each source folds a row once, through
+the `IndexCursor` route stats also use, so a live refresh reads only what was appended, and the list
+is collected again only when the row count or the rule version changed. Memory only, four entries:
+the disk cache the roadmap allows under three conditions is not built, because nothing has measured
+recomputing as slow. Rows are never read through `queryTransactions`, for the reason `HarTest`
+exists. `FindingsServiceTest` holds a fold equal to a cold compute and a finding on the oldest of
+1203 rows; it was shown red reading through `queryTransactions`.
+
+**The findings settings are read on the next findings read, not at start; every other key still
+waits for a restart.** The `findings` key is re-parsed whenever `config.json`'s size, modified time
+or file key changed, and `ruleVersion`, a hash of the sources' versions and those settings, is part
+of the cache key, so a changed rule rebuilds and an unchanged file costs one `stat`. The daemon and
+`inspector mcp` are two processes, and the roadmap's reason for keeping rules in the config — an
+agent and the page disagreeing about what counts as a finding is a worse bug than either alone — is
+exactly what a read at start produced between a restarted daemon and an MCP server started before
+the edit. A hand edit that does not parse keeps the last good settings and says so in `configError`.
+`routeTemplates` stays read at start, so after a template edit a finding's route still changes only
+on restart. Decided 2026-10-22 by the maintainer's proxy, for `findings` and, when the
+sensitive-data item adds it, `findingDismissals`, and for no other key. `FindingSettingsSourceTest`
+and `FindingsServiceTest` pin it, the latter with a second service instance standing for the MCP
+process; it was shown red with the settings parsed once.
+
+**A finding family plugs in as a `FindingSource`; the engine owns everything around it.** A source
+folds rows into an accumulator and returns findings under the rule ids it registered in
+`FindingRuleCatalog`, with its own coverage. The engine drops a disabled rule's findings and any
+finding under an unregistered id, checks hints, orders by severity then time, applies caps, the
+category and the limit, and serves the one route, the one MCP tool, the CLI and the exports. A
+second family adds a source and one line in `FindingSources.all`, never a second endpoint, cache or
+page, because a second copy of the order or the masking check is the one that would drift.
+`FindingsEngineTest` pins the engine's half.
+
+**Payment rules compare whole request bodies byte for byte, and claim nothing about a body capture
+did not keep.** Whole is the diff's `BodyEvidence` answer, and a body with a redacted path counts as
+unknown, because equal after redaction is not equal. Byte equality rather than parsed equality,
+because the same code path serialises a resend the same way, and a canonical JSON form would be a
+second parser to agree with; a body carrying a client nonce is therefore never a duplicate here,
+which is a known miss. An idempotency header redacted at capture counts as present with its value
+unknown. "Retry" is route stats' retry, through `RedirectHops`, so a 307 that re-sends a POST is a
+hop of one call. A failure that never reached a server (`UnknownHostException`, `ConnectException`
+and three more, by class) is not an ambiguous resubmit. `PaymentRulesTest` pins each trigger and
+boundary.
 
 **A daemon class decoded from outside input keeps its pre-move serial name.** kotlinx-serialization
 quotes a class's serial name in `MissingFieldException`, and a serial name defaults to the fully
