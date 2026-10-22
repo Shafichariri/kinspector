@@ -1,13 +1,19 @@
 package dev.inspector.daemon.http
 
+import dev.inspector.daemon.service.DiffMarkdown
 import dev.inspector.daemon.service.DiffOutcome
 import dev.inspector.daemon.service.DiffReport
 import dev.inspector.daemon.service.DiffRequest
 import dev.inspector.daemon.service.SessionDiffService
 import dev.inspector.model.InspectorJson
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.withCharset
 import io.ktor.http.Parameters
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.response.header
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.coroutines.Dispatchers
@@ -18,8 +24,8 @@ private const val DEFAULT_LIMIT = 1000
 private const val MAX_LIMIT = 5000
 
 /**
- * Two sessions compared route by route. Read-only, so open like every `GET`, and it carries less
- * than `GET …/transactions`: no header or body value, no query string.
+ * Two sessions compared route by route, as JSON and as Markdown. Read-only, so open like every
+ * `GET`, and it carries less than `GET …/transactions`: no header or body value, no query string.
  *
  * The rules are [SessionDiffService]'s, which `diff_sessions` and `inspector diff` serve too; this
  * holds only the parameters and the mapping of the service's outcome to a status.
@@ -28,6 +34,13 @@ internal fun Route.diffRoutes(diffs: SessionDiffService) {
     get("/api/diff") {
         val report = call.diffReport(diffs) ?: return@get
         call.respondJson(InspectorJson.encodeToString(DiffReport.serializer(), report))
+    }
+    // The same report as a file to hand on; errors stay JSON, as every route answers them.
+    get("/api/diff.md") {
+        val report = call.diffReport(diffs) ?: return@get
+        val name = "diff-${report.a.sessionId}-vs-${report.b.sessionId}.md"
+        call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
+        call.respondText(DiffMarkdown.render(report), ContentType("text", "markdown").withCharset(Charsets.UTF_8))
     }
 }
 

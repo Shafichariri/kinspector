@@ -79,6 +79,16 @@ red with an empty-list default on `routes` and with the table built from `queryT
 archive probe's `stats offline` lines pin the page: red with the `/stats` branch taken out of
 `archiveSource`, when the 404 is drawn instead of the table.
 
+**A session diff has a Markdown form and no other export.** `GET /api/diff.md` renders the same
+report the JSON route returns, through `DiffMarkdown`, with cells and code spans from the one
+`MarkdownText` the session export uses, so a `|` in a route is escaped the same way in both and an
+IPv6 server is bracketed by one rule. It says in its header which rules decide a change and that an
+unknown body is never a removed key, because the file is read away from the page that would explain
+it: a shape that could not be compared reads `unknown` with what the side held, and an unsure key
+sits under "Unknown — capture did not keep every body", never under "Removed". A session export
+carries no diff: it is one session, and a diff is a question about two. `DiffMarkdownTest` pins it,
+red with unsure keys rendered under "removed" and with the cells joined without `MarkdownText.cell`.
+
 **Every export discloses the findings, and a HAR does so in the comment of each entry a finding
 names.** The JSON and HTML carry `findings`, the whole session's report, with no default; the
 Markdown has a Findings section before the timeline. HAR has no field for it, so each named entry

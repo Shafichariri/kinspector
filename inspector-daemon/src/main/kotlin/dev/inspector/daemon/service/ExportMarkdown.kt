@@ -6,6 +6,7 @@ import dev.inspector.daemon.service.MarkdownText.count
 import dev.inspector.daemon.service.MarkdownText.heading
 import dev.inspector.daemon.service.MarkdownText.inlineCode
 import dev.inspector.daemon.service.MarkdownText.ms
+import dev.inspector.daemon.service.MarkdownText.server
 import dev.inspector.model.BodyOmission
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.Signal
@@ -211,16 +212,8 @@ object ExportMarkdown {
     private fun line(text: String): String = text.replace("\r", "").replace("\n", " ")
 
     /** `3 (75%)`, or `0`: a share of attempts with an outcome, to at most one decimal. */
-    /**
-     * A route's server as a call label names it, from `NetworkTransaction.hostPort`, so an IPv6 host
-     * is bracketed by the one rule rather than a copy here. Joined by hand it read `::1:8080`. The row
-     * is put in a transaction's shape because the rule is a property of one; a public free function
-     * in `:inspector-model` would be API for the sake of this cell.
-     */
-    private fun serverOf(row: RouteStatsRow): String = NetworkTransaction(
-        id = "", ts = "", mono = 0, method = row.method, scheme = row.scheme,
-        host = row.host, port = row.port, path = "", callId = "",
-    ).hostPort
+    /** A route's server as a call label names it; see [MarkdownText.server]. */
+    private fun serverOf(row: RouteStatsRow): String = server(row.scheme, row.host, row.port)
 
     private fun share(count: Int, rate: Double?): String {
         if (count == 0 || rate == null) return "$count"

@@ -199,4 +199,23 @@ class DiffRouteTest {
         assertEquals(full.routeCount - full.counts.unchanged, changed.routes.size)
         assertEquals(full.counts, changed.counts)
     }
+
+    @Test
+    fun `diff md is the same report as an attachment, and errors stay JSON`() = runBlocking {
+        val response = get("/api/diff.md", "a" to BASE_SESSION_ID)
+        assertEquals(200, response.status.value)
+        assertEquals("text/markdown; charset=UTF-8", response.headers["Content-Type"])
+        assertEquals(
+            "attachment; filename=\"diff-$BASE_SESSION_ID-vs-$PROBE_SESSION_ID.md\"",
+            response.headers["Content-Disposition"],
+        )
+        val text = response.bodyAsText()
+        assertTrue(text.startsWith("# Session diff: $PROBE_SESSION_ID against $BASE_SESSION_ID\n"))
+        assertTrue(text.indexOf("## Changed routes") in 1 until text.indexOf("## Routes added"))
+
+        val missing = get("/api/diff.md", "a" to "nope")
+        assertEquals(404, missing.status.value)
+        assertEquals("""{"error":"no session 'nope' (a)"}""", missing.bodyAsText())
+        assertEquals(400, get("/api/diff.md", "unchanged" to "maybe").status.value)
+    }
 }

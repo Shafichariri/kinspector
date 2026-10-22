@@ -71,6 +71,13 @@ class DiffCliTest {
     }
 
     @Test
+    fun `--md prints the Markdown form of the same report`() {
+        val text = run("--a", BASE_SESSION_ID, "--md")
+        assertTrue(text.startsWith("# Session diff: $PROBE_SESSION_ID against $BASE_SESSION_ID\n"), text.take(200))
+        assertTrue("## Changed routes" in text)
+    }
+
+    @Test
     fun `an unknown session exits 1 with the message on stderr`() {
         // In a child JVM on this test's classpath, because the CLI ends the process on a failure.
         val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
