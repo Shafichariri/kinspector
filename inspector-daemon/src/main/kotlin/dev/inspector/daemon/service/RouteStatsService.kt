@@ -1,25 +1,21 @@
 package dev.inspector.daemon.service
 
-import dev.inspector.daemon.archive.IndexTail
+import dev.inspector.daemon.archive.IndexCursor
 import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.daemon.archive.SessionLayout
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.model.Filter
 import dev.inspector.model.FilterContext
 import dev.inspector.model.FilterParser
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardOpenOption
-import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.isRegularFile
 
 /**
  * Route stats for a session, folded from where the last read of it stopped.
  *
  * Computed on read and never on ingest, so a slow stats read cannot slow archiving. Every row is
- * read, through [IndexTail], and never through `queryTransactions`, which clamps to 1000 — the
+ * read, through an [IndexCursor], and never through `queryTransactions`, which clamps to 1000 — the
  * reason `HarTest` exists. A cache entry per session and filter keeps the accumulator and the byte
  * offset after the last complete line it folded; the next read folds only what was appended, which
  * is sound because `index.jsonl` is append-only. The entry is rebuilt from the start when that stops
@@ -41,10 +37,7 @@ class RouteStatsService(
         val accumulator: RouteStatsAccumulator,
         val markersSize: Long,
     ) {
-        var offset = 0L
-        var fileKey: Any? = null
-        /** The first bytes of the file as last folded; a replaced file almost never starts the same. */
-        var head = ByteArray(0)
+        val cursor = IndexCursor()
     }
 
     private val entries = object : LinkedHashMap<CacheKey, Entry>(16, 0.75f, true) {
@@ -68,7 +61,7 @@ class RouteStatsService(
             ?.takeIf { filter.isEmpty() || it.markersSize == markersSize }
         if (cached != null) {
             synchronized(cached) {
-                if (!replaced(index, cached)) return snapshot(cached, index, real, filter, sort, limit)
+                if (!cached.cursor.replaced(index)) return snapshot(cached, index, real, filter, sort, limit)
             }
         }
         val entry = fresh(real, parsed, markersSize)
@@ -86,34 +79,8 @@ class RouteStatsService(
     }
 
     private fun fold(entry: Entry, index: Path) {
-        if (entry.offset == 0L) entry.fileKey = fileKeyOf(index)
-        entry.offset = IndexTail.read(index, entry.offset) { entry.accumulator.add(it) }
-        if (entry.head.size < HEAD_BYTES) entry.head = headOf(index, minOf(entry.offset, HEAD_BYTES.toLong()).toInt())
-    }
-
-    /** True when what the entry folded is no longer the start of the file. */
-    private fun replaced(index: Path, entry: Entry): Boolean {
-        if (entry.offset == 0L) return false
-        if (sizeOf(index) < entry.offset) return true
-        if (fileKeyOf(index) != entry.fileKey) return true
-        return !headOf(index, entry.head.size).contentEquals(entry.head)
+        entry.cursor.advance(index) { entry.accumulator.add(it) }
     }
 
     private fun sizeOf(file: Path): Long = if (file.isRegularFile()) Files.size(file) else -1L
-
-    private fun fileKeyOf(file: Path): Any? =
-        runCatching { Files.readAttributes(file, BasicFileAttributes::class.java).fileKey() }.getOrNull()
-
-    private fun headOf(file: Path, bytes: Int): ByteArray {
-        if (bytes <= 0 || !file.isRegularFile()) return ByteArray(0)
-        FileChannel.open(file, StandardOpenOption.READ).use { channel ->
-            val buffer = ByteBuffer.allocate(bytes)
-            while (buffer.hasRemaining() && channel.read(buffer) > 0) Unit
-            return buffer.array().copyOf(buffer.position())
-        }
-    }
-
-    private companion object {
-        const val HEAD_BYTES = 256
-    }
 }

@@ -35,7 +35,18 @@ data class RouteKey(
     val host: String,
     val port: Int?,
     val route: Route,
-)
+) {
+    /**
+     * The one definition of "mutation": POST, PUT, PATCH and DELETE. The payment rules and the
+     * session diff read it rather than each listing methods. A computed property, outside the
+     * constructor, so key equality and every call building a key are unchanged.
+     */
+    val mutation: Boolean get() = method in MUTATION_METHODS
+
+    private companion object {
+        val MUTATION_METHODS = setOf("POST", "PUT", "PATCH", "DELETE")
+    }
+}
 
 /**
  * The route rule: which paths are one route, and the filter term that finds a route's calls.

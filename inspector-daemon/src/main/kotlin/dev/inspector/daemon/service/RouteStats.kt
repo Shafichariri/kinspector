@@ -103,9 +103,9 @@ enum class StatsSort(val key: String, val metric: (RouteStatsRow) -> Number?) {
  * an export of the same session from disagreeing.
  *
  * It keeps per route only counts, a growable array of latencies, the set of `callId`s and the few
- * attempts after a first, and session-wide the 3xx attempts; never the rows. Retries and redirects
- * are told apart at [snapshot], not as rows arrive, so a fold that met an attempt before the one
- * it follows still classifies it right.
+ * attempts after a first, and session-wide the 3xx attempts in [RedirectHops]; never the rows.
+ * Retries and redirects are told apart at [snapshot], not as rows arrive, so a fold that met an
+ * attempt before the one it follows still classifies it right.
  */
 class RouteStatsAccumulator(
     private val templates: RouteTemplates,
@@ -116,19 +116,15 @@ class RouteStatsAccumulator(
     private var matched = 0
     private val routes = HashMap<RouteKey, RouteTally>()
 
-    /**
-     * `callId#attempt` of every 3xx row in the session, filtered or not. Built from all rows because
-     * `status:200` would otherwise drop the 302 before a hop and turn the redirect into a retry.
-     */
-    private val redirectHops = HashSet<String>()
+    /** Every row in the session, filtered or not: see [RedirectHops] for why. */
+    private val redirectHops = RedirectHops()
 
     /** Most sessions call a few hundred paths many times; this saves templating each again. */
     private val keyByOrigin = HashMap<OriginPath, RouteKey>()
 
     fun add(txn: NetworkTransaction) {
         total++
-        val status = txn.status
-        if (status != null && status / 100 == 3) redirectHops += hop(txn.callId, txn.attempt)
+        redirectHops.add(txn)
         if (filter != Filter.MatchAll && !filter.matches(txn, context)) return
         matched++
         val origin = OriginPath(txn.method, txn.scheme, txn.host, txn.port, txn.path)
@@ -159,13 +155,16 @@ class RouteStatsAccumulator(
         )
     }
 
+    /** An attempt after a first; a retry or a hop, decided at [snapshot]. */
+    private class LaterAttempt(val callId: String, val attempt: Int)
+
     private data class OriginPath(val method: String, val scheme: String, val host: String, val port: Int?, val path: String)
 
     private inner class RouteTally {
         var attempts = 0
         val calls = HashSet<String>()
-        /** `callId#attempt` of the attempt before each attempt > 1: a retry unless that one was a 3xx. */
-        val predecessors = ArrayList<String>()
+        /** Each attempt > 1: a retry unless the one before it was a 3xx. */
+        val laterAttempts = ArrayList<LaterAttempt>()
         val byClass = IntArray(4)
         var transportFailures = 0
         var inFlight = 0
@@ -179,7 +178,7 @@ class RouteStatsAccumulator(
         fun add(txn: NetworkTransaction) {
             attempts++
             calls += txn.callId
-            if (txn.attempt > 1) predecessors += hop(txn.callId, txn.attempt - 1)
+            if (txn.attempt > 1) laterAttempts += LaterAttempt(txn.callId, txn.attempt)
             reqBytes += txn.reqBytes
             val status = txn.status
             when {
@@ -208,8 +207,8 @@ class RouteStatsAccumulator(
                 latencies.sort(0, samples)
                 sorted = true
             }
-            val redirects = predecessors.count { it in redirectHops }
-            val retries = predecessors.size - redirects
+            val redirects = laterAttempts.count { redirectHops.isRedirect(it.callId, it.attempt) }
+            val retries = laterAttempts.size - redirects
             val outcomes = attempts - inFlight
             val failed = byClass[2] + byClass[3] + transportFailures
             val withheld = samples < TAIL_MIN_SAMPLES
@@ -266,8 +265,6 @@ class RouteStatsAccumulator(
         const val TAIL_MIN_SAMPLES = 20
         const val TAIL_WITHHELD = "n<20"
         const val KEY_MEMO_LIMIT = 50_000
-
-        fun hop(callId: String, attempt: Int) = "$callId#$attempt"
 
         fun rate(count: Int, of: Int): Double? =
             if (of == 0) null else Math.round(count * 10_000.0 / of) / 10_000.0
