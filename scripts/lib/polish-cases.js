@@ -40,9 +40,9 @@
  * Each reading leaves the page as it found it: colour scheme the system's.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { scratchDir } = require('./measure-scratch');
 const { BASE_SESSION_ID } = require('./diff-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
@@ -103,7 +103,7 @@ function iconRow(key, reads) {
 
 /** Every icon control, at each width, in both colour schemes, served and exported. */
 async function iconTargets(page, url, rows) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polish-export-'));
+  const dir = scratchDir('polish-export-');
   const file = path.join(dir, 'export.html');
   try {
     fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
@@ -453,7 +453,7 @@ const TXN_BACK_READ = `(() => {
  * say it is on screen and on top.
  */
 async function txnBack(page, url, rows) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polish-txn-'));
+  const dir = scratchDir('polish-txn-');
   const file = path.join(dir, 'export.html');
   try {
     fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));

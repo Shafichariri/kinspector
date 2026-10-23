@@ -23,9 +23,9 @@
  * Each reading leaves the page as it found it: drawer closed, colour scheme the system's.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { scratchDir } = require('./measure-scratch');
 const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 
 const LOADED = `typeof state !== 'undefined' && state.sessionId && document.querySelectorAll('#list .row').length > 0`;
@@ -132,7 +132,7 @@ async function drawer(page, url, rows) {
   await page.ev(`document.getElementById('drawer-close').click()`);
 
   // An export draws its own actions (no replay), and is the page as a file, so it is read as one.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'room-export-'));
+  const dir = scratchDir('room-export-');
   try {
     const file = path.join(dir, 'export.html');
     fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));

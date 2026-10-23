@@ -15,9 +15,9 @@
  * (KIN-41), and a huge session drawing nothing (KIN-37, KIN-42).
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { scratchDir } = require('./measure-scratch');
 
 const WIDTHS = [1440, 400];
 const FILTERS = [['none', ''], ['stock', 'path:/v3/shop/stock'], ['screen', 'tag:screen']];
@@ -402,7 +402,7 @@ async function findingsSensitive(page, url) {
       value: !r ? 'NO - found no dismiss form, so this checked nothing' : r.evalError ? 'threw' : ok ? 'fits' : 'overflows',
       detail: !r || r.evalError ? String(r && r.evalError || '') : `input ${r.input} of ${r.form}; ${width < 520 ? `stacked ${r.stacked}` : `one line ${r.oneLine}`}; inside ${r.inside}; document ${r.doc} of ${r.width}` });
   }
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sensitive-export-'));
+  const dir = scratchDir('sensitive-export-');
   try {
     const file = path.join(dir, 'export.html');
     fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));
