@@ -133,20 +133,6 @@ function countRecorded(list) {
   list.forEach((visit, i) => { visit.recorded = visitSegments(whole[i]).reduce((n, s) => n + s.count, 0); });
 }
 
-/**
- * Marks each visit holding a call, in the whole-session skeleton, older than the oldest the list
- * holds, while the list is short of what the route matched: it stops at the clamp, so whether those
- * calls match is unknown. Counting the held rows said "0 of 5 match" of visits whose calls matched.
- */
-function markUnloaded(list) {
-  if (state.matched === null || state.transactions.length >= state.matched) return;
-  let oldest = Infinity;
-  for (const txn of state.transactions) if (txn.mono < oldest) oldest = txn.mono;
-  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
-  if (whole.length !== list.length) return;
-  list.forEach((visit, i) => { visit.unloaded = whole[i].txns.some((txn) => txn.mono < oldest); });
-}
-
 const visitKey = (visit) => (visit.screen ? visit.screen.id : 'leading');
 
 /**
