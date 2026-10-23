@@ -48,8 +48,13 @@ data class DiffSideInfo(
     val markers: List<String>,
 )
 
+/**
+ * Routes by what the diff can say of them, disjoint, so the five sum to [DiffReport.routeCount].
+ * [unsure] counts routes with no change whose [DiffRoute.unsure] is set; [unchanged] the rest of
+ * those with no change. A route that changed is [changed] whether or not it is also unsure.
+ */
 @Serializable
-data class DiffCounts(val added: Int, val removed: Int, val changed: Int, val unchanged: Int)
+data class DiffCounts(val added: Int, val removed: Int, val changed: Int, val unsure: Int, val unchanged: Int)
 
 @Serializable
 data class ShapeBudget(val bodiesRead: Int, val bytesRead: Long, val limitBytes: Long, val exhausted: Boolean)
@@ -71,6 +76,12 @@ data class DiffRoute(
     val loud: Boolean,
     /** The change kinds, in rank order; empty for a route that did not change. */
     val changes: List<String>,
+    /**
+     * True when a body capture did not keep may hide a change on this route: a direction lists an
+     * unsure key, or one side kept whole JSON there and the other no whole body. Absent otherwise.
+     * Sets no change kind (§6.4), but such a route is never counted or dropped as unchanged.
+     */
+    val unsure: Boolean? = null,
     val a: RouteStatsRow? = null,
     val b: RouteStatsRow? = null,
     val status: StatusMix,
@@ -235,11 +246,26 @@ object SessionDiff {
         return common.copy(
             loud = key.mutation && "calls" in kinds,
             changes = KINDS.filter { it in kinds },
+            unsure = (unsure(requestShape.diff) || unsure(responseShape.diff)).takeIf { it },
             latency = latency, requestSize = requestSize, responseSize = responseSize,
             requestHeaders = requestHeaders, responseHeaders = responseHeaders,
             requestShape = requestShape.diff, responseShape = responseShape.diff,
         )
     }
+
+    /**
+     * Whether [shape] holds something the diff would have claimed had every body been kept: an
+     * unsure key, or, where nothing was compared, whole JSON on one side against no whole body on
+     * the other — the feed whose prefix was all A kept. A cut `unsure` list keeps [MAX_PATHS]
+     * entries, so `more` needs no reading. Both sides unknown (images omitted by content type), both
+     * empty and JSON too wide on both sides are left out: nothing there was lost to capture on one
+     * side only, and listing them would bury the routes that matter.
+     */
+    private fun unsure(shape: ShapeDiff): Boolean =
+        shape.unsure.isNotEmpty() || (!shape.compared && setOf(shape.a.kind, shape.b.kind) == setOf("json", "unknown"))
+
+    /** The routes `counts.unchanged` counts and `unchanged=false` drops: no change, and nothing unsure. */
+    fun unchanged(route: DiffRoute): Boolean = route.changes.isEmpty() && route.unsure != true
 
     /**
      * p50, judged only with [MIN_SAMPLES] responses on both sides and a change of at least
@@ -294,12 +320,13 @@ object SessionDiff {
         sizes.filter { it.second > max }.associate { it.first to it.second - max }.ifEmpty { null }
 
     /**
-     * Loud rows first; then by the highest-ranked kind a row has; then rows with no change; ties by
-     * method, host, port (none first), route and scheme, by char code, as route stats break them.
-     * In the daemon, so `limit` cuts the right rows and every adapter agrees.
+     * Loud rows first; then by the highest-ranked kind a row has; then rows with no change that are
+     * unsure, then the unchanged; ties by method, host, port (none first), route and scheme, by char
+     * code, as route stats break them. In the daemon, so `limit` cuts the right rows and every
+     * adapter agrees.
      */
     val ORDER: Comparator<DiffRoute> = compareBy<DiffRoute> { if (it.loud) 0 else 1 }
-        .thenBy { route -> route.changes.firstOrNull()?.let(KINDS::indexOf) ?: KINDS.size }
+        .thenBy { route -> route.changes.firstOrNull()?.let(KINDS::indexOf) ?: if (route.unsure == true) KINDS.size else KINDS.size + 1 }
         .thenBy { it.method }
         .thenBy { it.host }
         .thenComparator { x, y ->

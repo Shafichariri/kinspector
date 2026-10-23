@@ -52,8 +52,10 @@ class DiffMarkdownTest {
         return DiffReport(
             a = info("sa"), b = info("sb"), aChosen = "given", sameApp = true, filter = "", routeCount = routes.size,
             counts = DiffCounts(
-                routes.count { it.presence == "added" }, routes.count { it.presence == "removed" },
-                routes.count { it.presence == "both" && it.changes.isNotEmpty() }, routes.count { it.changes.isEmpty() },
+                added = routes.count { it.presence == "added" }, removed = routes.count { it.presence == "removed" },
+                changed = routes.count { it.presence == "both" && it.changes.isNotEmpty() },
+                unsure = routes.count { it.changes.isEmpty() && it.unsure == true },
+                unchanged = routes.count { it.changes.isEmpty() && it.unsure != true },
             ),
             shapeBudget = ShapeBudget(0, 0, 1, false), routes = routes,
         )
@@ -66,9 +68,11 @@ class DiffMarkdownTest {
         assertEquals("# Session diff: $PROBE_SESSION_ID against $BASE_SESSION_ID", lines.first())
         assertTrue(lines.any { it.startsWith("- **A (before):** `$BASE_SESSION_ID` · com.example.projectx 1.4.2 · iPhone 16 Pro · 2025-12-30T09:00:00.000Z · 12 calls") }, text)
         assertTrue("- **Filter:** none" in lines)
-        assertTrue("- **Routes:** 14 — 7 added, 1 removed, 4 changed, 2 unchanged" in lines)
+        assertTrue("- **Routes:** 14 — 7 added, 1 removed, 4 changed, 1 with unknown keys, 1 unchanged" in lines, text)
         assertTrue(text.contains("a key is never called removed because of it."))
-        val sections = listOf("## Changed routes", "## Routes added", "## Routes removed", "## Unchanged routes").map { lines.indexOf(it) }
+        val sections = listOf(
+            "## Changed routes", "## Routes added", "## Routes removed", "## Routes with unknown keys", "## Unchanged routes",
+        ).map { lines.indexOf(it) }
         assertTrue(sections.all { it > 0 } && sections == sections.sorted(), sections.toString())
         assertFalse(lines.any { it.startsWith(">") }, "a blockquote with one app and an ended B")
     }
@@ -87,6 +91,21 @@ class DiffMarkdownTest {
         assertTrue(feed.isNotEmpty())
         assertTrue(feed.any { "unknown (1 truncated)" in it }, feed.toString())
         assertTrue(feed.none { "removed" in it.lowercase() }, feed.toString())
+    }
+
+    @Test
+    fun `a route whose only news is an unsure key has its own section, and removed is in no line about it`() {
+        val (a, b) = qaPair()
+        val lines = DiffMarkdown.render(report(diffInMemory(a, b))).lines()
+        assertTrue("- **Routes:** 2 — 0 added, 0 removed, 0 changed, 1 with unknown keys, 1 unchanged" in lines, lines.joinToString("\n"))
+        val section = lines.indexOf("## Routes with unknown keys")
+        val unchanged = lines.indexOf("## Unchanged routes")
+        val product = lines.indexOfFirst { it.startsWith("| GET api.example.invalid/v1/product |") }
+        assertTrue(product in section until unchanged, "the route is not in its section: ${lines.joinToString("\n")}")
+        assertTrue(lines.subList(unchanged, lines.size).none { "/v1/product" in it }, "the unsure route listed as unchanged")
+        val block = lines.subList(lines.indexOf("### GET api.example.invalid/v1/product"), unchanged)
+        assertTrue(block.any { it.startsWith("    - `\$.price` is in 2 of A's 2 whole bodies and none of B's 1") }, block.joinToString("\n"))
+        assertTrue(lines.subList(section, unchanged).none { "removed" in it.lowercase() }, "a line about the unsure route says removed")
     }
 
     @Test

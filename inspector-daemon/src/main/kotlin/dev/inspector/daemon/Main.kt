@@ -46,7 +46,8 @@ stats prints per-route latency and failure rates; --sort is attempts (the defaul
 p90, p95, p99, max or errors, and --limit defaults to 1000.
 diff compares --b (the latest by default) with --a (by default the previous session of b's
 app) route by route; --since-a and --since-b cut a side at a marker, --limit defaults to
-1000, --unchanged includes routes that did not change, and --md prints the Markdown form.
+1000, --unchanged includes routes that did not change (a route with unknown keys is always
+listed), and --md prints the Markdown form.
 findings prints what the findings rules flag (payment safety, sensitive data); --category
 narrows to one family, and --limit defaults to 1000. --fail-on high|medium|info makes it a
 CI gate: exit 1 when an undismissed finding is at or above that severity, 0 when none is,

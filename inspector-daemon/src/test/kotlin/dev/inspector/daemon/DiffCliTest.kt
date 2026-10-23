@@ -50,7 +50,8 @@ class DiffCliTest {
         val report = report("--a", BASE_SESSION_ID, "--b", PROBE_SESSION_ID)
         assertEquals(BASE_SESSION_ID to PROBE_SESSION_ID, report.a.sessionId to report.b.sessionId)
         assertEquals("/v3/shop/orders/submit", report.routes.single { it.loud && it.presence == "both" }.route)
-        assertTrue(report.routes.all { it.changes.isNotEmpty() })
+        assertTrue(report.routes.all { it.changes.isNotEmpty() || it.unsure == true })
+        assertEquals(listOf("/v3/shop/feed"), report.routes.filter { it.changes.isEmpty() }.map { it.route }, "the unsure feed is listed")
         assertTrue(report("--a", BASE_SESSION_ID, "--unchanged").routes.any { it.changes.isEmpty() })
         assertEquals(1, report("--a", BASE_SESSION_ID, "--limit", "1").routes.size)
     }
@@ -75,6 +76,24 @@ class DiffCliTest {
         val text = run("--a", BASE_SESSION_ID, "--md")
         assertTrue(text.startsWith("# Session diff: $PROBE_SESSION_ID against $BASE_SESSION_ID\n"), text.take(200))
         assertTrue("## Changed routes" in text)
+    }
+
+    @Test
+    fun `by default QA's pair lists the unsure route, and --md gives it a section with the key under Unknown`() {
+        writeQaPair(tmp)
+        val report = report("--a", QA_PAIR_A, "--b", QA_PAIR_B)
+        assertEquals(listOf("/v1/product" to true), report.routes.map { it.route to it.unsure })
+        assertEquals(1 to 1, report.counts.unsure to report.counts.unchanged)
+
+        val lines = run("--a", QA_PAIR_A, "--b", QA_PAIR_B, "--md").lines()
+        val section = lines.indexOf("## Routes with unknown keys")
+        val next = lines.indexOf("## Unchanged routes")
+        assertTrue(section in 1 until next, lines.joinToString("\n"))
+        val body = lines.subList(section, next)
+        val unknown = body.indexOf("  - Unknown — capture did not keep every body:")
+        assertTrue(unknown > 0, body.joinToString("\n"))
+        assertTrue(body[unknown + 1].startsWith("    - `\$.price` "), body[unknown + 1])
+        assertTrue(lines.none { "removed" in it.lowercase() && "price" in it }, "the unsure key worded as removed")
     }
 
     @Test

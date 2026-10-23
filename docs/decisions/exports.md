@@ -85,9 +85,11 @@ report the JSON route returns, through `DiffMarkdown`, with cells and code spans
 IPv6 server is bracketed by one rule. It says in its header which rules decide a change and that an
 unknown body is never a removed key, because the file is read away from the page that would explain
 it: a shape that could not be compared reads `unknown` with what the side held, and an unsure key
-sits under "Unknown — capture did not keep every body", never under "Removed". A session export
+sits under "Unknown — capture did not keep every body", never under "Removed". A route whose only
+news is unsure is listed under "Routes with unknown keys", never in the unchanged table. A session export
 carries no diff: it is one session, and a diff is a question about two. `DiffMarkdownTest` pins it,
-red with unsure keys rendered under "removed" and with the cells joined without `MarkdownText.cell`.
+red with unsure keys rendered under "removed", with the unsure route rendered in the unchanged table
+only, and with the cells joined without `MarkdownText.cell`.
 
 **Every export discloses the findings, and a HAR does so in the comment of each entry a finding
 names.** The JSON and HTML carry `findings`, the whole session's report, with no default; the

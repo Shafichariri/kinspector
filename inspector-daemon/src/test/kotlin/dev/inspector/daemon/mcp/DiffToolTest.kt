@@ -3,6 +3,8 @@ package dev.inspector.daemon.mcp
 import dev.inspector.daemon.BASE_SESSION_ID
 import dev.inspector.daemon.LONG_SESSION_ID
 import dev.inspector.daemon.PROBE_SESSION_ID
+import dev.inspector.daemon.QA_PAIR_A
+import dev.inspector.daemon.QA_PAIR_B
 import dev.inspector.daemon.archive.DaemonConfig
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.mcpCallTool
@@ -12,6 +14,7 @@ import dev.inspector.daemon.service.DiffReport
 import dev.inspector.daemon.service.DiffRequest
 import dev.inspector.daemon.service.SessionDiffService
 import dev.inspector.daemon.writeProbeFixture
+import dev.inspector.daemon.writeQaPair
 import dev.inspector.model.InspectorJson
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -77,12 +80,21 @@ class DiffToolTest {
     fun `it returns the service's report, changes only and 50 routes by default`() {
         val args = """{"a":"$BASE_SESSION_ID","b":"$PROBE_SESSION_ID"}"""
         assertEquals(direct(DiffRequest(a = BASE_SESSION_ID, b = PROBE_SESSION_ID, limit = 50, unchanged = false)), report(args))
-        assertTrue(report(args).routes.all { it.changes.isNotEmpty() }, "an unchanged route by default")
+        assertTrue(report(args).routes.all { it.changes.isNotEmpty() || it.unsure == true }, "an unchanged route by default")
+        assertTrue(report(args).routes.any { it.route == "/v3/shop/feed" && it.unsure == true }, "the unsure feed left out by default")
 
         val all = report("""{"a":"$BASE_SESSION_ID","unchanged":"true","limit":"2"}""")
         assertEquals(2, all.routes.size)
         assertEquals(all.routeCount, direct(DiffRequest(a = BASE_SESSION_ID)).routeCount)
         assertTrue(report("""{"a":"$BASE_SESSION_ID","unchanged":true}""").routes.any { it.changes.isEmpty() })
+    }
+
+    @Test
+    fun `by default QA's pair lists the unsure route and counts it`() {
+        writeQaPair(tmp)
+        val report = report("""{"a":"$QA_PAIR_A","b":"$QA_PAIR_B"}""")
+        assertEquals(listOf("/v1/product" to true), report.routes.map { it.route to it.unsure })
+        assertEquals(listOf(0, 1, 1), with(report.counts) { listOf(changed, unsure, unchanged) })
     }
 
     @Test

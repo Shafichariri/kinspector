@@ -189,7 +189,7 @@ class SessionDiffServiceTest {
         val service = service()
         val full = ok(service.diff(DiffRequest(a = "s1", b = "s2")))
         assertEquals(4, full.routeCount)
-        assertEquals(listOf(2, 1, 0, 1), with(full.counts) { listOf(added, removed, changed, unchanged) })
+        assertEquals(listOf(2, 1, 0, 0, 1), with(full.counts) { listOf(added, removed, changed, unsure, unchanged) })
         assertEquals("/v1/same", full.routes.last().route, "unchanged rows sort last")
 
         val changed = ok(service.diff(DiffRequest(a = "s1", b = "s2", unchanged = false)))
@@ -199,6 +199,22 @@ class SessionDiffServiceTest {
         assertEquals(listOf(full.routes.first()), one.routes)
         assertEquals(4, one.routeCount)
         assertNotSame(full, one)
+        assertEquals(1, computed, "a cut of a cached report recomputed it")
+    }
+
+    @Test
+    fun `an unsure route is counted apart from unchanged, and unchanged=false keeps it`() {
+        writeQaPair(tmp)
+        val service = service()
+        val full = ok(service.diff(DiffRequest(a = QA_PAIR_A, b = QA_PAIR_B)))
+        assertEquals(listOf(0, 0, 0, 1, 1), with(full.counts) { listOf(added, removed, changed, unsure, unchanged) })
+        assertEquals(full.routeCount, with(full.counts) { added + removed + changed + unsure + unchanged }, "the counts overlap")
+        assertEquals(listOf("/v1/product", "/v1/health"), full.routes.map { it.route }, "an unsure route sorts before an unchanged one")
+
+        val cut = ok(service.diff(DiffRequest(a = QA_PAIR_A, b = QA_PAIR_B, unchanged = false)))
+        assertEquals(listOf("/v1/product" to true), cut.routes.map { it.route to it.unsure })
+        assertEquals(full.counts, cut.counts)
+        assertEquals(full.counts, ok(service.diff(DiffRequest(a = QA_PAIR_A, b = QA_PAIR_B, unchanged = false, limit = 1))).counts)
         assertEquals(1, computed, "a cut of a cached report recomputed it")
     }
 

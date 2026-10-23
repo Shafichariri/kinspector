@@ -1,6 +1,7 @@
 package dev.inspector.daemon
 
 import dev.inspector.daemon.archive.RouteKey
+import dev.inspector.daemon.archive.SessionWriter
 import dev.inspector.daemon.archive.RouteTemplates
 import dev.inspector.daemon.service.BodySide
 import dev.inspector.daemon.service.DiffBudget
@@ -12,6 +13,7 @@ import dev.inspector.daemon.service.SessionDiff
 import dev.inspector.model.Filter
 import dev.inspector.model.FilterContext
 import dev.inspector.model.NetworkTransaction
+import java.nio.file.Path
 
 /**
  * One side of a diff built in memory: rows, and the bodies a ref points at. [call] writes a row the
@@ -83,3 +85,39 @@ fun diffInMemory(a: DiffSideRows, b: DiffSideRows, caps: DiffCaps = DiffCaps(), 
 /** The one route on [path] (any method). */
 fun List<DiffRoute>.on(path: String, method: String? = null): DiffRoute =
     single { it.route == path && (method == null || it.method == method) }
+
+/** The app id QA's pair is written under, apart from the probe fixture's, so its `latest` and previous runs do not move. */
+const val QA_PAIR_APP = "com.example.diffpair"
+const val QA_PAIR_A = "2025-12-01T09-00-00_diff-pair-a"
+const val QA_PAIR_B = "2025-12-01T10-00-00_diff-pair-b"
+
+/**
+ * QA's pair (`session-diff-pr-a-report`, note 1): on `/v1/product` A kept two whole bodies holding
+ * `$.price`, and B one whole body without it and one truncated, so `$.price` may be in the body B
+ * did not keep: unsure, never removed, and no change kind. `/v1/health` has no body and no change.
+ */
+fun qaPair(): Pair<DiffSideRows, DiffSideRows> {
+    val a = DiffSideRows().apply {
+        repeat(2) { call(path = "/v1/product", res = """{"id":1,"price":9.99}""") }
+        call(path = "/v1/health")
+    }
+    val b = DiffSideRows().apply {
+        call(path = "/v1/product", res = """{"id":1}""")
+        call(path = "/v1/product", res = """{"id":1,"pri""", resBytes = 900_000, resTruncated = true)
+        call(path = "/v1/health")
+    }
+    return a to b
+}
+
+/** QA's pair written under [dataDir] as [QA_PAIR_A] and [QA_PAIR_B], both ended, with `latest` left alone. */
+fun writeQaPair(dataDir: Path) {
+    val (a, b) = qaPair()
+    val sides = listOf(Triple(QA_PAIR_A, "2025-12-01T09:00:00.000Z", a), Triple(QA_PAIR_B, "2025-12-01T10:00:00.000Z", b))
+    for ((id, startedAt, side) in sides) {
+        val writer = SessionWriter(dataDir.resolve("sessions").resolve(id), clientInfo(appId = QA_PAIR_APP).toSessionMeta(id, startedAt))
+        for (row in side.rows) {
+            writer.append(row.copy(reqBodyRef = null, resBodyRef = null), side.bodies[row.id to BodySide.REQ], side.bodies[row.id to BodySide.RES])
+        }
+        writer.close()
+    }
+}

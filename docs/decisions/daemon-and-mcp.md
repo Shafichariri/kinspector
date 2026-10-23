@@ -284,6 +284,17 @@ stricter twice, as the maintainer's proxy confirmed on 2026-10-22. `DiffShapeTes
 shown red with a truncated prefix walked leniently, with the all-read condition dropped, with the
 observable rule dropped and with the redacted exclusion dropped.
 
+**A route the diff cannot call unchanged is listed and counted as unsure, never as unchanged.**
+`unsure` sets no change kind, so a route whose only news was an unsure key counted as unchanged,
+and the `unchanged=false` default of MCP and the CLI dropped it: QA's pair read `changed: 0` and no
+routes, while a key may have been removed. A route with an unsure key, or a direction one side kept
+whole JSON for and the other none, carries `unsure: true`. With no change kind it is counted in
+`counts.unsure` and not in `counts.unchanged`, it sorts after every changed route, and
+`unchanged=false` keeps it. The page hides only what the daemon counts unchanged. Both sides
+unknown, both empty and JSON too wide on both sides are not unsure: nothing there was lost on one
+side only (the second condition decided by the maintainer's proxy, 2026-10-23). `SessionDiffTest`
+and `DiffRouteTest` pin it, red with the route counted unchanged.
+
 **A diff is computed on read, cached whole, and not folded.** Both sides are read through
 `IndexTail` from the start, never `queryTransactions`, for the reason `HarTest` exists. Four
 finished reports are kept in memory, keyed by the two folders, the filter and the two `since`
