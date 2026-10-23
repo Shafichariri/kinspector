@@ -86,6 +86,32 @@ class HarTest {
     }
 
     @Test
+    fun `two calls in one millisecond follow capture seq, as the timeline does`() {
+        // Written to the archive in the reverse of capture order. A sort by mono alone keeps the
+        // archive's order on the tie, which is the opposite of the timeline and the JSON export.
+        val har = export(
+            listOf(
+                txn("bbbb2222", path = "/second", mono = 300).copy(seq = 2),
+                txn("aaaa1111", path = "/first", mono = 300).copy(seq = 1),
+            )
+        )
+        val paths = har.entries().map { it.jsonObject.str("request", "url")!!.substringAfter("api.example.com") }
+        assertEquals(listOf("/first", "/second"), paths)
+    }
+
+    @Test
+    fun `two calls in one millisecond without seq keep archive order`() {
+        val har = export(
+            listOf(
+                txn("bbbb2222", path = "/second", mono = 300),
+                txn("aaaa1111", path = "/first", mono = 300),
+            )
+        )
+        val paths = har.entries().map { it.jsonObject.str("request", "url")!!.substringAfter("api.example.com") }
+        assertEquals(listOf("/second", "/first"), paths)
+    }
+
+    @Test
     fun `timings capture never measured are minus one, not invented`() {
         val entry = export(listOf(txn("aaaa1111", ms = 143))).entry(0)
         val timings = entry["timings"]!!.jsonObject

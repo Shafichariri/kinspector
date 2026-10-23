@@ -2,6 +2,8 @@ package dev.inspector.daemon.service
 
 import dev.inspector.model.NetworkTransaction
 import dev.inspector.model.SessionMeta
+import dev.inspector.model.TimelineEntry
+import dev.inspector.model.timeline
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -78,11 +80,13 @@ object Har {
         creatorVersion: String,
         findingsByTxn: Map<String, List<Finding>> = emptyMap(),
     ): String {
-        val entries = transactions
-            // Chronological, by the device's monotonic clock — the same ordering authority the
-            // rest of the archive uses, and the order a HAR viewer expects to be handed.
-            .sortedBy { it.mono }
-            .map { entryFor(it, bodyOf, findingsByTxn[it.id].orEmpty()) }
+        // Chronological, in the order the timeline gives: by the device's monotonic clock, and
+        // inside one millisecond by capture `seq` where the calls carry it. Sorting by `mono`
+        // alone kept archive order on a tie, so the HAR could put two calls the other way round
+        // from the timeline and the JSON export. The rule lives once, in the model's timeline().
+        val entries = timeline(transactions, markers = emptyList())
+            .filterIsInstance<TimelineEntry.Call>()
+            .map { entryFor(it.txn, bodyOf, findingsByTxn[it.txn.id].orEmpty()) }
 
         return json.encodeToString(
             HarFile.serializer(),

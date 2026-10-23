@@ -2,6 +2,7 @@ package dev.inspector.daemon.mcp
 
 import dev.inspector.daemon.archive.TimelineEntry
 import dev.inspector.model.InspectorJsonPretty
+import dev.inspector.model.timeline
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -54,10 +55,14 @@ internal fun TransactionTools.explain(args: JsonObject): ToolOutcome {
     // Overlap, which nothing else can answer: a call is an interval, and every other tool
     // treats it as the instant it started.
     val txnEnd = txn.mono + (txn.ms ?: 0)
-    val concurrent = transactions
+    // In the timeline's order, so a tie inside one millisecond goes by capture `seq` as it does
+    // in `timeline` and the exports; sorting by `mono` alone kept archive order and could say
+    // the opposite about the same two calls.
+    val overlapping = transactions
         .filter { it.id != txn.id && it.mono <= txnEnd && it.mono + (it.ms ?: 0) >= txn.mono }
-        .sortedBy { it.mono }
-        .map { TimelineEntry.of(it) }
+    val concurrent = timeline(overlapping, markers = emptyList())
+        .filterIsInstance<dev.inspector.model.TimelineEntry.Call>()
+        .map { TimelineEntry.of(it.txn) }
     if (concurrent.isNotEmpty()) {
         notes += "${concurrent.size} other call(s) were in flight while this one ran"
     }
