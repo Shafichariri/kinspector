@@ -129,13 +129,15 @@ function route(method, path, changes, { on = 'both', loud = false, ...more } = {
   };
 }
 
+/** A reply over [routes], counted as the daemon counts: a route with no change is unsure or unchanged by its flag. */
 function report(routes, extra = {}) {
   const changed = routes.filter((r) => r.changes.length).length;
+  const unsure = routes.filter((r) => !r.changes.length && r.unsure).length;
   return {
     a: { sessionId: 'S-A', startedAt: '2026-01-01T09:00:00Z', endedAt: '2026-01-01T09:10:00Z', total: 3, matched: 3, filterCarried: true, markers: [] },
     b: { sessionId: 'S-B', startedAt: '2026-01-02T09:00:00Z', endedAt: '2026-01-02T09:10:00Z', total: 4, matched: 4, filterCarried: true, markers: [] },
     aChosen: 'given', sameApp: true, filter: '', routeCount: routes.length,
-    counts: { added: 0, removed: 0, changed, unchanged: routes.length - changed },
+    counts: { added: 0, removed: 0, changed, unsure, unchanged: routes.length - changed - unsure },
     shapeBudget: { bodiesRead: 0, bytesRead: 0, limitBytes: 1, exhausted: false }, routes, ...extra,
   };
 }
@@ -284,11 +286,49 @@ async function checkStaleDropped(sources) {
     : `NO - drawn "${shown}" (status "${comparing}") after the older landed last; a single read drew "${single}"`;
 }
 
+/**
+ * A route the daemon flags `unsure` is drawn with the toggle off, its change cell reads `unknown keys`
+ * and never "no change", a changed route with the flag carries both, and the toggle counts only the
+ * rows the daemon counts unchanged. The reply is cut as `limit` cuts it, so its `counts.unsure` (2)
+ * is more than the one such row listed: the summary must print the daemon's count, not one of rows.
+ */
+async function checkUnsureShown(sources) {
+  const title = 'capture did not keep every body on a side, so a key may have been removed or added; open the row for which';
+  const routes = [
+    route('GET', '/v1/changed', ['statusMix']),
+    route('GET', '/v1/both', ['responseShape'], { unsure: true }),
+    route('GET', '/v1/feed', [], { unsure: true }),
+    route('GET', '/v1/plain', []),
+    route('GET', '/v1/also-plain', []),
+  ];
+  const p = await drawn(sources, report(routes, { routeCount: 8, counts: { added: 0, removed: 0, changed: 2, unsure: 2, unchanged: 4 } }));
+  if (!p.rows().length) return 'NO - found no drawn row, so this checked nothing';
+  const wrong = [];
+  const order = () => p.rows().map((tr) => tr.dataset.route).join(' ');
+  if (order() !== '/v1/changed /v1/both /v1/feed') wrong.push(`with the toggle off, rows drawn ${order() || 'none'}; /v1/changed /v1/both /v1/feed due`);
+  const tags = (path) => (p.row(path) ? p.row(path).byClass('diff-tag').filter((t) => t.dataset.kind) : []);
+  const feed = tags('/v1/feed').find((t) => t.dataset.kind === 'unsure');
+  if (!feed || feed.textContent !== 'unknown keys' || feed.title !== title) wrong.push(`the feed's unsure tag reads "${feed ? feed.textContent : 'nothing'}", title "${feed ? feed.title : ''}"`);
+  const feedCell = p.row('/v1/feed') ? p.cell(p.row('/v1/feed'), 'change').textContent : '';
+  if (/no change/.test(feedCell)) wrong.push(`the feed's change cell reads "${feedCell}"`);
+  const both = tags('/v1/both').map((t) => t.dataset.kind).join(' ');
+  if (both !== 'responseShape unsure') wrong.push(`/v1/both tags ${both || 'none'}, responseShape unsure due`);
+  const said = p.$('diff-summary').textContent;
+  if (!said.includes('2 changed, 2 with unknown keys, 4 unchanged')) wrong.push(`the summary reads "${said.slice(said.indexOf('routes'))}", the daemon's 2 with unknown keys due`);
+  const toggle = p.$('diff-unchanged-toggle');
+  if (toggle.hidden || toggle.textContent !== 'show 2 unchanged routes') wrong.push(`the toggle reads "${toggle.textContent}"${toggle.hidden ? ', hidden' : ''}, "show 2 unchanged routes" due`);
+  toggle.click();
+  if (order() !== routes.map((r) => r.route).join(' ')) wrong.push(`with unchanged shown, rows drawn ${order()}`);
+  return wrong.length ? `NO - ${wrong.join('; ')}`
+    : `yes (3 rows of 5 drawn with the toggle off, the feed tagged "unknown keys", "2 with unknown keys" from the daemon's count; the toggle counts the 2 plain rows)`;
+}
+
 async function checkDiffRender(sources) {
   return [
     ['diff draws kinds', await checkDrawsKinds(sources)],
     ['diff unknown verbatim', await checkUnknownVerbatim(sources)],
     ['diff verdict verbatim', await checkVerdictVerbatim(sources)],
+    ['diff unsure shown', await checkUnsureShown(sources)],
     ['diff stale dropped', await checkStaleDropped(sources)],
   ];
 }

@@ -957,7 +957,11 @@ same as before. CI's `web` job runs it on the runner's preinstalled Chrome, foun
 
 **The Diff page draws the daemon's comparison and decides nothing.** Kinds, order, verdicts and the
 reason a shape could not be compared come from `GET /api/diff`, so the page has no mirror block and
-no case file. `#/diff?a=&b=` carries the two sessions and nothing else, as Stats keeps its filter
+no case file. It hides only the rows the daemon counts `unchanged`; a row with `unsure: true` is
+always drawn, tagged `unknown keys`, and the summary prints `counts.unsure` as sent. Hiding every
+row with no change kind put a route whose only news was a key capture could not be sure of behind
+the toggle, as if it were the same; `diff unsure shown`, static and live, is red with that
+predicate back. `#/diff?a=&b=` carries the two sessions and nothing else, as Stats keeps its filter
 out of the address; `#/diff` alone means the latest run against its previous one, and the page never
 rewrites it to the ids it resolved, so a bookmark follows the newest run. Choosing a session
 replaces the address, because Back walks places, not data. It is `live` in `PAGES`, since an export
