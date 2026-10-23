@@ -167,6 +167,31 @@ const visitInRange = (visit) =>
   !state.timeRange ||
   (visit.from <= state.timeRange.to && (visit.to === null || visit.to >= state.timeRange.from));
 
+/**
+ * The oldest call the list holds while it is short of what the route matched, or null when it holds
+ * every match. The list stops at the clamp, so of a visit beginning below this the rows held say
+ * nothing: whether it had calls, and whether they match, is only in the whole-session copy.
+ */
+function oldestHeld() {
+  if (state.matched === null || state.transactions.length >= state.matched) return null;
+  let oldest = Infinity;
+  for (const txn of state.transactions) if (txn.mono < oldest) oldest = txn.mono;
+  return oldest;
+}
+
+/**
+ * Marks each visit holding a call, in the whole-session skeleton, older than the oldest the list
+ * holds (`oldestHeld`), so whether those calls match is unknown. Counting the held rows said
+ * "0 of 5 match" on the path, and "no calls" on a waterfall stub, of visits whose calls were there.
+ */
+function markUnloaded(list) {
+  const oldest = oldestHeld();
+  if (oldest === null) return;
+  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
+  if (whole.length !== list.length) return;
+  list.forEach((visit, i) => { visit.unloaded = whole[i].txns.some((txn) => txn.mono < oldest); });
+}
+
 // --- the waterfall ------------------------------------------------------
 
 /**
@@ -180,6 +205,12 @@ const visitInRange = (visit) =>
  * segmentation here that read the *filtered* signals and dropped any screen with no matching
  * calls — so typing `path:` took every screen away, and a filter that matched nothing on Cart drew
  * a route that skipped it. A visit with no matching calls is now a stub.
+ *
+ * A stub is a visit the list holds no call of, which is not a visit with none: past the clamp, a
+ * screen older than the oldest call held said "0 calls" and "no calls" over calls it had. Such a
+ * stub is `notLoaded`, by the path's rule (`markUnloaded`) once the whole-session copy is the
+ * session's; until then nothing tells it from an empty one, so any stub beginning below the oldest
+ * call held is, and a stub the copy shows no call below that point in still says "no calls".
  */
 function waterfallGroups() {
   const win = sessionWindow();
@@ -189,12 +220,17 @@ function waterfallGroups() {
 
   const colour = screenColours();
   const lastMono = win.to;
-  return visits(state.screens, rows, [], [], sessionStartMono()).map((visit) => {
+  const list = visits(state.screens, rows, [], [], sessionStartMono());
+  const oldest = oldestHeld();
+  const copied = state.allSessionId === state.sessionId && !wholePending();
+  if (copied) markUnloaded(list);
+  return list.map((visit) => {
     const name = visit.screen ? visit.screen.name : null;
     const group = {
       segment: { name, from: visit.from, to: visit.to ?? lastMono, colour: colour(name) },
       rows: visit.txns,
       dim: !visitInRange(visit),
+      notLoaded: !visit.txns.length && oldest !== null && (copied ? Boolean(visit.unloaded) : visit.from < oldest),
     };
     if (group.rows.length) {
       group.from = Infinity;
@@ -250,14 +286,17 @@ function renderWaterfall() {
     swatch.style.background = group.segment.colour;
     head.appendChild(swatch);
     head.appendChild(el('span', 'wf-name', group.segment.name || 'before the first screen'));
+    // A stub whose calls are not loaded counts nothing: its "0 calls · 0ms" was the false claim.
     const stats = el('span', 'wf-stats muted mono');
-    stats.textContent = `${group.rows.length} calls · ${fmtMs(group.wall)} · ${fmtBytes(group.bytes)}`;
+    if (!group.notLoaded) stats.textContent = `${group.rows.length} calls · ${fmtMs(group.wall)} · ${fmtBytes(group.bytes)}`;
     head.appendChild(stats);
     if (group.failed) head.appendChild(el('span', 'wf-failed', `${group.failed} failed`));
     block.appendChild(head);
     // Kept rather than dropped: a route with a hole in it names a navigation nobody made.
     if (!group.rows.length) {
-      block.appendChild(el('div', 'wf-empty muted', state.filter || state.timeRange ? 'no matching calls' : 'no calls'));
+      const none = state.filter || state.timeRange ? 'no matching calls' : 'no calls';
+      const unknown = wholePending() ? beingRead(state.sessionTotal) : 'calls not loaded';
+      block.appendChild(el('div', 'wf-empty muted', group.notLoaded ? unknown : none));
     }
 
     // Each group gets its own scale. A shared one would squeeze a 200 ms screen into a sliver

@@ -75,6 +75,47 @@ function exceptionsRow(key, page) {
   return { key: `${key} page exceptions`, value: seen.length ? 'thrown' : 'none', ok: seen.length === 0, detail: seen.join(' | ') };
 }
 
+// KIN-151: each waterfall stub says what is true of it. What it is due comes from the page's state,
+// never the stubs drawn: a stub the whole-session copy shows a call in, below the oldest the list
+// holds while short of `matched`, is not loaded and claims no count; any other stub says "no calls"
+// or "no matching calls". On the 3016-call session the five oldest screens said "0 calls", "no calls".
+const STUBS_HONEST = `(() => {
+  if (wholePending()) return { error: 'the copy is still being read' };
+  // With no call in view the waterfall draws no group at all, only its empty text.
+  if (!visibleTransactions().length) return { na: 'no call in view, so no group is drawn' };
+  const held = state.transactions;
+  const short = state.matched !== null && held.length < state.matched;
+  const oldest = held.reduce((m, t) => (t.mono < m ? t.mono : m), Infinity);
+  const list = visits(state.screens, visibleTransactions(), [], [], sessionStartMono());
+  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
+  const blocks = [...document.querySelectorAll('#waterfall .wf-group')];
+  if (blocks.length !== list.length || whole.length !== list.length) return { error: 'groups ' + blocks.length + ', visits ' + list.length + ', copy ' + whole.length };
+  const out = { unloaded: 0, none: 0, bad: [] };
+  list.forEach((v, i) => {
+    if (v.txns.length) return;
+    const body = (blocks[i].querySelector('.wf-empty') || {}).textContent || '';
+    const stats = blocks[i].querySelector('.wf-stats').textContent;
+    const name = v.screen ? v.screen.name : 'leading';
+    if (short && whole[i].txns.some((t) => t.mono < oldest)) {
+      out.unloaded++;
+      if (!/not loaded/.test(body) || /\\d+ calls/.test(stats)) out.bad.push(name + ' "' + stats + '" "' + body + '"');
+    } else {
+      out.none++;
+      if (!/^no (matching )?calls$/.test(body)) out.bad.push(name + ' "' + body + '"');
+    }
+  });
+  return out;
+})()`;
+
+function stubsRow(key, r) {
+  if (!r || r.evalError || r.error) return { key, value: 'unreadable', ok: false, detail: (r && (r.evalError || r.error)) || 'no answer' };
+  if (r.na) return { key, value: 'n/a (no group)', ok: null, detail: r.na };
+  const n = r.unloaded + r.none;
+  if (!n) return { key, value: 'n/a (no stub)', ok: null, detail: 'every visit holds a call the list drew' };
+  return { key, value: r.bad.length ? 'claims' : 'honest', ok: !r.bad.length,
+    detail: `${r.unloaded} not loaded, ${r.none} with none${r.bad.length ? `; wrong: ${r.bad.join(', ')}` : ''}` };
+}
+
 // Scope bar on top, the timeline's first row whole, and each path station landing below the
 // sticky box, per width and filter.
 async function layout(page, url, session) {
@@ -128,6 +169,8 @@ async function layout(page, url, session) {
         r = await page.ev(`(async () => { const lp = document.getElementById('list-pane'); lp.scrollTop = lp.scrollHeight / 2;
           await new Promise((res) => setTimeout(res, 200)); return ${BAR_ON_TOP}; })()`);
         rows.push(barRow(`${key} waterfall scope bar mid-scroll`, r));
+        await page.waitFor('!wholePending()', 30000);
+        rows.push(stubsRow(`${key} waterfall stubs`, await page.ev(STUBS_HONEST)));
       }
       await view(page, 'network');
     }

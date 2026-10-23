@@ -527,7 +527,14 @@ the visits are asked of the whole-session skeleton, so a visit with no call belo
 marked. With no filter the same visits had read "nothing recorded". The note then says
 "newest 1000 of 3015 matches loaded", which is the number the header counts — beside "1 call hidden"
 it had left 2015 calls unaccounted for (`path clamp …` in `check-web-static.js`). The waterfall's stubs
-do not take this rule yet: a visit there whose calls were not loaded still reads "no matching calls". The timeline decides it is empty on calls and
+take the same rule, `markUnloaded` in `45-visits.js`: on the 3016-call session the five screens older
+than the newest 1000 calls each read "0 calls · 0ms" and "no calls" over the calls they had. Such a
+stub now reads "calls not loaded" and counts nothing. While the whole-session copy is read, or after
+a read that failed, nothing tells it from a stub with none, so any stub beginning below the oldest
+call held says `beingRead`'s words or "calls not loaded"; a stub the copy shows no call in still says
+"no calls", or "no matching calls" under a filter or a stretch (`wf stub clamp …` in
+`check-web-static.js`, each red with the stub unmarked, the read ignored, the copy not asked or the
+count kept; `layout … waterfall stubs` in Chrome). The timeline decides it is empty on calls and
 signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
 calls"; the waterfall as a whole never did, which is what this paragraph used to claim. An emptied
 waterfall asks in a fixed order: a filter that hid calls in range, then a brushed stretch in a session

@@ -244,6 +244,31 @@ function findAll(node, cls, out = []) {
   return out;
 }
 
+// A session past the route's clamp, for the path and the waterfall; `checkPathPastTheClamp` says what it holds.
+const CLAMP_CALLS = Array.from({ length: 3016 }, (_, i) => ({
+  id: `t${i}`, mono: i, ms: 5, method: 'GET', host: 'shop.invalid', path: i === 0 ? '/v3/auth' : '/v3/shop', status: 200,
+})).filter((t) => t.mono < 300 || t.mono >= 500);
+const CLAMP_SCREENS = [
+  { id: 'home', tag: 'screen', name: 'Home', mono: 0 },
+  { id: 'idle', tag: 'screen', name: 'Idle', mono: 300 },
+  { id: 'cart', tag: 'screen', name: 'Cart', mono: 500 },
+  { id: 'checkout', tag: 'screen', name: 'Checkout', mono: 1000 },
+];
+
+/** The page over that session under [filter], holding the newest 1000 matches, as a load leaves it. */
+function clampState(filter, view) {
+  const calls = CLAMP_CALLS;
+  const screens = CLAMP_SCREENS;
+  const matched = calls.filter((t) => !filter || `path:${t.path}` === filter);
+  return {
+    sessionId: 'S', signalSessionId: 'S', filter, view, newestFirst: false, liveTail: false, timeRange: null,
+    transactions: matched.slice(-1000), allTransactions: calls, allSessionId: 'S', sessionTotal: calls.length, matched: matched.length,
+    signals: [], allSignals: screens, screens, markers: [], recording: [], arriving: { transactions: null, signals: null },
+    expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,
+    screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null,
+  };
+}
+
 /**
  * The path on a session past the route's clamp: 2816 calls, all but the first to `/v3/shop`, over
  * `Home` from 0, `Idle` from 300 with no call, `Cart` from 500 and `Checkout` from 1000. `Idle`
@@ -257,28 +282,13 @@ function findAll(node, cls, out = []) {
  * there `Cart` still says "0 of 500 match".
  */
 function checkPathPastTheClamp(sources) {
-  const calls = Array.from({ length: 3016 }, (_, i) => ({
-    id: `t${i}`, mono: i, ms: 5, method: 'GET', host: 'shop.invalid', path: i === 0 ? '/v3/auth' : '/v3/shop', status: 200,
-  })).filter((t) => t.mono < 300 || t.mono >= 500);
-  const screens = [
-    { id: 'home', tag: 'screen', name: 'Home', mono: 0 },
-    { id: 'idle', tag: 'screen', name: 'Idle', mono: 300 },
-    { id: 'cart', tag: 'screen', name: 'Cart', mono: 500 },
-    { id: 'checkout', tag: 'screen', name: 'Checkout', mono: 1000 },
-  ];
   const lines = [];
   const notLoaded = { Home: 'calls not loaded', Idle: 'nothing', Cart: 'calls not loaded' };
   const auth = { Home: '1 network', Idle: 'nothing', Cart: '0 of 500 match' };
   for (const [filter, want] of [['path:/v3/shop', notLoaded], ['', notLoaded], ['path:/v3/auth', auth]]) {
-    const matched = calls.filter((t) => !filter || `path:${t.path}` === filter);
-    const held = matched.slice(-1000);
-    const state = {
-      sessionId: 'S', signalSessionId: 'S', filter, view: 'path', newestFirst: false, liveTail: false, timeRange: null,
-      transactions: held, allTransactions: calls, sessionTotal: calls.length, matched: matched.length,
-      signals: [], allSignals: screens, screens, markers: [], recording: [], arriving: { transactions: null, signals: null },
-      expandedVisits: new Set(), pathFocus: null, pathSessionId: null, pathVisitCount: null, pathFresh: true,
-      screenPayloadText: new Map(), tagColours: new Map(), tagColoursSession: null,
-    };
+    const state = clampState(filter, 'path');
+    const held = state.transactions;
+    const matched = state.matched;
     const { page } = stubPage(sources, state);
     page.renderPath();
     const root = page.$('path');
@@ -290,20 +300,67 @@ function checkPathPastTheClamp(sources) {
     const checkout = findAll(root, 'pv-stats').map(textOf).find((t) => t.includes('network')) || '';
     const note = findAll(root, 'filter-note').map(textOf).join('');
     const label = `path clamp ${filter || 'no filter'}`;
-    const clamped = held.length < matched.length;
+    const clamped = held.length < matched;
     const problems = [];
     for (const [name, text] of Object.entries(want)) {
       if (stat(name) !== text) problems.push(`${name} reads "${stat(name)}", where "${text}" was due`);
     }
     if (clamped && !checkout.includes('older calls not loaded')) problems.push(`Checkout reads "${checkout}", without "older calls not loaded"`);
-    if (clamped && filter && !note.includes(`newest ${held.length} of ${matched.length} matches loaded`)) {
+    if (clamped && filter && !note.includes(`newest ${held.length} of ${matched} matches loaded`)) {
       problems.push(`the note reads "${note.slice(0, 90)}", without what its count covers`);
     }
     lines.push([label, problems.length
-      ? `NO - ${problems.join('; ')} (${held.length} of ${matched.length} matches held)`
-      : `yes (${stations.join(' | ')}; ${held.length} of ${matched.length} matches held)`]);
+      ? `NO - ${problems.join('; ')} (${held.length} of ${matched} matches held)`
+      : `yes (${stations.join(' | ')}; ${held.length} of ${matched} matches held)`]);
   }
   return lines;
 }
 
-module.exports = { checkLongSession, checkPathPastTheClamp, auditNoArgumentSpread, stubNode, stubPage };
+/**
+ * The waterfall over the same session: `Home` and `Cart` are stubs, the list holding none of their
+ * calls, which are older than the oldest it holds. Each said "0 calls · 0ms" and "no calls", or "no
+ * matching calls" under `path:/v3/shop`, which matched 3015. Each now says its calls are not loaded,
+ * and counts nothing; `Idle`, which the copy shows no call in, still says "no calls" or "no matching
+ * calls". While the copy is read nothing tells `Idle` from the others, so all three say the session
+ * is being read. Under `path:/v3/auth`, which matched only the first call, nothing is clamped, and
+ * `Idle` and `Cart` say "no matching calls" as before.
+ */
+function checkWaterfallPastTheClamp(sources) {
+  const lines = [];
+  const reading = 'being read';
+  const cases = [
+    ['', { Idle: 'no calls', Home: 'calls not loaded', Cart: 'calls not loaded' }],
+    ['path:/v3/shop', { Idle: 'no matching calls', Home: 'calls not loaded', Cart: 'calls not loaded' }],
+    ['path:/v3/auth', { Idle: 'no matching calls', Cart: 'no matching calls' }],
+    ['being read', { Idle: reading, Home: reading, Cart: reading }],
+  ];
+  for (const [filter, want] of cases) {
+    const pending = filter === 'being read';
+    const state = clampState(pending ? '' : filter, 'waterfall');
+    // As a load leaves it mid-read (KIN-42): the switch's copy, empty and unmarked, its buffer open.
+    if (pending) Object.assign(state, { allTransactions: [], allSessionId: null, arriving: { transactions: { sessionId: 'S' }, signals: null } });
+    // A call row's classes and its click are `00-core.js`'s, which is not run here.
+    const { page } = stubPage(sources, state, { globals: { methodClass: () => '', statusClass: () => '', select() {} } });
+    page.renderWaterfall();
+    // `beingRead`'s own words, from the page's file, so this holds no second copy of them.
+    const due = (text) => (text === reading ? page.beingRead(state.sessionTotal) : text);
+    const stubs = findAll(page.$('waterfall'), 'wf-stub').map((block) => ({
+      name: findAll(block, 'wf-name').map(textOf).join(''),
+      stats: findAll(block, 'wf-stats').map(textOf).join(''),
+      body: findAll(block, 'wf-empty').map(textOf).join(''),
+    }));
+    const problems = [];
+    for (const [name, text] of Object.entries(want)) {
+      const stub = stubs.find((s) => s.name === name);
+      if (!stub) problems.push(`${name} is no stub`);
+      else if (stub.body !== due(text)) problems.push(`${name} reads "${stub.body}", where "${due(text)}" was due`);
+      else if (text !== 'no calls' && text !== 'no matching calls' && /\d/.test(stub.stats)) problems.push(`${name} counts "${stub.stats}"`);
+    }
+    lines.push([`wf stub clamp ${filter || 'no filter'}`, !stubs.length ? 'NO - found no stub, so this checked nothing'
+      : problems.length ? `NO - ${problems.join('; ')} (${state.transactions.length} of ${state.matched} matches held)`
+        : `yes (${stubs.map((s) => `${s.name}=${s.body}`).join(' | ')}; ${state.transactions.length} of ${state.matched} matches held)`]);
+  }
+  return lines;
+}
+
+module.exports = { checkLongSession, checkPathPastTheClamp, checkWaterfallPastTheClamp, auditNoArgumentSpread, stubNode, stubPage };
