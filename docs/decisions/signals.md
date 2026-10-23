@@ -22,6 +22,10 @@ mean the same in both orders reads `TimelineRun.earliest`. The id does, and has 
 its newest end, so an id taken from the head would re-key on every observation during live tail and
 collapse the run under the reader — in exactly the mode someone watching live traffic is in. It
 would also change when the order toggle is tapped. Two tests pin this and neither is redundant.
+When the earliest members share a millisecond, the one with the lower `seq` is earliest (a member
+without `seq` after one with it), then the lower signal id, so a tie names the same member in either
+order; `minBy { mono }` took the first in draw order and collapsed the run on the flip
+(`mirror-cases/timelineRuns.json`).
 `app.js`'s `runIdOf` took the head from v0.8.0, when the model's id moved to `earliest`, through
 v1.3.0, so an expanded run on the web collapsed under the reader during live tail;
 `mirror-cases/timelineRuns.json` now carries the newest-first cases.

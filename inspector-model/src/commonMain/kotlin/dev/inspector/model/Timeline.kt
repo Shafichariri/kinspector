@@ -47,8 +47,13 @@ data class TimelineRun(
      * [entries] is in draw order, because [timelineRuns] groups an already-reversed list. Anything
      * that must mean the same thing in both orders has to say so explicitly rather than take the
      * head of the list.
+     *
+     * A tie on `mono` goes by `seq`, a row without one last, then by [token]. `minBy { mono }` took
+     * the first minimum in draw order, which is a different member in each order whenever the two
+     * earliest share a millisecond, so the id moved on a flip. A total order has one answer in
+     * either, including when only some members carry `seq`.
      */
-    val earliest: TimelineEntry get() = entries.minBy { it.mono }
+    val earliest: TimelineEntry get() = entries.minWith(EARLIEST)
 
     /** How long the run covers, in device milliseconds. Zero for a run of one. */
     val spanMs: Long get() = entries.maxOf { it.mono } - entries.minOf { it.mono }
@@ -61,15 +66,18 @@ data class TimelineRun(
      * end, so in newest-first order the head changes on every observation — an id taken from it
      * would re-key the run and collapse it under the reader in exactly the mode where traffic is
      * arriving. Taking the earliest also makes the id survive flipping the order, which the head
-     * would not.
+     * would not. A same-millisecond tie is settled the same way in both orders; see [earliest].
      */
-    val id: String
-        get() {
-            val head = earliest
-            val token = (head as? TimelineEntry.Observation)?.signal?.id ?: head.mono.toString()
-            return "${key.orEmpty()}\u0000$token"
-        }
+    val id: String get() = "${key.orEmpty()}\u0000${earliest.token}"
 }
+
+/** What a run's id names its earliest member by: the signal's id, else the millisecond. */
+private val TimelineEntry.token: String
+    get() = (this as? TimelineEntry.Observation)?.signal?.id ?: mono.toString()
+
+/** [TimelineRun.earliest]'s order: total, so it does not depend on which way the run is drawn. */
+private val EARLIEST: Comparator<TimelineEntry> =
+    compareBy({ it.mono }, { it.seq ?: Long.MAX_VALUE }, { it.token })
 
 /** What makes two adjacent entries "the same thing happening again". */
 private fun runKeyOf(entry: TimelineEntry): String? =

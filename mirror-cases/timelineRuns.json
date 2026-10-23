@@ -131,6 +131,52 @@
       ]
     },
     {
+      "name": "a run whose earliest members share a millisecond is keyed on the lower seq, oldest first",
+      "from": "TimelineTest.a run whose earliest members share a millisecond keeps its id when the order flips",
+      "input": {
+        "entries": [
+          {"S": {"id": "b", "tag": "state", "name": "form", "mono": 100, "seq": 1}},
+          {"S": {"id": "a", "tag": "state", "name": "form", "mono": 100, "seq": 2}},
+          {"S": {"id": "c", "tag": "state", "name": "form", "mono": 110, "seq": 3}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form", "S:state/form"], "id": "state\u0000form\u0000b"}]
+    },
+    {
+      "name": "a run whose earliest members share a millisecond is keyed on the lower seq, newest first",
+      "from": "TimelineTest.a run whose earliest members share a millisecond keeps its id when the order flips",
+      "input": {
+        "entries": [
+          {"S": {"id": "c", "tag": "state", "name": "form", "mono": 110, "seq": 3}},
+          {"S": {"id": "a", "tag": "state", "name": "form", "mono": 100, "seq": 2}},
+          {"S": {"id": "b", "tag": "state", "name": "form", "mono": 100, "seq": 1}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form", "S:state/form"], "id": "state\u0000form\u0000b"}]
+    },
+    {
+      "name": "a tie where only one member carries seq is keyed on that member, in either order",
+      "from": "TimelineTest.a mixed-seq tie picks the same earliest member in either draw order",
+      "input": {
+        "entries": [
+          {"S": {"id": "a", "tag": "state", "name": "form", "mono": 100}},
+          {"S": {"id": "b", "tag": "state", "name": "form", "mono": 100, "seq": 5}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000b"}]
+    },
+    {
+      "name": "a tie without seq is keyed on the lower signal id, not the draw order",
+      "from": "TimelineTest.a tie without seq picks the same earliest member in either draw order",
+      "input": {
+        "entries": [
+          {"S": {"id": "b", "tag": "state", "name": "form", "mono": 100}},
+          {"S": {"id": "a", "tag": "state", "name": "form", "mono": 100}}
+        ]
+      },
+      "expect": [{"key": "state\u0000form", "entries": ["S:state/form", "S:state/form"], "id": "state\u0000form\u0000a"}]
+    },
+    {
       "name": "a single observation is a run of one",
       "from": "Timeline.kt timelineRuns",
       "input": {"entries": [{"S": {"id": "r1", "tag": "state", "name": "form", "mono": 110}}]},
