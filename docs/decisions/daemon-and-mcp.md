@@ -68,10 +68,10 @@ key as it was, because the file is also edited by hand and will carry the findin
 temporary file in the same directory and moves it over the old one atomically, so a crash leaves the
 old file or the new one, never half of each. A malformed file is refused with 409 and left untouched:
 a save must never overwrite settings it could not read. An unknown key in the request is a 400 that
-names it, since a misspelt key silently dropped is a setting the user believes they made. Nothing
-but `findings` and `findingDismissals` applies until the next start (see "The findings settings are
-read on the next findings read" below) — a port cannot move live and `Retention` reads the config it was built
-with — and `GET` reports the flags that override the file so the page can say why a value will not
+names it, since a misspelt key silently dropped is a setting the user believes they made. Only
+`findings` and `findingDismissals` apply live (see "The findings settings are read on the next
+findings read" below); every other key waits for the next start — a port cannot move live and
+`Retention` reads the config it was built with — and `GET` reports the flags that override the file so the page can say why a value will not
 change. `ConfigFileTest` pins each rule.
 
 **The daemon's control endpoints require `X-Inspector-Control: 1`.** Not ceremony. The daemon
