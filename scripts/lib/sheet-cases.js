@@ -19,9 +19,9 @@
  * and the orders route's detail open.
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { scratchDir } = require('./measure-scratch');
 const { PAYMENTS_SESSION_ID } = require('./findings-probes');
 const { BASE_SESSION_ID } = require('./diff-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
@@ -112,7 +112,7 @@ async function sheet(page, url, outDir, tree) {
   const taken = new Map();
   const rows = [];
   const thrown = new Set(); // each load clears the page's list, so they are gathered per shot
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sheet-export-'));
+  const tmp = scratchDir('sheet-export-');
   try {
     const exportFile = path.join(tmp, 'export.html');
     fs.writeFileSync(exportFile, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));

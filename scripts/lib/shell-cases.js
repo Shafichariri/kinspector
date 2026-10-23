@@ -23,9 +23,9 @@
  * served, every route is still one line (`stats 1440 routes one line served`).
  */
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { scratchDir } = require('./measure-scratch');
 const { LONG_SESSION_ID } = require('./long-session-probes');
 const { PROBE_SESSION_ID } = require('./measure-fixtures');
 const { PAYMENTS_SESSION_ID } = require('./findings-probes');
@@ -274,7 +274,7 @@ async function statsRouteBreaks(page, url) {
     value: !wideFound ? 'NO - found no route cell with a server, so this checked nothing' : wide.breaks === 0 ? 'one line' : 'wrapped',
     detail: wideFound ? `${wide.cells} route cells, ${wide.breaks} line breaks` : String(wide && wide.evalError) });
   await page.setWidth(400);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stats-export-'));
+  const dir = scratchDir('stats-export-');
   try {
     const file = path.join(dir, 'export.html');
     fs.writeFileSync(file, Buffer.from(await (await fetch(`${url}api/sessions/latest/export.html`)).arrayBuffer()));

@@ -33,7 +33,7 @@
  * writes; with --base, each tree in a folder of its own).
  * Exit status: 1 when any judged reading on head fails, 2 when the suite could not run, 130 or 143
  * when SIGINT or SIGTERM stopped it, after it stopped Chrome and its daemons and removed its temp
- * directory (kept with --keep).
+ * directory (kept with --keep), with the exported sessions the cases wrote inside it.
  */
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
@@ -49,6 +49,7 @@ const { room } = require('./lib/list-room-cases');
 const { liveTraffic } = require('./lib/live-traffic-cases');
 const { polish } = require('./lib/polish-cases');
 const { sheet } = require('./lib/sheet-cases');
+const { setScratchRoot } = require('./lib/measure-scratch');
 const { landingFits } = require('./lib/site-cases');
 
 const REPO = path.resolve(__dirname, '..');
@@ -210,6 +211,9 @@ async function main() {
   try { opts = parseArgs(process.argv.slice(2)); } catch (e) { console.error(`measure-web-ui: ${e.message}`); return 2; }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'measure-web-ui-'));
   run.tmp = tmp;
+  // The cases' exported sessions go inside it, so cleanUp removes them on a signal too, which skips
+  // the `finally` each case removes its own with (lib/measure-scratch.js).
+  setScratchRoot(tmp);
   run.keep = opts.keep;
   try {
     const trees = [['head', opts.head], ...(opts.base ? [['base', opts.base]] : [])];
