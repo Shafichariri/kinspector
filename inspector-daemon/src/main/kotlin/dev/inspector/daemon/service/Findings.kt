@@ -36,7 +36,7 @@ data class Finding(
     val path: String? = null,
     /** Never built from a captured value. */
     val message: String,
-    /** Timeline order (mono, then seq when both carry it, then id); at most [MAX_TXN_IDS]. */
+    /** Timeline order ([FindingSession.TIMELINE]: mono, rows without seq first, seq, id); at most [MAX_TXN_IDS]. */
     val txnIds: List<String>,
     /** Distinct, first seen in that order; at most [MAX_TXN_IDS]. */
     val callIds: List<String>,
@@ -222,14 +222,22 @@ class FindingSession(
     companion object {
         private const val KEY_MEMO_LIMIT = 50_000
 
-        /** Timeline order: `mono`, then `seq` when both rows carry it, then id. Never `ts`. */
-        val TIMELINE: Comparator<FindingRow> = Comparator { a, b ->
-            when {
-                a.mono != b.mono -> a.mono.compareTo(b.mono)
-                a.seq != null && b.seq != null && a.seq != b.seq -> a.seq.compareTo(b.seq)
-                else -> a.id.compareTo(b.id)
-            }
-        }
+        /**
+         * Timeline order: `mono`, then rows without `seq` before rows with one, then `seq`, then id.
+         * Never `ts`.
+         *
+         * Comparing `seq` only when both rows carry it, as `schema.md` reads, is intransitive once a
+         * session mixes them: (seq 0, id z) < (seq 1, id a) < (no seq, id m) < (seq 0, id z). Then a
+         * finding's order followed file order, and on a group of 32 or more the JDK's sort threw and
+         * took the whole findings read with it. A session does mix them: a 1.2.0 daemon writes no
+         * `seq`, and a newer daemon resuming that session within the grace writes it.
+         *
+         * `timeline()` places a row without `seq` by its neighbours in the whole session, which no
+         * comparator over one group's rows can do. What it does in that session is keep the older
+         * daemon's rows, which come first in the file, ahead of the rows ordered by `seq`, and that is
+         * what this key says for every tie. Rows that all carry `seq` order exactly as before.
+         */
+        val TIMELINE: Comparator<FindingRow> = compareBy({ it.mono }, { it.seq != null }, { it.seq }, { it.id })
 
         fun idOf(ruleId: String, groupKey: String): String = sha256Hex("$ruleId\u0000$groupKey").take(12)
 

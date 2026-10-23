@@ -153,7 +153,10 @@ class FindingsTimelineOrderTest {
         }
     }
 
-    /** `SensitiveSource` keeps its evidence sorted as rows arrive. */
+    /**
+     * `SensitiveSource` keeps the first five evidence lines in timeline order as rows arrive, so in
+     * the reversed file the earliest rows come last and must displace the ones it holds.
+     */
     @Test
     fun `a secret field's evidence lists its 32 calls in one order from either file order`() {
         val rows = mixedGroup(seed = 4)
@@ -164,7 +167,7 @@ class FindingsTimelineOrderTest {
         for ((name, file) in listOf("file order" to calls, "reversed" to calls.reversed())) {
             val finding = findings(file).single { it.ruleId == "sensitive.field.secret" }
             assertEquals(expected, finding.txnIds, "txnIds, $name")
-            assertEquals(expected, finding.evidence.map { it.txnId }, "evidence, $name")
+            assertEquals(expected.take(5), finding.evidence.map { it.txnId }, "evidence, $name")
         }
     }
 
