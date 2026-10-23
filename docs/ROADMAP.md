@@ -505,6 +505,75 @@ at `80a694c`. Their places are in §5 → "Order from here". None touches public
   the signal and marker branches' per-message `renderTabs`, `renderMarkers` and `renderList`, which
   are by design. *Surfaces:* web UI.
 
+*The three entries below were found on 2026-10-23 by the architect while designing
+`item:timeline-seq-ties`, outside that item. The maintainer's proxy ruled that none folds into it
+(decision `2026-10-23-timeline-seq-side-findings`) and proposed a place for each; the product owner
+placed them the same day, and each entry says whether it kept the proposal and why. Their places are
+in §5 → "Order from here". None touches public API, the schema or a golden in `api/`.*
+
+- **The HAR and `explain`'s `concurrent` order calls by `mono` alone.** *Ticket label:*
+  `item:har-explain-seq-ties`. *The user and the problem:* a web UI user who hands a HAR to another
+  tool or a colleague, and an agent calling `explain`. `Har.kt` sorts entries with
+  `sortedBy { it.mono }` and `ExplainTool.kt` sorts `concurrent` the same way, so two calls in one
+  millisecond keep archive order there. Once `item:timeline-seq-ties` lands, the timeline, the list
+  and the JSON and Markdown exports put those two calls in `seq` order, and the HAR and `explain` can
+  say the opposite of them about the same pair. *Why now:* `item:timeline-seq-ties` creates the
+  disagreement, so the fix belongs straight after it, while the rule is fresh; it is a small
+  inconsistency, not a crash. *Placement:* the proxy's proposal kept, with one addition: it goes
+  ahead of `item:timeline-run-id-stable`, because two surfaces disagreeing on which call came first is
+  a fact one of them has wrong, where the run id is only an annoyance.
+  *Acceptance criteria:* with two calls in one millisecond carrying `seq` and written to the archive
+  in reverse capture order, the HAR's `entries` and `explain`'s `concurrent` list them in `seq`
+  order, the same as the JSON export's `timeline`; calls without `seq` keep today's order in both; a
+  test on each, proven red against `sortedBy { it.mono }`. *Out of scope:* the HAR's
+  `startedDateTime`, which stays wall-clock; markers and signals, which the HAR and `concurrent` do
+  not hold; anything else in `explain`. *Surfaces:* daemon (HAR export, MCP `explain`). XS.
+
+- **A run's id changes when the order flips on a same-millisecond tie.** *Ticket label:*
+  `item:timeline-run-id-stable`. *The user and the problem:* an overlay user or a web UI user who
+  expands a run of calls and then flips the list between oldest first and newest first.
+  `TimelineRun.earliest` is `minBy { mono }` on both sides, and "the first minimum in draw order wins a
+  tie", so when a run's earliest members share a millisecond the run's id is a different call in each
+  order, and the expanded run collapses on the flip. Nothing on screen is false; the user loses what
+  they had open. It predates `item:timeline-seq-ties` and is not order, which is why that item left it
+  out. *Why now:* it is in the code `item:timeline-seq-ties` has just changed, on both sides, so it is
+  cheapest straight after it. *Placement:* the proxy's proposal kept, lanes L then W, but behind
+  `item:har-explain-seq-ties`: an annoyance, not a false fact. Lane W is serial, so its W part waits
+  for the W rows ordered ahead of it. *Acceptance criteria:* a run whose
+  earliest members tie on `mono` has the same id oldest first and newest first, in the model and in
+  the web mirror; a run expanded in one order is still expanded after a flip on the web UI and the
+  overlay; a shared case in `mirror-cases/` run by both the Kotlin tests and `check-web-static.js`,
+  proven red on each side against `minBy { mono }` in draw order. *Out of scope:* how runs are formed;
+  what a run shows. *Surfaces:* `:inspector-model`, the overlay (by inheritance), web UI. The
+  architect says whether the id is public API; if it is, the core golden and noop twin are part of
+  the item. XS.
+
+- **`Findings.TIMELINE` is not a total order when `seq` is mixed in one session.** *Ticket label:*
+  `item:findings-timeline-total`. *The user and the problem:* anyone reading findings (the page,
+  `list_findings`, `inspector findings`) and, once `item:findings-ci-check` lands, a consuming team
+  whose CI runs the gate. The comparator in `service/Findings.kt` is "`mono`, then `seq` when both rows
+  carry it, then id", which is intransitive when some calls in a group carry `seq` and some do not:
+  (seq 0, id z) < (seq 1, id a) < (no seq, id m) < (seq 0, id z). It is used by `sortedWith` in
+  `Findings.kt`, `PaymentRules.kt` and `SensitiveSource.kt`, so a finding's evidence can come out in an
+  order that depends on file order, and on a group of 32 or more the JDK's sort may throw "Comparison
+  method violates its general contract". *Why not first:* it is not reproduced, and mixed `seq` inside
+  one session needs an edited archive today. A guard must be seen red before it is ordered as a crash.
+  *Placement:* the proxy's proposal kept, lane D after `item:findings-ci-check`. The reason
+  is sharper than the proposal's: the gate turns a throw here into a red build a team did not cause,
+  so this must not ship long after the gate, and it follows `item:timeline-seq-ties` so the fix can
+  use the same rule. **If the first step finds a real path to mixed `seq`** (a session written by two
+  library versions, a bridge or ingest path that drops `seq` on some rows, an archive a user edits by
+  hand as the readable folders invite), **it is a crash a user can reach and the product owner moves
+  it ahead of every false-fact row in lane D.** *Acceptance criteria:* the first commit is a red test
+  that sorts a group of 32 or more rows with mixed `seq` through the comparator and shows it throw, or
+  shows two input orders giving two outputs; the item's record says whether any archive the current
+  library and daemon write can hold mixed `seq` in one session, and how that was established; after
+  the fix the same test is green, the order no longer depends on input order, rows that all carry
+  `seq` are ordered exactly as today, and a finding's evidence lists calls in the order
+  `item:timeline-seq-ties` draws them on the timeline. *Out of scope:* which calls a rule flags;
+  changing what `seq` means or when it is assigned. *Surfaces:* daemon (findings, and so the page, MCP
+  and the CLI). S.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -677,7 +746,7 @@ features that catch a defect in the app under test, and none of these is needed 
 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
-| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before PR B, PR B last of all (diff PR B has since merged, so only polish PR B is left). **PR A is complete (2026-10-23).** Part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 done 2026-10-23: A4 to A6 (KIN-105 to KIN-107, PR #181, `7f49e14`; QA closed all three). **PR B is in progress** (KIN-145 and KIN-146, on the web developer's branch, not merged) |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before PR B, PR B last of all (diff PR B has since merged, so only polish PR B is left). **PR A is complete (2026-10-23).** Part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 done 2026-10-23: A4 to A6 (KIN-105 to KIN-107, PR #181, `7f49e14`; QA closed all three). **PR B merged (PR #192) and QA passed it, 2026-10-23**; the delivery tracker moves this row at the next close-out |
 
 **After polish PR B — ordered 2026-10-23 by the product owner**, out of the unordered candidates and
 follow-ups in §3 and §6, each checked against the code at `80a694c`. Polish PR B was the last
@@ -694,12 +763,15 @@ straight to tickets.
 | Order | Item | Where | Ticket label | Size | Lane | Design first |
 |---|---|---|---|---|---|---|
 | 31 | The diff hides a route whose only news is an unsure key | §3 → Bugs found, not fixed | `item:diff-unsure-key-shown` | S, M if the page needs its own row | D, then W | yes: a tally in `counts`, or the routes kept listed |
-| 32 | A waterfall stub says `no calls` of a screen whose calls are not loaded | §3 → Bugs found, not fixed | `item:web-waterfall-stub-says-unloaded` | S | W | no |
+| 32 | A waterfall stub says `no calls` of a screen whose calls are not loaded | §3 → Bugs found, not fixed | `item:web-waterfall-stub-says-unloaded` | S | W. **PR #196 open, not merged** | no |
 | 33 | The Stats table's box, measured for the Diff box's fault | §3 → Bugs found, not fixed | `item:web-stats-box-measured` | XS | W | no |
 | 34 | Two doc sentences that say the wrong thing | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-23` | XS | S | no |
-| 35 | `timeline()` ignores `seq` on same-millisecond ties | §3 → Bugs found, not fixed | `item:timeline-seq-ties` | M | L (model and mirror cases), then W (`app.js`) | yes: the comparator, and where a marker with `seq` sorts |
+| 35 | `timeline()` ignores `seq` on same-millisecond ties | §3 → Bugs found, not fixed | `item:timeline-seq-ties` | M | L (model and mirror cases), then W (`app.js`). **Designed 2026-10-23; PR #195 open, not merged** | yes: the comparator, and where a marker with `seq` sorts. Done 2026-10-23 |
+| 35a | The HAR and `explain`'s `concurrent` order calls by `mono` alone | §3 → Bugs found, not fixed | `item:har-explain-seq-ties` | XS | D. Straight after `item:timeline-seq-ties`, because that item creates the disagreement; ahead of `item:timeline-run-id-stable` because two surfaces disagreeing on which call came first is a fact one has wrong | no |
+| 35b | A run's id changes when the order flips on a same-millisecond tie | §3 → Bugs found, not fixed | `item:timeline-run-id-stable` | XS | L, then W. Straight after `item:timeline-seq-ties`, in the code it has just changed; behind `item:har-explain-seq-ties` because it is an annoyance, not a false fact | no |
 | 36 | The landing page between 821 and 885 px | §3 → Bugs found, not fixed | `item:landing-page-fits-821-885` | XS | S | no |
-| 37 | A findings check for CI | §6 → Candidates | `item:findings-ci-check` | S | D | yes: the architect's two confirmations; a "no" makes it "Not worth doing" |
+| 37 | A findings check for CI | §6 → Candidates | `item:findings-ci-check` | S | D | yes: the architect's two confirmations. Done 2026-10-23, both yes; shape decided by the maintainer's proxy (`2026-10-23-findings-ci-gate-shape`) |
+| 37a | `Findings.TIMELINE` is not a total order when `seq` is mixed in one session | §3 → Bugs found, not fixed | `item:findings-timeline-total` | S | D. After `item:findings-ci-check`, because it is unreproduced and a guard must be seen red before it is ordered as a crash, but no later: the gate turns a throw into a red build. Its first step settles whether a real archive can hold mixed `seq`; if one can, it moves ahead of the false-fact rows in lane D | no; the first commit is the red test |
 | 38 | A live call redraws the waterfall and the path once per call | §3 → Bugs found, not fixed | `item:web-live-call-burst-bounded` | S | W | no |
 | 39 | A file in `src/iosMain` of core or noop fails the build | §3 → Guards | `item:guard-ios-main-compiled` | XS | L | no |
 | 40 | Interrupted probes leave their export temp directories | §3 → Guards | `item:guard-export-temp-cleanup` | XS | S | no |
@@ -719,6 +791,12 @@ release that has findings in it.
 
 What was left unordered, and what is not worth doing, is recorded with each entry, in §3 and in §6 →
 "Candidates, not ordered".
+
+**Three rows added 2026-10-23 by the product owner**, from the side findings of
+`item:timeline-seq-ties`'s design, on the maintainer's proxy's proposal (decision
+`2026-10-23-timeline-seq-side-findings`): `item:har-explain-seq-ties`, `item:timeline-run-id-stable`
+and `item:findings-timeline-total`. All three proposed places are kept; each row gives its reason,
+and its §3 entry the rest. Labels are lettered so no row is renumbered.
 
 **One row added 2026-10-22 by the product owner, at the coordinator's request:**
 `item:landing-page-fits-400`, from QA on `item:public-claims-true`. It goes first in lane S because
@@ -1314,9 +1392,8 @@ and each names what would decide it.*
 *Ticket label:* `item:findings-ci-check`
 
 **Ordered 2026-10-23 by the product owner**, design first; its place is in §5 → "Order from here".
-The architect's note answers the two questions under "Why not now" before any ticket is filed. If
-either answer is no, the item leaves the order as a "Not worth doing" entry with that answer, and the
-rows below it keep their order.
+The architect's note was to answer the two questions under "Why not now" before any ticket is filed,
+and a "no" would have made it a "Not worth doing" entry. Both answers came back yes (below).
 
 **The user and the problem.** A consuming team that has recorded a payment flow and wants a pull
 request to fail when that flow starts double-submitting. Findings answer on a page, over MCP and from
@@ -1329,13 +1406,27 @@ function over a session folder, with no running daemon, and that a team's CI can
 at all: a test run that streams into a daemon, or a recorded folder checked in. If CI cannot produce a
 session, this is "Not worth doing" with that reason.
 
-**Acceptance criteria, if placed.**
-- `inspector findings <session folder> --fail-on <severity>` exits non-zero when any undismissed
-  finding is at or above that severity, and zero otherwise. It prints the findings it counted, with
-  masked evidence.
+**Design done 2026-10-23: both confirmations are yes.** The architect's note found the engine
+already pure (`inspector findings` runs in-process over `<data>/sessions/<id>/` and
+`<data>/config.json`, with no socket) and showed a CI job can produce a session by streaming a test
+into a daemon it starts. The maintainer's proxy took the note's three recommendations the same day
+(decision `2026-10-23-findings-ci-gate-shape`): the existing `--data` and `--session` flags instead
+of a session-folder argument, exit 2 for "cannot judge" under `--fail-on` only, and the CI guide in
+`docs/DAEMON.md` only. The first changes the wording of the criteria below; the product owner made
+that change on 2026-10-23.
+
+**Acceptance criteria.**
+- `inspector findings --data DIR --session ID --fail-on <severity>` exits non-zero when any
+  undismissed finding is at or above that severity, and zero otherwise. It prints the findings it
+  counted, with masked evidence.
 - It reads the same rules and dismissals from `config.json` as the page and `list_findings`, so the
   three agree on the same session.
 - Without `--fail-on`, the command behaves as the findings item built it.
+- **The gate is shown failing in this repository's CI, as part of the item, not as a follow-up.** A
+  CI step on the installed launcher (`bin/inspector`, the binary a consuming team runs) runs the
+  command against the probe fixture's payments session and must read exit 1, and against a fixture
+  session with no finding at that severity and must read exit 0. A guard only ever seen passing is
+  not a guard, and this step is also what proves the launcher passes the exit code through.
 
 **Out of scope.** A hosted service, or anything listening beyond loopback. A new filter-grammar
 term. Comparing two sessions, which is the diff's.
