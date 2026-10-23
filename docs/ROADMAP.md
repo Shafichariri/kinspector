@@ -192,6 +192,11 @@ Not new, and not forgotten. Collected here because they were spread across nine 
   KIN-42); (5) the overview band's `min-height` rule is unguarded: with `.axis-hint.axis-reading { min-height:
   24px }` removed, `copy lands huge` still passes at 44 px, under its 48 px bound. *(2026-10-22: (5) is
   placed by the product owner as `item:guard-overview-band-reserved`, §3 → Guards; (1) to (4) stay unplaced. **(5) is done**: guarded by KIN-110, `overview band css` in CI and `copy lands huge` bounded at the scope bar's height.)*
+  *(2026-10-23, the product owner: (4) is placed as `item:web-waterfall-stub-says-unloaded`, §3 → Bugs
+  found, not fixed. (1) to (3) stay unordered on purpose. (1) and (3) cost time on a large session and
+  show nothing false. (2) shows a list one row short, which the next load corrects, in a window as long
+  as one page request; fixing it means reworking KIN-42's read. Reopen (2) if anyone sees it in use,
+  and (1) or (3) if a user waits on them.)*
   **For the product-owner, unplaced:** a live call never redraws the timeline. The `txn` branch of the
   socket's `onmessage` never calls `renderTimeline` (found by the engineer building KIN-41, true at `e1711a3` and after), so a call
   appears on the timeline only on the next redraw; with the pane at the end it is "followed" only in the
@@ -227,6 +232,28 @@ proxy**: see "Order from here".*
 
 - ~~**Interrupting a measure run leaves its daemons running.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-measure-interrupt-cleans-up`.
 
+*The two guards below were placed on 2026-10-23 by the product owner, from the batch-4 and batch-6
+follow-ups in §6 → "Candidates, not ordered". Their places are in §5 → "Order from here". Nobody sees
+either fault today; each is minutes of work.*
+
+- **A file in `src/iosMain` of core or noop builds clean and ships nowhere.** *Ticket label:*
+  `item:guard-ios-main-compiled`. *The user and the problem:* a contributor adding iOS-only code to
+  `:inspector-core` or `:inspector-noop`. Their hand-written `jvmAndAndroidMain` links turn the default
+  hierarchy off, so no `iosMain` source set exists (`docs/decisions/twins-and-api.md`). Neither module
+  has the directory today. *Acceptance criteria:* a `:repo-checks` test fails when a published module
+  has a `src/<name>` directory that is not one of its source sets, naming the directory and where
+  iOS-only code goes; proven red with a file in `inspector-core/src/iosMain`. *Out of scope:* turning
+  the default hierarchy back on, which is a build change for the architect. *Surfaces:* build only.
+
+- **Interrupted probes leave their export temp directories.** *Ticket label:* `item:guard-export-temp-cleanup`.
+  *The user and the problem:* whoever runs `measure-web-ui.js`, QA in every W-lane round. `shell`,
+  `room`, `polish` and `sheet` make `stats-export-`, `room-export-`, `polish-export-` and
+  `sheet-export-` directories under the OS temp directory and remove them in a `finally`, which a
+  signal skips; `cleanUp` removes only the run's own directory (KIN-109 left the first two open).
+  *Acceptance criteria:* each is made inside the run's own temp directory, or registered with
+  `cleanUp`, and an interrupt mid-case leaves none of the four, proven red as
+  `item:guard-measure-interrupt-cleans-up` proved its daemons. *Surfaces:* scripts.
+
 ### Bugs found, not fixed
 
 - **The model's `timeline()` ignores `seq` on same-millisecond signal ties.** Calls and signals are
@@ -237,6 +264,20 @@ proxy**: see "Order from here".*
   comparator (as `visits()` does with `seq ?: Long.MIN_VALUE`) and a decision about markers that
   carry `seq`, which today are interleaved by `mono` with `<=` only. **Phase E ships as "MCP
   equals the model"** (decided by the agent team on 2026-10-18 under the maintainer's delegation; the maintainer may overturn), so MCP inherits this rather than diverging from it. Not scheduled.
+
+  *Ticket label:* `item:timeline-seq-ties`. **Ordered 2026-10-23 by the product owner**; its place is
+  in §5 → "Order from here". *The user and the problem:* anyone reading a timeline — the overlay user,
+  the web UI user, an agent calling `timeline`, a reader of an export — is told a navigation's call
+  came before the tap that caused it. *Why now:* it is a false fact on every surface, and the cheaper
+  false facts are ahead of it. *Design first:* the architect fixes the total comparator and where a
+  marker carrying `seq` sorts, before tickets. *Acceptance criteria:* a signal and a call in one
+  millisecond sort by `seq` where both carry it, on the overlay, the web UI, MCP `timeline` and every
+  export; two signals in one millisecond do too; rows without `seq` keep today's order; the rule has
+  shared mirror cases in `mirror-cases/` that both the Kotlin tests and `check-web-static.js` run, each
+  proven red. *Out of scope:* changing what `seq` means or when capture assigns it; `visits()`, which
+  is already right. *Surfaces:* `:inspector-model`, the overlay, `app.js`, exports, MCP. No signature
+  change is expected; if the design needs one in core, ui or stream, it says so and carries the noop
+  twin and the golden file.
 
 *The four entries below were found on 2026-10-18, outside any item: the first by the architect and
 QA while verifying `item:export-md-query-once`, the other three by the architect while designing
@@ -395,6 +436,74 @@ ordered 2026-10-22 by the maintainer**: see "Order from here".*
 - ~~**The README and the landing page say things that are not true.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:public-claims-true`.
 
 - ~~**The landing page scrolls sideways at 400 px, and cuts a card's text.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:landing-page-fits-400`.
+
+*The six items below were placed on 2026-10-23 by the product owner, out of the follow-ups in §6 →
+"Candidates, not ordered" and the unplaced KIN-42 notes in §3 → Guards, each checked against the code
+at `80a694c`. Their places are in §5 → "Order from here". None touches public API.*
+
+- **The diff hides a route whose only news is an unsure key.** *Ticket label:* `item:diff-unsure-key-shown`.
+  *The user and the problem:* an agent calling `diff_sessions`, a developer running `inspector diff`
+  in a terminal, or a web UI user on the Diff page. Design 6.4 says `unsure` never sets a change kind,
+  so a route whose only news is an unsure key counts as unchanged, and the `unchanged=false` default
+  drops it. QA's pair read `counts {changed: 0, unchanged: 7}` and no routes, where a key may have been
+  removed. "Nothing changed" is the one answer a diff must not give falsely, and an agent takes it
+  without opening the page. *Why now:* a false fact on three surfaces, and the diff has just shipped.
+  *Design first:* the architect picks between an `unsure` tally in `counts` and the summary, or such
+  routes kept listed by default; either way the three surfaces answer alike. *Acceptance criteria:*
+  with QA's pair, the default reply on REST, MCP, the CLI and the page says how many routes carry only
+  unsure keys and how to see them, and never reads as no change; a route with a removed key still reads
+  "removed", never "unsure"; the diff's JSON only gains fields; red proofs on each surface.
+  *Out of scope:* the body budget (below, unordered); changing 6.4's rule that `unsure` sets no change
+  kind. *Surfaces:* daemon, MCP, CLI, web UI.
+
+- **A waterfall stub says `no calls` of a screen whose calls are not loaded.** *Ticket label:*
+  `item:web-waterfall-stub-says-unloaded`. KIN-42's note (4), in §3 → Guards. *The user and the
+  problem:* a web UI user on a long session. `waterfallGroups` (`web/js/45-visits.js`) builds visits
+  from `visibleTransactions()`, so a screen older than what the list holds is a stub, and the stub
+  says `no calls` (`:239`) of a screen that had them. *Why now:* a false fact, and small. *Acceptance
+  criteria:* the builder first confirms it at head, and closes the item with that evidence if it no
+  longer holds; a stub for a screen whose calls are not loaded says so, in words that do not claim
+  none; a stub for a screen with truly no calls still says `no calls`; a probe proven red. *Out of
+  scope:* loading the older calls; the list's own note, which `item:web-list-says-what-it-holds` owns.
+  *Surfaces:* web UI.
+
+- **The Stats table's box, measured for the Diff box's fault.** *Ticket label:* `item:web-stats-box-measured`.
+  *The user and the problem:* a web UI user on the Stats page. `.stats-scroll` lacks the `flex: none`
+  the Diff box needed to keep its height in a flex column (`88-diff.css`), so it may scroll the table
+  inside itself and cut rows below the window. *Why now:* if it is true, rows are hidden; if not,
+  minutes to say so. *Acceptance criteria:* the builder measures the Stats box in Chrome at 1440, 1000
+  and 400 with more routes than the window holds; if every row is reachable by scrolling the page, the
+  item closes with the readings and no change; if not, the fix lands with a measure line proven red.
+  Dropped before it starts if polish PR B's hand-over shows the box fixed. *Surfaces:* web UI.
+
+- **Two doc sentences that say the wrong thing.** *Ticket label:* `item:docs-housekeeping-2026-10-23`.
+  *The user and the problem:* agents and contributors, who read the decision files as rules.
+  `docs/decisions/daemon-and-mcp.md` says "Nothing but `findings` and `findingDismissals` applies until
+  the next start", which reads as "only those two wait", the opposite of the code; `docs/DAEMON.md`
+  says the diff reads "256 MB", where the code's budget is 256 MiB. *Acceptance criteria:* the first
+  reads "Only `findings` and `findingDismissals` apply live; every other key waits for the next start"
+  or words that cannot be read the other way; the second says 256 MiB. *Out of scope:* any other
+  rewording. *Surfaces:* docs.
+
+- **The landing page between 821 and 885 px.** *Ticket label:* `item:landing-page-fits-821-885`.
+  *The user and the problem:* a visitor to the landing page in a narrow window or on a tablet. QA
+  measured `scrollWidth` every 5 px from 360 to 1440 at `41b968c`: only 821 to 885 px overflows, to
+  886 px, because `.grid2 > * { min-width: 0 }` sits inside the 820 px query (`site/index.html:87`) and
+  the two-column grid above it keeps `min-width: auto`. *Why now:* the page is public and published from
+  `main`; the fix is one rule. *Acceptance criteria:* no width from 360 to 1440 in 5 px steps has a
+  `scrollWidth` above the window; the 400 px guard's check is extended to that sweep, or to a width in
+  the band, and proven red. *Out of scope:* copy. *Surfaces:* `site/`.
+
+- **A live call redraws the waterfall and the path once per call.** *Ticket label:*
+  `item:web-live-call-burst-bounded`. *The user and the problem:* a web UI user tailing a busy app with
+  the waterfall or the path open. The `txn` branch of `web/js/05-network.js` calls `renderWaterfall()`
+  and `renderPath()` per message, where the timeline and the glance go through the 250 ms `drawLive`
+  timer that `item:web-live-signal-burst-bounded` set. *Why now:* the other half of a bound already
+  built; nothing on screen is false. *Acceptance criteria:* a burst of 50 calls redraws the waterfall
+  and the path at most once per `drawLive` tick each, measured as that item measured the timeline;
+  a lone call still reaches both within one tick plus the render; a probe proven red. *Out of scope:*
+  the signal and marker branches' per-message `renderTabs`, `renderMarkers` and `renderList`, which
+  are by design. *Surfaces:* web UI.
 
 ### Open questions
 
@@ -569,6 +678,47 @@ features that catch a defect in the app under test, and none of these is needed 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before PR B, PR B last of all (diff PR B has since merged, so only polish PR B is left). **PR A is complete (2026-10-23).** Part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 done 2026-10-23: A4 to A6 (KIN-105 to KIN-107, PR #181, `7f49e14`; QA closed all three). **PR B is in progress** (KIN-145 and KIN-146, on the web developer's branch, not merged) |
+
+**After polish PR B — ordered 2026-10-23 by the product owner**, out of the unordered candidates and
+follow-ups in §3 and §6, each checked against the code at `80a694c`. Polish PR B was the last
+ordered row. These rows go into whatever release is cut next: the maintainer is not releasing yet,
+and the 1.4.0 tag is cut no earlier than 2026-11-01, so a row merged before then ships in it and none
+of them is required for it. Row labels continue from 30a.
+
+How they are ordered: **a false fact shown to a user comes before work nobody sees; then value per
+hour.** Each lane takes its rows in this table's order, and lanes run side by side, so a later row in
+an idle lane may start before an earlier row in a busy one. W stays strictly serial, behind polish
+PR B. "Design first" means the architect writes a note before any ticket is filed; the other rows go
+straight to tickets.
+
+| Order | Item | Where | Ticket label | Size | Lane | Design first |
+|---|---|---|---|---|---|---|
+| 31 | The diff hides a route whose only news is an unsure key | §3 → Bugs found, not fixed | `item:diff-unsure-key-shown` | S, M if the page needs its own row | D, then W | yes: a tally in `counts`, or the routes kept listed |
+| 32 | A waterfall stub says `no calls` of a screen whose calls are not loaded | §3 → Bugs found, not fixed | `item:web-waterfall-stub-says-unloaded` | S | W | no |
+| 33 | The Stats table's box, measured for the Diff box's fault | §3 → Bugs found, not fixed | `item:web-stats-box-measured` | XS | W | no |
+| 34 | Two doc sentences that say the wrong thing | §3 → Bugs found, not fixed | `item:docs-housekeeping-2026-10-23` | XS | S | no |
+| 35 | `timeline()` ignores `seq` on same-millisecond ties | §3 → Bugs found, not fixed | `item:timeline-seq-ties` | M | L (model and mirror cases), then W (`app.js`) | yes: the comparator, and where a marker with `seq` sorts |
+| 36 | The landing page between 821 and 885 px | §3 → Bugs found, not fixed | `item:landing-page-fits-821-885` | XS | S | no |
+| 37 | A findings check for CI | §6 → Candidates | `item:findings-ci-check` | S | D | yes: the architect's two confirmations; a "no" makes it "Not worth doing" |
+| 38 | A live call redraws the waterfall and the path once per call | §3 → Bugs found, not fixed | `item:web-live-call-burst-bounded` | S | W | no |
+| 39 | A file in `src/iosMain` of core or noop fails the build | §3 → Guards | `item:guard-ios-main-compiled` | XS | L | no |
+| 40 | Interrupted probes leave their export temp directories | §3 → Guards | `item:guard-export-temp-cleanup` | XS | S | no |
+| 41 | MCP registry listing | §6 → Candidates | `item:mcp-registry-listing` | XS, plus the maintainer's time | S, after the 1.4.0 tag | no; the maintainer picks the registries |
+
+**Why this order.** The diff's default answer, `0 routes` changed, can be false when a key was removed,
+and it reaches three surfaces including the agent's, so it goes first. The waterfall's `no calls` on
+a screen that had calls is the same class on one surface. The Stats box may cut rows below the
+window; it is unmeasured, so it is XS and drops out if the measurement finds nothing. The two doc
+sentences are read by agents as rules: one says the opposite of what the code does, the other names
+the wrong unit. The tie order is a false fact on every surface, but it is M and needs a design, so it
+follows the cheap ones. The landing-page band is not false, only broken, on the page a newcomer reads
+first. Then the work nobody sees as wrong today, by value per hour: the CI check is the strategy's
+next feature and the way an outside team would run findings on its own flow; the call-branch redraw
+is the burst bound's missing half; the two guards are minutes each; the registry listing waits for a
+release that has findings in it.
+
+What was left unordered, and what is not worth doing, is recorded with each entry, in §3 and in §6 →
+"Candidates, not ordered".
 
 **One row added 2026-10-22 by the product owner, at the coordinator's request:**
 `item:landing-page-fits-400`, from QA on `item:public-claims-true`. It goes first in lane S because
@@ -1051,36 +1201,50 @@ purpose. Neither is in "Order from here", and neither gets tickets until it is p
 names what would decide it. If that evidence says no, it moves to a "Not worth doing" entry with the
 reason.
 
+*Ruled 2026-10-23 by the product owner:* every line and candidate below now says whether it was
+placed, left unordered, or is not worth doing. `item:findings-ci-check` and `item:mcp-registry-listing`
+are in "Order from here" and stay written here, where their criteria are, until done. One more is
+left unordered and recorded here so it is not held only in `docs/STATUS.md`:
+
+- **At 1440 with the detail column open, a row that is both repeated and flagged can draw no path.**
+  The builder's observation on `item:findings-payment-safety`, with no criterion and no reproduction.
+  *Left unordered:* it needs a reproduction before it is an item; whoever next measures the traffic
+  list at 1440 with findings on should look for it.
+
 #### Follow-ups left by the batch-4 close, 2026-10-22
 
 Unplaced, no tickets, each checked against the code at `f4bbfbf` before it was written. One line each; the product owner places or drops them.
 
-- **The payment source's route memo holds raw URL paths.** `PaymentLedger.add` asks `FindingSession.routeOf`, whose memo is keyed by the raw method, scheme, host, port and path (`service/Findings.kt`), so a card number in a URL path sits in the cache; the sensitive source avoids the memo for that reason. Found by detection's leak test, outside its item.
-- **The call branch redraws the waterfall and the path on every call.** `web/js/05-network.js`'s `txn` branch calls `renderWaterfall()` and `renderPath()` per message, while the timeline and the glance go through `drawLive` (250 ms); the burst bound `web-live-signal-burst-bounded` set holds for those two only.
-- **A lone signal takes about 280 ms to reach the timeline.** `LIVE_DRAW_MS` is 250, and QA read 277 to 281 ms with the render, so "within 250 ms" is true of calls and not of a signal on its own.
-- **`docs/decisions/daemon-and-mcp.md` line 72 can be read the wrong way round.** "Nothing but `findings` and `findingDismissals` applies until the next start" can be taken as "only these wait"; "Only `findings` and `findingDismissals` apply live; every other key waits for the next start" cannot. QA's nit from `item:findings-payment-safety`.
-- **`shell`, `room`, `polish` and `sheet` leave their export temp directories behind on an interrupt.** Each makes `stats-export-`, `room-export-`, `polish-export-` or `sheet-export-` under the OS temp directory and removes it in a `finally`, which a signal skips; `measure-web-ui.js`'s `cleanUp` removes only the run's own directory (KIN-109 named `stats-export-` and `room-export-` as left open).
+- **The payment source's route memo holds raw URL paths.** `PaymentLedger.add` asks `FindingSession.routeOf`, whose memo is keyed by the raw method, scheme, host, port and path (`service/Findings.kt`), so a card number in a URL path sits in the cache; the sensitive source avoids the memo for that reason. Found by detection's leak test, outside its item. **Not worth doing, 2026-10-23.** The memo lives in the daemon's memory, beside an archive that already holds every raw path on disk, so it holds nothing the daemon does not, and nothing reads the memo's keys back out. What a finding prints is the route the memo returns, which is `RouteTemplates.keyOf` with or without the memo; a numeric segment, a card number written as digits included, is already `{id}` there. The sensitive source skips the memo, by its own comment because the memo's key is the raw path, and then masks literal segments its value rules flag (a JWT, an IBAN) in the route it prints; that masking, not the memo, is what keeps a value out of its output. Reopen if a payment finding's route is ever seen printing a captured value; that would be the route key's fault, shared with Stats and the diff, not the memo's.
+- **The call branch redraws the waterfall and the path on every call.** `web/js/05-network.js`'s `txn` branch calls `renderWaterfall()` and `renderPath()` per message, while the timeline and the glance go through `drawLive` (250 ms); the burst bound `web-live-signal-burst-bounded` set holds for those two only. *Placed 2026-10-23 by the product owner* as `item:web-live-call-burst-bounded`, §3 → Bugs found, not fixed.
+- **A lone signal takes about 280 ms to reach the timeline.** `LIVE_DRAW_MS` is 250, and QA read 277 to 281 ms with the render, so "within 250 ms" is true of calls and not of a signal on its own. **Not worth doing, 2026-10-23.** "Within 250 ms" is a criterion of `item:web-live-signal-burst-bounded`, not a claim any user or page reads, and `docs/STATUS.md` already records the 277 to 281 ms. Thirty milliseconds past a batching timer is not something a person watching a timeline can see. Reopen if a page, doc or tool ever promises a number.
+- **`docs/decisions/daemon-and-mcp.md` line 72 can be read the wrong way round.** "Nothing but `findings` and `findingDismissals` applies until the next start" can be taken as "only these wait"; "Only `findings` and `findingDismissals` apply live; every other key waits for the next start" cannot. QA's nit from `item:findings-payment-safety`. *Placed 2026-10-23 by the product owner* as `item:docs-housekeeping-2026-10-23`, §3 → Bugs found, not fixed.
+- **`shell`, `room`, `polish` and `sheet` leave their export temp directories behind on an interrupt.** Each makes `stats-export-`, `room-export-`, `polish-export-` or `sheet-export-` under the OS temp directory and removes it in a `finally`, which a signal skips; `measure-web-ui.js`'s `cleanUp` removes only the run's own directory (KIN-109 named `stats-export-` and `room-export-` as left open). *Placed 2026-10-23 by the product owner* as `item:guard-export-temp-cleanup`, §3 → Guards.
 
 #### Follow-ups left by the batch-5 close, 2026-10-22
 
 Unplaced, no tickets, each checked before it was written: against `site/index.html` and QA's width sweep for the first, and against `.github/workflows/ci.yml` and `scripts/check-release-clean.sh` for the other two. One line each; the product owner places or drops them.
 
-- **Between 821 and 885 px the landing page is still 886 px wide.** QA measured `scrollWidth` every 5 px from 360 to 1440 (`41b968c`): only that band overflows; at 850 px the widest boxes are a card's `div.shot`, `h3`, `p` and `li`, reaching x = 861. `.grid2` is two columns above its 820 px query (`site/index.html:86-87`), where `.grid2 > * { min-width: 0 }` does not apply. It is true on main before `item:landing-page-fits-400` too, and the 400 px guard does not read it.
-- **`PublishedPomTest` has never been run on a Linux developer machine.** CI runs `:repo-checks:test` only inside the macOS `build` job's `./gradlew build`; the Ubuntu `repo` job runs the identity and name scripts and no JDK. QA's and the builder's runs were on macOS, and the test resolves iOS configurations.
-- **The release guard did not scan the Android aars during the local rehearsal.** There is no Android SDK on the rehearsal machine, so no aar was built; `check-release-clean.sh` reads `*.aar` (and unpacks the nested `classes.jar`), and CI's `build` job, on macOS with the SDK, runs it after `./gradlew build`. Only the seven Android POMs were checked locally.
+- **Between 821 and 885 px the landing page is still 886 px wide.** QA measured `scrollWidth` every 5 px from 360 to 1440 (`41b968c`): only that band overflows; at 850 px the widest boxes are a card's `div.shot`, `h3`, `p` and `li`, reaching x = 861. `.grid2` is two columns above its 820 px query (`site/index.html:86-87`), where `.grid2 > * { min-width: 0 }` does not apply. It is true on main before `item:landing-page-fits-400` too, and the 400 px guard does not read it. *Placed 2026-10-23 by the product owner* as `item:landing-page-fits-821-885`, §3 → Bugs found, not fixed.
+- **`PublishedPomTest` has never been run on a Linux developer machine.** CI runs `:repo-checks:test` only inside the macOS `build` job's `./gradlew build`; the Ubuntu `repo` job runs the identity and name scripts and no JDK. QA's and the builder's runs were on macOS, and the test resolves iOS configurations. *Left unordered 2026-10-23 by the product owner:* nobody in the record builds on Linux, CI's `build` job is macOS by necessity (the iOS klibs), and running `:repo-checks:test` in the Ubuntu `repo` job would add a JDK and Kotlin/Native resolution to the one fast job. Reopen when a contributor on Linux reports a failure, or when outside contributions start.
+- **The release guard did not scan the Android aars during the local rehearsal.** There is no Android SDK on the rehearsal machine, so no aar was built; `check-release-clean.sh` reads `*.aar` (and unpacks the nested `classes.jar`), and CI's `build` job, on macOS with the SDK, runs it after `./gradlew build`. Only the seven Android POMs were checked locally. **Not worth doing, 2026-10-23.** CI's `build` job builds the aars and runs the guard and its self-test on every push; the rehearsal machine has no Android SDK, and installing one only to repeat CI's check adds nothing. The rehearsal's job was the POMs and the publish path, which it covered.
 
 #### Follow-ups left by the batch-6 close, 2026-10-23
 
 Unplaced, no tickets, each checked against the code at `1b7a45b` before it was written. One line each; the product owner places or drops them.
 
-- **`src/iosMain` is never compiled in `:inspector-core` and `:inspector-noop`.** Their hand-written `jvmAndAndroidMain` links (`dependsOn` in both `build.gradle.kts`) turn the default hierarchy template off, so no `iosMain` source set exists; neither module has a `src/iosMain` today, but a file added there would build clean and ship nowhere (`docs/decisions/twins-and-api.md`; the iOS guard reads the real klibs, so it stays honest). `iosArm64Main` and `iosSimulatorArm64Main` are where iOS-only code goes. Found by KIN-143's build and confirmed by QA.
-- **Two 20,000-call sessions with 8 KB bodies use up the diff's 256 MiB body budget.** `DiffBudget` (`service/SessionDiffSide.kt`, `256L * 1024 * 1024`) ran out in the builder's scratch pair (33,378 bodies, 268,434,247 bytes), so the rest of each route's bodies read as unread, and a key B dropped can read "unsure" where it is in fact removed. The reply says so (`shapeBudget.exhausted`); nothing false is claimed. Whether to raise the budget, sample, or stream is open.
-- **By default, MCP `diff_sessions`, `inspector diff` and the Diff page hide a route whose only news is an unsure key.** Design 6.4 says `unsure` never sets a change kind, so such a route counts as unchanged and the `unchanged=false` default drops it: QA's pair read `counts {changed: 0, unchanged: 7}` and 0 routes, while a removal may be hidden. Every criterion is met as written. An `unsure` tally in `counts` or the summary, or keeping such routes listed, would close it on all three surfaces together (QA, `session-diff-pr-a-report` note 1 and `session-diff-pr-b-report` note 1).
-- **The Stats page's table box may have the Diff page's layout fault.** `css/85-stats.css:21` is `.stats-scroll { overflow-x: auto; margin: 0 0 8px; }`, where the Diff box needed `flex: none` (`css/88-diff.css:28`) to keep its width in a flex column. Unverified and untouched: nobody has measured the Stats box in Chrome. Polish PR B's hand-over is not written yet, so this is placed here and dropped if it shows the box was fixed or never faulted.
+- **`src/iosMain` is never compiled in `:inspector-core` and `:inspector-noop`.** Their hand-written `jvmAndAndroidMain` links (`dependsOn` in both `build.gradle.kts`) turn the default hierarchy template off, so no `iosMain` source set exists; neither module has a `src/iosMain` today, but a file added there would build clean and ship nowhere (`docs/decisions/twins-and-api.md`; the iOS guard reads the real klibs, so it stays honest). `iosArm64Main` and `iosSimulatorArm64Main` are where iOS-only code goes. Found by KIN-143's build and confirmed by QA. *Placed 2026-10-23 by the product owner* as `item:guard-ios-main-compiled`, §3 → Guards.
+- **Two 20,000-call sessions with 8 KB bodies use up the diff's 256 MiB body budget.** `DiffBudget` (`service/SessionDiffSide.kt`, `256L * 1024 * 1024`) ran out in the builder's scratch pair (33,378 bodies, 268,434,247 bytes), so the rest of each route's bodies read as unread, and a key B dropped can read "unsure" where it is in fact removed. The reply says so (`shapeBudget.exhausted`); nothing false is claimed. Whether to raise the budget, sample, or stream is open. *Left unordered 2026-10-23 by the product owner:* nothing false is shown (the reply says the budget ran out), and the pair is a builder's synthetic one. Raising, sampling and streaming each trade memory or certainty differently, and nobody knows what size a real pair reaches. Decide when a real pair exhausts it; `item:diff-unsure-key-shown` makes the consequence visible in the meantime.
+- **By default, MCP `diff_sessions`, `inspector diff` and the Diff page hide a route whose only news is an unsure key.** Design 6.4 says `unsure` never sets a change kind, so such a route counts as unchanged and the `unchanged=false` default drops it: QA's pair read `counts {changed: 0, unchanged: 7}` and 0 routes, while a removal may be hidden. Every criterion is met as written. An `unsure` tally in `counts` or the summary, or keeping such routes listed, would close it on all three surfaces together (QA, `session-diff-pr-a-report` note 1 and `session-diff-pr-b-report` note 1). *Placed 2026-10-23 by the product owner* as `item:diff-unsure-key-shown`, §3 → Bugs found, not fixed.
+- **The Stats page's table box may have the Diff page's layout fault.** `css/85-stats.css:21` is `.stats-scroll { overflow-x: auto; margin: 0 0 8px; }`, where the Diff box needed `flex: none` (`css/88-diff.css:28`) to keep its width in a flex column. Unverified and untouched: nobody has measured the Stats box in Chrome. Polish PR B's hand-over is not written yet, so this is placed here and dropped if it shows the box was fixed or never faulted. *Placed 2026-10-23 by the product owner* as `item:web-stats-box-measured`, §3 → Bugs found, not fixed.
 
 #### Match routes across origins in the diff
 
 *Ticket label:* `item:diff-match-across-origins`
+
+*Left unordered 2026-10-23 by the product owner.* Its condition, the diff verified by QA, is met;
+its evidence, how often two runs of one app reach different hosts, does not exist yet, since the diff
+has been in nobody's hands. Decide after the diff has been in a release and someone asks for it.
 
 **The user and the problem.** A web UI user on a Mac, or an agent calling `diff_sessions`, compares
 a run against a staging server with a run against production. A route keys on host, so every route
@@ -1114,6 +1278,9 @@ two findings keys. No library API. **Size:** M, the product owner's guess.
 
 *Ticket label:* `item:finding-same-body-new-key`
 
+*Left unordered 2026-10-23 by the product owner.* The six rules are built now, but nobody has
+recorded findings running on one real session, which is what decides the rule's false-positive rate.
+
 **The user and the problem.** A web UI user or an agent checking a payment flow. The client mints a
 fresh idempotency key on each tap, so a double tap sends the same body twice and the server treats
 the two calls as two payments. None of the six rules sees it: Duplicate mutation needs no key, and
@@ -1146,6 +1313,11 @@ and each names what would decide it.*
 
 *Ticket label:* `item:findings-ci-check`
 
+**Ordered 2026-10-23 by the product owner**, design first; its place is in §5 → "Order from here".
+The architect's note answers the two questions under "Why not now" before any ticket is filed. If
+either answer is no, the item leaves the order as a "Not worth doing" entry with that answer, and the
+rows below it keep their order.
+
 **The user and the problem.** A consuming team that has recorded a payment flow and wants a pull
 request to fail when that flow starts double-submitting. Findings answer on a page, over MCP and from
 the CLI, but nothing turns a finding into a failed build, so a regression is caught only when someone
@@ -1173,6 +1345,10 @@ term. Comparing two sessions, which is the diff's.
 #### MCP registry listing
 
 *Ticket label:* `item:mcp-registry-listing`
+
+**Ordered 2026-10-23 by the product owner**, last; its place is in §5 → "Order from here". It starts
+only after the 1.4.0 tag, the first release with findings in it, and only for the registries the
+maintainer has picked and holds accounts for. Until then the row waits and blocks nothing.
 
 **The user and the problem.** A developer whose editor's agent finds MCP servers through a
 registry. Inspector's server is described only in this repository, so that developer never finds
