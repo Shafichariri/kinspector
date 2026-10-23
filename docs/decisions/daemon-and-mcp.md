@@ -348,6 +348,21 @@ second family adds a source and one line in `FindingSources.all`, never a second
 page, because a second copy of the order or the masking check is the one that would drift.
 `FindingsEngineTest` pins the engine's half.
 
+**A finding's members are ordered by one total key: `mono`, rows without `seq` first, `seq`, id.**
+`FindingSession.TIMELINE` used to compare `seq` only when both rows carried it, `schema.md`'s
+reading, and that is intransitive once a session mixes them. A finding's order then followed file
+order, and on a group of 32 or more the JDK's sort threw out of `FindingsService.report`, taking the
+page, `list_findings` and the CI gate with it. A session can mix them without an edit: a 1.2.0
+daemon writes no `seq` (its model drops the field) and a newer daemon resuming the session within
+the grace writes it. `timeline()` places a row without `seq` by its neighbours in the whole session,
+which no comparator over one group's rows can do. In that session it keeps the older rows, first in
+the file, ahead of the `seq` rows in a tie, and that is the side this key picks for every tie. Rows
+that all carry `seq` order as before. Between two rows without `seq` the key goes by id where
+the timeline keeps file order, because a `FindingRow` holds no file position. One comparator serves
+`Findings.kt`, `PaymentRules.kt` and `SensitiveSource.kt`. `FindingsTimelineOrderTest` pins it,
+red with the old comparator at each of the three sites alone, with rows without `seq` last and with
+`seq` dropped from the key.
+
 **A finding carries no captured value: evidence names where, and masks what.** Location and path use
 the Redactor's syntax, so whether a location was redacted is answered by the same `redacted[]`
 reader the diff uses. A masked hint is masked (`•••• 4242`), and the engine replaces any hint with

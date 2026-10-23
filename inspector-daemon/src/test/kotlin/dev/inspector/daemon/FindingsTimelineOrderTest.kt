@@ -102,9 +102,10 @@ class FindingsTimelineOrderTest {
 
     @Test
     fun `rows that all carry seq go by mono, then seq, then id, as before`() {
-        val rows = listOf(row("b", 2, 1), row("y", 1, 9), row("x", 1, 3), row("d", 2, 1), row("c", 1, 3))
-        assertEquals(listOf("c", "x", "y", "b", "d"), sorted(rows))
-        assertEquals(listOf("c", "x", "y", "b", "d"), sorted(rows.reversed()))
+        // Id order disagrees with seq order in the first millisecond, so a key that dropped seq fails.
+        val rows = listOf(row("b", 2, 1), row("a", 1, 9), row("x", 1, 3), row("d", 2, 1), row("c", 1, 3))
+        assertEquals(listOf("c", "x", "a", "b", "d"), sorted(rows))
+        assertEquals(listOf("c", "x", "a", "b", "d"), sorted(rows.reversed()))
     }
 
     /**
