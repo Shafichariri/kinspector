@@ -122,6 +122,11 @@ fun timelineRuns(entries: List<TimelineEntry>): List<TimelineRun> {
  * dropped at the moment something is about to happen, so the boundary belongs on the side of the
  * traffic it is there to introduce.
  *
+ * **Inside one millisecond, rows that carry capture `seq` go by it** — calls, signals and device
+ * markers alike — in the places those rows already hold; see [orderTiesBySeq]. A row without `seq`
+ * (an older archive, a marker the host posted) keeps the place the rules above give it, so `<=`
+ * now decides only where capture order is unknown.
+ *
  * Timing uses `mono` on both sides. `ts` is a wall clock that can step, and a marker posted by an
  * agent over HTTP carries the device's `mono` precisely so it can be placed here.
  *
@@ -139,8 +144,8 @@ fun timeline(
     transactions.mapTo(body) { TimelineEntry.Call(it) }
     signals.mapTo(body) { TimelineEntry.Observation(it) }
     // Stable sort, so a signal and a call at the same millisecond keep the order they were added
-    // in — calls first. Which one truly came first is unknowable at millisecond resolution, and a
-    // stable rule beats one that reshuffles between renders.
+    // in — calls first. That is only the starting order: orderTiesBySeq below corrects it wherever
+    // `seq` says what was captured first, and it is the answer only where `seq` cannot.
     body.sortBy { it.mono }
 
     val entries = ArrayList<TimelineEntry>(body.size + ordered.size)
@@ -158,7 +163,50 @@ fun timeline(
         entries += TimelineEntry.Mark(ordered[next])
         next++
     }
+    orderTiesBySeq(entries)
     return if (newestFirst) entries.asReversed().toList() else entries
+}
+
+/** Capture order, private so the public sealed [TimelineEntry] gains no member. */
+private val TimelineEntry.seq: Long?
+    get() = when (this) {
+        is TimelineEntry.Call -> txn.seq
+        is TimelineEntry.Mark -> marker.seq
+        is TimelineEntry.Observation -> signal.seq
+    }
+
+/**
+ * Inside each run of equal `mono`, the members carrying `seq` take their own slots in `seq` order.
+ *
+ * `onClick { signal("tap"); navigate() }` puts a tap and the call it fires in one millisecond, and
+ * the stable sort alone drew the call first on every surface. The obvious fix, one comparator of
+ * `mono` then `seq ?: Long.MIN_VALUE`, moves a row *without* `seq` ahead of a tied row that has
+ * one — a signal from an older library jumping ahead of a call — and `schema.md` says to use `seq`
+ * only between two rows that both carry it. Comparing only when both carry it is intransitive, and
+ * a sort may throw on that. Re-sorting the `seq` members among the slots they already hold needs no
+ * comparator over mixed rows at all: inside the slots the key is one counter's value, which is
+ * total, and every row without `seq`, a host marker included, stays exactly where it was.
+ *
+ * [entries] is non-decreasing in `mono`, so each tie is a contiguous run. Allocates only for a run
+ * holding two or more `seq` members.
+ */
+private fun orderTiesBySeq(entries: MutableList<TimelineEntry>) {
+    var start = 0
+    while (start < entries.size) {
+        val mono = entries[start].mono
+        var end = start
+        var carrying = 0
+        while (end < entries.size && entries[end].mono == mono) {
+            if (entries[end].seq != null) carrying++
+            end++
+        }
+        if (carrying > 1) {
+            val slots = (start until end).filter { entries[it].seq != null }
+            val bySeq = slots.map { entries[it] }.sortedBy { it.seq!! }
+            slots.forEachIndexed { i, slot -> entries[slot] = bySeq[i] }
+        }
+        start = end
+    }
 }
 
 /**

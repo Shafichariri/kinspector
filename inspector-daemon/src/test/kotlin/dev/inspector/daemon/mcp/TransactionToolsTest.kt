@@ -184,8 +184,8 @@ class TransactionToolsTest : McpToolsFixture() {
     @Test
     fun explain_places_same_millisecond_calls_by_position_and_signals_after_the_call() {
         // What DAEMON.md §8 says about ties. A call recorded first precedes this one in the shared
-        // order and so led to it; a signal never precedes a call it ties with, whatever the file
-        // order, because the rule puts calls ahead of signals at one millisecond.
+        // order and so led to it; a signal without `seq` never precedes a call it ties with,
+        // whatever the file order, because the rule puts calls ahead of signals at one millisecond.
         val id = session("2026-08-17T09-00-08_sametick_dev_debug") { writer ->
             writer.append(signal(id = "tick0001", tag = SignalTags.STATE, name = "Early", mono = 500), null)
             writer.append(txn("tickb001", path = "/b", mono = 500), null, null)

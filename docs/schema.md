@@ -96,7 +96,8 @@ genuinely unordered and `seq` reports whichever reached the counter first.
 
 Use it only to break a `mono` tie between two rows that both carry it. When either lacks it, fall
 back to `mono` and whatever rule the consumer had before — `visits()` gives the tie to the arriving
-screen.
+screen, and `timeline()` keeps a row without `seq` where it stood (a marker before the call or
+signal at its millisecond, a call before a signal) and orders only the rows that carry one.
 
 ### Derived helpers
 

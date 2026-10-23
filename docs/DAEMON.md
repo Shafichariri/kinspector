@@ -990,8 +990,9 @@ UIs. In 1.3.0 and earlier, a marker at the same millisecond as a call was listed
 comes before. `explain` splits its `before` and `after` context by position in that order, so a
 marker dropped at the call's own millisecond is reported as leading to it, not as caused by it.
 The same positional rule moves another *call* at the same `mono`, recorded before it, into
-`before`, where a split by time put it in `after`. A signal at that millisecond stays in `after`:
-the shared rule puts calls ahead of signals in a tie, whatever order they were recorded in.
+`before`, where a split by time put it in `after`. Inside one millisecond, rows that carry capture
+`seq` go by it, a device marker included; a row without one keeps the older rule's place, so a
+host-posted marker still comes first and a signal without `seq` stays after a tied call.
 
 To drive it by hand, which is the fastest way to check a tool change:
 
