@@ -933,6 +933,74 @@ Every export carries them: the JSON and HTML as `findings`, the whole session's 
 category or limit; the Markdown as a Findings section before the timeline; the HAR as a note on
 each entry a finding names. A dismissed finding is listed in every form with its reason.
 
+```bash
+inspector findings --data DIR --session ID --fail-on high      # or medium, or info
+```
+
+`--fail-on` turns the command into a build gate. It exits **1** when any undismissed finding is at
+or above that severity, **0** when none is, and **2** when it cannot judge: a bad flag, no such
+session, a session with no calls, or a `config.json` the findings read rejected (in a fresh process
+that would mean the default rules, not yours). It counts the `high`/`medium`/`info` totals, so
+`--limit` shortens the list but never hides a finding, and a `findingDismissals` entry counts
+exactly as it does on the page and in `list_findings`. stdout is still the report above. stderr
+gets the verdict, one line per finding it counted, `and N more` past the limit, and each coverage
+line; the evidence there is the masked hint, the same as everywhere else. Without `--fail-on`
+nothing changes: an error exits 1 and findings do not change the exit code.
+
+#### Findings in CI
+
+The point is a pull request that fails when a recorded flow starts double-submitting. That needs a
+session the pull request **made**, so lead with streaming one. A session folder checked in also
+works with `--data`, but it is frozen: it tests your rules and dismissals, never the code under
+review.
+
+1. Install JDK 21 and the daemon zip of the release you pin (§1). Copy your team's `config.json`
+   (rules, severities, `findingDismissals`) into the data directory before starting the daemon, so
+   the gate judges with your settings.
+2. Start the daemon on that directory and wait until it answers.
+3. Run the app's JVM test that drives the flow, with the Ktor plugin installed and a
+   `StreamSink(client, host = "127.0.0.1", port = 18099)` added as a sink. **Before `stop()`,
+   wait until the daemon holds every row the test made, and assert `sink.dropped.value == 0L`.**
+   `stop()` does not drain: rows still queued are lost, and the queue drops its oldest past 512. A
+   session missing rows can only show *fewer* findings, so an early stop reads green. The gate
+   refuses a session with no calls, but one that kept some rows and lost the second submit passes.
+   The two checks are not the same: rows sent after `stop()` are lost without counting as dropped.
+4. Run the gate.
+5. Prove it red once: run the flow with a deliberate double submit and see exit 1. A gate only ever
+   seen passing is not a gate.
+
+```yaml
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: '21' }
+      - name: Start the inspector daemon
+        run: |
+          gh release download "v$INSPECTOR_VERSION" --repo Shafichariri/kinspector --pattern '*.zip' && unzip -q inspector-*.zip
+          mkdir -p "$RUNNER_TEMP/inspector" && cp ci/inspector-config.json "$RUNNER_TEMP/inspector/config.json"
+          inspector-*/bin/inspector serve --data "$RUNNER_TEMP/inspector" --port 18099 --no-usb &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:18099/api/sessions > /dev/null && exit 0; sleep 1; done
+          exit 1
+        env: { GH_TOKEN: '${{ github.token }}', INSPECTOR_VERSION: '<the version you pin>' }
+      - name: Drive the payment flow
+        run: ./gradlew :app:jvmTest --tests '*PaymentFlowRecording*'
+      - name: Findings gate
+        run: inspector-*/bin/inspector findings --data "$RUNNER_TEMP/inspector" --session latest --fail-on high > findings.json
+```
+
+The wait in step 3, inside the test, before `stop()`:
+
+```kotlin
+val expected = 2 // the calls this flow makes
+withTimeout(10_000) {
+    while (Json.parseToJsonElement(http.get("http://127.0.0.1:18099/api/sessions/latest/transactions?limit=1").bodyAsText())
+            .jsonObject.getValue("total").jsonPrimitive.int < expected) delay(50)
+}
+assertEquals(0L, sink.dropped.value)
+sink.stop()
+```
+
+The version, the config path and the test name are yours; `http` is any Ktor client. `FindingsGateStreamTest` in this
+repository runs the same round trip, including the early stop the gate refuses.
+
 ---
 
 ## 8. The MCP server

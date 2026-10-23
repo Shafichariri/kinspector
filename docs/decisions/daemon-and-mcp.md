@@ -349,6 +349,23 @@ query, bodies and an error message and finds none in the REST reply, the MCP tex
 findings or the accumulators' fields; it was shown red with the raw key put in a hint and the error
 message put in a note, and it fails if nothing was planted.
 
+**The findings gate fails on what it could not judge, and judges on counts, never the list.**
+`inspector findings --fail-on <severity>` exits 1 when an undismissed finding is at or above the
+severity, 0 otherwise, and 2 when it cannot judge: a bad flag, no session, a session with no calls,
+or a `config.json` the findings read rejected. In a one-shot process the "last good settings" are
+the defaults, and an empty session is what a test that stopped its sink before delivery leaves;
+both would otherwise read green. It counts the `high`/`medium`/`info` totals, taken before the limit with dismissed
+findings left out, so `--limit` cannot hide a finding. It selects the session with `--data` and
+`--session`, not a folder argument, because `config.json` lives in the data dir and `resolve`
+already confines the path. stdout stays the report; the gate's lines go to stderr, built from
+severity, rule id, route, message and the evidence's location, path and masked hint only. Without
+`--fail-on` the command is unchanged. Decided 2026-10-23 by the maintainer's proxy
+(`2026-10-23-findings-ci-gate-shape`). `FindingsGateTest`, `FindingsCliTest`,
+`FindingsGateStreamTest` and CI's launcher step pin it, red with the rank compared by `<`, with the
+listed findings judged instead of the counts, with dismissed findings counted, with each refusal
+removed, and with a bad flag exiting 1; `FindingsLeakTest` searches the gate's stderr, red with a
+row's idempotency key printed there.
+
 **Payment rules compare whole request bodies byte for byte, and claim nothing about a body capture
 did not keep.** Whole is the diff's `BodyEvidence` answer, and a body with a redacted path counts as
 unknown, because equal after redaction is not equal. Byte equality rather than parsed equality,

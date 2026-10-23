@@ -37,8 +37,8 @@ import kotlin.test.assertTrue
 /**
  * The redaction guard for findings: secrets planted in headers, the query, both bodies and an error
  * message, and placeholders left by redaction, reach none of the REST reply, the MCP text, an
- * export's findings, the Markdown section, the HAR's finding notes, or the accumulators' fields. A key
- * may show its last four characters and nothing more of it.
+ * export's findings, the Markdown section, the HAR's finding notes, the CI gate's stderr, or the
+ * accumulators' fields. A key may show its last four characters and nothing more of it.
  *
  * It first checks the secrets really are in the archive, so a fixture that stopped planting them
  * fails here instead of passing for want of anything to find.
@@ -141,12 +141,30 @@ class FindingsLeakTest {
                 "export findings" to InspectorJson.encodeToString(FindingsReport.serializer(), document.findings),
                 "Markdown section" to markdown.substring(markdown.indexOf("## Findings"), markdown.indexOf("## Timeline")),
                 "HAR finding notes" to notes.joinToString("\n"),
+                "gate stderr" to gateStderr(),
                 "accumulator fields" to accumulatorStrings().joinToString("\n"),
             )
         } finally {
             http.close()
             daemon.stop()
         }
+    }
+
+    /**
+     * `inspector findings --fail-on info` in a child JVM, as CI runs it: at info every finding is
+     * listed, so every line the gate can print is searched.
+     */
+    private fun gateStderr(): String {
+        val java = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val process = ProcessBuilder(
+            java, "-cp", System.getProperty("java.class.path"), "dev.inspector.daemon.MainKt",
+            "findings", "--session", SESSION, "--fail-on", "info", "--data", tmp.toString(),
+        ).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()
+        val stderr = process.errorStream.bufferedReader().readText()
+        assertEquals(1, process.waitFor(), stderr)
+        // It listed findings with their evidence, so there was something to leak.
+        assertTrue("duplicate-mutation" in stderr && "evidence: " in stderr, stderr)
+        return stderr
     }
 
     private fun engine() = FindingsEngine(FindingSettingsSource(tmp), config.routeTemplates)
@@ -209,6 +227,7 @@ class FindingsLeakTest {
         }
         assertEquals(emptyList(), leaks.distinct())
         assertTrue("•••• 9f3a" in surfaces.getValue("REST"), "the key's masked tail is the hint")
+        assertTrue("•••• 9f3a" in surfaces.getValue("gate stderr"), "the gate prints the same masked hint")
     }
 
     private companion object {
