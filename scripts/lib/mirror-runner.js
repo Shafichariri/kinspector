@@ -64,11 +64,12 @@ const RULES = {
     exports: 'timelineRuns, runIdOf',
     inputs: ['entries'],
     run: ({ timelineRuns, runIdOf }, input, d) => {
+      // The shape `timelineEntries` gives the page, `seq` on the entry included: `runIdOf` reads it there.
       const entries = input.entries.map((wrapped) => {
         const [[kind, row]] = Object.entries(wrapped);
-        if (kind === 'T') { const txn = { ...d.txn, ...row }; return { kind: 'txn', mono: txn.mono, txn }; }
-        if (kind === 'M') { const marker = { ...d.marker, ...row }; return { kind: 'marker', mono: marker.mono, marker }; }
-        if (kind === 'S') { const signal = { ...d.signal, ...row }; return { kind: 'signal', mono: signal.mono, signal }; }
+        if (kind === 'T') { const txn = { ...d.txn, ...row }; return { kind: 'txn', mono: txn.mono, seq: txn.seq ?? null, txn }; }
+        if (kind === 'M') { const marker = { ...d.marker, ...row }; return { kind: 'marker', mono: marker.mono, seq: marker.seq ?? null, marker }; }
+        if (kind === 'S') { const signal = { ...d.signal, ...row }; return { kind: 'signal', mono: signal.mono, seq: signal.seq ?? null, signal }; }
         throw new HarnessError(`unknown entry kind '${kind}'; expected T, M or S`);
       });
       return timelineRuns(entries).map((run) => {

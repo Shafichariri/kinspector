@@ -62,13 +62,27 @@ function timelineRuns(entries) {
  * A run grows at its newest end, so in newest-first order the head is the newest observation and
  * changes on every one — an id taken from it re-keyed the run and collapsed an expanded run under
  * the reader during live tail, which is exactly when somebody is watching it. The earliest member
- * also survives flipping the order. The first minimum in draw order wins a tie, as `minBy` does.
+ * also survives flipping the order.
+ *
+ * A tie on `mono` goes by `seq`, a row without one last, then by the token, as the model's
+ * `earliest` does. Taking the first minimum in draw order picked a different member in each order
+ * whenever the two earliest shared a millisecond, so an expanded run collapsed on the flip.
  */
+const runTokenOf = (entry) => (entry.kind === 'signal' ? entry.signal.id : String(entry.mono));
+
+const isEarlier = (a, b) => {
+  if (a.mono !== b.mono) return a.mono < b.mono;
+  // Compared, never subtracted: Infinity - Infinity is NaN.
+  const aSeq = a.seq ?? Infinity;
+  const bSeq = b.seq ?? Infinity;
+  if (aSeq !== bSeq) return aSeq < bSeq;
+  return runTokenOf(a) < runTokenOf(b);
+};
+
 const runIdOf = (run) => {
   let earliest = run.entries[0];
-  for (const entry of run.entries) if (entry.mono < earliest.mono) earliest = entry;
-  const token = earliest.kind === 'signal' ? earliest.signal.id : String(earliest.mono);
-  return `${run.key ?? ''}\u0000${token}`;
+  for (const entry of run.entries) if (isEarlier(entry, earliest)) earliest = entry;
+  return `${run.key ?? ''}\u0000${runTokenOf(earliest)}`;
 };
 // @mirror-end timelineRuns
 
