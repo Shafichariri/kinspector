@@ -10,6 +10,12 @@
  * `pre` and a 454 px `.term`, each meant to scroll in its own box, set their column's width
  * instead. A diagram's 640 px SVG does not count: `.diagram-box` scrolls it.
  *
+ * Judged, from 360 to 1440 px in 5 px steps: the document is no wider than the window at any of them
+ * (`site 360-1440 document width`). Between 821 and 885 px it was 886 px wide: above its 820 px
+ * query `.grid2` is two columns, and `min-width: 0` on its items sat inside that query, so a card's
+ * content kept its column from shrinking; the rule now stops at 900 px (`docs/decisions/web-ui.md`). One width in that band would have done; the sweep is a
+ * resize, not a load per width, and costs about a second, so no band is left unread.
+ *
  * Not judged, at 1440: the document's size and a digest of every element's box (`site 1440
  * layout`). With --base, a value that moved is printed, which is how a fix at 400 is shown to
  * narrow nothing that fits at 1440.
@@ -72,6 +78,23 @@ async function settle(page) {
   await sleep(300);
 }
 
+// The document's width at each window width, resized in place: the media queries apply on resize, and
+// reading scrollWidth lays the page out first. innerWidth is waited for because the override reaches
+// the renderer after the call returns.
+async function sweep(page, from, to, step) {
+  const wide = [];
+  let read = 0;
+  for (let w = from; w <= to; w += step) {
+    await page.setWidth(w);
+    if (await page.waitFor(`window.innerWidth === ${w}`, 2000, 10) === null) throw new Error(`site: the window never became ${w} px`);
+    const doc = await page.ev('document.documentElement.scrollWidth');
+    if (typeof doc !== 'number') throw new Error(`site ${w}: no scrollWidth`);
+    read++;
+    if (doc > w) wide.push(`${w}: ${doc}`);
+  }
+  return { read, wide };
+}
+
 async function landingFits(page, tree) {
   const url = pathToFileURL(path.join(tree, 'site/index.html')).href;
   const rows = [];
@@ -85,6 +108,11 @@ async function landingFits(page, tree) {
   // No bullets at all would pass vacuously, so a renamed class fails here instead.
   rows.push({ key: 'site 400 card bullets', value: `${m.cut.length} of ${m.bullets} past the edge`,
     ok: m.bullets > 0 && m.cut.length === 0, detail: m.cut.slice(0, 4).join('; ') || undefined });
+
+  // From the 400 px load, already settled. Zero widths read would pass vacuously, so that fails too.
+  const sw = await sweep(page, 360, 1440, 5);
+  rows.push({ key: 'site 360-1440 document width', value: `${sw.wide.length} of ${sw.read} widths wider than the window`,
+    ok: sw.read > 0 && sw.wide.length === 0, detail: sw.wide.length ? `${sw.wide[0]} to ${sw.wide[sw.wide.length - 1]}` : undefined });
 
   await load(page, url, 1440);
   const d = await page.ev(DIGEST);

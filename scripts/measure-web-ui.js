@@ -8,8 +8,8 @@
  * a daemon of its own through `/ingest` and judges the page's filtered re-read
  * (`lib/live-traffic-cases.js`). `polish` reads the icon controls' targets and the page documents' buttons, prose, density select
  * and Sessions rows, and the key legend `?` opens on Settings (`lib/polish-cases.js`).
- * `site` opens the landing page, `site/index.html`, from disk and judges that it fits a 400 px window
- * (`lib/site-cases.js`); the one group with no daemon, so `--only site` needs no build and no JDK.
+ * `site` opens the landing page, `site/index.html`, from disk and judges that it fits a 400 px window,
+ * and every width from 360 to 1440 px in 5 px steps (`lib/site-cases.js`); the one group with no daemon, so `--only site` needs no build and no JDK.
  * `sheet`, opt-in, judges nothing: it writes a PNG of every page and view at four widths, dark and
  * light, served and exported, and an `index.html` grid of them to `--out` (`lib/sheet-cases.js`),
  * for a person to look at.
