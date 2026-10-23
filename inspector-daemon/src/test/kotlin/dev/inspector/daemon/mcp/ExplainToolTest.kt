@@ -7,6 +7,7 @@ import dev.inspector.daemon.mcpCallTool
 import dev.inspector.daemon.mcpSession
 import dev.inspector.daemon.txn
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.nio.file.Files
@@ -66,5 +67,32 @@ class ExplainToolTest {
 
         assertEquals("https://api.example.com:8080/v2/users/me?a=1", row.url)
         assertEquals(row.url, url)
+    }
+
+    private fun concurrentIds(id: String, of: String): List<String> =
+        Json.parseToJsonElement(callTool("explain", """{"session":"$id","id":"$of"}""")).jsonObject
+            .getValue("concurrent").jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content }
+
+    @Test
+    fun explain_lists_concurrent_calls_in_one_millisecond_by_capture_seq() {
+        // Two calls tied on mono, written in the reverse of capture order. `concurrent` used to
+        // sort by mono alone, keeping archive order, so it said the opposite of `timeline` and the
+        // exports about which of the two came first.
+        val id = session("2026-08-17T09-00-10_seqtie_dev_debug") { writer ->
+            writer.append(txn("long0001", path = "/a", mono = 1_000, ms = 500), null, null)
+            writer.append(txn("tied0002", path = "/c", mono = 1_200, ms = 10).copy(seq = 2), null, null)
+            writer.append(txn("tied0001", path = "/b", mono = 1_200, ms = 10).copy(seq = 1), null, null)
+        }
+        assertEquals(listOf("tied0001", "tied0002"), concurrentIds(id, "long0001"))
+    }
+
+    @Test
+    fun explain_keeps_archive_order_for_tied_concurrent_calls_without_seq() {
+        val id = session("2026-08-17T09-00-11_noseq_dev_debug") { writer ->
+            writer.append(txn("long0001", path = "/a", mono = 1_000, ms = 500), null, null)
+            writer.append(txn("tied0002", path = "/c", mono = 1_200, ms = 10), null, null)
+            writer.append(txn("tied0001", path = "/b", mono = 1_200, ms = 10), null, null)
+        }
+        assertEquals(listOf("tied0002", "tied0001"), concurrentIds(id, "long0001"))
     }
 }
