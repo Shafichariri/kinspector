@@ -246,7 +246,11 @@ surface, so a declaration in `iosArm64Main` or `iosSimulatorArm64Main` alone fai
 **In `:inspector-core` and `:inspector-noop`, `src/iosMain` is not compiled.** Their hand-made
 `jvmAndAndroidMain` turns the default hierarchy template off, so no `iosMain` source set exists and a
 file there, even one that is not Kotlin, builds clean and ships nowhere. Their iOS-only code would go in
-`iosArm64Main` and `iosSimulatorArm64Main`, which is where the red proof put its probe.
+`iosArm64Main` and `iosSimulatorArm64Main`, which is where the red proof put its probe. `SourceSetDirsTest`
+in `:repo-checks` fails on any `src/<name>` of a published module that is not one of its Kotlin source
+sets, which the build reports, and says where iOS-only code goes. It reads git's listing, so an empty
+directory passes; shown red with a `.kt` file in `inspector-core/src/iosMain` and a plain file in
+`inspector-noop/src/iosMain`. Turning the default hierarchy back on is a build change it does not make.
 
 Android's output is JVM bytecode, so each pair's two tests also run in `testAndroidHostTest`, against
 the pair's JVM golden file, read only: `inspector.api.regenerate` reaches `jvmTest` alone. Every platform

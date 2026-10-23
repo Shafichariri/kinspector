@@ -1,6 +1,7 @@
 /*
  * Structural checks over the repository itself: the module graph, the noop twins, the dependency
- * locks, deferred-work markers, the file-size ratchet, and the decision files and agent guides.
+ * locks, deferred-work markers, the file-size ratchet, uncompiled `src/` directories, and the
+ * decision files and agent guides.
  * Tests only, no main source set.
  *
  * Never published, and that is checked rather than assumed: there is no `maven-publish` here, and
@@ -45,6 +46,19 @@ private val structureLines: Provider<List<String>> = provider {
 }
 
 /*
+ * Each published module's directory, relative to the root, and the names of its Kotlin source sets,
+ * for `SourceSetDirsTest`. Only the build knows which source sets exist: in `:inspector-core` and
+ * `:inspector-noop` the hand-written `jvmAndAndroidMain` links turn the default hierarchy off, so
+ * `iosMain` is not one of them, and nothing in the file tree says so.
+ */
+private val sourceSetLines: Provider<List<String>> = provider {
+    checkedProjects.filter { it.pluginManager.hasPlugin("maven-publish") }.map { p ->
+        val kotlin = p.extensions.getByType<org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension>()
+        "${p.projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath} ${kotlin.sourceSets.names.sorted().joinToString(",")}"
+    }.sorted()
+}
+
+/*
  * Hands the test JVM the repository root and the module graph. The root is `@Internal`: the real
  * input is the whole git tree, which no input declaration can express cheaply — hence the test
  * task below never being up to date.
@@ -52,6 +66,7 @@ private val structureLines: Provider<List<String>> = provider {
 class StructureArguments(
     @get:Internal val repoRoot: File,
     @get:Input val structure: Provider<List<String>>,
+    @get:Input val sourceSets: Provider<List<String>>,
     @get:Input val regenerateModules: Provider<String>,
     @get:Input val tightenBudgets: Provider<String>,
 ) : CommandLineArgumentProvider {
@@ -59,6 +74,7 @@ class StructureArguments(
         "-Dinspector.repoRoot=${repoRoot.absolutePath}",
         // `|` cannot occur in a Gradle path or configuration name, so it separates safely.
         "-Dinspector.structure=${structure.get().joinToString("|")}",
+        "-Dinspector.sourceSets=${sourceSets.get().joinToString("|")}",
         "-Dinspector.modules.regenerate=${regenerateModules.get()}",
         "-Dinspector.budgets.tighten=${tightenBudgets.get()}",
     )
@@ -76,7 +92,7 @@ private val tightenBudgets = providers.systemProperty("inspector.budgets.tighten
 
 tasks.test {
     useJUnitPlatform()
-    jvmArgumentProviders += StructureArguments(rootProject.projectDir, structureLines, regenerateModules, tightenBudgets)
+    jvmArgumentProviders += StructureArguments(rootProject.projectDir, structureLines, sourceSetLines, regenerateModules, tightenBudgets)
     /*
      * Always runs, never from cache. These tests read every tracked file and every lockfile, and
      * declaring that as an input means declaring the repository; without this, adding a marker or
