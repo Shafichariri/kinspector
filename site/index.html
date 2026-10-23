@@ -82,9 +82,9 @@ nav .links a { color: var(--muted); }
 .d-g { fill: var(--grey); font: 12px var(--sans); }
 .pulse { fill: var(--accent); }
 
-/* surfaces */
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } .grid2 > * { min-width: 0; } }
+/* surfaces. A grid item keeps min-width: auto, so content wider than its column widens the page: up to 885 px the two columns cannot hold a card's content and the page was 886 px wide. min-width: 0 stops at 900 px, not everywhere, because at 1440 the second card's content sets its column (478 and 538 px) and the rule would even them and narrow that card. */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; } @media (max-width: 900px) { .grid2 > * { min-width: 0; } }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
 .card p { margin: 0; color: var(--muted); }
 .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.95rem; }

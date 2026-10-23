@@ -901,17 +901,21 @@ only where it is one column.** A grid item keeps `min-width: auto`, so a child m
 its own box sets its column's width instead: at 400 px a 531 px `pre` in "Get started" made the page
 605 px wide, and a 454 px `.term` in "Four surfaces" made a card 558 px wide and cut its 12 bullets.
 The architecture diagram was blamed and is not the cause: its 640 px SVG scrolls inside
-`.diagram-box`. `.grid2 > * { min-width: 0 }` sits inside the 820 px query on purpose. In the two
-columns above it, the same `.term` widens its column today (478 and 538 px at 1440), and the rule
-there evens them and narrows that card by 30 px, which this fix was not to change. `.step`'s rule
+`.diagram-box`. `.grid2 > * { min-width: 0 }` stops at 900 px on purpose, in a query of its own. At
+1440 the second card widens its column today (478 and 538 px), and the rule there evens them and
+narrows that card by 30 px, which this fix was not to change. It first sat inside the 820 px query,
+and from 821 to 885 px, in two columns, the page was 886 px wide; 900 covers that band with room,
+and between 886 and 900 the rule only evens the columns. `.step`'s rule
 moves nothing at 1440. `measure-web-ui.js --only site` (`lib/site-cases.js`) opens
 `site/index.html` from disk with no daemon: `site 400 document width`, `site 400 past the edge`
 (anything outside a scroll container) and `site 400 card bullets` fail with either rule removed
 (605 px with both gone, 558 with `.grid2`'s, 605 with `.step`'s), and `site 1440 layout`, a digest
-of every box outside an SVG, reads the same as at `638119e`. CI's `web` job runs it on the
-runner's preinstalled Chrome, found by `measure-cdp.js` at `/usr/bin/google-chrome`, with nothing
-installed. At 821 to 885 px the page is still wider than the window, in two columns, at `638119e`
-too, which this item did not take on.
+of every box outside an SVG, reads the same as at `638119e`. `site 360-1440 document width`
+resizes the 400 px load from 360 to 1440 px in 5 px steps and fails at any width whose
+`scrollWidth` is above the window: 13 of 217 (825 to 885, all 886 px) with the rule back inside
+the 820 px query, 0 with it at 900, where `site 1440 layout` and every box at 400 px read the
+same as before. CI's `web` job runs it on the runner's preinstalled Chrome, found by
+`measure-cdp.js` at `/usr/bin/google-chrome`, with nothing installed.
 
 **The Diff page draws the daemon's comparison and decides nothing.** Kinds, order, verdicts and the
 reason a shape could not be compared come from `GET /api/diff`, so the page has no mirror block and
