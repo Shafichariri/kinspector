@@ -15,6 +15,7 @@ import dev.inspector.daemon.service.DiffOutcome
 import dev.inspector.daemon.service.DiffReport
 import dev.inspector.daemon.service.DiffRequest
 import dev.inspector.daemon.service.FindingsEngine
+import dev.inspector.daemon.service.FindingsGate
 import dev.inspector.daemon.service.FindingsReport
 import dev.inspector.daemon.service.FindingsService
 import dev.inspector.daemon.service.RouteStatsReport
@@ -36,7 +37,7 @@ Usage:
   inspector query    '<filter>' [--session ID] [--limit N] [--offset N]
   inspector stats    ['<filter>'] [--session ID] [--sort KEY] [--limit N]
   inspector diff     ['<filter>'] [--a ID] [--b ID] [--since-a LABEL] [--since-b LABEL] [--limit N] [--unchanged] [--md]
-  inspector findings [--session ID] [--category C] [--limit N]
+  inspector findings [--session ID] [--category C] [--limit N] [--fail-on SEVERITY]
   inspector body     <txnId> --side req|res [--session ID]
   inspector prune
 
@@ -46,8 +47,11 @@ p90, p95, p99, max or errors, and --limit defaults to 1000.
 diff compares --b (the latest by default) with --a (by default the previous session of b's
 app) route by route; --since-a and --since-b cut a side at a marker, --limit defaults to
 1000, --unchanged includes routes that did not change, and --md prints the Markdown form.
-findings prints what the findings rules flag (payment safety); --category narrows to one
-family, and --limit defaults to 1000.
+findings prints what the findings rules flag (payment safety, sensitive data); --category
+narrows to one family, and --limit defaults to 1000. --fail-on high|medium|info makes it a
+CI gate: exit 1 when an undismissed finding is at or above that severity, 0 when none is,
+and 2 when it cannot judge (a bad flag, no such session, a session with no calls, or a
+config.json the read rejected). The report still goes to stdout; the summary to stderr.
 
 serve also bridges a USB-attached iPhone when usbmuxd is present (every Mac): the app
 listens on the phone's own 127.0.0.1:<port> and the daemon dials it over the cable.
@@ -170,12 +174,27 @@ fun main(args: Array<String>) {
         }
 
         "findings" -> {
-            val dir = repository.resolve(flags["session"] ?: "latest") ?: fail("no such session")
-            val category = FindingsEngine.parseCategory(flags["category"]).getOrElse { fail(it.message.orEmpty()) }
+            // Under --fail-on every way of not reaching a verdict exits 2, so a CI log tells a broken
+            // setup from a regression; without it the command is exactly what it was, errors exiting 1.
+            val gated = "fail-on" in flags
+            val stop: (String) -> Nothing = if (gated) ::cannotJudge else ::fail
+            val failOn = if (gated) FindingsGate.parse(flags["fail-on"]).getOrElse { stop(it.message.orEmpty()) } else null
+            val dir = repository.resolve(flags["session"] ?: "latest") ?: stop("no such session")
+            val category = FindingsEngine.parseCategory(flags["category"]).getOrElse { stop(it.message.orEmpty()) }
             val limit = (flags["limit"]?.toIntOrNull() ?: 1000).coerceIn(1, 5000)
             val engine = FindingsEngine(FindingSettingsSource(config.dataDir), config.routeTemplates)
             val report = FindingsService(repository, engine).report(dir, category, limit)
             println(dev.inspector.model.InspectorJsonPretty.encodeToString(FindingsReport.serializer(), report))
+            if (failOn != null) {
+                val verdict = FindingsGate.judge(report, failOn)
+                System.out.flush()
+                FindingsGate.lines(report, failOn, verdict).forEach(System.err::println)
+                when (verdict) {
+                    is FindingsGate.Verdict.Pass -> Unit
+                    is FindingsGate.Verdict.Fail -> exitProcess(1)
+                    is FindingsGate.Verdict.CannotJudge -> exitProcess(2)
+                }
+            }
         }
 
         "body" -> {
@@ -222,4 +241,10 @@ private fun parseFlags(args: List<String>): Map<String, String> {
 private fun fail(message: String): Nothing {
     System.err.println("inspector: $message")
     exitProcess(1)
+}
+
+/** `findings --fail-on`'s exit for a run that reached no verdict: 1 is reserved for "found". */
+private fun cannotJudge(message: String): Nothing {
+    System.err.println("inspector: cannot judge: $message")
+    exitProcess(2)
 }

@@ -1,9 +1,11 @@
 ---
 id: KIN-153
 title: 'Daemon: inspector findings --fail-on gates a CI build on findings'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-23 09:43'
+updated_date: '2026-10-23 09:49'
 labels:
   - 'item:findings-ci-check'
 dependencies: []
@@ -30,3 +32,15 @@ Ordered 2026-10-23 by the product owner, design first (architect's note confirme
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Plan and build (bob, 2026-10-23), from designs/findings-ci-check.md and decision 2026-10-23-findings-ci-gate-shape.
+- service/FindingsGate.kt: parse/judge/lines, pure. Counts report.high/medium/info at or above the threshold (taken before the limit, dismissed left out); never report.findings. CannotJudge on configError and on total == 0.
+- Main.kt: --fail-on. stdout unchanged (the report). stderr: header, one line per listed finding at or above, 'and N more', each coverage line; evidence = location, path, masked hint only. Exit 1 found, 0 none, 2 cannot judge (bad --fail-on incl. no value, no such session, bad --category, empty session, configError). Without --fail-on: unchanged, errors exit 1.
+- Tests: FindingsGateTest (pure), FindingsCliTest (child JVM exits; dismissal honoured; no-flag unchanged), FindingsLeakTest (gate stderr surface, --fail-on info), FindingsGateStreamTest (real StreamSink -> daemon: double submit exits 1, single 0, sink stopped before delivery exits 2 'holds no calls').
+- CI: web job step 'Findings gate exits 1 on a high finding and 0 on none' on bin/inspector: payments session exit 1, base session 2025-12-30T09-00-00_probe_ci_debug exit 0 (no finding at any severity).
+- Docs: DAEMON.md §7 --fail-on paragraph and 'Findings in CI' recipe (wait for rows, assert sink.dropped == 0 before stop()); decision paragraph in daemon-and-mcp.md; Key files row in inspector-daemon/AGENTS.md. No INTEGRATION.md change.
+- Not done on purpose: no catch around the report read. No reachable throw was found (an unreadable index, body dir and broken meta all read as data), so a catch could not be shown red. A throw exits 1 (still a red build); item 37a owns the only suspected throw.
+<!-- SECTION:NOTES:END -->

@@ -154,6 +154,24 @@ jobs:
           done
           echo "daemon did not answer within 60s"; cat "$RUNNER_TEMP/daemon.log"; exit 1
 
+      # The findings gate on the installed launcher, the binary a consuming team runs, so this also
+      # proves bin/inspector passes the JVM's exit code through. Exact codes, not "non-zero": 2 means
+      # it could not judge, and a gate that read 2 here would be a broken setup passing as a finding.
+      # The payments session holds three high findings; the base session holds none at any severity.
+      - name: Findings gate exits 1 on a high finding and 0 on none
+        run: |
+          inspector=inspector-daemon/build/install/inspector/bin/inspector
+          set +e
+          "$inspector" findings --data "$RUNNER_TEMP/probe" --session 2025-12-31T08-00-00_probe-payments_ci_debug \
+            --fail-on high > /dev/null
+          payments=$?
+          "$inspector" findings --data "$RUNNER_TEMP/probe" --session 2025-12-30T09-00-00_probe_ci_debug \
+            --fail-on high > /dev/null
+          base=$?
+          set -e
+          echo "payments session: exit $payments (want 1); base session: exit $base (want 0)"
+          [ "$payments" -eq 1 ] && [ "$base" -eq 0 ]
+
       - name: Install jsdom
         run: npm install --no-save --no-package-lock "jsdom@$JSDOM_VERSION"
 
