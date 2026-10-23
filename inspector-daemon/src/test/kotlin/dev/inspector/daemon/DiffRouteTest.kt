@@ -98,7 +98,9 @@ class DiffRouteTest {
         assertEquals(listOf("given", "true"), listOf(report.aChosen, report.sameApp.toString()))
         assertEquals(listOf("launch", "tapped checkout"), report.b.markers)
         assertEquals(14, report.routeCount)
-        assertEquals(listOf(7, 1, 4, 2), with(report.counts) { listOf(added, removed, changed, unchanged) })
+        // The feed is counted unsure, not unchanged: A kept no whole body of it and B kept one.
+        assertEquals(listOf(7, 1, 4, 1, 1), with(report.counts) { listOf(added, removed, changed, unsure, unchanged) })
+        assertEquals(setOf("added", "removed", "changed", "unsure", "unchanged"), json.getValue("counts").jsonObject.keys)
 
         // Loud rows first, then by their highest kind: the DELETE the probe session added, then the
         // order called 2 → 1, answered 200 → 500, whose keys went and whose error came.
@@ -131,6 +133,8 @@ class DiffRouteTest {
         assertEquals("A kept no complete JSON body here: 1 truncated", feed.why)
         assertTrue(feed.removed.isEmpty() && feed.added.isEmpty() && feed.unsure.isEmpty())
         assertEquals(emptyList(), report.on("/v3/shop/feed").changes)
+        assertEquals(true, report.on("/v3/shop/feed").unsure)
+        assertEquals(listOf("/v3/shop/feed"), report.routes.filter { it.unsure == true }.map { it.route })
 
         // The product: price became a string.
         val price = report.on("/v3/shop/products/{id}").responseShape!!.typeChanged.single()
@@ -198,6 +202,21 @@ class DiffRouteTest {
         val (_, changed) = ok("a" to BASE_SESSION_ID, "unchanged" to "false")
         assertEquals(full.routeCount - full.counts.unchanged, changed.routes.size)
         assertEquals(full.counts, changed.counts)
+    }
+
+    @Test
+    fun `QA's pair with unchanged=false lists the unsure route and counts it, never reading as no change`() = runBlocking {
+        writeQaPair(tmp)
+        val (json, report) = ok("a" to QA_PAIR_A, "b" to QA_PAIR_B, "unchanged" to "false")
+        assertEquals(listOf(0, 1, 1), with(report.counts) { listOf(changed, unsure, unchanged) })
+        val route = json.getValue("routes").jsonArray.single().jsonObject
+        assertEquals("/v1/product", route.getValue("route").jsonPrimitive.content)
+        assertEquals("true", route.getValue("unsure").jsonPrimitive.content)
+        assertEquals("removed", report.routes.single().responseShape!!.unsure.single().would)
+        val (all, _) = ok("a" to QA_PAIR_A, "b" to QA_PAIR_B)
+        val health = all.getValue("routes").jsonArray.last().jsonObject
+        assertEquals("/v1/health", health.getValue("route").jsonPrimitive.content)
+        assertFalse("unsure" in health.keys, "the flag is written only when true")
     }
 
     @Test

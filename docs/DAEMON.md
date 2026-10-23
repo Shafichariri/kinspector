@@ -855,9 +855,16 @@ listed under `unsure`. Keys at or under a path in `redacted[]` are listed under 
 At most 500 bodies per route and side and 256 MiB per diff are read; a body past either is
 `unread`, which also only ever makes a key unsure. `shapeBudget` says what was read.
 
+A route with no change the diff can be sure of, but where a body capture did not keep may hide
+one, carries `unsure: true`: a direction lists an unsure key, or one side kept whole JSON there
+and the other no whole body. It is counted in `counts.unsure`, not `counts.unchanged`, so the
+five counts sum to `routeCount`, and it sorts after every changed route. The Markdown form lists
+it under "Routes with unknown keys".
+
 `limit` (default 1000, at most 5000) cuts `routes` after the order, and `unchanged=false` drops
-routes with no change; `counts` and `routeCount` count them all. The MCP tool `diff_sessions`
-takes the same arguments, with `unchanged` off and `limit` 50 by default. The web UI's Diff page
+the routes counted `unchanged`, so a route with `unsure: true` is always listed. `counts` and
+`routeCount` count every route. The MCP tool
+`diff_sessions` takes the same arguments, with `unchanged` off and `limit` 50 by default. The web UI's Diff page
 is the same table; open it from the rail, from **compare (2)** on the Sessions page with two
 sessions ticked, or from a session row's **diff**.
 

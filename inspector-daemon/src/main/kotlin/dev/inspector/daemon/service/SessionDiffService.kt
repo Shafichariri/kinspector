@@ -108,11 +108,13 @@ class SessionDiffService(
 
     /**
      * [full] as a caller asked for it: unchanged routes dropped on request, then cut to [limit], with
-     * counts whole. [aChosen] is set here, not cached: A named and A found as the previous run are
-     * the same comparison and share an entry, but not the same answer to "who chose A".
+     * counts whole. An unsure route is never dropped: "no change" is the one answer the diff must not
+     * give falsely, and the default of MCP and the CLI is to drop. [aChosen] is set here, not cached:
+     * A named and A found as the previous run are the same comparison and share an entry, but not the
+     * same answer to "who chose A".
      */
     private fun view(full: DiffReport, aChosen: String, limit: Int, unchanged: Boolean): DiffReport {
-        val kept = if (unchanged) full.routes else full.routes.filter { it.changes.isNotEmpty() }
+        val kept = if (unchanged) full.routes else full.routes.filterNot(SessionDiff::unchanged)
         if (kept === full.routes && limit >= kept.size && aChosen == full.aChosen) return full
         return full.copy(aChosen = aChosen, routes = kept.take(limit.coerceAtLeast(1)))
     }
@@ -184,7 +186,8 @@ class SessionDiffService(
                 added = routes.count { it.presence == "added" },
                 removed = routes.count { it.presence == "removed" },
                 changed = routes.count { it.presence == "both" && it.changes.isNotEmpty() },
-                unchanged = routes.count { it.changes.isEmpty() },
+                unsure = routes.count { it.changes.isEmpty() && it.unsure == true },
+                unchanged = routes.count(SessionDiff::unchanged),
             ),
             shapeBudget = ShapeBudget(budget.bodiesRead, budget.bytesRead, budget.limitBytes, budget.exhausted),
             routes = routes,

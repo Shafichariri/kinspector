@@ -134,11 +134,71 @@ class SessionDiffTest {
     }
 
     @Test
-    fun `the order is loud, then the highest kind, then unchanged, then method, host, port, route and scheme`() {
-        fun row(route: String, changes: List<String>, loud: Boolean = false, method: String = "GET", host: String = "h", port: Int? = null, scheme: String = "https") =
+    fun `QA's pair is unsure with no change, and the same key gone from bodies B kept whole is removed`() {
+        val (a, b) = qaPair()
+        val routes = diffInMemory(a, b)
+        val product = routes.on("/v1/product")
+        assertEquals(emptyList(), product.changes, "6.4: unsure sets no change kind")
+        assertEquals(true, product.unsure)
+        assertEquals(listOf("\$.price" to "removed"), product.responseShape!!.unsure.map { it.path to it.would })
+        assertNull(routes.on("/v1/health").unsure, "a route with nothing unsure carries no flag")
+
+        // B kept both bodies whole: the key is removed, the route changed, and nothing is unsure.
+        val known = DiffSideRows().apply { repeat(2) { call(path = "/v1/product", res = """{"id":1}""") } }
+        val removed = diffInMemory(a, known).on("/v1/product")
+        assertEquals(listOf("responseShape"), removed.changes)
+        assertEquals(listOf("\$.price"), removed.responseShape!!.removed.map { it.path })
+        assertEquals(emptyList(), removed.responseShape!!.unsure)
+        assertNull(removed.unsure)
+    }
+
+    @Test
+    fun `a route that changed and holds an unsure key is changed and unsure`() {
+        // B is all whole, so $.price is removed; A truncated one body, so B's $.next is only unsure.
+        val a = DiffSideRows().apply {
+            call(res = """{"id":1,"price":9.99}""")
+            call(res = """{"id":1,"pri""", resBytes = 900_000, resTruncated = true)
+        }
+        val b = DiffSideRows().apply { repeat(2) { call(res = """{"id":1,"next":"p2"}""") } }
+        val route = diffInMemory(a, b).single()
+        assertEquals(listOf("responseShape"), route.changes)
+        assertEquals(listOf("\$.price"), route.responseShape!!.removed.map { it.path })
+        assertEquals(listOf("\$.next" to "added"), route.responseShape!!.unsure.map { it.path to it.would })
+        assertEquals(true, route.unsure)
+    }
+
+    @Test
+    fun `a direction one side kept whole JSON for and the other no whole body is unsure, and no other uncompared pair`() {
+        fun one(a: DiffSideRows.() -> Unit, b: DiffSideRows.() -> Unit) = diffInMemory(DiffSideRows().apply(a), DiffSideRows().apply(b)).single()
+        val truncated: DiffSideRows.() -> Unit = { call(res = """{"items":[{"id":1""", resBytes = 300_000, resTruncated = true) }
+        val whole: DiffSideRows.() -> Unit = { call(res = """{"items":[{"id":1}]}""") }
+
+        // The feed: A kept a prefix, B a whole body. Either way round.
+        for (route in listOf(one(truncated, whole), one(whole, truncated))) {
+            assertFalse(route.responseShape!!.compared)
+            assertEquals(emptyList(), route.changes)
+            assertEquals(true, route.unsure, route.responseShape!!.why)
+        }
+        // Both unknown, as images omitted by content type are; both empty, as every GET's request is.
+        val image: DiffSideRows.() -> Unit = { call(res = "png", resType = "image/png", resOmitted = "content-type") }
+        assertNull(one(image, image).unsure)
+        assertNull(one({ call() }, { call() }).unsure)
+        // Wide JSON on both sides is not compared, but nothing on either side went unkept.
+        val deep = "[".repeat(40) + "1" + "]".repeat(40)
+        val wide = one({ call(res = deep) }, { call(res = deep) })
+        assertFalse(wide.responseShape!!.compared, wide.responseShape.toString())
+        assertNull(wide.unsure)
+        // Added and removed routes have no shapes to be unsure of.
+        val added = diffInMemory(DiffSideRows(), DiffSideRows().apply(truncated)).single()
+        assertEquals("added" to null, added.presence to added.unsure)
+    }
+
+    @Test
+    fun `the order is loud, then the highest kind, then unsure, then unchanged, then method, host, port, route and scheme`() {
+        fun row(route: String, changes: List<String>, loud: Boolean = false, method: String = "GET", host: String = "h", port: Int? = null, scheme: String = "https", unsure: Boolean? = null) =
             DiffRoute(
                 method = method, scheme = scheme, host = host, port = port, route = route, routeSource = "heuristic",
-                presence = "both", mutation = false, loud = loud, changes = changes, status = StatusMix(),
+                presence = "both", mutation = false, loud = loud, changes = changes, unsure = unsure, status = StatusMix(),
             )
         val expected = listOf(
             row("/loud", listOf("calls"), loud = true),
@@ -154,6 +214,10 @@ class SessionDiffTest {
             row("/reqs", listOf("requestSize")),
             row("/calls", listOf("calls")),
             row("/faster", listOf("faster")),
+            row("/faster", listOf("faster"), unsure = true, host = "z"),
+            // A route whose only news is unsure: after every change, before every unchanged route.
+            row("/unsure", emptyList(), unsure = true),
+            row("/unsure", emptyList(), method = "PUT", unsure = true),
             row("/same", emptyList(), method = "DELETE"),
             row("/same", emptyList(), method = "GET", host = "a"),
             row("/same", emptyList(), host = "b"),

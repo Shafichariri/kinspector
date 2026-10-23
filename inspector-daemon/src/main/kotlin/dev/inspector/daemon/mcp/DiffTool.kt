@@ -13,8 +13,9 @@ import kotlinx.serialization.json.put
  * [SessionDiffService] rules and with the same error messages, as results rather than JSON-RPC errors.
  *
  * Unchanged routes are left out by default and `limit` is smaller than the route's: an agent reads
- * changes, and `counts` still says how many routes did not change. Its own process's cache, as for
- * `route_stats`.
+ * changes, and `counts` still says how many routes did not change. A route with unsure keys is never
+ * left out, because an agent takes "no change" without opening the page. Its own process's cache, as
+ * for `route_stats`.
  */
 internal class DiffTool(private val diffs: SessionDiffService) : ToolGroup {
 
@@ -31,7 +32,8 @@ internal class DiffTool(private val diffs: SessionDiffService) : ToolGroup {
                     "names (never values), and JSON key paths and types from bodies on disk. A body capture " +
                     "did not keep in full is unknown, and a key is never reported removed because of one: " +
                     "such keys are listed as unsure. filter applies to both sides; sinceA and sinceB cut a " +
-                    "side at a marker. unchanged: include routes with no change (default false).",
+                    "side at a marker. unchanged: include routes with no change (default false); a route " +
+                    "whose only news is an unsure key is always listed, and counted in counts.unsure.",
             ) {
                 put("a", stringProperty("Baseline session id, or 'latest'. Defaults to the newest earlier session of b's app."))
                 put("b", stringProperty("Session under test, an id or 'latest'. Defaults to 'latest'."))

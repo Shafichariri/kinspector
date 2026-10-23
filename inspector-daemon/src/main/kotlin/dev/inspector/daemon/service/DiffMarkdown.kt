@@ -15,7 +15,8 @@ import dev.inspector.daemon.service.MarkdownText.server
  * and code spans go through [MarkdownText], the one copy the session export uses, so a `|` in a
  * route cannot break a table here either. It says in its header which rules decide a change, and
  * never words an unknown body as a removed key: a shape that could not be compared reads `unknown`
- * with the daemon's reason, and an unsure key sits under its own heading, never under "removed".
+ * with the daemon's reason, and an unsure key sits under its own heading, never under "removed". A
+ * route whose only news is unsure has a section of its own, never the unchanged table.
  */
 object DiffMarkdown {
 
@@ -26,7 +27,10 @@ object DiffMarkdown {
         appendLine("- **B (after):** ${side(report.b)}")
         appendLine("- **Filter:** ${if (report.filter.isEmpty()) "none" else inlineCode(report.filter)}")
         with(report.counts) {
-            appendLine("- **Routes:** ${report.routeCount} — $added added, $removed removed, $changed changed, $unchanged unchanged")
+            appendLine(
+                "- **Routes:** ${report.routeCount} — $added added, $removed removed, $changed changed, " +
+                    "$unsure with unknown keys, $unchanged unchanged"
+            )
         }
         if (report.aChosen == "previousRun") appendLine("- A is the previous run of B's app.")
         appendLine()
@@ -48,7 +52,8 @@ object DiffMarkdown {
         }
 
         val changed = report.routes.filter { it.presence == "both" && it.changes.isNotEmpty() }
-        val unchanged = report.routes.filter { it.changes.isEmpty() }
+        val unknownKeys = report.routes.filter { it.changes.isEmpty() && it.unsure == true }
+        val unchanged = report.routes.filter(SessionDiff::unchanged)
         appendLine("## Changed routes")
         appendLine()
         if (changed.isEmpty()) {
@@ -60,6 +65,17 @@ object DiffMarkdown {
         }
         oneSided("## Routes added", report.routes.filter { it.presence == "added" }) { it.b!! }
         oneSided("## Routes removed", report.routes.filter { it.presence == "removed" }) { it.a!! }
+        // Its own section, never the unchanged table: each may hide a key that went, and its block's
+        // Unknown list or shape line says which body capture did not keep.
+        appendLine("## Routes with unknown keys")
+        appendLine()
+        if (unknownKeys.isEmpty()) {
+            appendLine("None.")
+            appendLine()
+        } else {
+            compared(unknownKeys, withChanges = false)
+            for (route in unknownKeys) block(route)
+        }
         appendLine("## Unchanged routes")
         appendLine()
         when {
@@ -126,11 +142,13 @@ object DiffMarkdown {
         appendLine()
     }
 
-    /** One changed route with every list the reply holds. */
+    /** One changed or unsure route with every list the reply holds. */
     private fun StringBuilder.block(route: DiffRoute) {
         appendLine("### ${heading(label(route))}")
         appendLine()
-        appendLine("- Changes: ${line(changes(route))}")
+        // An unsure route has no change kind, and "none" alone would read as no change.
+        val changes = changes(route).ifEmpty { "none the diff can be sure of: a side has bodies capture did not keep" }
+        appendLine("- Changes: ${line(changes)}")
         appendLine("- Calls: ${route.a?.calls} → ${route.b?.calls}; attempts ${route.a?.attempts} → ${route.b?.attempts}")
         appendLine("- Status: ${status(route.status.a)} → ${status(route.status.b)}")
         appendLine("- p50: ${latency(route.latency)}")
