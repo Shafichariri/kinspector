@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@engineer'
 created_date: '2026-10-23 10:38'
-updated_date: '2026-10-23 10:50'
+updated_date: '2026-10-23 12:09'
 labels:
   - 'item:diff-unsure-key-shown'
 dependencies: []
@@ -50,4 +50,6 @@ Built by bob, 2026-10-23, from designs/diff-unsure-key-shown.md T1 and decision 
 - Assertions moved on purpose (condition (b) makes the fixture's feed unsure): DiffRouteTest [7,1,4,2] -> [7,1,4,1,1]; DiffMarkdownTest Routes line; DiffToolTest and DiffCliTest 'every route has a change' -> 'a change or unsure'.
 - Tests: QA's pair in DiffTestSupport (qaPair, writeQaPair under its own app id, latest untouched). Eleven breaks each shown red; see the hand-over.
 - Between this and KIN-159 the page still hides the feed behind its toggle and its summary prints four counts summing to 13 of 14 on base->probe; live probe 325/325 and archive 61/61 stay green.
+
+Merged: PR #202, merge e1b2d2711e1222e754b1694f7b201ae877e75ec7 (head bf61557; build, release-swap, repo, web pass by name; main push CI run 39949586195 all success). Ready for QA.
 <!-- SECTION:NOTES:END -->
