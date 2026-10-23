@@ -28,7 +28,9 @@
  *                               ⌈T/250⌉ + 1 calls each of the timeline, the waterfall and the path
  *                               renderers and as many `/current` reads (`drawLive`), every one drawn
  *   traffic marker burst        50 markers, the same bound for the timeline and the path
+ *   traffic call burst          50 calls, the same bound for the timeline, the waterfall and the path
  *   traffic lone signal drawn, … one signal or marker is on the timeline within the live redraw
+ *   traffic lone call waterfall, … one call is on the waterfall, and one on the path, within it
  *   traffic paused still, other still   a signal or marker while paused, or for another session,
  *                               calls no renderer and reads no `/current`
  *   traffic hosts               every call the daemon archived has a host ending in `.invalid`
@@ -271,8 +273,8 @@ async function burst(page, origin, app, sent) {
 }
 
 // Installed once the page is on the session the bursts are sent to. It counts the calls of the three
-// renderers a live signal redraws, by replacing the page's global functions, which is where the
-// page's own calls resolve; and it records each live signal or marker as the socket hands it over,
+// renderers a live row redraws, by replacing the page's global functions, which is where the
+// page's own calls resolve; and it records each live call, signal or marker as the socket hands it over,
 // with its session, so a reading's T is the span the page saw and an empty scan can be told apart.
 const DRAW_COUNTER = `(() => {
   window.__draws = { renderTimeline: 0, renderWaterfall: 0, renderPath: 0 };
@@ -284,7 +286,7 @@ const DRAW_COUNTER = `(() => {
   const sock = window.__sockets.find((s) => s.url.includes('/api/live') && s.readyState === 1);
   sock.addEventListener('message', (event) => {
     const m = JSON.parse(event.data);
-    if (m.type === 'signal' || m.type === 'marker') window.__arrived.push({ type: m.type, sessionId: m.sessionId, at: performance.now() });
+    if (m.type === 'signal' || m.type === 'marker' || m.type === 'txn') window.__arrived.push({ type: m.type, sessionId: m.sessionId, at: performance.now() });
   });
   return true;
 })()`;
@@ -325,9 +327,10 @@ const burstRow = (key, what, seen, names, extra) => {
 };
 
 /**
- * The live redraw for signals and markers (`drawLive`, `docs/decisions/web-ui.md`): bursts on the
- * timeline with no filter, a lone row's delay, and nothing moved while paused or for another session.
- * Run on [app]'s session, the one with signals, so the timeline tab is offered.
+ * The live redraw (`drawLive`, `docs/decisions/web-ui.md`): signal and marker bursts on the timeline
+ * and a call burst on the waterfall, with no filter, a lone row's delay, and nothing moved while
+ * paused or for another session. Run on [app]'s session, the one with signals, so the timeline, the
+ * waterfall and the path tabs are offered.
  */
 async function signalBursts(page, origin, app, other) {
   await switchTo(page, app.sessionId);
@@ -392,6 +395,44 @@ async function signalBursts(page, origin, app, other) {
   const dividers = await page.ev(`[...document.querySelectorAll('#timeline .marker-divider')].filter((n) => /^burst \\d+$/.test(n.textContent)).length`);
   rows.push(burstRow('traffic marker burst', 'marker', seen, ['renderTimeline', 'renderPath'],
     { missing: seen.arrived && dividers < 50, text: `${dividers} of 50 on the timeline` }));
+  rows.push(...await callBursts(page, app));
+  return rows;
+}
+
+const openTab = async (page, view) => {
+  await page.ev(`document.querySelector('#tabs .tab[data-view="${view}"]').click()`);
+  if (await page.waitFor(`state.view === '${view}'`, 3000) === null) throw new Error(`the ${view} tab did not open`);
+  await sleep(400);
+};
+
+/**
+ * A call owes the waterfall and the path to the same redraw: a lone call on each, timed from the
+ * socket handing it over to its row there, and a burst of 50 on the waterfall, the pane it draws.
+ */
+async function callBursts(page, app) {
+  const rows = [];
+  for (const view of ['waterfall', 'path']) {
+    await openTab(page, view);
+    await page.ev(RESET);
+    // A failure, on an endpoint of its own: the path summarises a busy visit's calls into one count
+    // and names only its failures, so a lone 200 has no element there to find.
+    const id = app.call(`/lone/${view}`, 500);
+    await page.ev(`window.__lone = null; (function poll() {
+      if (document.querySelector('#${view} [data-id="${id}"]')) { const a = window.__arrived[0]; window.__lone = a ? Math.round(performance.now() - a.at) : -1; return; }
+      setTimeout(poll, 5); })()`);
+    const ms = await page.waitFor('window.__lone !== null', 3000) === null ? null : await page.ev('window.__lone');
+    rows.push(ms === null || ms < 0 ? { key: `traffic lone call ${view}`, value: 'not drawn', ok: false, detail: `not on the ${view} 3 s after it was sent` }
+      : { key: `traffic lone call ${view}`, value: ms <= 300 ? 'within the redraw' : 'late', ok: ms <= 300,
+        detail: `on the ${view} ${ms} ms after it arrived (redraw 250 ms, 50 ms slack)` });
+  }
+  await openTab(page, 'waterfall');
+  await page.ev(RESET);
+  const ids = [];
+  await sendAndSettle(page, app.sessionId, 50, 20, (i) => ids.push(app.call('/feed', 200)));
+  const seen = await drawsSince(page, app.sessionId);
+  const drawn = await page.ev(`${JSON.stringify(ids)}.filter((id) => document.querySelector('#waterfall [data-id="' + id + '"]')).length`);
+  rows.push(burstRow('traffic call burst', 'call', seen, ['renderTimeline', 'renderWaterfall', 'renderPath'],
+    { missing: seen.arrived && drawn < ids.length, text: `${drawn} of ${ids.length} on the waterfall` }));
   return rows;
 }
 

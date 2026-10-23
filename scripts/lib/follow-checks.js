@@ -363,6 +363,26 @@ async function checkLiveSignalBurst(sources) {
       ? `yes (${counts}; ${view === 'all' ? `${shown} of 100 drawn on the timeline` : `${shown} stations drawn`})`
       : `NO - ${counts}; ${view === 'all' ? `${shown} of 100 drawn on the timeline` : `${shown} stations drawn, 11 due`}`]);
   }
+  // 50 calls over a second on the waterfall: the call branch redrew the waterfall and the path per
+  // call, beside the timeline it already sent through the redraw. Each is now once per redraw.
+  {
+    const { state, page, send } = socketPage(sources, 'waterfall', false);
+    const n = counted(page, ['renderTimeline', 'renderWaterfall', 'renderPath']);
+    const took = await burst(send, 50, 20, (i) => ({ type: 'txn',
+      txn: { id: `burst-t${i}`, mono: 60 + i, method: 'GET', host: 'shop.invalid', path: '/v3/shop/stock', status: 200 } }));
+    await drawn(state);
+    const bound = Math.ceil(took / 250) + 1;
+    // Counted by id: the stub's list and whole-session copy are one array, so its length counts twice.
+    const arrived = new Set(state.transactions.filter((t) => t.id.startsWith('burst-t')).map((t) => t.id)).size;
+    const ids = (node) => [...(node.dataset && node.dataset.id ? [node.dataset.id] : []), ...(node.children || []).flatMap(ids)];
+    const rows = new Set(ids(page.$('waterfall')));
+    const shown = Array.from({ length: 50 }, (_, i) => `burst-t${i}`).filter((id) => rows.has(id)).length;
+    const counts = `${arrived} calls arrived in ${took} ms: ${n.renderTimeline} timeline, ${n.renderWaterfall} waterfall and ${n.renderPath} path redraws, bound ${bound}`;
+    lines.push(['live call burst', !arrived ? `NO - found no call arriving, so this checked nothing (${counts})`
+      : [n.renderTimeline, n.renderWaterfall, n.renderPath].every((c) => c <= bound) && shown === 50
+        ? `yes (${counts}; ${shown} of 50 drawn on the waterfall)`
+        : `NO - ${counts}; ${shown} of 50 drawn on the waterfall`]);
+  }
   // 50 markers over a second: the timeline and the path, each once per redraw.
   {
     const { state, page, send } = socketPage(sources, 'all', false);

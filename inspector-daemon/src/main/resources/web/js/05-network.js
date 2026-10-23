@@ -221,14 +221,17 @@ const LIVE_DRAW_MS = 250;
 /**
  * Arms the one pending live redraw, unless one is already armed, and adds what it owes.
  *
- * A call owes the timeline and the glance. A marker owes the path as well (`path`). A signal owes
- * the waterfall, the path, one `/current` read and the payload reads of the panes that show them
- * (`signal`), which a signal used to make per message: 100 signals were 300 whole-session redraws
- * and 100 `/current` reads. The reads ride the timer too, for the reasons `drawLiveNow` gives.
+ * Every row owes the timeline and the glance. A marker owes the path as well (`path`). A call owes
+ * the waterfall and the path (`call`), which the call branch drew per call while its timeline
+ * already waited here: 50 calls were 100 whole-session redraws. A signal owes the waterfall, the path, one
+ * `/current` read and the payload reads of the panes that show them (`signal`), which a signal used
+ * to make per message: 100 signals were 300 whole-session redraws and 100 `/current` reads. The
+ * reads ride the timer too, for the reasons `drawLiveNow` gives.
  */
-function drawLive({ path = false, signal = null } = {}) {
+function drawLive({ path = false, call = false, signal = null } = {}) {
   const draw = state.liveDraw;
-  if (path || signal) draw.path = true;
+  if (path || call || signal) draw.path = true;
+  if (call || signal) draw.waterfall = true;
   if (signal) (draw.signals ||= []).push({ sessionId: state.sessionId, signal });
   if (draw.timer !== null) return;
   draw.timer = setTimeout(drawLiveNow, LIVE_DRAW_MS);
@@ -254,13 +257,13 @@ function drawLive({ path = false, signal = null } = {}) {
  */
 async function drawLiveNow() {
   const draw = state.liveDraw;
-  const { path } = draw;
+  const { path, waterfall } = draw;
   const owed = draw.signals || [];
-  Object.assign(draw, { timer: null, path: false, signals: [] });
+  Object.assign(draw, { timer: null, path: false, waterfall: false, signals: [] });
   renderTimeline();
   if ($('detail').hidden) renderSessionGlance();
+  if (waterfall) renderWaterfall();
   if (!path) return;
-  if (owed.length) renderWaterfall();
   const reads = state.liveTail && !sessionPending() ? owed.filter((o) => o.sessionId === state.sessionId) : [];
   if (reads.length) refreshCurrent();
   if (state.view === 'path' && reads.some((o) => tagOf(o.signal) === 'screen')) await loadScreenPayloads();
@@ -302,13 +305,13 @@ function connectLive() {
       renderCounts();
       renderTabs();
       renderList();
-      renderWaterfall();
-      renderPath();
-      // The picker's label counts what the header counts, and the timeline and the glance follow
-      // within LIVE_DRAW_MS: both said what the session held at the last load, `calls 27` under a
-      // header of 29, and the timeline left out every call that arrived with no filter set.
+      // The picker's label counts what the header counts, and the timeline, the glance, the
+      // waterfall and the path follow within LIVE_DRAW_MS: the first two said what the session held
+      // at the last load, `calls 27` under a header of 29, and the timeline left out every call that
+      // arrived with no filter set. The last two redraw from the whole session too; drawn per call,
+      // 50 calls cost 100 full redraws.
       followLiveCount();
-      drawLive();
+      drawLive({ call: true });
       // The Stats and Findings pages ask again at most once a second, and only while shown.
       oweStats();
       oweFindings();
