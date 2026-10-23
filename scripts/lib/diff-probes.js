@@ -7,10 +7,12 @@
  * holds) reads removed; and the baseline session, against the probe session, holds one route per
  * rule — `POST …/orders/submit` called 2 → 1 times, 200 → 500, `$.price` number → string on the
  * products detail, the feed truncated in the baseline, the token's redacted `$.expires_in` and its
- * new `x-request-id`, and stock's 5 → 4 attempts, too few to judge latency. On the Sessions page,
- * ticking two sessions offers `compare (2)` with the older as A, and a row's `diff` compares it with
- * its previous run; a route's `calls in A` and `calls in B` open Traffic on that side's session
- * through the Stats page's caveat, which then names Diff and goes back to the diff's address.
+ * new `x-request-id`, and stock's 5 → 4 attempts, too few to judge latency. The feed has no change
+ * the daemon counts and is flagged `unsure`, so it is drawn with the unchanged toggle off. On the
+ * Sessions page, ticking two sessions offers `compare (2)` with the older as A, and a row's `diff`
+ * compares it with its previous run; a route's `calls in A` and `calls in B` open Traffic on that
+ * side's session through the Stats page's caveat, which then names Diff and goes back to the diff's
+ * address.
  *
  * The orders row is looked up, not read as the first row: the daemon puts loud rows first, and the
  * probe session's added `DELETE /v3/shop/cart/items` is loud too and sorts above it (PR A's order
@@ -27,7 +29,7 @@ const { LONG_SESSION_ID, choose, waitFor } = require('./long-session-probes');
 const BASE_SESSION_ID = '2025-12-30T09-00-00_probe_ci_debug';
 const DIFF_LABELS = [
   'diff default pair', 'diff long session whole', 'diff explicit pair', 'diff mutation loud', 'diff status mix',
-  'diff type changed', 'diff truncated unknown', 'diff redacted not compared', 'diff latency not judged',
+  'diff type changed', 'diff unsure shown', 'diff truncated unknown', 'diff redacted not compared', 'diff latency not judged',
   'diff header added', 'diff sessions compare', 'diff row action', 'diff opens calls', 'diff same session', 'diff restored',
 ];
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -111,7 +113,7 @@ async function probeDiff(ctx) {
     const report = await daemon(pair);
     await goTo(`#/diff?a=${encodeURIComponent(BASE_SESSION_ID)}&b=${encodeURIComponent(sessionId)}`, pair);
     const c = report.counts;
-    const counted = `${c.added} added, ${c.removed} removed, ${c.changed} changed, ${c.unchanged} unchanged`;
+    const counted = `${c.added} added, ${c.removed} removed, ${c.changed} changed, ${c.unsure} with unknown keys, ${c.unchanged} unchanged`;
     const said = text(doc.getElementById('diff-summary'));
     out.set('diff explicit pair', doc.querySelector('#diff-summary .diff-side-a')?.dataset.session === BASE_SESSION_ID
       && said.includes(`${report.routeCount} routes: ${counted}`)
@@ -133,11 +135,21 @@ async function probeDiff(ctx) {
     out.set('diff type changed', changedTypes.includes('$.price number → string')
       ? `yes (products detail: "${changedTypes}")` : `NO - products detail's type changes "${changedTypes}"${productsDetail ? '' : ' (no detail opened)'}`);
 
-    // The feed has no change the daemon counts, so it is drawn once unchanged routes are shown.
+    // The feed has no change the daemon counts but is `unsure`: drawn with the toggle off, tagged
+    // `unknown keys`, and every row drawn is one the daemon does not count unchanged.
     const toggle = doc.getElementById('diff-unchanged-toggle');
-    if (!toggle.hidden && toggle.getAttribute('aria-pressed') !== 'true') await press(toggle, 100);
     page = drawn(window, doc);
     const feed = page.row('GET', '/v3/shop/feed');
+    const unsureDue = report.routes.filter((r) => r.unsure && !r.changes.length).map((r) => `${r.method} ${r.route}`);
+    const feedTag = feed?.querySelector('.diff-tag[data-kind="unsure"]');
+    const feedCell = text(page.cell(feed, 'change'));
+    const listedDue = report.routeCount - c.unchanged;
+    const toggleDue = `show ${c.unchanged} unchanged route${c.unchanged === 1 ? '' : 's'}`;
+    out.set('diff unsure shown', !unsureDue.length ? `NO - the daemon flags no route unsure, so this checked nothing`
+      : toggle.getAttribute('aria-pressed') === 'false' && feed && text(feedTag) === 'unknown keys' && !/no change/.test(feedCell)
+        && report.routes.length === report.routeCount && page.rows.length === listedDue && text(toggle) === toggleDue
+        ? `yes (toggle off: ${page.rows.length} of ${report.routeCount} rows, the ${c.unchanged} unchanged hidden; ${unsureDue.join(', ')} reads "${feedCell}")`
+        : `NO - toggle pressed ${toggle.getAttribute('aria-pressed')}, "${text(toggle)}"; ${page.rows.length} rows where ${listedDue} were due; feed ${feed ? `change cell "${feedCell}"` : 'not drawn'}; the daemon flags ${unsureDue.join(', ')}`);
     const why = report.routes.find((r) => r.route === '/v3/shop/feed')?.responseShape?.why;
     const shapeCell = page.cell(feed, 'response shape');
     const feedDetail = await page.open(feed);

@@ -5,7 +5,9 @@
  * The page decides nothing. The kinds of change, their order, the loud mark, every verdict, `n<5`
  * and the reason a body shape could not be compared all come from `GET /api/diff`, so there is no
  * mirror block and no case file: the daemon's `service/SessionDiff.kt` is the only copy of each rule.
- * The page words the kinds and hides the unchanged rows it asked for, which is display.
+ * The page words the kinds and hides the rows the daemon counts unchanged, which is display: a route
+ * with no change is still drawn when the daemon flags it `unsure`, since a body capture did not keep
+ * whole may hide a removed key, and the daemon, not `changes`, says which routes those are.
  *
  * It never reads again on a live message. A re-read costs body reads, and a comparison that reorders
  * under the reader is hard to read; a B still recording says so and offers `refresh`.
@@ -31,6 +33,13 @@ const DIFF_KINDS = {
   requestHeaders: 'request headers', responseHeaders: 'response headers', requestSize: 'request size',
   responseSize: 'response size',
 };
+
+/**
+ * A row the daemon counts in `counts.unchanged`: no change and no `unsure` flag. Read off the reply,
+ * never decided here; `changes` empty alone hid a route whose only news was a key capture could not
+ * be sure of, as if it were the same on both sides.
+ */
+const diffUnchanged = (r) => r.changes.length === 0 && !r.unsure;
 
 /** The table's columns after the route, with what each counts. */
 const DIFF_COLUMNS = [
@@ -167,7 +176,7 @@ function diffRender() {
     summary.append('B: ', diffSessionSpan('diff-side-b', report.b), ' against A: ', diffSessionSpan('diff-side-a', report.a),
       report.aChosen === 'previousRun' ? ' (the previous run of this app)' : '',
       ` · ${diffPlural(report.routeCount, 'route', 'routes')}${report.filter ? ' match the filter' : ''}: ${counts.added} added, `
-        + `${counts.removed} removed, ${counts.changed} changed, ${counts.unchanged} unchanged`);
+        + `${counts.removed} removed, ${counts.changed} changed, ${counts.unsure} with unknown keys, ${counts.unchanged} unchanged`);
     if (report.sameApp === false) notes.push('A and B are different apps.');
     if (!report.b.endedAt || (state.recording || []).includes(report.b.sessionId)) {
       notes.push(`B is still recording; this compares the ${diffPlural(report.b.total, 'call', 'calls')} it held — refresh to compare again.`);
@@ -203,7 +212,7 @@ function diffEmptyWhy(reading) {
   return report.filter ? `No routes match the filter \`${report.filter}\` on either side.` : 'Neither session holds a call.';
 }
 
-/** The table, in the reply's order; unchanged rows are drawn only while the toggle shows them. */
+/** The table, in the reply's order; rows the daemon counts unchanged are drawn only while the toggle shows them. */
 function diffRenderTable(report) {
   const rows = $('diff-rows');
   rows.replaceChildren();
@@ -217,9 +226,9 @@ function diffRenderTable(report) {
   const routes = report ? report.routes : [];
   $('diff-scroll').hidden = !routes.length;
   const origins = new Set(routes.map(statsOrigin)).size;
-  const unchanged = routes.filter((r) => r.changes.length === 0).length;
+  const unchanged = routes.filter(diffUnchanged).length;
   for (const r of routes) {
-    if (r.changes.length === 0 && !diffState.unchanged) continue;
+    if (diffUnchanged(r) && !diffState.unchanged) continue;
     const tr = diffRow(r, origins);
     rows.appendChild(tr);
     if (diffState.open.has(diffKey(r))) rows.appendChild(diffDetail(r));
@@ -262,7 +271,12 @@ function diffRow(r, origins) {
     tag.dataset.kind = kind;
     change.appendChild(tag);
   }
-  if (!r.changes.length) change.appendChild(el('span', 'muted', 'no change'));
+  if (r.unsure) {
+    const unsure = el('span', 'diff-tag', 'unknown keys');
+    unsure.dataset.kind = 'unsure';
+    unsure.title = 'capture did not keep every body on a side, so a key may have been removed or added; open the row for which';
+    change.appendChild(unsure);
+  } else if (!r.changes.length) change.appendChild(el('span', 'muted', 'no change'));
   tr.appendChild(change);
   tr.appendChild(el('td', 'num diff-calls', `${r.a ? r.a.calls : '—'} → ${r.b ? r.b.calls : '—'}`));
   tr.appendChild(el('td', 'diff-status', `${diffStatus(r.status.a)} → ${diffStatus(r.status.b)}`));
