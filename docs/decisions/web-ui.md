@@ -71,7 +71,10 @@ last case: on an archived session it sent people to check the app when the app h
 The three sentences that do not involve a filter or a stretch are `noCallsWhy()` in
 `js/15-session-data.js`, and the Stats page asks it too. Stats had its own copy and said "No calls
 in this session yet" of an ended session, the claim this paragraph removed from the list
-(`no calls why`, red with that copy put back; `stats empty why` in the live probe).
+(`no calls why`, red with that copy put back; `stats empty why` in the live probe). The Diff and
+Findings pages word their own, and the live probe's `diff why states` and `findings why states` keep
+the three claims out of them: waiting for an app while a session exists, a filter that emptied the
+page with no `clear filter`, and "yet" of a session that ended. Each was red with the claim put in.
 
 **Nothing in the web UI is under 11px except a named list, and `render-web-ui.js` reads the
 stylesheet to hold it.** The method badge, `kbd` key caps and the three fold glyphs (`.jt-tw`,
@@ -95,7 +98,13 @@ because its height is the band budget 1b measured (`room 1440 bands list`). Pros
 stops at `--prose-max` (72ch). At 1440 a Sessions note had run 1232px, about 190 characters a line.
 `icon target css`, `icon controls svg`, `page targets css` and `prose width css` read the rules;
 `measure-web-ui.js`'s `polish <w> …` readings are the behaviour (the icons at 1440, 1000 and 400,
-served and exported, dark and light), each red with its rule removed.
+served and exported, dark and light), each red with its rule removed. Every page in `PAGES` but
+Traffic is a page document (`page documents`, red with `page-doc` taken off `#page-findings`), and
+`polish <w> planned controls` reads what a click draws on Diff and Findings: a route's detail,
+`clear filter`, the dismiss form and a dismissed fold's `restore`. A table's scroll box on a page is
+`flex: none`. As an item of the page's flex column it shrank to the window and scrolled its rows
+inside itself: Diff's did, and Stats' held 968px of table in 630 on the probe session at 400
+(`polish <w> tables whole`, red on `1b7a45b`).
 
 **The tab bar is always drawn.** It used to hide when a session had only the traffic view, which
 made the bar appear and disappear between sessions and moved everything under it. The order control
@@ -720,7 +729,9 @@ lives outside the Traffic page for that reason. **No key fires while the target 
 until this item, so typing `f` in the replay editor's body moved focus to the filter and lost the
 letter, and `o` reversed the list. `check-web-static.js`'s `page keys` and `typing skips keys`,
 and the live probe's `page keys live`, `keys legend` and `keys skip textarea`, hold it. Each was
-red with its rule removed.
+red with its rule removed. Diff and Findings, which landed after the keys, have a line each, `page
+keys diff` and `page keys findings`, red with their letter taken out, and the archive probe's `keys in
+export` presses `g d` and finds it goes nowhere.
 
 **The page is a rail over hash-routed pages, and the rail holds navigation and nothing else.**
 `#/traffic[/<view>]`, `#/stats`, `#/findings[?id=<finding>]`, `#/diff[?a=<id>&b=<id>]`, `#/sessions`,

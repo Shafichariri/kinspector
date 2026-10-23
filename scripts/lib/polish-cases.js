@@ -17,8 +17,15 @@
  * at least 24px tall (`polish <w> page targets`); the density select is at least its longest
  * option's text plus 20px for the chevron, measured in the select's own font (`polish <w> density
  * whole`); and every Sessions row starts with its start time, whole and inside its cell (`polish <w>
- * session time whole`). At 1440, every drawn `.settings-note` is at most 72 widths of `0` in its own
- * font (`polish 1440 prose width`); at 400 the window is narrower than that anyway.
+ * session time whole`). Every table box on Stats and Diff is as tall as its table: the page scrolls
+ * down, and the box only sideways (`polish <w> tables whole`). At 1440, every drawn `.settings-note`
+ * is at most 72 widths of `0` in its own font (`polish 1440 prose width`); at 400 the window is
+ * narrower than that anyway. A `.page-prose`, the class a page paragraph that is not a note takes,
+ * is measured as a note.
+ *
+ * Served, at 1440 and 400, what a click draws on Diff and Findings: a route's detail and a filter's
+ * `clear filter`, the dismiss form and a dismissed fold's `restore`, each control at least 24px tall
+ * (`polish <w> planned controls`), and at 1440 every note at most 72ch (`polish 1440 planned prose`).
  *
  * Served, at 1440 and 400, `?` pressed on Settings as the browser receives a key: the legend is drawn
  * whole inside the window, lists page keys, is what a pointer at its centre finds, and Escape shuts
@@ -36,6 +43,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { sleep } = require('./measure-cdp');
+const { BASE_SESSION_ID } = require('./diff-probes');
+const { PROBE_SESSION_ID } = require('./measure-fixtures');
 
 const LOADED = `typeof state !== 'undefined' && state.sessionId && document.querySelectorAll('#list .row').length > 0`;
 const OPEN_ROW = `(() => { const rows = [...document.querySelectorAll('#list .row')];
@@ -140,7 +149,7 @@ const PAGE_READ = `(() => {
   const ctx = document.createElement('canvas').getContext('2d');
   const textWidth = (e, text) => { const c = getComputedStyle(e); ctx.font = c.fontWeight + ' ' + c.fontSize + ' ' + c.fontFamily; return ctx.measureText(text).width; };
   const buttons = [...page.querySelectorAll('.btn')].filter(drawn).map((b) => ({ name: b.id || b.textContent.trim().slice(0, 16), h: b.getBoundingClientRect().height }));
-  const notes = [...page.querySelectorAll('.settings-note')].filter(drawn).map((n) => ({ w: n.getBoundingClientRect().width, cap: 72 * textWidth(n, '0') }));
+  const notes = [...page.querySelectorAll('.settings-note, .page-prose')].filter(drawn).map((n) => ({ w: n.getBoundingClientRect().width, cap: 72 * textWidth(n, '0') }));
   const select = page.querySelector('#density');
   const density = select && drawn(select) ? { client: select.clientWidth,
     need: Math.max(...[...select.options].map((o) => textWidth(select, o.textContent))) + 20, shown: select.options[select.selectedIndex].textContent } : null;
@@ -151,7 +160,10 @@ const PAGE_READ = `(() => {
     const r = t.getBoundingClientRect();
     return { text: t.textContent, whole: t.scrollWidth <= t.clientWidth + 0.5 && r.right <= cell.getBoundingClientRect().right + 0.5 && r.width > 0 };
   });
-  return { id: page.id, buttons, notes, density, times };
+  // A table's scroll box, which as an item of the page's flex column can shrink below its table.
+  const boxes = [...page.querySelectorAll('.stats-scroll, .diff-scroll')].filter(drawn)
+    .map((b) => ({ name: b.classList[0], client: b.clientHeight, scroll: b.scrollHeight }));
+  return { id: page.id, buttons, notes, density, times, boxes };
 })()`;
 
 /** Each page document at 1440 and 400, served: button heights, the notes' measure, the select, the rows. */
@@ -183,6 +195,13 @@ async function pageDocs(page, url, rows) {
         value: !notes.length ? 'NO - found no note on the pages, so this checked nothing' : wide.length ? 'wider than 72ch' : 'at most 72ch',
         detail: `${notes.length} notes, widest ${Math.round(Math.max(0, ...notes.map((n) => n.w)))}px against a 72ch of ${Math.round(notes[0] ? notes[0].cap : 0)}px` });
     }
+    // The page scrolls down, never a table's box: shrunk to the window, the box cut its rows and
+    // scrolled them inside itself. Stats on the probe session at 400 held 968px of table in 630.
+    const boxes = all.flatMap((r) => r.boxes);
+    const shrunk = boxes.filter((b) => b.scroll > b.client + 1);
+    rows.push({ key: `polish ${width} tables whole`, ok: !errors.length && boxes.length > 0 && !shrunk.length,
+      value: errors.length ? 'not measured' : !boxes.length ? 'NO - found no table box on Stats or Diff, so this checked nothing' : shrunk.length ? 'cut' : 'whole',
+      detail: boxes.map((b) => `${b.name} ${b.client}px for ${b.scroll}px`).join(', ') });
     const d = reads.settings && reads.settings.density;
     const whole = Boolean(d) && d.client >= d.need - 0.5;
     rows.push({ key: `polish ${width} density whole`, ok: whole,
@@ -193,6 +212,76 @@ async function pageDocs(page, url, rows) {
     rows.push({ key: `polish ${width} session time whole`, ok: times.length > 0 && !cut.length,
       value: !times.length ? 'NO - found no Sessions row, so this checked nothing' : cut.length ? 'cut' : 'whole, first',
       detail: `${times.length} rows: ${times.map((t) => `"${t.text}"${t.whole ? '' : ` ${t.why || 'cut'}`}`).join(', ')}` });
+  }
+}
+
+// The Diff and Findings pages in their opened states: every drawn `.btn`, and Diff's row buttons,
+// which open a route's detail and are not `.btn`; and every drawn note, in the measure PAGE_READ uses.
+const PLANNED_READ = `(() => {
+  const page = [...document.querySelectorAll('#pages > .page')].find((p) => !p.hidden);
+  const drawn = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+  const ctx = document.createElement('canvas').getContext('2d');
+  const textWidth = (e, text) => { const c = getComputedStyle(e); ctx.font = c.fontWeight + ' ' + c.fontSize + ' ' + c.fontFamily; return ctx.measureText(text).width; };
+  const buttons = [...page.querySelectorAll('.btn, .diff-open')].filter(drawn).map((b) => ({ page: page.id.replace('page-', ''),
+    name: b.classList.contains('diff-open') ? 'route ' + b.closest('tr').dataset.route : b.textContent.trim().slice(0, 24), h: b.getBoundingClientRect().height }));
+  const notes = [...page.querySelectorAll('.settings-note, .page-prose')].filter(drawn).map((n) => ({ w: n.getBoundingClientRect().width, cap: 72 * textWidth(n, '0') }));
+  return { buttons, notes };
+})()`;
+// A dismissed copy of the first finding, its fold opened: the fixture has no dismissal and making one
+// writes the daemon's config, so the fold is drawn from the reply the page holds. Nothing is sent.
+const FOLD_DRAWN = `(() => { const r = findingsState.report; const f = r && r.findings.find((x) => !x.dismissed);
+  if (!f) return false; r.findings.push({ ...f, id: f.id + '-polish', dismissed: { reason: 'polish reading' } });
+  dismissState.openFolds.add(f.ruleId); findingsRender(); return true; })()`;
+// What each opened state must draw for the reading to have checked it.
+const PLANNED_DUE = { diff: ['calls in A', 'clear filter', 'route /v3/shop/orders/submit'], findings: ['dismiss…', 'dismiss', 'cancel', 'restore'] };
+
+/**
+ * Served, at 1440 and 400, the controls the Diff and Findings pages draw only once opened: on the
+ * fixture's pair, the orders route's detail (`calls in A`/`B`) and then a filter the daemon matches
+ * nothing with (`clear filter`); on Findings, the dismiss form (`dismiss`, `cancel`) and a dismissed
+ * fold (`restore`) beside every `dismiss…`. Each at least 24px tall (`polish <w> planned controls`),
+ * and at 1440 every note at most 72ch (`polish 1440 planned prose`). `polish <w> page targets` reads
+ * the same pages as they open; this reads what a click on them draws.
+ */
+async function plannedControls(page, url, rows) {
+  for (const width of [1440, 400]) {
+    await load(page, `${url}#/traffic/network`, width);
+    const reads = [];
+    await page.ev(`navigate({ page: 'diff', a: ${JSON.stringify(BASE_SESSION_ID)}, b: ${JSON.stringify(PROBE_SESSION_ID)} })`);
+    const route = `#diff-rows tr[data-route="/v3/shop/orders/submit"] .diff-open`;
+    if (await page.waitFor(`document.querySelector('${route}')`, 15000) !== null) {
+      await page.ev(`document.querySelector('${route}').click()`);
+      await page.waitFor(`document.querySelector('#diff-rows .diff-calls-open')`, 5000);
+      await sleep(300);
+      reads.push(await page.ev(PLANNED_READ));
+      await page.ev(`diffSetFilter('path:/polish-matches-nothing')`);
+      await page.waitFor(`[...document.querySelectorAll('#diff-empty button')].some((b) => b.textContent === 'clear filter')`, 15000);
+      await sleep(300);
+      reads.push(await page.ev(PLANNED_READ));
+    }
+    await page.ev(`navigate({ page: 'findings' })`);
+    if (await page.waitFor(`document.querySelector('#findings-body .finding-dismiss')`, 15000) !== null && await page.ev(FOLD_DRAWN) === true) {
+      await page.ev(`document.querySelector('#findings-body .finding-dismiss').click()`);
+      await page.waitFor(`document.querySelector('#findings-body form.dismiss-form')`, 5000);
+      await sleep(300);
+      reads.push(await page.ev(PLANNED_READ));
+    }
+    const errors = reads.filter((r) => !r || r.evalError).map((r) => String(r && r.evalError));
+    const buttons = reads.filter((r) => r && !r.evalError).flatMap((r) => r.buttons);
+    const missing = Object.entries(PLANNED_DUE).flatMap(([where, names]) => names
+      .filter((name) => !buttons.some((b) => b.page === where && b.name === name)).map((name) => `${where} ${name}`));
+    const low = buttons.filter((b) => b.h < 24 - 0.01);
+    rows.push({ key: `polish ${width} planned controls`, ok: !errors.length && !missing.length && !low.length,
+      value: errors.length ? 'not measured' : missing.length ? `NO - found no ${missing.join(', ')}, so this checked nothing of it` : low.length ? 'short' : 'at least 24px',
+      detail: errors.length ? errors.join(' | ') : `${buttons.length} controls in ${reads.length} opened states${low.length
+        ? `; short: ${low.slice(0, 6).map((b) => `${b.page} ${b.name} ${round(b.h)}px`).join(', ')}` : ''}` });
+    if (width === 1440) {
+      const notes = reads.filter((r) => r && !r.evalError).flatMap((r) => r.notes);
+      const wide = notes.filter((n) => n.w > n.cap + 0.5);
+      rows.push({ key: `polish ${width} planned prose`, ok: !errors.length && notes.length > 0 && !wide.length,
+        value: !notes.length ? 'NO - found no note on the opened pages, so this checked nothing' : wide.length ? 'wider than 72ch' : 'at most 72ch',
+        detail: `${notes.length} notes, widest ${Math.round(Math.max(0, ...notes.map((n) => n.w)))}px against a 72ch of ${Math.round(notes[0] ? notes[0].cap : 0)}px` });
+    }
   }
 }
 
@@ -401,6 +490,7 @@ async function polish(page, urls) {
   await iconTargets(page, urls.probe, rows);
   await txnBack(page, urls.probe, rows);
   await pageDocs(page, urls.probe, rows);
+  await plannedControls(page, urls.probe, rows);
   await legendInside(page, urls.probe, rows);
   await settingsFirstLoad(page, urls.probe, rows);
   await emptyWhole(page, urls.probe, rows);
