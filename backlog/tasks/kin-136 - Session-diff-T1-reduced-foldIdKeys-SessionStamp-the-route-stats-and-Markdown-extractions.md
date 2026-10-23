@@ -3,11 +3,11 @@ id: KIN-136
 title: >-
   Session diff T1 (reduced): foldIdKeys, SessionStamp, the route-stats and
   Markdown extractions
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:25'
-updated_date: '2026-10-22 20:01'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -36,22 +36,30 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), after T4. Des
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 JsonPaths.foldIdKeys writes a grouped path's object keys that RouteTemplates.isIdLike reads as ids as {id}, and keeps a non-id key such as USD literal (a documented miss); BodyShapeTest shown red with the fold calling something other than isIdLike
-- [ ] #2 archive/SessionStamp.kt holds SessionStamp(indexSize, indexKey, markersSize) and of(dir); it changes when a row or a marker is appended
-- [ ] #3 RouteStatsAccumulator.add returns the RouteKey it counted the row under, or null when the filter dropped it; rowsByKey exists and snapshot uses it; RouteStatsTest, RouteStatsServiceTest and StatsRouteTest pass unedited
-- [ ] #4 service/MarkdownText.kt holds cell, inlineCode, heading, ms, bytes and count, moved out of ExportMarkdown, which calls them; ExportTest passes unedited
-- [ ] #5 inspector-daemon/AGENTS.md's archive/ row names session stamps; DaemonLayersTest passes
+- [x] #1 JsonPaths.foldIdKeys writes a grouped path's object keys that RouteTemplates.isIdLike reads as ids as {id}, and keeps a non-id key such as USD literal (a documented miss); BodyShapeTest shown red with the fold calling something other than isIdLike
+- [x] #2 archive/SessionStamp.kt holds SessionStamp(indexSize, indexKey, markersSize) and of(dir); it changes when a row or a marker is appended
+- [x] #3 RouteStatsAccumulator.add returns the RouteKey it counted the row under, or null when the filter dropped it; rowsByKey exists and snapshot uses it; RouteStatsTest, RouteStatsServiceTest and StatsRouteTest pass unedited
+- [x] #4 service/MarkdownText.kt holds cell, inlineCode, heading, ms, bytes and count, moved out of ExportMarkdown, which calls them; ExportTest passes unedited
+- [x] #5 inspector-daemon/AGENTS.md's archive/ row names session stamps; DaemonLayersTest passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Ready for QA once PR A merges. Reuses KIN-112 and KIN-127 unrenamed. JsonPaths.foldIdKeys (calls RouteTemplates.isIdLike; red with a digits-only test: UUID key stayed literal); archive/SessionStamp.kt + SessionStampTest (red with the file key dropped: a replaced index read as the same stamp); RouteStatsAccumulator.add returns RouteKey? and rowsByKey(termText, termParsed) returns RouteRows(rows, carried), snapshot calls it, route-stats tests unedited and green; MarkdownText holds cell, inlineCode, heading, count, ms, bytes (moved verbatim, diffed byte for byte) and, in T3, server; ExportTest unedited and green. inspector-daemon/AGENTS.md archive/ row names session stamps. -- bob
+
+Closed 2026-10-23 by the delivery tracker. PR #180, merge f59f3d4. QA report: qa/session-diff-pr-a-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug) on f59f3d4: daemon 582 tests 0 failed, repo-checks 38/0, check-web-static 133/0, live probe 299/0, archive 58/0; 15 red proofs re-run. Shared pieces: foldIdKeys red with a digits-only fold (M10); SessionStamp red without fileKey (M12); RouteStats, RouteStatsService, StatsRoute and ExportTest diffs empty and passing; DaemonLayersTest 17 tests. Merge f59f3d4 (#180). QA report session-diff-pr-a-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

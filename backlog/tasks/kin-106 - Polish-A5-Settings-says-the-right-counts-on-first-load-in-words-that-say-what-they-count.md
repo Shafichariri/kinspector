@@ -3,11 +3,11 @@ id: KIN-106
 title: >-
   Polish A5: Settings says the right counts on first load, in words that say
   what they count
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 19:58'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:web-ui-polish'
 dependencies: []
@@ -22,14 +22,14 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A5 criteria hold, each guard shown red (folded defect: counts read 0 when opened straight to #/settings)
+- [x] #1 The note's §9 A5 criteria hold, each guard shown red (folded defect: counts read 0 when opened straight to #/settings)
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -50,4 +50,12 @@ Rebased onto 5253bf3 and finished (part 3b). Ready for QA as patch 2 of 3 (A4, A
 Done: paintSettingsCounts() in 80-settings.js ('3 rows in this session', 'showing 10 of 13 endpoints in this session'; no 'row(s)' left in web/), called by applyDuplicateWindow, applyEndpointLimit and enterPage('settings'); Settings joins callsLanded (16-session-load.js) from wireSettingsPage. Deviation from note §3 P8: loadTransactions does not call paintSettingsCounts directly; pages add their repaint to callsLanded, because seven vm harnesses run loadTransactions and would need stubs. Live 'settings counts follow load'; Chrome 'polish settings first load counts' (both widths, served). web-ui.md counts paragraph (note §8) in, naming callsLanded.
 Red proofs: 'settings counts follow load: NO - after the load "0 rows in this session", "showing 0 of 0 endpoints in this session", due "3 rows ...", "showing 10 of 13 endpoints ..."' (from before the park). Chrome, with Settings' callsLanded line removed: 'FAIL polish settings first load counts: not the session's (1440: "0 rows in this session", "showing 0 of 0 endpoints in this session" for 16 calls, due "3 rows in this session", "showing 10 of 13 endpoints in this session"; 400: the same)'. Restored: 'ok polish settings first load counts: the session's (1440: ...; 400: ...)'. Pace: 'chip marks active : false (the clicked chip, and only it)' with this line, A4's and A6's present (295 passed, 4 failed); restored, 304 passed.
 State after patches 1-2: ci.yml 302/58; static 134/0; live 302 passed; archive 58 passed.
+
+Closed 2026-10-23 by the delivery tracker. PR #181, merge 7f49e14. QA report: qa/web-ui-polish-part3-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug): check-web-static 134/0; live probe 304/0; archive 59/0; Chrome 342 readings, 0 failed on head, 3 failed on base (moved: polish settings first load counts, polish 1440/400 empty whole). A5 Settings counts on first load: Chrome 'polish settings first load counts' at 1440 and 400, jsdom 'settings counts follow load'; both red with the repaint removed. row(s) is gone from web/. Merge 7f49e14 (#181). QA report web-ui-polish-part3-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -206,26 +206,7 @@ Not new, and not forgotten. Collected here because they were spread across nine 
 
 - ~~**Phase I gave the ui pair three guards that the core and stream pairs lack.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-twin-pairs-alike`.
 
-- **No pair guards a public declaration that exists only on iOS or Android.** *Ticket label:*
-  `item:guard-twin-native-surface`. Phase I's design named it as its first risk, and its QA and
-  `docs/STATUS.md` → Not verified carry it.
-
-  **For whom.** A consuming team shipping iOS or Android. Every parity test reads JVM output. A
-  public function added to `iosMain` or `androidMain` of a real module, and not to its twin, passes
-  every pair's test. The team finds out when their release build fails to compile on that platform
-  alone, which is how the facade-name break reached iOS (`twins-and-api.md`).
-
-  **Acceptance criteria.**
-  - On every pair, a public declaration present in one module's `iosMain` or `androidMain` and absent
-    from its twin fails a check that CI runs. The iOS half runs on the macOS job.
-  - Proven red on each platform with such a declaration added, and green again once it is removed.
-  - The architect chooses the mechanism, for example the Kotlin Gradle plugin's own klib ABI dump or
-    a scan of each platform's compiled output. A choice that adds a dependency or changes a
-    `gradle.lockfile` says so, and §5's "no new tools" is the bar it argues against.
-
-  **Out of scope.** Binary compatibility between released versions. The JVM half, which phase I and
-  `item:guard-twin-pairs-alike` (done 2026-10-22) cover. Surfaces: library API guards only, with no consumer-visible
-  change. **Size:** M, until the architect sizes the mechanism.
+- ~~**No pair guards a public declaration that exists only on iOS or Android.**~~ Done 2026-10-23, see `ROADMAP-DONE.md` → §3 → Guards. *Ticket label:* `item:guard-twin-native-surface`.
 
 *The two guards below were left open by the batch closed on 2026-10-22, from QA on
 `item:guard-probe-finds-nothing-fails` and the hand-over of `item:guard-live-traffic-driver`, and
@@ -362,13 +343,13 @@ from here" yet**: the maintainer reviews the list first.*
 | Follow-up | Goes to | Why there |
 |---|---|---|
 | ~~A live signal or marker redraws the timeline once per message~~ **Done 2026-10-22** (KIN-101; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:web-live-signal-burst-bounded` | the `drawLive` timer from `item:web-live-calls-reach-every-pane` already exists, and the same branch reads `/current` once per signal, which `docs/STATUS.md` records (50 signals, 53 requests). One item takes both |
-| `#/txn/<id>` has no visible way back | **new item**, `item:web-txn-page-way-back` | a missing control, not a look. Web UI polish is far off |
+| ~~`#/txn/<id>` has no visible way back~~ **Done 2026-10-23** (KIN-141; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-txn-page-way-back` | a missing control, not a look. Web UI polish is far off |
 | The `⤢` and `⇥` glyphs are 13px and nobody has judged them | §6 → Web UI polish | a judgement with no defect in it, and that item is the first human design pass |
 | ~~At 400px the Stats page's route cell breaks hostnames mid-word~~ **Done 2026-10-22** (KIN-93; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-stats-route-breaks-whole` | `http://127.0.0.1:808` / `0` reads as port 808, so this is a misreading and not only a look |
 | ~~IPv6 hosts are not bracketed in `url` or the row label~~ **Done 2026-10-22** (KIN-92; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:host-port-everywhere` | both this and the next row are places where the rule `item:row-label-port` set (a server is its host plus a non-default port) has not reached |
 | ~~The session summary's `byHost` merges `:8080` and `:9090`~~ **Done 2026-10-22**, with the IPv6 row (KIN-92) | `item:host-port-everywhere` | the key becomes `hostPort`, and once `hostPort` brackets IPv6 the key is right for IPv6 as well |
 | ~~During a session switch the timeline's call rows and the endpoint chips show the session just left~~ **Done 2026-10-22** (KIN-94, KIN-95; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:web-switch-clears-call-panes` | the same class of false fact as `item:web-now-strip-follows-session`, which put calls out of scope. 1a, where QA suggested it go, has shipped without it |
-| A brushed stretch with some loaded rows says nothing of older unloaded matches under a filter | **new item**, `item:web-stretch-says-older-matches` | `item:web-list-says-what-it-holds` covered only a stretch the list draws nothing of |
+| ~~A brushed stretch with some loaded rows says nothing of older unloaded matches under a filter~~ **Done 2026-10-23** (KIN-142; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | `item:web-stretch-says-older-matches` | `item:web-list-says-what-it-holds` covered only a stretch the list draws nothing of |
 | ~~Small doc fixes: `architect.md`, two INTEGRATION.md headings, the root `AGENTS.md` table, the Sessions page's path~~ **Done 2026-10-22** (KIN-89; `ROADMAP-DONE.md` → §3 → Bugs found, not fixed) | **new item**, `item:docs-housekeeping-2026-10-21` | four edits, none of them worth an item on its own |
 | Phase I's R12 proof command | not an item | `ROADMAP-DONE.md` → §5 → Phase I records that it is quoted nowhere in the repository, and the per-module regenerate commands in `api-parity/AGENTS.md` are correct |
 | `twins-and-api.md` says v59 tells consumers to "copy the colours they need" | not an item | QA called it looser wording, not a false claim. Copying the colours is one of v59's three cases |
@@ -376,23 +357,7 @@ from here" yet**: the maintainer reviews the list first.*
 
 - ~~**A burst of live signals or markers redraws every pane once per message.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-live-signal-burst-bounded`.
 
-- **`#/txn/<id>` has no visible way back.** *Ticket label:* `item:web-txn-page-way-back`. From the
-  hand-over and QA on `item:web-foundation-list-room` (1b).
-
-  **For whom.** A web UI user on a Mac who opened a call on its own page, from `⤢` or from an address
-  someone pasted. Only the browser's Back and `Esc` leave the page, and nothing on it says so. A
-  call opened in a new tab has no Back to press.
-
-  **Acceptance criteria.**
-  - The `#/txn` page shows a control that leaves it, keyboard-reachable and named for where it goes.
-    It does what `Esc` does (`leaveTxnFull`): Back when `⤢` pushed the page, otherwise the session's
-    list.
-  - At 400px it is on screen, and in an export it works from the embedded data.
-  - A probe line presses it in both cases. It is proven red with the control removed.
-
-  **Out of scope.** Changing what Back and `Esc` do. The size of the `⤢` and `⇥` glyphs, which is
-  Web UI polish's. This does not overturn a recorded decision: `web-ui.md` records that Back and
-  Escape leave the page, not that nothing else may. Surfaces: web UI only. **Size:** S.
+- ~~**`#/txn/<id>` has no visible way back.**~~ Done 2026-10-23, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-txn-page-way-back`.
 
 - ~~**At 400px the Stats page breaks a route's host mid-word.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-stats-route-breaks-whole`.
 
@@ -401,28 +366,7 @@ from here" yet**: the maintainer reviews the list first.*
 - ~~**During a session switch the timeline's calls and the endpoint chips are the session just left.**~~
   Done 2026-10-22 (KIN-94, KIN-95, PR #135): a switch clears the call side with the signal side, and until the new session lands every call pane, the glance and the markers popover say `this session is being read…`; the tab bar keeps its tabs without counts, and a call left open from the previous session closes. Overturns the `web-ui.md` sentence "The calls themselves are left to the switch's first page", by the maintainer's approval of 2026-10-21. See `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-switch-clears-call-panes`.
 
-- **A brushed stretch under a filter does not say that older matches may be in it.** *Ticket label:*
-  `item:web-stretch-says-older-matches`. From QA on `item:web-list-says-what-it-holds` (its "mixed
-  stretch" note) and `docs/STATUS.md` → Not verified.
-
-  **For whom.** A web UI user on a long session, with a filter that matches more calls than the list
-  loads, who brushes a stretch that reaches below the oldest match loaded. The list draws the loaded
-  matches in the stretch, and the note says `at least 10 calls hidden by the filter`. Nothing says
-  that the stretch may also hold matches older than the ones loaded, so the list reads as all the
-  matches in the stretch.
-
-  **Acceptance criteria.**
-  - In that case the list's note also says that the stretch reaches below the oldest of the `N`
-    matches loaded, so older matches in it are not drawn, and that narrowing the filter reaches them.
-  - It claims no count of those matches. The page evaluates no filter (`web-ui.md`, "Under a filter
-    it claims no count"), so it has none.
-  - A stretch wholly above the oldest match loaded reads as it does today.
-  - A line in `check-web-static.js` over the 3016-call stub and one in the live probe over the long
-    session, each proven red with the sentence removed.
-
-  **Out of scope.** A daemon route that counts the matches in a range. If the architect finds that
-  the sentence cannot be true without one, the item comes back to the product owner. The header's
-  wording. Surfaces: web UI only. **Size:** S.
+- ~~**A brushed stretch under a filter does not say that older matches may be in it.**~~ Done 2026-10-23, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:web-stretch-says-older-matches`.
 
 - ~~**Housekeeping after the 2026-10-20/21 run.**~~ Done 2026-10-22, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:docs-housekeeping-2026-10-21`.
 
@@ -601,6 +545,13 @@ ends at findings and sensitive-data detection.
 - **Required before the tag:** all of `item:findings-payment-safety` (its PR B and C included) and
   `item:sensitive-data-detection` T1 to T5, each merged and verified by QA; the private security
   advisory's fix, row 13; and `item:release-1-4-docs`, which lands last.
+- **Central's monthly file limit, added 2026-10-22 at the maintainer's request.** Central counts every
+  published file, checksums and signatures included, against 1,000 a month. 1.3.0 was a 2,000-file
+  release. Two rules follow:
+  1. **The 1.4.0 tag is cut no earlier than 2026-11-01**, so the release counts against November.
+  2. **At most one Central release a month.** Even trimmed (row 13g, done: about 800 files), one
+     release uses about 80% of the limit. A patch release in the same month goes to GitHub Packages
+     only, or waits.
 - **Fallback:** if those are not merged and verified by QA by **2026-12-03**, 1.4.0 is cut that day
   from what is merged, and anything required that missed it goes to the following release.
 - **Progress, close-out 5, 2026-10-22:** findings and detection T1 to T5 are merged and Done on QA's evidence, the rehearsal ran twice and its three faults are fixed (`ROADMAP-DONE.md` → §6), and the landing page landed. Open before the tag: row 13c's final pass, and row 13 (the private advisory's fix).
@@ -610,18 +561,14 @@ ends at findings and sensitive-data detection.
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
 | 13 | The private security advisory's fix | §5 → Open questions | `item:control-boundary-advisory` | not sized | D |
-| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). **Progress, close-out 5, 2026-10-22: the final pass is next and is the last commit before the tag.** Findings and detection are merged and Done on QA's evidence (KIN-124 included), the rehearsal passed (`ROADMAP-DONE.md` → §6 → Release 1.4.0), and KIN-129 stays open for it. |
+| 13c | The 1.4.0 release notes and `INTEGRATION.md` say what 1.4.0 ships | §6 → Release 1.4.0 | `item:release-1-4-docs` | S | S, after 13b; starts now, and its last commit lands last before the tag, after findings and detection are merged and verified by QA. **Pass 1 done 2026-10-22** (PR #163): UNRELEASED consolidated, INTEGRATION v64 (findings, detection, IPv6 route host), v60/v61 → v57. Final pass waits on findings PR C, detection T5 and QA (PR C has since merged, #164). **Progress, close-out 5, 2026-10-22: the final pass is next and is the last commit before the tag.** Findings and detection are merged and Done on QA's evidence (KIN-124 included), the rehearsal passed (`ROADMAP-DONE.md` → §6 → Release 1.4.0), and KIN-129 stays open for it. **Release-day PR #177 is a draft (v66, 1.4.0 coordinates, the site's "New in 1.4.0") and will be refreshed when the maintainer sets a date; no tag until then.** |
 
 **After 1.4.0**, decided 2026-10-22 by the maintainer. Row labels are kept. Why they wait: 1.4.0 ships the two
 features that catch a defect in the app under test, and none of these is needed to show them.
 
 | Order | Item | Where | Ticket label | Size | Lane |
 |---|---|---|---|---|---|
-| 24 | Session diff (questions answered 2026-10-22 by the maintainer's proxy) | §6 → Session diff | `item:session-diff` | L | PR A in D, after detection T4: T4, then T1 reduced by Shared body evidence, then T2 and T3. PR B in W, after detection T5 and polish PR A |
-| 25 | A pair guards a public declaration that exists only on iOS or Android | §3 → Guards | `item:guard-twin-native-surface` | M | L; the note first, then the build |
-| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; the rest of PR A (A3 to A6) before diff PR B, PR B last of all. **PR A part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 (A4 to A6, KIN-105 to KIN-107) is parked on `shafic/web-ui-polish-a456` for after 1.4.0, with PR B** |
-| 28 | `#/txn/<id>` has a visible way back | §3 → Bugs found, not fixed | `item:web-txn-page-way-back` | S | W, after polish A1 |
-| 29 | A brushed stretch under a filter says older matches may be in it | §3 → Bugs found, not fixed | `item:web-stretch-says-older-matches` | S | W, after polish PR A |
+| 27 | Web UI polish (questions answered 2026-10-22 by the maintainer's proxy; the first human design pass stays open for the maintainer, and the item closes without it) | §6 → Web UI polish | `item:web-ui-polish` | M | W; PR A before PR B, PR B last of all (diff PR B has since merged, so only polish PR B is left). **PR A is complete (2026-10-23).** Part 1 done 2026-10-22 and in 1.4.0: A1, A2 and A7 (PR #150, `4343823`). Part 2 done 2026-10-22: A3, page keys (KIN-104, PR #155, `fc7b205`). Part 3 done 2026-10-23: A4 to A6 (KIN-105 to KIN-107, PR #181, `7f49e14`; QA closed all three). **PR B is in progress** (KIN-145 and KIN-146, on the web developer's branch, not merged) |
 
 **One row added 2026-10-22 by the product owner, at the coordinator's request:**
 `item:landing-page-fits-400`, from QA on `item:public-claims-true`. It goes first in lane S because
@@ -1009,59 +956,9 @@ data or hidden under `body.archive`.
 
 **Done, 2026-10-21** (KIN-74 to KIN-77; PRs #115 and #121, merges `0a5a1c9` and `d256174`). The text, the decision on the two notions of "endpoint" and what was built are in `ROADMAP-DONE.md` → §6 → "Endpoint latency stats".
 
-### Session diff
+### ~~Session diff~~ — done 2026-10-23, see `ROADMAP-DONE.md` → §6
 
-`GET /api/diff?a=&b=&filter=`, defaulting to the newest session against the previous one of the
-same app; an optional `since:marker("…")` per side to compare one stretch of two runs.
-
-- Endpoints added and removed; call count changed (`/transfer` 1× → 2×, loudest on mutations);
-  status mix changed; latency regressed **only** when n ≥ 5 on both sides, the change is ≥ 25%
-  **and** ≥ 50 ms — anything less is noise drawn as signal; request and response **shape** (JSON key
-  paths and types) from bodies on disk.
-- **A body capture did not keep is "unknown", never "field removed".** Same principle as
-  `BodyOmission`: the diff must not assert what capture could not see.
-- MCP `diff_sessions`, a Markdown form, and the Diff page.
-
-Endpoint identity here is the **route** — the template decided under Endpoint latency stats — so
-"endpoints added and removed" means routes, and the diff says so in its labels.
-
-The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
-
-**T1 shrinks, 2026-10-22:** `JsonPaths.walk`, `group` and `isAtOrUnder` were carved out as KIN-127 (`item:sensitive-data-detection`) and are on main.
-
-**Shared body evidence moved to findings, 2026-10-22** (the maintainer's proxy, confirmed by the
-architect). `RouteKey.mutation` and the contract half of `service/BodyShape.kt` (`BodySide`,
-`BodyState`, `BodyEvidence.state`, `BodyEvidence.read` and `JsonPaths.redactedPaths`) are built as
-the Shared body evidence ticket under `item:findings-payment-safety`, to the names and signatures
-of this item's design §10. **Diff T1 shrinks by that piece and depends on it**: it keeps
-`SessionStamp`, the route-stats and Markdown moves, and adds `walk`, `group`, `foldIdKeys` and
-`isAtOrUnder` to the same `JsonPaths` object. It renames nothing the shared piece built. Findings
-and detection now come before this item; see "Order from here".
-
-**Decided 2026-10-22 by the maintainer's proxy: the recommendation below, made stricter.** A key
-path is "removed" only when every JSON body on the other side was read complete, and nothing at or
-under a redacted path is compared. Cross-origin matching is not in this item; it is in "Candidates,
-not ordered" below.
-
-*Was an open decision —* **"unknown" must cover truncated bodies, not only omitted ones.** *(Review,
-2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
-around bodies capture did not keep, which reads as `reqBodyOmitted`/`resBodyOmitted`. A body over
-the cap is a different case: capture keeps a prefix, writes it to disk with a `*BodyRef`, sets
-`reqBodyTruncated`/`resBodyTruncated`, and leaves the omission reason **null** — so a diff that only
-checks omission treats it as captured. The cap is `bodyCaptureMaxBytes`, 256 KB by default and set
-by the app, so two runs can even truncate at different points. A strict JSON parse of a cut prefix
-fails, but a lenient or streaming key-path walk succeeds up to the cut and then reports every later
-key as removed — the exact false claim the rule exists to prevent, on exactly the large responses
-people diff.
-
-Options: treat a truncated body as unknown; or walk its prefix for key paths that *are* present and
-count them as "seen", never anything as removed. Recommended: the second is tempting and not worth
-its subtlety — **shape comes only from bodies that are complete (not truncated, not omitted) and
-parse strictly; everything else is unknown for that side**, and a key path is "removed" only when
-the other side has at least one complete sample and no complete sample contains it. One adjacent
-case belongs in the same criterion: under `Redaction.On()` a redacted value becomes the placeholder
-string, so a number redacted on one side and not the other would read as a type change. Paths named
-in `redacted[]` are not compared for type.
+Open text still refers to it: the cross-origin question is the candidate "Match routes across origins in the diff" below, and the default-view gap is under "Follow-ups left by the batch-6 close".
 
 ### ~~Findings, and the payment-safety rules~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
@@ -1070,6 +967,8 @@ in `redacted[]` are not compared for type.
 ### ~~A sample demo flow that both rule families catch~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6
 
 ### Web UI polish
+
+**Progress, 2026-10-23: PR A is complete.** Part 3 (A4 empty states, A5 Settings counts on a first load, A6 the `routeTemplates` editor; KIN-105 to KIN-107, PR #181, `7f49e14`) merged and QA closed all three, so A1 to A7 are done. PR B (KIN-145, KIN-146) is in progress on a branch and not merged; the item stays open for it.
 
 **Progress, 2026-10-22: PR A parts 1 and 2 done.** Part 2: A3 (KIN-104, page keys) merged in PR #155 (`fc7b205`) and is Done on QA's pass with real keystrokes at 1440 and 400 px (`g` plus a letter, `g g`, `?` on every page, nothing fires while typing, which also fixes the replay textarea defect). Part 3 (A4 to A6, KIN-105 to KIN-107) is parked for after 1.4.0.
 
@@ -1142,6 +1041,8 @@ style. **Size:** S.
 
 #### ~~Rehearse the release locally before the tag~~ — done 2026-10-22, see `ROADMAP-DONE.md` → §6 → Release 1.4.0
 
+#### ~~The Central bundle ships only what Central requires~~ (row 13g) — done 2026-10-23, see `ROADMAP-DONE.md` → §6 → Release 1.4.0
+
 ### Candidates, not ordered
 
 Added 2026-10-22 by the product owner, out of questions the maintainer's proxy answered that day
@@ -1167,6 +1068,15 @@ Unplaced, no tickets, each checked before it was written: against `site/index.ht
 - **Between 821 and 885 px the landing page is still 886 px wide.** QA measured `scrollWidth` every 5 px from 360 to 1440 (`41b968c`): only that band overflows; at 850 px the widest boxes are a card's `div.shot`, `h3`, `p` and `li`, reaching x = 861. `.grid2` is two columns above its 820 px query (`site/index.html:86-87`), where `.grid2 > * { min-width: 0 }` does not apply. It is true on main before `item:landing-page-fits-400` too, and the 400 px guard does not read it.
 - **`PublishedPomTest` has never been run on a Linux developer machine.** CI runs `:repo-checks:test` only inside the macOS `build` job's `./gradlew build`; the Ubuntu `repo` job runs the identity and name scripts and no JDK. QA's and the builder's runs were on macOS, and the test resolves iOS configurations.
 - **The release guard did not scan the Android aars during the local rehearsal.** There is no Android SDK on the rehearsal machine, so no aar was built; `check-release-clean.sh` reads `*.aar` (and unpacks the nested `classes.jar`), and CI's `build` job, on macOS with the SDK, runs it after `./gradlew build`. Only the seven Android POMs were checked locally.
+
+#### Follow-ups left by the batch-6 close, 2026-10-23
+
+Unplaced, no tickets, each checked against the code at `1b7a45b` before it was written. One line each; the product owner places or drops them.
+
+- **`src/iosMain` is never compiled in `:inspector-core` and `:inspector-noop`.** Their hand-written `jvmAndAndroidMain` links (`dependsOn` in both `build.gradle.kts`) turn the default hierarchy template off, so no `iosMain` source set exists; neither module has a `src/iosMain` today, but a file added there would build clean and ship nowhere (`docs/decisions/twins-and-api.md`; the iOS guard reads the real klibs, so it stays honest). `iosArm64Main` and `iosSimulatorArm64Main` are where iOS-only code goes. Found by KIN-143's build and confirmed by QA.
+- **Two 20,000-call sessions with 8 KB bodies use up the diff's 256 MiB body budget.** `DiffBudget` (`service/SessionDiffSide.kt`, `256L * 1024 * 1024`) ran out in the builder's scratch pair (33,378 bodies, 268,434,247 bytes), so the rest of each route's bodies read as unread, and a key B dropped can read "unsure" where it is in fact removed. The reply says so (`shapeBudget.exhausted`); nothing false is claimed. Whether to raise the budget, sample, or stream is open.
+- **By default, MCP `diff_sessions`, `inspector diff` and the Diff page hide a route whose only news is an unsure key.** Design 6.4 says `unsure` never sets a change kind, so such a route counts as unchanged and the `unchanged=false` default drops it: QA's pair read `counts {changed: 0, unchanged: 7}` and 0 routes, while a removal may be hidden. Every criterion is met as written. An `unsure` tally in `counts` or the summary, or keeping such routes listed, would close it on all three surfaces together (QA, `session-diff-pr-a-report` note 1 and `session-diff-pr-b-report` note 1).
+- **The Stats page's table box may have the Diff page's layout fault.** `css/85-stats.css:21` is `.stats-scroll { overflow-x: auto; margin: 0 0 8px; }`, where the Diff box needed `flex: none` (`css/88-diff.css:28`) to keep its width in a flex column. Unverified and untouched: nobody has measured the Stats box in Chrome. Polish PR B's hand-over is not written yet, so this is placed here and dropped if it shows the box was fixed or never faulted.
 
 #### Match routes across origins in the diff
 

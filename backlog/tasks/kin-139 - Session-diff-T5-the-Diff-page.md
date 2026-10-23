@@ -1,11 +1,11 @@
 ---
 id: KIN-139
 title: 'Session diff T5: the Diff page'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:26'
-updated_date: '2026-10-22 22:26'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -51,22 +51,22 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR B (lane W), cut after PR 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 #/diff, #/diff?a=…, #/diff?a=…&b=… parse and round-trip (route parse); a PAGES row diff with live: true and a rail link between Stats and Sessions; rail is navigation passes
-- [ ] #2 #/diff with no ids shows the latest run against its previous one and is not rewritten
-- [ ] #3 The table draws the daemon's order, kinds, loud mark and verdicts; an unknown direction shows the daemon's why and no removed; n<5 is printed from the reply (check-web-static.js diff draws kinds, diff unknown verbatim, diff verdict verbatim, diff stale dropped, each red as in the design's §12)
-- [ ] #4 The live probe's diff lines from diff default pair to diff same session, plus diff restored, pass on the CI fixture, including diff long session whole (1201 calls removed) and diff truncated unknown; the Pace-rule red of the next probe's guard is in the hand-over
-- [ ] #5 The page does not re-read on a live message; a recording B shows the note and refresh
-- [ ] #6 In an export the Diff rail link is hidden and #/diff lands on Traffic (diff hidden in export); 1a's export lines still pass
-- [ ] #7 At 1440, 1000, 600 and 400 px the document does not scroll sideways on #/diff (shell <w> page diff fits); QA renders 1440 and 400 with an open detail row, with screenshots
-- [ ] #8 UI_EXPECT_CHECKS and ARCHIVE_EXPECT_CHECKS raised in the same commit; index.html and render-web-ui.js budgets raised by hand with reasons; fetch still called once across scripts.txt's files; nothing new under 11 px
-- [ ] #9 The web-ui.md paragraph of the design's §14 is in
+- [x] #1 #/diff, #/diff?a=…, #/diff?a=…&b=… parse and round-trip (route parse); a PAGES row diff with live: true and a rail link between Stats and Sessions; rail is navigation passes
+- [x] #2 #/diff with no ids shows the latest run against its previous one and is not rewritten
+- [x] #3 The table draws the daemon's order, kinds, loud mark and verdicts; an unknown direction shows the daemon's why and no removed; n<5 is printed from the reply (check-web-static.js diff draws kinds, diff unknown verbatim, diff verdict verbatim, diff stale dropped, each red as in the design's §12)
+- [x] #4 The live probe's diff lines from diff default pair to diff same session, plus diff restored, pass on the CI fixture, including diff long session whole (1201 calls removed) and diff truncated unknown; the Pace-rule red of the next probe's guard is in the hand-over
+- [x] #5 The page does not re-read on a live message; a recording B shows the note and refresh
+- [x] #6 In an export the Diff rail link is hidden and #/diff lands on Traffic (diff hidden in export); 1a's export lines still pass
+- [x] #7 At 1440, 1000, 600 and 400 px the document does not scroll sideways on #/diff (shell <w> page diff fits); QA renders 1440 and 400 with an open detail row, with screenshots
+- [x] #8 UI_EXPECT_CHECKS and ARCHIVE_EXPECT_CHECKS raised in the same commit; index.html and render-web-ui.js budgets raised by hand with reasons; fetch still called once across scripts.txt's files; nothing new under 11 px
+- [x] #9 The web-ui.md paragraph of the design's §14 is in
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -113,4 +113,12 @@ Red proofs (each restored and seen green):
 - shell <w> page diff fits: .diff-scroll's overflow-x removed → FAIL at 1000 (page 992 of 956), 600 (743 of 556) and 400 (743 of 356); fits at 1440. Green with it back.
 - Contact sheet showed the table box shrinking as an item of the page's flex column (rows below the window cut, scrolled inside the box) and the narrow detail running past the box's visible edge; fixed with flex: none and a sticky, window-wide detail body below 700px.
 - measure-web-ui.js --only polish,shell,room,layout --base abb3622: head 238 readings, 0 failed. Moved: shell <w> page diff fits no page → fits (4 widths), polish 1440/400 page targets short → at least 24px. The base's 6 failures are this tree's cases asking a base with no Diff page.
+
+Closed 2026-10-23 by the delivery tracker. PR #185, merge 1b7a45b. QA report: qa/session-diff-pr-b-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug) on 1b7a45b: check-web-static 139/0; live probe 321/0; archive 61/0; Chrome 350 readings, 0 failed on head, 6 failed on base (intended movers: shell <w> page diff fits, polish page targets). The Diff page: reds D1 D2 D3 D4 D6 D7 and the overflow-x red re-run. AC 5 (a recording B shows the note and refresh) is NOT verified live: the fixture has no recording session; QA read the code (diffRead runs from the page's own triggers only). Closed on QA's verdict with that exact scope. Merge 1b7a45b (#185). QA report session-diff-pr-b-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->
