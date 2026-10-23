@@ -17,8 +17,10 @@
 #page-stats .filter-error { border: 1px solid var(--divider); border-radius: 5px; margin: 0 0 8px; }
 
 /* Fifteen columns do not fit 400px, and the page must never scroll sideways: the table scrolls in
-   its own box, with the route held at the left so a row still says what it counts. */
-.stats-scroll { overflow-x: auto; margin: 0 0 8px; }
+   its own box, with the route held at the left so a row still says what it counts. `flex: none`, as
+   `.diff-scroll`: an item of the page's flex column, the box shrank to the window and scrolled its
+   rows inside itself, 968px of table in 630 on the probe session at 400. */
+.stats-scroll { overflow-x: auto; margin: 0 0 8px; flex: none; }
 /* As wide as its columns, not the window: stretched, the route column was mostly empty at 1440. */
 .stats-table { width: auto; }
 .stats-table th, .stats-table td { white-space: nowrap; }

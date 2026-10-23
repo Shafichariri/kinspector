@@ -192,6 +192,25 @@ function checkPageKeys(scripts) {
   return wrong.length ? `NO - ${wrong.join('; ')}` : `yes (${cases.length} sequences, live and exported, and with the Diff and the Findings rows taken out)`;
 }
 
+/**
+ * Every page in `PAGES` but Traffic is a page document in index.html, `<section id="page-<id>">`
+ * carrying `page-doc`, so the targets and the prose cap reach it. Findings was drawn as a plain
+ * `page` in its design note; a page that lands without the class takes neither rule.
+ */
+function auditPageDocuments(scripts) {
+  const ids = vm.runInContext('PAGES.map((p) => p.id)', routes(scripts, null, false)).filter((id) => id !== 'traffic');
+  if (!ids.length) return 'NO - found no page but Traffic in PAGES, so this checked nothing';
+  const html = loadIndexHtml();
+  const bad = [];
+  for (const id of ids) {
+    const tag = new RegExp(`<section\\b[^>]*\\bid="page-${id}"[^>]*>`).exec(html);
+    const cls = tag && /\bclass="([^"]*)"/.exec(tag[0]);
+    if (!tag) bad.push(`no section#page-${id} in index.html`);
+    else if (!cls || !cls[1].split(/\s+/).includes('page-doc')) bad.push(`#page-${id} is "${cls ? cls[1] : ''}", not a page-doc`);
+  }
+  return bad.length ? `NO - ${bad.join('; ')}` : `yes (${ids.length} pages, each a page-doc: ${ids.join(', ')})`;
+}
+
 /** `typingTarget` is every element that takes typing, and nothing that does not. */
 function checkTypingTarget(scripts) {
   const { typingTarget } = routes(scripts, null, false);
@@ -253,6 +272,7 @@ function checkPolish(scripts, styles) {
     ['typing skips keys', checkTypingTarget(scripts)],
     ['icon target css', auditIconTargets(styles)],
     ['icon controls svg', auditIconControls(scripts)],
+    ['page documents', auditPageDocuments(scripts)],
     ['page targets css', auditPageDoc(styles, '.page-doc .btn', 'min-height', '--target-min', (v) => /^(\d+)px$/.test(v) && parseFloat(v) >= 24)],
     ['prose width css', auditPageDoc(styles, '.page-doc .settings-note', 'max-width', '--prose-max', (v) => /^\d+ch$/.test(v) && parseFloat(v) <= 80)],
     ['no calls why', checkNoCallsWhy(scripts)],

@@ -38,10 +38,12 @@
   font-weight: 400;
 }
 .diff-table thead .diff-route { font-weight: 600; }
+/* A route's button is a target like a page's buttons: its 11px badge and 12px path drew it 14.5px tall. */
 .diff-open {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-height: var(--target-min);
   max-width: 420px;
   background: none;
   border: none;
