@@ -852,7 +852,7 @@ each side and a change of at least 50 ms and 25% — otherwise `same`, or `notJu
 parse as JSON. A truncated, omitted, missing or unparsable body is counted, never read, and a key
 is reported removed only when every JSON body on the other side was read whole; otherwise it is
 listed under `unsure`. Keys at or under a path in `redacted[]` are listed under `notCompared`.
-At most 500 bodies per route and side and 256 MB per diff are read; a body past either is
+At most 500 bodies per route and side and 256 MiB per diff are read; a body past either is
 `unread`, which also only ever makes a key unsure. `shapeBudget` says what was read.
 
 `limit` (default 1000, at most 5000) cuts `routes` after the order, and `unchanged=false` drops
