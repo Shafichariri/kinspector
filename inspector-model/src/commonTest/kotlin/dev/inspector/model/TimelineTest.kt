@@ -401,6 +401,44 @@ class TimelineTest {
         assertEquals(ascending.id, descending.id)
     }
 
+    /**
+     * `minBy { mono }` takes the first minimum in draw order, so a run whose two earliest members
+     * share a millisecond was keyed on a different member in each order and collapsed on the flip.
+     * Through `timeline()`, because that is what puts the tie in a different order each way.
+     */
+    @Test
+    fun `a run whose earliest members share a millisecond keeps its id when the order flips`() {
+        val signals = listOf(
+            signal("state", "form", 100, seq = 2),
+            signal("state", "form", 100, seq = 1),
+            signal("state", "form", 110, seq = 3),
+        )
+        val ascending = timelineRuns(timeline(emptyList(), emptyList(), signals)).single()
+        val descending = timelineRuns(
+            timeline(emptyList(), emptyList(), signals, newestFirst = true),
+        ).single()
+        assertEquals(signals[1].id, (ascending.earliest as TimelineEntry.Observation).signal.id)
+        assertEquals(ascending.id, descending.id)
+    }
+
+    @Test
+    fun `a mixed-seq tie picks the same earliest member in either draw order`() {
+        val without = TimelineEntry.Observation(signal("state", "form", 100))
+        val with = TimelineEntry.Observation(signal("state", "form", 100, seq = 5))
+        for (drawn in listOf(listOf(without, with), listOf(with, without))) {
+            val run = timelineRuns(drawn).single()
+            assertEquals(with, run.earliest, "draw order ${drawn.map { (it as TimelineEntry.Observation).signal.id }}")
+        }
+    }
+
+    @Test
+    fun `a tie without seq picks the same earliest member in either draw order`() {
+        val one = TimelineEntry.Observation(signal("state", "form", 100))
+        val two = TimelineEntry.Observation(signal("state", "form", 100))
+        val ids = listOf(listOf(one, two), listOf(two, one)).map { timelineRuns(it).single().id }
+        assertEquals(ids[0], ids[1])
+    }
+
     @Test
     fun `a run reports the same span in either order`() {
         val signals = listOf(signal("state", "form", 100), signal("state", "form", 900))
