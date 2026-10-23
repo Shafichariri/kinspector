@@ -169,9 +169,9 @@ is a bug that passes casual testing: `TimelineTest` pins it with a tie, because 
 immediately before a request is exactly what a tie looks like on a millisecond clock.
 
 A marker at a call's `mono` is placed **before** it — `<=`, not `<` — because a marker is
-dropped just before the thing it marks. Markers after the last call are still emitted: "I marked
-it and then nothing happened" is an answer, and a divider that appeared only once the next
-request arrived would hide it. The web UI carries a mirror, `timelineEntries` in its `visits` block, held to the model by
+dropped just before the thing it marks; where both carry capture `seq`, the next paragraph decides
+instead. Markers after the last call are still emitted: "I marked it and then nothing happened" is
+an answer, and a divider that appeared only once the next request arrived would hide it. The web UI carries a mirror, `timelineEntries` in its `visits` block, held to the model by
 `mirror-cases/timeline.json`, and both the list and the timeline tab draw through it. The timeline
 tab did not until phase A: it sorted all three streams in one stable sort with markers added last,
 so a tied marker landed after its call there and before it in the list beside it. A mirror case
@@ -181,6 +181,17 @@ tools order through it too, never by a sort of their own, and `explain` splits b
 position, not by `mono`. `SignalToolsTest` compares the `timeline` tool with the live model entry
 by entry, and `TransactionToolsTest` checks that a marker at the call's own millisecond lands in
 `explain`'s `before`.
+
+**Inside one millisecond, `timeline()` orders the rows that carry capture `seq` by it, in the places
+those rows already hold.** `onClick { tap; navigate() }` puts a tap and the call it fires in one
+millisecond, and a stable sort by `mono` drew the call first on every surface. The rule keeps
+today's order and then re-sorts only the `seq`-carrying members of each tie among their own slots.
+A row without `seq` (an older archive, a marker the host posted) stays exactly where it was, which
+is `schema.md`'s "use it only to break a tie between two rows that both carry it", and no
+comparator over mixed rows exists to be intransitive. A device marker with `seq` sorts by it, so
+`<=` now applies only where capture order is unknown. `TimelineTest` and
+`mirror-cases/timeline.json` pin it on both sides, red with the stable sort alone and with
+`seq ?: Long.MIN_VALUE`.
 
 **A marker chip's filter term is asked of the parser, not assumed.** `since:marker("…")` quotes
 the label and the grammar has **no escape inside the quotes**, so whether a label is expressible

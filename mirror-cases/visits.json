@@ -208,6 +208,17 @@
         "indexAt": [250, 370, 50]
       },
       "expect": {"visits": [{"screen": "Cart", "entries": ["T:orders"]}, {"screen": "Confirm", "entries": []}], "indexAt": [0, 1, -1]}
+    },
+    {
+      "name": "a visit's tied entries go by seq",
+      "from": "TimelineTest.a signal captured before a call in the same millisecond comes first",
+      "input": {
+        "screens": [{"id": "v32", "tag": "screen", "name": "Home", "mono": 100, "seq": 1}],
+        "transactions": [{"id": "buy", "callId": "buy", "mono": 300, "seq": 6}],
+        "markers": [],
+        "signals": [{"id": "v33", "tag": "tap", "name": "buy", "mono": 300, "seq": 5}]
+      },
+      "expect": {"visits": [{"screen": "Home", "entries": ["S:tap/buy", "T:buy"]}]}
     }
   ]
 }

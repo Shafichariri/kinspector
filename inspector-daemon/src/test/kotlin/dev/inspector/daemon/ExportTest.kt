@@ -112,6 +112,19 @@ class ExportTest {
     }
 
     @Test
+    fun `a tap captured before its call in the same millisecond leads both timelines`() {
+        val dir = session {
+            it.append(txn("aaaa1111", mono = 300).copy(seq = 2), null, null)
+            it.append(signal(id = "s1", tag = SignalTags.STATE, name = "Tap", mono = 300).copy(seq = 1), null)
+        }
+        val document = build(dir)
+        assertEquals(listOf("s1", "aaaa1111"), document.timeline.map { it.id })
+        val section = ExportMarkdown.render(document).substringAfter("## Timeline").substringBefore("\n## ")
+        val kinds = section.lines().mapNotNull { row -> listOf("signal", "call").firstOrNull { "| $it |" in row } }
+        assertEquals(listOf("signal", "call"), kinds, section)
+    }
+
+    @Test
     fun `a session over every page cap exports every row`() {
         // 1000 is the query cap and 2000 the timeline cap. An export must inherit neither.
         val dir = session { writer ->

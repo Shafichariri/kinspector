@@ -27,8 +27,8 @@ internal class SignalTools(
                     "was the app doing when this failed' — start from a marker and read " +
                     "forwards. Follow an id into get_signal or get_body for detail. " +
                     "Same filter grammar as list_transactions plus tag: and name:. " +
-                    "Same-millisecond ties follow the shared timeline rule: a marker comes " +
-                    "before the call or signal at its instant.",
+                    "Same-millisecond ties go by capture order (seq) where rows carry it; a " +
+                    "marker without one comes before the call or signal at its instant.",
             ) {
                 put("session", sessionProperty())
                 put("filter", stringProperty("Filter expression. Empty matches everything."))

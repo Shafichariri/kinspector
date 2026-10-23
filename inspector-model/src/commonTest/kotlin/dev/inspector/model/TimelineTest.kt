@@ -11,20 +11,21 @@ import kotlin.test.assertEquals
  */
 class TimelineTest {
 
-    private fun txn(id: String, mono: Long) = NetworkTransaction(
+    private fun txn(id: String, mono: Long, seq: Long? = null) = NetworkTransaction(
         id = id, ts = "2026-09-17T09:00:00Z", mono = mono, method = "GET",
         scheme = "https", host = "api.example.com", path = "/v1/$id", status = 200,
-        callId = id,
+        callId = id, seq = seq,
     )
 
-    private fun mark(label: String, mono: Long) = Marker(
-        ts = "2026-09-17T09:00:00Z", mono = mono, label = label, source = "user",
+    private fun mark(label: String, mono: Long, seq: Long? = null) = Marker(
+        ts = "2026-09-17T09:00:00Z", mono = mono, label = label, source = "user", seq = seq,
     )
 
     private var signalSeq = 0
 
-    private fun signal(tag: String, name: String, mono: Long) = Signal(
+    private fun signal(tag: String, name: String, mono: Long, seq: Long? = null) = Signal(
         id = "s${++signalSeq}", ts = "2026-09-17T09:00:00Z", mono = mono, tag = tag, name = name,
+        seq = seq,
     )
 
     /** `a M:checkout S:screen/home b` reads in the order the entries would be drawn. */
@@ -197,11 +198,76 @@ class TimelineTest {
 
     @Test
     fun `a signal and a call at the same millisecond keep a stable order`() {
-        // Which came first is unknowable at this resolution. What matters is that two renders of
-        // the same data agree, so the list does not reshuffle under the reader.
+        // Without `seq`, which came first is unknowable at this resolution. What matters is that
+        // two renders of the same data agree, so the list does not reshuffle under the reader.
         val once = timeline(listOf(txn("a", 200)), emptyList(), listOf(signal("state", "form", 200)))
         val again = timeline(listOf(txn("a", 200)), emptyList(), listOf(signal("state", "form", 200)))
         assertEquals(shape(once), shape(again))
+    }
+
+    // --- same-millisecond ties, by capture seq -------------------------------------------------
+    //
+    // Every case below is red against a stable sort by mono alone; the last is red against
+    // `thenBy { seq ?: Long.MIN_VALUE }`, and the host-marker case against a merge that gives a
+    // marker without seq the far end of its tie.
+
+    @Test
+    fun `a signal captured before a call in the same millisecond comes first`() {
+        // `onClick { signal("tap"); navigate() }`: the tap and the call it fires share a millisecond.
+        val entries = timeline(listOf(txn("a", 200, seq = 2)), emptyList(), listOf(signal("tap", "buy", 200, seq = 1)))
+        assertEquals("S:tap/buy a", shape(entries))
+    }
+
+    @Test
+    fun `two signals in one millisecond go by seq`() {
+        val entries = timeline(
+            transactions = emptyList(),
+            markers = emptyList(),
+            signals = listOf(signal("state", "second", 200, seq = 5), signal("state", "first", 200, seq = 4)),
+        )
+        assertEquals("S:state/first S:state/second", shape(entries))
+    }
+
+    @Test
+    fun `two calls in one millisecond go by seq`() {
+        // The daemon sends calls newest first, so input order is the reverse of capture order there.
+        val entries = timeline(listOf(txn("b", 200, seq = 9), txn("a", 200, seq = 8)), emptyList())
+        assertEquals("a b", shape(entries))
+    }
+
+    @Test
+    fun `a device marker captured after a call follows it`() {
+        // `<=` is for a marker whose place in capture order is unknown; this one's is known.
+        val entries = timeline(listOf(txn("a", 200, seq = 1)), listOf(mark("done", 200, seq = 2)))
+        assertEquals("a M:done", shape(entries))
+    }
+
+    @Test
+    fun `a host marker without seq still introduces its millisecond`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 200, seq = 5)),
+            markers = listOf(mark("agent", 200)),
+            signals = listOf(signal("state", "form", 200, seq = 4)),
+        )
+        assertEquals("M:agent S:state/form a", shape(entries))
+    }
+
+    @Test
+    fun `a signal without seq stays after a tied call that carries one`() {
+        // Rows without seq keep today's place; `seq ?: Long.MIN_VALUE` would move the signal first.
+        val entries = timeline(listOf(txn("a", 200, seq = 5)), emptyList(), listOf(signal("state", "form", 200)))
+        assertEquals("a S:state/form", shape(entries))
+    }
+
+    @Test
+    fun `a seq tie reverses with everything else`() {
+        val entries = timeline(
+            transactions = listOf(txn("a", 200, seq = 2)),
+            markers = emptyList(),
+            signals = listOf(signal("tap", "buy", 200, seq = 1)),
+            newestFirst = true,
+        )
+        assertEquals("a S:tap/buy", shape(entries))
     }
 
     @Test

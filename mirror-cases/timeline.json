@@ -116,6 +116,66 @@
         "signals": [{"id": "s5", "tag": "state", "name": "form", "mono": 200}]
       },
       "expect": ["M:tap", "T:a", "S:state/form"]
+    },
+    {
+      "name": "a signal captured before a call in the same millisecond comes first",
+      "from": "TimelineTest.a signal captured before a call in the same millisecond comes first",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200, "seq": 2}],
+        "markers": [],
+        "signals": [{"id": "s6", "tag": "tap", "name": "buy", "mono": 200, "seq": 1}]
+      },
+      "expect": ["S:tap/buy", "T:a"]
+    },
+    {
+      "name": "two signals in one millisecond go by seq",
+      "from": "TimelineTest.two signals in one millisecond go by seq",
+      "input": {
+        "transactions": [],
+        "markers": [],
+        "signals": [{"id": "s7", "tag": "state", "name": "second", "mono": 200, "seq": 5}, {"id": "s8", "tag": "state", "name": "first", "mono": 200, "seq": 4}]
+      },
+      "expect": ["S:state/first", "S:state/second"]
+    },
+    {
+      "name": "two calls in one millisecond go by seq",
+      "from": "TimelineTest.two calls in one millisecond go by seq",
+      "input": {
+        "transactions": [{"id": "b", "callId": "b", "path": "/v1/b", "mono": 200, "seq": 9}, {"id": "a", "callId": "a", "path": "/v1/a", "mono": 200, "seq": 8}],
+        "markers": [],
+        "signals": []
+      },
+      "expect": ["T:a", "T:b"]
+    },
+    {
+      "name": "a device marker captured after a call follows it",
+      "from": "TimelineTest.a device marker captured after a call follows it",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200, "seq": 1}],
+        "markers": [{"label": "done", "mono": 200, "seq": 2}],
+        "signals": []
+      },
+      "expect": ["T:a", "M:done"]
+    },
+    {
+      "name": "a host marker without seq still introduces its millisecond",
+      "from": "TimelineTest.a host marker without seq still introduces its millisecond",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200, "seq": 5}],
+        "markers": [{"label": "agent", "mono": 200, "source": "agent"}],
+        "signals": [{"id": "s9", "tag": "state", "name": "form", "mono": 200, "seq": 4}]
+      },
+      "expect": ["M:agent", "S:state/form", "T:a"]
+    },
+    {
+      "name": "a signal without seq stays after a tied call that carries one",
+      "from": "TimelineTest.a signal without seq stays after a tied call that carries one",
+      "input": {
+        "transactions": [{"id": "a", "callId": "a", "path": "/v1/a", "mono": 200, "seq": 5}],
+        "markers": [],
+        "signals": [{"id": "s10", "tag": "state", "name": "form", "mono": 200}]
+      },
+      "expect": ["T:a", "S:state/form"]
     }
   ]
 }

@@ -2,7 +2,9 @@ package dev.inspector.daemon.mcp
 
 import dev.inspector.daemon.archive.SessionRepository
 import dev.inspector.daemon.archive.TimelineEntry
+import dev.inspector.daemon.signal
 import dev.inspector.daemon.txn
+import dev.inspector.model.SignalTags
 import dev.inspector.model.timeline as modelTimeline
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -95,6 +97,23 @@ class SignalToolsTest : McpToolsFixture() {
         expected.indices.forEach { i ->
             assertEquals(expected[i], actual[i], "entry $i differs from the shared timeline()")
         }
+    }
+
+    @Test
+    fun the_timeline_tool_lists_a_tap_captured_before_its_call_in_the_same_millisecond_first() {
+        // Against a literal this time: the test above holds MCP to the model, and this one holds
+        // both to capture order. The call is written first, so file order alone would lead with it.
+        val id = session("2026-08-17T09-00-09_seqtie_dev_debug") { writer ->
+            writer.append(txn("seqc0001", path = "/buy", mono = 400).copy(seq = 2), null, null)
+            writer.append(signal(id = "seqs0001", tag = SignalTags.STATE, name = "Tap", mono = 400).copy(seq = 1), null)
+        }
+
+        val ids = Json.decodeFromString(
+            ListSerializer(TimelineEntry.serializer()),
+            callTool("timeline", """{"session":"$id"}"""),
+        ).map { it.id }
+
+        assertEquals(listOf("seqs0001", "seqc0001"), ids)
     }
 
     /**
