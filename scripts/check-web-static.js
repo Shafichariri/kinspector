@@ -70,7 +70,9 @@ const { checkSessionState } = require('./lib/session-state-checks');
 const { checkBeingRead } = require('./lib/being-read-checks');
 const { checkListHolds } = require('./lib/list-holds-checks');
 const { checkLiveReread } = require('./lib/live-reread-checks');
-const { checkLongSession, checkPathPastTheClamp, checkWaterfallPastTheClamp, auditNoArgumentSpread } = require('./lib/long-session-checks');
+const {
+  checkLongSession, checkPathPastTheClamp, checkWaterfallPastTheClamp, checkWaterfallGroupsPastTheClamp, auditNoArgumentSpread,
+} = require('./lib/long-session-checks');
 const { checkTimelineFollow, checkSocketFollow } = require('./lib/follow-checks');
 const { checkShell } = require('./lib/shell-checks');
 const { checkStatsRefresh } = require('./lib/stats-refresh-checks');
@@ -147,6 +149,7 @@ async function main() {
   for (const [label, value] of await checkLongSession(scripts)) report(label, value);
   for (const [label, value] of checkPathPastTheClamp(scripts)) report(label, value);
   for (const [label, value] of checkWaterfallPastTheClamp(scripts)) report(label, value);
+  for (const [label, value] of checkWaterfallGroupsPastTheClamp(scripts)) report(label, value);
   for (const [label, value] of await checkListHolds(scripts)) report(label, value);
 
   console.error('--- live follow ---');
