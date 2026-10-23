@@ -1,11 +1,11 @@
 ---
 id: KIN-138
 title: 'Session diff T3: the Markdown form, GET /api/diff.md'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:25'
-updated_date: '2026-10-22 20:01'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:session-diff'
 dependencies:
@@ -27,20 +27,28 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), after T2. Des
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 GET /api/diff.md answers text/markdown with Content-Disposition attachment; filename="diff-<a>-vs-<b>.md", and errors as JSON with §7.2's statuses
-- [ ] #2 The document has §7.3's header, its sections in order, escaped cells, and an unknown body never described as removed (DiffMarkdownTest, red with unsure keys rendered under removed and with MarkdownText.cell bypassed)
-- [ ] #3 The exports.md paragraph of the design's §14 is in
+- [x] #1 GET /api/diff.md answers text/markdown with Content-Disposition attachment; filename="diff-<a>-vs-<b>.md", and errors as JSON with §7.2's statuses
+- [x] #2 The document has §7.3's header, its sections in order, escaped cells, and an unknown body never described as removed (DiffMarkdownTest, red with unsure keys rendered under removed and with MarkdownText.cell bypassed)
+- [x] #3 The exports.md paragraph of the design's §14 is in
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Ready for QA once PR A merges. service/DiffMarkdown.kt, GET /api/diff.md (text/markdown; charset=UTF-8, attachment diff-<a>-vs-<b>.md, errors as JSON), inspector diff --md. An unsure key is under 'Unknown — capture did not keep every body', never 'Removed'; a shape not compared reads 'unknown (1 truncated)', and two known non-JSON kinds read as the kinds ('empty', 'json → empty'). Red: unsure keys rendered under 'Removed: only in A'; cells joined without MarkdownText.cell (an unescaped pipe). exports.md paragraph in. -- bob
+
+Closed 2026-10-23 by the delivery tracker. PR #180, merge f59f3d4. QA report: qa/session-diff-pr-a-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug) on f59f3d4: daemon 582 tests 0 failed, repo-checks 38/0, check-web-static 133/0, live probe 299/0, archive 58/0; 15 red proofs re-run. GET /api/diff.md: text/markdown with attachment filename, all ten errors as JSON with the same status; escaping red (M8) and unsure-under-Removed red (M9). Merge f59f3d4 (#180). QA report session-diff-pr-a-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -3,11 +3,11 @@ id: KIN-107
 title: >-
   Polish A6: an editor for routeTemplates on Settings, and the Stats note links
   to it
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 19:58'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:web-ui-polish'
 dependencies: []
@@ -22,14 +22,14 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A6 criteria hold, each guard shown red
+- [x] #1 The note's §9 A6 criteria hold, each guard shown red
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -54,4 +54,12 @@ Checks: live 'routes editor' and 'stats note link' (scripts/lib/polish-probes.js
 Red proofs: 'routes editor: NO - a retention save sent {"maxSessions":101,"routeTemplates":[]}' (configPatch sending the key always); 'stats note link: NO - the Stats note has no link to #/settings' (span removed); 'stats note export: NO - the Settings link's display is inline, the export's words' inline' (.live-only taken out of the hide list, the same edit made in the tree and the export). Pace: 'chip marks active : false' with all new lines present; archive Pace: 'stats offline drawn: NO - 0 rows of 13 ... "not in this export: ..."' with the /stats branch taken out of archiveSource and 'stats note export' present. All restored.
 Chrome: 'shell <w> page settings fits' fits at 1440, 1000, 600 and 400. Note: at 1440 the box runs the row's full remaining width (about 1000px), as §3 P9 asks.
 Final: ci.yml UI_EXPECT_CHECKS 304, ARCHIVE_EXPECT_CHECKS 59 (main 299/58).
+
+Closed 2026-10-23 by the delivery tracker. PR #181, merge 7f49e14. QA report: qa/web-ui-polish-part3-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug): check-web-static 134/0; live probe 304/0; archive 59/0; Chrome 342 readings, 0 failed on head, 3 failed on base (moved: polish settings first load counts, polish 1440/400 empty whole). A6 routeTemplates editor: end to end on a real daemon (0 PUTs unchanged; trimmed lines sent through controlFetch; 400 verbatim; restart shows running: 2 templates); red with the key always sent; Stats note link and export wording red re-run. Merge 7f49e14 (#181). QA report web-ui-polish-part3-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

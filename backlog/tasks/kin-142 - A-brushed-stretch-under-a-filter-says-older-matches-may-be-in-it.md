@@ -1,11 +1,11 @@
 ---
 id: KIN-142
 title: A brushed stretch under a filter says older matches may be in it
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:26'
-updated_date: '2026-10-22 21:17'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:web-stretch-says-older-matches'
 dependencies:
@@ -28,17 +28,17 @@ Order row 29, docs/ROADMAP.md §3 → Bugs found, not fixed (lane W, after polis
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 In that case the list's note also says that the stretch reaches below the oldest of the N matches loaded, so older matches in it are not drawn, and that narrowing the filter reaches them
-- [ ] #2 It claims no count of those matches: the page evaluates no filter (web-ui.md, Under a filter it claims no count)
-- [ ] #3 A stretch wholly above the oldest match loaded reads as it does today
-- [ ] #4 A line in check-web-static.js over the 3016-call stub and one in the live probe over the long session, each proven red with the sentence removed
+- [x] #1 In that case the list's note also says that the stretch reaches below the oldest of the N matches loaded, so older matches in it are not drawn, and that narrowing the filter reaches them
+- [x] #2 It claims no count of those matches: the page evaluates no filter (web-ui.md, Under a filter it claims no count)
+- [x] #3 A stretch wholly above the oldest match loaded reads as it does today
+- [x] #4 A line in check-web-static.js over the 3016-call stub and one in the live probe over the long session, each proven red with the sentence removed
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -62,4 +62,12 @@ Code: belowLoaded() and olderMatchesNote() in js/15-session-data.js (448 lines);
 Guards: static 'stretch below loaded matches' (scripts/lib/list-holds-checks.js), live 'long stretch below matches' (scripts/lib/long-session-probes.js probeCapped). Counts: static 134 -> 135, live 304 -> 305 (ci.yml UI_EXPECT_CHECKS), archive 59 unchanged.
 Red: static with the sentence removed gave the base text 'at least 50 calls hidden … — newest 1000 of 1200 matches loaded — clear filter'; with the reaches-below rule ignored the wholly-above stretch failed. Live with the sentence removed plus Pace neighbour 'long stretch older' broken: 303 passed, 2 failed (exactly those two).
 Green: static 135/0; CI web replay on 8105 305 passed, archive 59; measure-web-ui --only layout,room,first vs 7f49e14: moved nothing, 153/153 readings 0 failed both; :repo-checks:test --rerun 38 tests pass. Looked in Chrome at 1440 (3 lines) and 400 (5 lines): sticky under the scope bar, no overflow.
+
+Closed 2026-10-23 by the delivery tracker. PR #184, merge 2af3168. QA report: qa/web-stretch-says-older-matches-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Row 29, a brushed stretch under a filter says older matches may be in it. QA (Doug): static 135/0; live probe 306/0; archive 60/0; Chrome moved against base: nothing (one known flake, same on base). Reds S1 (sentence removed: static and live both fail), S2 (below-loaded rule ignored), S3 (a count claimed: the planted count came from the unfiltered copy). By hand: the clause shown, and the wholly-above case reads as before. Merge 2af3168 (#184). QA report web-stretch-says-older-matches-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

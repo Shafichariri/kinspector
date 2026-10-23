@@ -1,11 +1,11 @@
 ---
 id: KIN-135
 title: 'Session diff T4: a baseline run in the probe fixture'
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 19:25'
-updated_date: '2026-10-22 20:01'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:session-diff'
 dependencies: []
@@ -24,20 +24,28 @@ Order row 24, docs/ROADMAP.md §6 → Session diff; PR A (lane D), first of its 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 writeProbeFixture writes 2025-12-30T09-00-00_probe_ci_debug with the design's §11 rows and replaces it on a re-run; latest still names the probe session
-- [ ] #2 ProbeFixtureTest asserts each §11 fact through SessionRepository, shown red with the feed row's resBodyTruncated dropped
-- [ ] #3 Every existing probe and measure-web-ui.js reading is unchanged against the three-session fixture, stated in the hand-over
+- [x] #1 writeProbeFixture writes 2025-12-30T09-00-00_probe_ci_debug with the design's §11 rows and replaces it on a re-run; latest still names the probe session
+- [x] #2 ProbeFixtureTest asserts each §11 fact through SessionRepository, shown red with the feed row's resBodyTruncated dropped
+- [x] #3 Every existing probe and measure-web-ui.js reading is unchanged against the three-session fixture, stated in the hand-over
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Ready for QA once PR A merges. ProbeFixture.kt: BASE_SESSION_ID 2025-12-30T09-00-00_probe_ci_debug (baseSessionCalls), the oldest of four sessions; ProbeFixtureTest.the_base_session_holds_each_difference_the_diff_reads asserts each design §11 fact through SessionRepository, and that the base session has no marker, signal or finding. Red: the feed's resBodyTruncated dropped -> 'the base feed is not marked truncated'. Probes against the four-session fixture on port 18310: render-web-ui.js 299 passed, 0 failed, 1 n/a (facet filter, also n/a on main's CI run of PR #178); render-web-ui-archive.js 58 passed, 0 failed; only the note 'session options' moved, 3 -> 4. measure-web-ui.js --base main: see the PR A hand-over. -- bob
+
+Closed 2026-10-23 by the delivery tracker. PR #180, merge f59f3d4. QA report: qa/session-diff-pr-a-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug) on f59f3d4: daemon 582 tests 0 failed, repo-checks 38/0, check-web-static 133/0, live probe 299/0, archive 58/0; 15 red proofs re-run. Baseline session in the fixture: four sessions, every design section 11 row read live; ProbeFixtureTest 8 tests, red with the feed's resBodyTruncated dropped. Chrome suite not re-run by QA for AC 3 (jsdom probes only; the builder's and PR #180's web job stand). Merge f59f3d4 (#180). QA report session-diff-pr-a-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->

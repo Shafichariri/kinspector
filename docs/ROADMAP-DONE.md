@@ -1037,6 +1037,35 @@ Android only looked right because 120px clears a status bar at that density.
   `measure-web-ui.js` in CI. Surfaces: none a user sees; scripts, plus one sentence in
   `web-ui.md` if needed. No public API. **Size:** XS.
 
+- ~~**No pair guards a public declaration that exists only on iOS or Android.**~~ **Done, 2026-10-23.** PR #182 merged as `c62d39e` (row 25). KIN-143 (iOS) and KIN-144 (Android) are Done on QA's pass, one round, no blocking findings; `build`, `release-swap`, `repo` and `web` passed on the PR and on main's push run. The text is moved verbatim below.
+
+- **No pair guards a public declaration that exists only on iOS or Android.** *Ticket label:*
+  `item:guard-twin-native-surface`. Phase I's design named it as its first risk, and its QA and
+  `docs/STATUS.md` → Not verified carry it.
+
+  **For whom.** A consuming team shipping iOS or Android. Every parity test reads JVM output. A
+  public function added to `iosMain` or `androidMain` of a real module, and not to its twin, passes
+  every pair's test. The team finds out when their release build fails to compile on that platform
+  alone, which is how the facade-name break reached iOS (`twins-and-api.md`).
+
+  **Acceptance criteria.**
+  - On every pair, a public declaration present in one module's `iosMain` or `androidMain` and absent
+    from its twin fails a check that CI runs. The iOS half runs on the macOS job.
+  - Proven red on each platform with such a declaration added, and green again once it is removed.
+  - The architect chooses the mechanism, for example the Kotlin Gradle plugin's own klib ABI dump or
+    a scan of each platform's compiled output. A choice that adds a dependency or changes a
+    `gradle.lockfile` says so, and §5's "no new tools" is the bar it argues against.
+
+  **Out of scope.** Binary compatibility between released versions. The JVM half, which phase I and
+  `item:guard-twin-pairs-alike` (done 2026-10-22) cover. Surfaces: library API guards only, with no consumer-visible
+  change. **Size:** M, until the architect sizes the mechanism.
+
+  **What was built and learned.** The architect chose the mechanism and the maintainer's proxy answered its three questions yes, with the condition that an `abiValidation` plugin or any new artifact escalates (decisions `2026-10-22-guard-twin-native-surface-questions`); neither was needed, so no lockfile, catalog, plugin or wrapper line moved and this stayed a fix. **iOS:** six `iosApiTest` tasks (root `build.gradle.kts`, `KlibSurface.kt`) run `klib dump-abi` from the Kotlin/Native distribution that matches `libs.versions.kotlin` (2.3.20, never the stdlib's 2.3.21, and asked for 2.3.21 they fail instead of downloading), for both iOS targets, and compare the normalised result with three goldens, `api/*.ios.txt` (104, 25 and 1 entries). The normalisation is load-bearing and QA took each rule out in turn: dropping the header and IR signatures, flattening a member to `<enclosing>: <declaration>`, filtering `$stableprop` by name, and erasing Ktor inside `kotlin/FunctionN<...>` so stream's `Function0<HttpClient>` reads as the noop's `Function0<Any?>`. `structure/twins.txt` gained a fourth column and `NoopTwinTest` fails a pair without its file; each golden is a declared input of both modules' task, which QA showed by deleting the declaration and watching a hand-edited golden stay UP-TO-DATE and green. **Android** needs no tool: its output is JVM bytecode, so each pair's two tests run in `testAndroidHostTest` against the JVM golden, read only (`inspector.api.regenerate` reaches `jvmTest` alone). Putting the six host tests on the classpath found one surprise: `:inspector-core`'s failed on `okhttp3/Interceptor` because OkHttp is `compileOnly` there, so `libs.okhttp` joined core's and noop's `androidHostTest` (an existing catalog entry, test-only, recorded as a deviation). Another found a stream-only fact: with the `@file:JvmName("StreamSinkKt")` pin deleted, only stream's host test fails, with `Contract class dev.inspector.stream.StreamSinkKt is not on this module's classpath, so its members would not be compared at all.` **Found by the build, not fixed here:** in `:inspector-core` and `:inspector-noop`, `src/iosMain` is never compiled, because their hand-written `jvmAndAndroidMain` links turn the default hierarchy template off; a file there builds clean and ships nowhere. The guard reads the real klibs, so it stays honest; the trap is recorded in `twins-and-api.md` and placed as a candidate in `ROADMAP.md` §6.
+
+  **Left open.** The Android half was proven red from CI only (throwaway branch, deleted, never merged; runs 39852405138 and 39852841927), because neither the builder's nor QA's machine has an Android SDK. Klib dumps carry no parameter names, so a renamed parameter in iOS-only code passes; the stream constructor matches at source level only (IR signatures differ); a klib compiled against one twin and linked against the other is untested; off macOS the iOS guard fails by design.
+
+  cost: not recorded — built in the 2026-10-22/23 coordinated run, an architect note then one engineer session, no QA before merge; QA after merge, 1 round
+
 ### Bugs found, not fixed
 
 - ~~**`ExportMarkdown.kt:158` prints the query twice.**~~ **Done, 2026-10-18.** The line is
@@ -2253,6 +2282,63 @@ Not verified. Placed by the product owner on 2026-10-22, checked in Chrome and a
 
   cost: not recorded — built in the 2026-10-22 coordinated run, one engineer session, no QA before merge; QA after merge, 1 round
 
+- ~~**`#/txn/<id>` has no visible way back.**~~ **Done, 2026-10-23.** PR #183 merged as `abb3622` (row 28). KIN-141 is Done on QA's pass, one round, no blocking findings; `build`, `release-swap`, `repo` and `web` passed on the PR and on main's push run. The text is moved verbatim below.
+
+- **`#/txn/<id>` has no visible way back.** *Ticket label:* `item:web-txn-page-way-back`. From the
+  hand-over and QA on `item:web-foundation-list-room` (1b).
+
+  **For whom.** A web UI user on a Mac who opened a call on its own page, from `⤢` or from an address
+  someone pasted. Only the browser's Back and `Esc` leave the page, and nothing on it says so. A
+  call opened in a new tab has no Back to press.
+
+  **Acceptance criteria.**
+  - The `#/txn` page shows a control that leaves it, keyboard-reachable and named for where it goes.
+    It does what `Esc` does (`leaveTxnFull`): Back when `⤢` pushed the page, otherwise the session's
+    list.
+  - At 400px it is on screen, and in an export it works from the embedded data.
+  - A probe line presses it in both cases. It is proven red with the control removed.
+
+  **Out of scope.** Changing what Back and `Esc` do. The size of the `⤢` and `⇥` glyphs, which is
+  Web UI polish's. This does not overturn a recorded decision: `web-ui.md` records that Back and
+  Escape leave the page, not that nothing else may. Surfaces: web UI only. **Size:** S.
+
+  **What was built and learned.** A `← traffic` button at the start of the tools row on `#/txn`, named "Back to the traffic list" with `(Esc)` in its title, 24 px tall, reached by Tab as the thirteenth focusable on the page. Its click handler is `leaveTxnFull` itself, not a copy, so it does what Esc does: Back when `⤢` pushed the page, otherwise the session's list. It is hidden in the drawer by the show rule `#panes.txn-full .txn-back`. QA's by-hand check opened a fresh tab straight on `#/txn/a0000002` and a real click replaced the page with the list with history length still 1. Three guards, each red: the control removed (live and archive both fail, `found no #txn-back, so this checked nothing`), always opening the list (Back and Forward fail), and the show rule removed (all four Chrome readings fail). **A trap for the next red proof:** removing only the button and leaving `$('txn-back').addEventListener` in `99-init.js` throws at start and fails 34 archive checks for that reason alone; the targeted red removes both.
+
+  **Left open.** Pressing `← traffic` a second time after Forward replaces the call's entry rather than going Back, as Esc does (both are `leaveTxnFull`, and `txnPushed` is cleared on leaving); the AC asked for exactly Esc's behaviour. The button scrolls away on a long call's page.
+
+  cost: not recorded — built in the 2026-10-22/23 coordinated run, one developer session, no QA before merge; QA after merge, 1 round
+
+- ~~**A brushed stretch under a filter does not say that older matches may be in it.**~~ **Done, 2026-10-23.** PR #184 merged as `2af3168` (row 29). KIN-142 is Done on QA's pass, one round, no blocking findings; `build`, `release-swap`, `repo` and `web` passed on the PR and on main's push run. The text is moved verbatim below.
+
+- **A brushed stretch under a filter does not say that older matches may be in it.** *Ticket label:*
+  `item:web-stretch-says-older-matches`. From QA on `item:web-list-says-what-it-holds` (its "mixed
+  stretch" note) and `docs/STATUS.md` → Not verified.
+
+  **For whom.** A web UI user on a long session, with a filter that matches more calls than the list
+  loads, who brushes a stretch that reaches below the oldest match loaded. The list draws the loaded
+  matches in the stretch, and the note says `at least 10 calls hidden by the filter`. Nothing says
+  that the stretch may also hold matches older than the ones loaded, so the list reads as all the
+  matches in the stretch.
+
+  **Acceptance criteria.**
+  - In that case the list's note also says that the stretch reaches below the oldest of the `N`
+    matches loaded, so older matches in it are not drawn, and that narrowing the filter reaches them.
+  - It claims no count of those matches. The page evaluates no filter (`web-ui.md`, "Under a filter
+    it claims no count"), so it has none.
+  - A stretch wholly above the oldest match loaded reads as it does today.
+  - A line in `check-web-static.js` over the 3016-call stub and one in the live probe over the long
+    session, each proven red with the sentence removed.
+
+  **Out of scope.** A daemon route that counts the matches in a range. If the architect finds that
+  the sentence cannot be true without one, the item comes back to the product owner. The header's
+  wording. Surfaces: web UI only. **Size:** S.
+
+  **What was built and learned.** `belowLoaded()` in `15-session-data.js` is now the one rule for "this stretch reaches below the oldest of the loaded matches"; `olderMatchesNote()` writes the clause and `filterNote` takes it as an extra part before `clear filter`, and `olderThanLoaded` (the empty text) reads the same rule, so the two cannot disagree. The note reads `... newest 1000 of 1201 matches loaded - this stretch reaches below the oldest of the 1000 matches loaded, so any older matches in it are not drawn - narrow the filter to reach them - clear filter`. It says "any" and no number, and QA's third red showed why: a count put in the clause read "so 100 older matches", taken from the *unfiltered* copy, the very claim the page cannot make. A stretch wholly above the oldest loaded match reads as before. `25-traffic-list.js` went from 587 to 582 lines. Each red fails exactly the two lines (`stretch below loaded matches` over the 3016-call stub, `long stretch below matches` over the 1203-call session) and nothing else.
+
+  **Left open.** The Chrome reading `run toggle big 1440 oldest-first` is flaky under load (QA's last three two-tree runs failed it on base and head alike; 6 of 6 ok alone), and is not this change. QA's first by-hand look showed no clause because its navigation changed only the fragment and left the old script loaded; a real reload showed the new code. The daemon's static files carry no cache headers, but caching was not the cause.
+
+  cost: not recorded — built in the 2026-10-22/23 coordinated run, one developer session, no QA before merge; QA after merge, 1 round
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -2349,6 +2435,11 @@ tag cut before any of this existed.
 | ~~Findings, and the payment-safety rules~~ **Done, 2026-10-22** (KIN-111 to KIN-119; PRs #151 to #153, #160 and #164; one round of QA each; the item closed with detection T5) *(was row 26)* | §6 → Findings | `item:findings-payment-safety` | L |
 | ~~Shared body evidence: `RouteKey.mutation` and `service/BodyShape.kt`'s contract~~ **Done, 2026-10-22** (KIN-112, PR #151, merge `428745a`) *(was row 26a)* | §6 → Findings | `item:findings-payment-safety` | S |
 | ~~Sensitive-data detection — detect, never redact~~ **Done, 2026-10-22** (KIN-120 to KIN-124 and KIN-127; PRs #156, #158, #161 and #169; one round of QA each) *(was row 30)* | §6 → Sensitive-data detection | `item:sensitive-data-detection` | M |
+| ~~Session diff~~ **Done, 2026-10-23** (KIN-135 to KIN-140; PRs #180 and #185, merges `f59f3d4` and `1b7a45b`; one round of QA for each PR) *(was row 24)* | §6 → Session diff | `item:session-diff` | L |
+| ~~A pair guards a public declaration that exists only on iOS or Android~~ **Done, 2026-10-23** (KIN-143, KIN-144; PR #182, merge `c62d39e`; one round of QA) *(was row 25)* | §3 → Guards | `item:guard-twin-native-surface` | M |
+| ~~`#/txn/<id>` has a visible way back~~ **Done, 2026-10-23** (KIN-141, PR #183, merge `abb3622`; one round of QA) *(was row 28)* | §3 → Bugs found | `item:web-txn-page-way-back` | S |
+| ~~A brushed stretch under a filter says older matches may be in it~~ **Done, 2026-10-23** (KIN-142, PR #184, merge `2af3168`; one round of QA) *(was row 29)* | §3 → Bugs found | `item:web-stretch-says-older-matches` | S |
+| ~~The Central bundle ships only what Central requires~~ **Done, 2026-10-23** (no ticket, PR #179, merge `936dbbf`; one round of QA) *(was row 13g)* | §6 → Release 1.4.0 | `item:central-bundle-trim` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
@@ -3741,6 +3832,71 @@ config already covers.
 
 cost: not recorded — built in the 2026-10-22 coordinated run, engineer and developer sessions, T1 to T4 in D and T5 in W, no QA before merge; QA after merge, 1 round each
 
+### Session diff — done 2026-10-23
+
+**Done, 2026-10-23.** PR A (daemon, KIN-135 to KIN-138) merged as `f59f3d4` (#180) and PR B (web, KIN-139 and KIN-140) as `1b7a45b` (#185); the tickets came in PR #178. All six are Done on QA's passes, one round each, no blocking findings. The text is moved verbatim below.
+
+
+`GET /api/diff?a=&b=&filter=`, defaulting to the newest session against the previous one of the
+same app; an optional `since:marker("…")` per side to compare one stretch of two runs.
+
+- Endpoints added and removed; call count changed (`/transfer` 1× → 2×, loudest on mutations);
+  status mix changed; latency regressed **only** when n ≥ 5 on both sides, the change is ≥ 25%
+  **and** ≥ 50 ms — anything less is noise drawn as signal; request and response **shape** (JSON key
+  paths and types) from bodies on disk.
+- **A body capture did not keep is "unknown", never "field removed".** Same principle as
+  `BodyOmission`: the diff must not assert what capture could not see.
+- MCP `diff_sessions`, a Markdown form, and the Diff page.
+
+Endpoint identity here is the **route** — the template decided under Endpoint latency stats — so
+"endpoints added and removed" means routes, and the diff says so in its labels.
+
+The route is `archive/RouteTemplates.kt`'s, built in `item:endpoint-latency-stats`, including the `routeTemplates` overrides; the diff calls it and never templates a path itself.
+
+**T1 shrinks, 2026-10-22:** `JsonPaths.walk`, `group` and `isAtOrUnder` were carved out as KIN-127 (`item:sensitive-data-detection`) and are on main.
+
+**Shared body evidence moved to findings, 2026-10-22** (the maintainer's proxy, confirmed by the
+architect). `RouteKey.mutation` and the contract half of `service/BodyShape.kt` (`BodySide`,
+`BodyState`, `BodyEvidence.state`, `BodyEvidence.read` and `JsonPaths.redactedPaths`) are built as
+the Shared body evidence ticket under `item:findings-payment-safety`, to the names and signatures
+of this item's design §10. **Diff T1 shrinks by that piece and depends on it**: it keeps
+`SessionStamp`, the route-stats and Markdown moves, and adds `walk`, `group`, `foldIdKeys` and
+`isAtOrUnder` to the same `JsonPaths` object. It renames nothing the shared piece built. Findings
+and detection now come before this item; see "Order from here".
+
+**Decided 2026-10-22 by the maintainer's proxy: the recommendation below, made stricter.** A key
+path is "removed" only when every JSON body on the other side was read complete, and nothing at or
+under a redacted path is compared. Cross-origin matching is not in this item; it is in "Candidates,
+not ordered" below.
+
+*Was an open decision —* **"unknown" must cover truncated bodies, not only omitted ones.** *(Review,
+2026-10-17. Does not block the start; it is an acceptance criterion.)* The rule above is phrased
+around bodies capture did not keep, which reads as `reqBodyOmitted`/`resBodyOmitted`. A body over
+the cap is a different case: capture keeps a prefix, writes it to disk with a `*BodyRef`, sets
+`reqBodyTruncated`/`resBodyTruncated`, and leaves the omission reason **null** — so a diff that only
+checks omission treats it as captured. The cap is `bodyCaptureMaxBytes`, 256 KB by default and set
+by the app, so two runs can even truncate at different points. A strict JSON parse of a cut prefix
+fails, but a lenient or streaming key-path walk succeeds up to the cut and then reports every later
+key as removed — the exact false claim the rule exists to prevent, on exactly the large responses
+people diff.
+
+Options: treat a truncated body as unknown; or walk its prefix for key paths that *are* present and
+count them as "seen", never anything as removed. Recommended: the second is tempting and not worth
+its subtlety — **shape comes only from bodies that are complete (not truncated, not omitted) and
+parse strictly; everything else is unknown for that side**, and a key path is "removed" only when
+the other side has at least one complete sample and no complete sample contains it. One adjacent
+case belongs in the same criterion: under `Redaction.On()` a redacted value becomes the placeholder
+string, so a number redacted on one side and not the other would read as a type change. Paths named
+in `redacted[]` are not compared for type.
+
+**Decided 2026-10-21 (design note), confirmed 2026-10-22 by the maintainer's proxy: unknown covers truncated bodies, as recommended, made stricter twice** — a key is removed only when every JSON body on the other side was read whole, and nothing at or under a redacted path is compared. The paragraph above is the record. Cross-origin matching is `ROADMAP.md` §6's candidate "Match routes across origins in the diff": the diff keeps the host in the key, so a staging run against a production run reads as every route added and removed.
+
+**What was built and learned.** PR A: `service/SessionDiff*.kt`, `DiffMarkdown`, `GET /api/diff` and `/api/diff.md`, MCP `diff_sessions`, `inspector diff`, `archive/SessionStamp`, `service/MarkdownText`, and a fourth, older session in the probe fixture (`2025-12-30T09-00-00_probe_ci_debug`) so the diff has a real base. Rows are read over every row, not `queryTransactions`' first 999: on the long session `/v3/long/bulk` is removed with 1201 calls on REST, MCP and the CLI, and QA's red of reading through `queryTransactions(..., 5000)` gave `expected <1201> but was <999>` in four classes. The rules held under fifteen red proofs QA re-ran: the 5-sample, 50 ms and 25% latency thresholds (`>` for `>=` and `n >= 4` both fail), unknown never becoming removed (`known(B)` dropped gives `$.next` removed), nothing under a redacted path compared, no header or body value in any reply, and the cache keyed on a `SessionStamp` that moves on an appended row or marker. **The builder departed from the note six ways, all recorded:** strict JSON also checks literals (kotlinx accepts `NaN` and `01`); response tallies count only attempts that got a status, so one timeout does not read as "json to empty"; `aChosen` is set per reply because a given A and a found A share a cache entry; the Redactor's placeholder became `JsonPaths.PLACEHOLDER`; the note's `diff mutation loud` live line could not hold, because `added` sorts above `statusMix` and the fixture's loud `DELETE .../cart/items` is row 0, so PR B's probe looks the orders row up by name (QA showed the lookup load-bearing: with the page sorting by route it fails `rows above not loud: 5`); and DAEMON.md's Diff-page sentence waited for PR B. PR B: the Diff page (`96-diff.js` 512 lines, `88-diff.css`) draws the daemon's reply and computes nothing, with the reply's order, kinds, loud mark, verdicts and the daemon's own `why` for unknown; `compare (2)` and a row's `diff` on Sessions; `calls in A` and `calls in B` through the Stats caveat; hidden in an export. Probe counts went 299/58 to 321/61, static 133 to 139. **One finding crosses both PRs:** by default a route whose only news is an unsure key counts as unchanged and is dropped from the `unchanged=false` view on MCP, the CLI and the page, so a removal may be hidden behind "0 routes" (placed as a candidate in `ROADMAP.md` §6).
+
+**Left open.** Diff timings on a real large session (the 160k-call `huge` pair and the 20,000-call scratch pair are fixtures; the scratch pair exhausts the 256 MiB body budget, so some removed keys read as unsure). A recording B, the `diff` button on a recording row, and a deleted session under a shown Diff page: the fixture has no recording session, and the last is verified by reading code only. The row button's accessible name runs the method into the URL, and the latency line wraps mid-value at 1440 (both for the design pass).
+
+cost: not recorded — built in the 2026-10-22/23 coordinated run, one engineer session for the tickets and PR A and a developer session with an engineer subagent for PR B, no QA before merge; QA after merge, 1 round each
+
 ### Release 1.4.0
 
 #### The release page and `ACCESS.md` name the same place to get the library
@@ -3807,3 +3963,25 @@ workflow, unless the rehearsal finds a fault in it. **Size:** S.
 **Left open.** The Android aars were never built or scanned locally (no SDK on the machine); the seven Android POMs were generated and checked, and CI's `build` and `release-swap` build the aars on macOS. Signing and the Central bundle were out of scope. `PublishedPomTest` has not run on a Linux developer machine. The last two are candidates in §6.
 
 cost: not recorded — rehearsal in the 2026-10-22 coordinated run, an engineer session per round plus an architect note for F1 and an engineer session for the three fixes, no QA before merge; QA after merge, 1 round each
+
+#### The Central bundle ships only what Central requires (row 13g)
+
+**Done, 2026-10-23.** PR #179 merged as `936dbbf`. There is no ticket: the maintainer asked for it on 2026-10-22 and it was built and merged the same day. QA verified it from a detached copy, one round, no blocking findings (counts below).
+
+*Ticket label:* `item:central-bundle-trim`
+
+**The user and the problem.** The maintainer publishing to Maven Central. Central counts every file an organization publishes, checksums and signatures included, against a limit of 1,000 files a month. The 1.3.0 bundle held 2,000 files, and two releases in one month (4,000 files) drew a warning from Sonatype whose grace period ends 2026-11-10; after that Central refuses a release that would keep the organization over the limit.
+
+**Acceptance criteria.**
+- `centralBundle` leaves out `**/*.asc.*`, `**/*.sha256` and `**/*.sha512`, so every artifact has exactly `.asc`, `.md5` and `.sha1` companions, and the file count is recorded. The red proof: removing the new `exclude` line brings the extra files back.
+- GitHub Packages publishing is unchanged.
+- The release job stages the bundle with USER_MANAGED, so the Portal's validation of the first trimmed release is read before it is published; if it fails the release stays staged and the maintainer is told.
+- The 1.4.0 tag is cut no earlier than 2026-11-01.
+
+**Out of scope.** Asking Sonatype to raise the limit, which is the maintainer's. A guard that pins the bundle's file count. **Size:** S.
+
+**What was built and learned.** One hunk in `build.gradle.kts`: `centralBundle` adds `exclude("**/*.asc.*", "**/*.sha256", "**/*.sha512")`, and `docs/decisions/release.md` records why and says not to restore them. **The filter acts at the zip, not in staging**: the staging repository still holds all ten kinds, which is also why GitHub Packages (Gradle's own `maven-publish`, which writes every checksum) is unchanged; `git diff` outside `docs/` and `backlog/` is that one file, `release.yml` is untouched, and `gradlew tasks --all` lists the same 28 GitHub Packages publish tasks on both trees. QA counted on the 28 non-Android publications (165 published files) with a throwaway OpenPGP key made from the BouncyCastle jars in Gradle's own `lib/plugins`, deleted afterwards (there is no `gpg` here): **1,650 files before, 660 after**, every published file still with `.md5`, `.sha1` and `.asc` (0 missing), the zip 3,438,063 to 3,091,647 bytes. With the seven Android publications, 35 more published files, the same per-file rule gives **2,000 before and 800 after**, as `release.md` says. **A trap QA hit:** the full `centralBundle` cannot run without an Android SDK even with the Android publish tasks excluded, because `build.gradle.kts` makes every publish task depend on every `Sign` task, `signAndroidPublication` included, which needs the aar. QA excluded that signing task for the seven modules and ran the real `centralBundle` with `-x stageCentralBundle`.
+
+**Left open.** The Android part of the bundle was not built, so 800 is extrapolated. The throwaway signatures were never checked against Central's validation and nothing was uploaded: whether the Portal accepts the trimmed bundle is only known when 1.4.0 is staged. Even trimmed, one release uses about 80% of the monthly limit, so the rules in `ROADMAP.md` (tag no earlier than 2026-11-01, at most one Central release a month) stand. Whether to ask Sonatype to raise the limit, and whether a guard should pin the file count, are open.
+
+cost: not recorded — built in the 2026-10-22 coordinated run, a design-session request and the coordinator's push, no QA before merge; QA after merge, 1 round

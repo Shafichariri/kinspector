@@ -14,6 +14,10 @@ detection T5), and the release fixes have their own section. Whatever `docs/INTE
 the release-steward re-checks that, and every "1.3.0 and earlier" here and in `DAEMON.md` §8,
 against `git tag` at the cut.
 
+The sixth close, on 2026-10-23, added the session diff, polish part 3 and rows 28 and 29. Each of those
+lines is marked QA verified on the evidence in `docs/STATUS.md` → Verified, and the Central bundle
+trim owes none (see "Owe nothing").
+
 ## Action needed for some apps
 
 These change the library, or what a script or agent reads from the daemon. The release's own
@@ -76,6 +80,28 @@ These change the library, or what a script or agent reads from the daemon. The r
   names no session or call, so it also covers sessions recorded later. Settings edits
   `firstPartyHosts` and nothing else under `findings.sensitive`; field names and value rules stay in
   the file, so the line does not say Settings edits them. No MCP tool dismisses.
+- *"Daemon and web UI: a Diff page, `GET /api/diff`, its Markdown form `GET /api/diff.md`, the MCP tool
+  `diff_sessions` and `inspector diff` compare a run with the one before it, or any two sessions,
+  route by route: routes added and removed, calls per route with mutations first, status codes on one
+  side only, p50 latency judged only with 5 or more responses per side, mean sizes, header names and
+  JSON key paths and types; a body capture did not keep whole is reported as unknown, never as a
+  removed key. Pick two sessions on the Sessions page and press `compare`, or press `diff` on a
+  session's row; a route in the Diff page opens its calls in either session."*
+  `item:session-diff` (KIN-135 to KIN-140, PRs #180 and #185). QA verified, both halves. Daemon-only
+  `INTEGRATION.md` entry, like the lines before it: the release-steward adds
+  `diff_sessions(a, b, filter, sinceA, sinceB, limit, unchanged)` to §10's list of MCP tools; nothing
+  in a consuming app changes. "Never as a removed key" is load-bearing and guarded. Two caveats keep
+  the line true: by default a route whose only news is an unsure key counts as unchanged and is not
+  listed, so the line does not say the default view shows every possible change; and the timing on
+  very large sessions is not claimed (the 256 MiB body budget can run out, which the reply says).
+  The Diff page is not in an exported file.
+- *"Web UI: empty pages say why there is nothing (Stats, Sessions, the traffic list and the detail
+  pane); Settings shows the session's counts when opened directly, in words that say what they count;
+  and Settings edits `routeTemplates`, one template per line, applied when the daemon restarts, with
+  a link from the Stats page."*
+  `item:web-ui-polish` PR A part 3 (A4 to A6, KIN-105 to KIN-107, PR #181). QA verified, with the save
+  tried against a real daemon and its `config.json`. With parts 1 and 2 above, PR A is complete. The
+  line does not say the editor applies without a restart: it does not. PR B is not merged.
 - *"Daemon and web UI: a Stats page, `GET /api/sessions/{id}/stats`, the MCP tool `route_stats` and
   `inspector stats` show per-route calls, attempts, retries, 4xx, 5xx and transport-failure rates and
   p50/p90/p95/p99/max latency, with p95 and p99 reading `n<20` below 20 samples; paths group into
@@ -112,8 +138,8 @@ These change the library, or what a script or agent reads from the daemon. The r
   Settings, and `?` for the list of keys; the top of the list is now `g g`, not `g`. Typing in the
   replay editor no longer triggers shortcuts."*
   `item:web-ui-polish` PR A parts 1 and 2: A1 and A2 (KIN-102, KIN-103, PR #150) and A3 (KIN-104,
-  PR #155, "Page keys" in STATUS → Verified), all QA verified. A7 (KIN-108, the contact sheet) owes no line. A4 to A6 and PR B
-  come after 1.4.0. `g g` is load-bearing: it is the one change to an existing key. No
+  PR #155, "Page keys" in STATUS → Verified), all QA verified. A7 (KIN-108, the contact sheet) owes no line. A4 to A6 are the next line; PR B
+  is not merged. `g g` is load-bearing: it is the one change to an existing key. No
   `INTEGRATION.md` bump of its own.
 - *"Web UI: the Sessions page names the folder this daemon keeps its sessions in, whatever `--data`
   is, where it always said `~/.inspector/sessions`. An exported file, which has no Sessions page,
@@ -184,6 +210,16 @@ touched, so none has an `INTEGRATION.md` entry of its own.
   file. "Only between the parts" is load-bearing: a long hostname label is held whole, so one very
   long route makes the route column wider and leaves fewer number columns beside it until the table
   is scrolled.
+- *"Web UI: a call opened on its own page (`#/txn/<id>`) has a `← traffic` button back to the list,
+  in the app and in an exported file."*
+  `item:web-txn-page-way-back` (KIN-141, PR #183). QA verified. It does what Esc does, so after
+  Back and Forward a second press replaces the call's entry rather than going Back; the line does
+  not say it is a browser Back.
+- *"Web UI: under a filter, a brushed stretch that reaches past the matches loaded says that older
+  matches may be in it and how to reach them (narrow the filter)."*
+  `item:web-stretch-says-older-matches` (KIN-142, PR #184). QA verified. The note says "any" and
+  claims no count, because the page evaluates no filter; a stretch wholly among the loaded matches
+  reads as before.
 
 ## Daemon, MCP and exports
 
@@ -252,5 +288,9 @@ Found by the 1.4.0 release rehearsal and fixed before the tag. No code of yours 
 `item:structure-split-mcp-test` and `item:structure-phase-h` (tests and file moves only), polish A7
 (the contact sheet), the guard and script items merged on 2026-10-21 and 2026-10-22, the release
 rehearsal (`item:release-rehearsal`, KIN-130: evidence, no change), the release page's boilerplate
-(`item:release-notes-boilerplate`: it is the notes, not a change in them), and the landing page
-fitting a 400 px window (`item:landing-page-fits-400`, the site only).
+(`item:release-notes-boilerplate`: it is the notes, not a change in them), the landing page
+fitting a 400 px window (`item:landing-page-fits-400`, the site only), the twin guard
+on iOS and Android (`item:guard-twin-native-surface`, KIN-143 and KIN-144: CI and tests only, no
+library change), and the Central bundle trim (row 13g, PR #179: `.sha256`, `.sha512` and `.asc.*`
+files no longer in the Central zip, which a consumer's Gradle or Maven resolves without; the
+artifacts, `.md5`, `.sha1` and `.asc` are the same).

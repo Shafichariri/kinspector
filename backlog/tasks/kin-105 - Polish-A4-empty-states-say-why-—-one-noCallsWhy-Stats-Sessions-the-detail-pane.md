@@ -3,11 +3,11 @@ id: KIN-105
 title: >-
   Polish A4: empty states say why — one noCallsWhy, Stats, Sessions, the detail
   pane
-status: In Progress
+status: Done
 assignee:
   - '@engineer'
 created_date: '2026-10-22 07:27'
-updated_date: '2026-10-22 19:58'
+updated_date: '2026-10-23 07:23'
 labels:
   - 'item:web-ui-polish'
 dependencies: []
@@ -22,14 +22,14 @@ Order row 27, PR A (built screens). Design: the architect's note for item:web-ui
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The note's §9 A4 criteria hold, each guard shown red; 25-traffic-list.js at most 589 lines
+- [x] #1 The note's §9 A4 criteria hold, each guard shown red; 25-traffic-list.js at most 589 lines
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
-- [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
+- [x] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -56,4 +56,12 @@ Done before the park: noCallsWhy() in 15-session-data.js (413 lines); renderList
 Added now: Chrome 'polish <w> empty whole' in scripts/lib/polish-cases.js: served at 1440 and 400, Stats in its three cases, Sessions, and the detail pane at 1440 (below 1200px it is a closed drawer with no call open), each sentence due and whole in the window, counted in text line boxes.
 Red proofs: 'no calls why', 'stats empty why', 'sessions empty why' and the Pace red as noted before the park. 'polish 400 empty whole': with '#stats-empty, #session-rows td { white-space: nowrap }' -> 'FAIL polish 400 empty whole: cut (sessions: past the window (62..629 of 400), clipped by #page-sessions)'; with '#stats-empty span { white-space: nowrap; font-size: 15px }' -> 'FAIL polish 400 empty whole: cut (stats no session: past the window (78..432 of 400), clipped by #page-stats, wider than its box)'. Restored: 'ok polish 1440 empty whole: whole (detail in 1 line box, stats ended in 1 line box, ...)', 'ok polish 400 empty whole'.
 State after this patch alone: ci.yml 301/58; static 134/0; live 301 passed; archive 58 passed (tree served ahead of the jar on 8103).
+
+Closed 2026-10-23 by the delivery tracker. PR #181, merge 7f49e14. QA report: qa/web-ui-polish-part3-report.md (run folder of 2026-10-20), verdict close - yes.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+QA (Doug): check-web-static 134/0; live probe 304/0; archive 59/0; Chrome 342 readings, 0 failed on head, 3 failed on base (moved: polish settings first load counts, polish 1440/400 empty whole). A4 empty states: each sentence checked in jsdom and Chrome, reds re-run (stats empty why, sessions empty why, no calls why, 400 empty whole). 25-traffic-list.js 587 lines (max 589). Merge 7f49e14 (#181). QA report web-ui-polish-part3-report.md.
+<!-- SECTION:FINAL_SUMMARY:END -->
