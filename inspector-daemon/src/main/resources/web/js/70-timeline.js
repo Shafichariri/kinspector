@@ -93,7 +93,7 @@ function renderTimeline({ follow = true } = {}) {
 
   const ends = spanEndsFor(state.allSignals);
   // Through `timelineEntries`, the mirror of the model's `timeline()`, so a marker at exactly a
-  // call's `mono` is drawn before it. One stable sort over all three streams with markers added
+  // call's `mono` is drawn where the model puts it. One stable sort over all three streams with markers added
   // last put a tied marker after the call it introduced — the opposite of the list beside it.
   const calls = state.transactions.filter((txn) => inRange(txn.mono));
   const signals = state.signals.filter((signal) => inRange(signal.mono));

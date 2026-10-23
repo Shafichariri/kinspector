@@ -89,27 +89,48 @@ function visitIndexAt(list, mono) {
 
 /**
  * Mirror of `timeline()` for one visit's contents, oldest first: calls then signals in a stable
- * sort, with each marker placed before anything at the same `mono` (`<=`).
+ * sort, with each marker placed before anything at the same `mono` (`<=`). Then, inside each
+ * millisecond, the rows carrying capture `seq` go by it in the slots they already hold, so a row
+ * without `seq` — an older archive, a marker the host posted — keeps exactly that place.
  */
 function timelineEntries(txns, markers, signals) {
   const body = [
-    ...txns.map((txn) => ({ kind: 'txn', mono: txn.mono, txn })),
-    ...signals.map((signal) => ({ kind: 'signal', mono: signal.mono, signal })),
+    ...txns.map((txn) => ({ kind: 'txn', mono: txn.mono, seq: txn.seq ?? null, txn })),
+    ...signals.map((signal) => ({ kind: 'signal', mono: signal.mono, seq: signal.seq ?? null, signal })),
   ].sort((a, b) => a.mono - b.mono);
   const ordered = [...markers].sort((a, b) => a.mono - b.mono);
+  const markerEntry = (marker) => ({ kind: 'marker', mono: marker.mono, seq: marker.seq ?? null, marker });
   const entries = [];
   let next = 0;
   for (const entry of body) {
-    while (next < ordered.length && ordered[next].mono <= entry.mono) {
-      entries.push({ kind: 'marker', mono: ordered[next].mono, marker: ordered[next] });
-      next++;
-    }
+    while (next < ordered.length && ordered[next].mono <= entry.mono) entries.push(markerEntry(ordered[next++]));
     entries.push(entry);
   }
-  for (; next < ordered.length; next++) {
-    entries.push({ kind: 'marker', mono: ordered[next].mono, marker: ordered[next] });
-  }
+  for (; next < ordered.length; next++) entries.push(markerEntry(ordered[next]));
+  timelineOrderTies(entries);
   return entries;
+}
+
+/**
+ * Mirror of `orderTiesBySeq`: one comparator of `mono` then `seq ?? -Infinity` would move a row
+ * without `seq` ahead of a tied row that has one, which `schema.md` forbids, so only the `seq`
+ * members of a tie are re-sorted, among their own slots. Null is checked explicitly: `?? -Infinity`
+ * on two nulls subtracts to `NaN`.
+ */
+function timelineOrderTies(entries) {
+  for (let start = 0; start < entries.length;) {
+    const mono = entries[start].mono;
+    let end = start;
+    let carrying = 0;
+    for (; end < entries.length && entries[end].mono === mono; end++) if (entries[end].seq !== null) carrying++;
+    if (carrying > 1) {
+      const slots = [];
+      for (let i = start; i < end; i++) if (entries[i].seq !== null) slots.push(i);
+      const bySeq = slots.map((i) => entries[i]).sort((a, b) => a.seq - b.seq);
+      slots.forEach((slot, i) => { entries[slot] = bySeq[i]; });
+    }
+    start = end;
+  }
 }
 // @mirror-end visits
 
