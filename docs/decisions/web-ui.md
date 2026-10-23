@@ -442,6 +442,17 @@ signal drawn`, `traffic lone marker drawn`, `traffic paused still` and `traffic 
 through a real daemon. Each was proven red with its rule removed, the bursts with the per-message
 branches put back.
 
+A live call's waterfall and path ride it as well. The call branch sent the timeline and the glance
+through the timer but still redrew the waterfall and the path per call, so 50 calls cost 100
+whole-session redraws beside the timeline's few. A call now owes the redraw both, at most once per
+redraw each, and a lone call reaches them a tick and a render after it arrives, as it reaches the
+timeline. The list, the header and the tab bar still move per call, unchanged.
+`check-web-static.js`'s `live call burst` holds it in jsdom, and `measure-web-ui.js --only
+traffic`'s `traffic call burst`, `traffic lone call waterfall` and `traffic lone call path` through
+a real daemon; the lone call on the path is a failure on an endpoint of its own, because the path
+summarises a busy visit's calls into a count and names only failures. The burst was proven red with
+the per-call redraws put back, the lone readings with the timer at 400 ms.
+
 **No row array is spread into an argument list.** Every argument is a stack slot, so
 `Math.min(...monos)` throws `RangeError: Maximum call stack size exceeded` once the array is long
 enough — past about 110,000 elements in Chrome and 120,000 in Node. Once the whole-session calls
