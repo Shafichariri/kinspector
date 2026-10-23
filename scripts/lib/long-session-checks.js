@@ -363,4 +363,68 @@ function checkWaterfallPastTheClamp(sources) {
   return lines;
 }
 
-module.exports = { checkLongSession, checkPathPastTheClamp, checkWaterfallPastTheClamp, auditNoArgumentSpread, stubNode, stubPage };
+/**
+ * The waterfall's groups with calls over the same session, with `Pay` from 2500 added so a group
+ * the held rows cover whole exists beside one they do not. The list holds 2016..3015: `Checkout`
+ * began at 1000, so its count covered 484 of its 1500 calls and said nothing of the rest, while the
+ * path said "older calls not loaded". It now counts "calls loaded" and says the older ones are not,
+ * with no count of them; while the copy is read it says what the stubs say. `Pay`, wholly held, and
+ * `Home` under `path:/v3/auth`, which nothing clamps, read as before. So does `Pay` opened at 2010,
+ * just below the oldest call held, with the six calls before 2016 gone: the visit began below that
+ * call, yet the copy shows it none older, which only the copy can say. Each stats line is checked
+ * whole, so a count of the unloaded calls, or a caveat on a group wholly held, fails it.
+ */
+function checkWaterfallGroupsPastTheClamp(sources) {
+  const lines = [];
+  const payAt = (mono) => [...CLAMP_SCREENS, { id: 'pay', tag: 'screen', name: 'Pay', mono }];
+  const reading = 'being read';
+  const opened = 'opened below held';
+  const cases = [
+    ['', { Checkout: 'older calls not loaded', Pay: null }],
+    ['path:/v3/shop', { Checkout: 'older calls not loaded', Pay: null }],
+    ['path:/v3/auth', { Home: null }],
+    ['being read', { Checkout: reading, Pay: null }],
+    [opened, { Pay: null }],
+  ];
+  for (const [filter, want] of cases) {
+    const pending = filter === 'being read';
+    const state = clampState(pending || filter === opened ? '' : filter, 'waterfall');
+    const screens = payAt(filter === opened ? 2010 : 2500);
+    Object.assign(state, { screens, allSignals: screens });
+    if (filter === opened) {
+      const calls = state.allTransactions.filter((t) => t.mono < 2010 || t.mono >= 2016);
+      Object.assign(state, { allTransactions: calls, transactions: calls.slice(-1000), sessionTotal: calls.length, matched: calls.length });
+    }
+    if (pending) Object.assign(state, { allTransactions: [], allSessionId: null, arriving: { transactions: { sessionId: 'S' }, signals: null } });
+    const { page } = stubPage(sources, state, { globals: { methodClass: () => '', statusClass: () => '', select() {} } });
+    page.renderWaterfall();
+    const groups = findAll(page.$('waterfall'), 'wf-group').filter((b) => findAll(b, 'wf-row').length).map((block) => ({
+      name: findAll(block, 'wf-name').map(textOf).join(''),
+      stats: findAll(block, 'wf-stats').map(textOf).join(''),
+    }));
+    // The due line from the held rows of the visit, by the stubs' formatters (`${ms}ms`, `${n} B`).
+    const due = (name, caveat) => {
+      const i = screens.findIndex((s) => s.name === name);
+      const to = i + 1 < screens.length ? screens[i + 1].mono : Infinity;
+      const rows = state.transactions.filter((t) => t.mono >= screens[i].mono && t.mono < to);
+      // Every call lasts 5 ms and the rows are oldest first, so the last one ends the group.
+      const wall = rows[rows.length - 1].mono + rows[rows.length - 1].ms - rows[0].mono;
+      const tail = caveat === null ? '' : ` · ${caveat === reading ? page.beingRead(state.sessionTotal) : caveat}`;
+      return `${rows.length} calls${caveat === null ? '' : ' loaded'} · ${wall}ms · 0 B${tail}`;
+    };
+    const problems = [];
+    for (const [name, caveat] of Object.entries(want)) {
+      const group = groups.find((g) => g.name === name);
+      if (!group) problems.push(`${name} draws no calls`);
+      else if (group.stats !== due(name, caveat)) problems.push(`${name} reads "${group.stats}", where "${due(name, caveat)}" was due`);
+    }
+    lines.push([`wf group clamp ${filter || 'no filter'}`, !groups.length ? 'NO - found no group with calls, so this checked nothing'
+      : problems.length ? `NO - ${problems.join('; ')} (${state.transactions.length} of ${state.matched} matches held)`
+        : `yes (${groups.map((g) => `${g.name}=${g.stats}`).join(' | ')}; ${state.transactions.length} of ${state.matched} matches held)`]);
+  }
+  return lines;
+}
+
+module.exports = {
+  checkLongSession, checkPathPastTheClamp, checkWaterfallPastTheClamp, checkWaterfallGroupsPastTheClamp, auditNoArgumentSpread, stubNode, stubPage,
+};

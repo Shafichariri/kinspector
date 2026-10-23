@@ -545,7 +545,16 @@ a read that failed, nothing tells it from a stub with none, so any stub beginnin
 call held says `beingRead`'s words or "calls not loaded"; a stub the copy shows no call in still says
 "no calls", or "no matching calls" under a filter or a stretch (`wf stub clamp …` in
 `check-web-static.js`, each red with the stub unmarked, the read ignored, the copy not asked or the
-count kept; `layout … waterfall stubs` in Chrome). The timeline decides it is empty on calls and
+count kept; `layout … waterfall stubs` in Chrome). A group with calls takes the same rule: on that
+session Checkout read "1000 calls · 1.1s · 31.3 KB" of a visit holding 3009, 2009 of them older than
+the list holds, with no word of them while the path said "older calls not loaded". It now reads
+"1000 calls loaded · … · older calls not loaded", or `beingRead`'s words in place of the caveat while
+the copy is read, and **claims no count of the older ones**, for the reason the list's note does not:
+the copy is unfiltered. A group the held rows cover whole reads as before, and so does one that
+opened below the oldest call held with no call before it, which only the copy can tell (`wf group
+clamp …` in `check-web-static.js`, each stats line checked whole; red with the group unmarked, the
+read ignored, the copy not asked, a count of the unloaded kept, "loaded" dropped or every group past
+the clamp marked; `layout … waterfall groups` in Chrome). The timeline decides it is empty on calls and
 signals, never markers. A stub visit inside a waterfall that still has rows reads "no matching
 calls"; the waterfall as a whole never did, which is what this paragraph used to claim. An emptied
 waterfall asks in a fixed order: a filter that hid calls in range, then a brushed stretch in a session

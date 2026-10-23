@@ -116,6 +116,44 @@ function stubsRow(key, r) {
     detail: `${r.unloaded} not loaded, ${r.none} with none${r.bad.length ? `; wrong: ${r.bad.join(', ')}` : ''}` };
 }
 
+// Row 32a: each waterfall group with calls says whether its count is of all of them. Due, as above,
+// from the page's state: a group the copy shows a call in below the oldest the list holds, while short
+// of `matched`, counts "N calls loaded" and says "older calls not loaded", with no other number; any
+// other reads "N calls · …" as before. On the 3016-call session Checkout read "1000 calls" of 3009.
+const GROUPS_HONEST = `(() => {
+  if (wholePending()) return { error: 'the copy is still being read' };
+  if (!visibleTransactions().length) return { na: 'no call in view, so no group is drawn' };
+  const held = state.transactions;
+  const short = state.matched !== null && held.length < state.matched;
+  const oldest = held.reduce((m, t) => (t.mono < m ? t.mono : m), Infinity);
+  const list = visits(state.screens, visibleTransactions(), [], [], sessionStartMono());
+  const whole = visits(state.screens, state.allTransactions, [], [], sessionStartMono());
+  const blocks = [...document.querySelectorAll('#waterfall .wf-group')];
+  if (blocks.length !== list.length || whole.length !== list.length) return { error: 'groups ' + blocks.length + ', visits ' + list.length + ', copy ' + whole.length };
+  const out = { partial: 0, whole: 0, bad: [] };
+  list.forEach((v, i) => {
+    if (!v.txns.length) return;
+    const stats = blocks[i].querySelector('.wf-stats').textContent;
+    const name = v.screen ? v.screen.name : 'leading';
+    if (short && whole[i].txns.some((t) => t.mono < oldest)) {
+      out.partial++;
+      if (!/^\\d+ calls loaded · [^·]+ · [^·]+ · older calls not loaded$/.test(stats)) out.bad.push(name + ' "' + stats + '"');
+    } else {
+      out.whole++;
+      if (!/^\\d+ calls · /.test(stats) || /loaded/.test(stats)) out.bad.push(name + ' "' + stats + '"');
+    }
+  });
+  return out;
+})()`;
+
+function groupsRow(key, r) {
+  if (!r || r.evalError || r.error) return { key, value: 'unreadable', ok: false, detail: (r && (r.evalError || r.error)) || 'no answer' };
+  if (r.na) return { key, value: 'n/a (no group)', ok: null, detail: r.na };
+  if (!(r.partial + r.whole)) return { key, value: 'NO (no group with calls)', ok: false, detail: 'calls are in view, yet no group drew one, so this checked nothing' };
+  return { key, value: r.bad.length ? 'claims' : 'honest', ok: !r.bad.length,
+    detail: `${r.partial} partly loaded, ${r.whole} whole${r.bad.length ? `; wrong: ${r.bad.join(', ')}` : ''}` };
+}
+
 // Scope bar on top, the timeline's first row whole, and each path station landing below the
 // sticky box, per width and filter.
 async function layout(page, url, session) {
@@ -171,6 +209,7 @@ async function layout(page, url, session) {
         rows.push(barRow(`${key} waterfall scope bar mid-scroll`, r));
         await page.waitFor('!wholePending()', 30000);
         rows.push(stubsRow(`${key} waterfall stubs`, await page.ev(STUBS_HONEST)));
+        rows.push(groupsRow(`${key} waterfall groups`, await page.ev(GROUPS_HONEST)));
       }
       await view(page, 'network');
     }

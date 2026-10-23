@@ -210,7 +210,9 @@ function markUnloaded(list) {
  * screen older than the oldest call held said "0 calls" and "no calls" over calls it had. Such a
  * stub is `notLoaded`, by the path's rule (`markUnloaded`) once the whole-session copy is the
  * session's; until then nothing tells it from an empty one, so any stub beginning below the oldest
- * call held is, and a stub the copy shows no call below that point in still says "no calls".
+ * call held is, and a stub the copy shows no call below that point in still says "no calls". A
+ * group with calls is `olderNotLoaded` by the same rule: on a 3016-call session Checkout counted
+ * "1000 calls" of the 3009 it had, with no word that 2009 were older than the list holds.
  */
 function waterfallGroups() {
   const win = sessionWindow();
@@ -230,8 +232,10 @@ function waterfallGroups() {
       segment: { name, from: visit.from, to: visit.to ?? lastMono, colour: colour(name) },
       rows: visit.txns,
       dim: !visitInRange(visit),
-      notLoaded: !visit.txns.length && oldest !== null && (copied ? Boolean(visit.unloaded) : visit.from < oldest),
     };
+    const unknown = oldest !== null && (copied ? Boolean(visit.unloaded) : visit.from < oldest);
+    group.notLoaded = !visit.txns.length && unknown;
+    group.olderNotLoaded = visit.txns.length > 0 && unknown;
     if (group.rows.length) {
       group.from = Infinity;
       group.to = -Infinity;
@@ -287,16 +291,20 @@ function renderWaterfall() {
     head.appendChild(swatch);
     head.appendChild(el('span', 'wf-name', group.segment.name || 'before the first screen'));
     // A stub whose calls are not loaded counts nothing: its "0 calls · 0ms" was the false claim.
+    // A group holding some of its calls counts those as loaded and says the older ones are not, with
+    // no count of them: under a filter the copy, which is unfiltered, cannot say which would match.
+    const unknown = (older) => (wholePending() ? beingRead(state.sessionTotal) : `${older ? 'older ' : ''}calls not loaded`);
     const stats = el('span', 'wf-stats muted mono');
-    if (!group.notLoaded) stats.textContent = `${group.rows.length} calls · ${fmtMs(group.wall)} · ${fmtBytes(group.bytes)}`;
+    const counted = `${group.rows.length} calls${group.olderNotLoaded ? ' loaded' : ''}`;
+    if (!group.notLoaded) stats.textContent = `${counted} · ${fmtMs(group.wall)} · ${fmtBytes(group.bytes)}`;
+    if (group.olderNotLoaded) stats.textContent += ` · ${unknown(true)}`;
     head.appendChild(stats);
     if (group.failed) head.appendChild(el('span', 'wf-failed', `${group.failed} failed`));
     block.appendChild(head);
     // Kept rather than dropped: a route with a hole in it names a navigation nobody made.
     if (!group.rows.length) {
       const none = state.filter || state.timeRange ? 'no matching calls' : 'no calls';
-      const unknown = wholePending() ? beingRead(state.sessionTotal) : 'calls not loaded';
-      block.appendChild(el('div', 'wf-empty muted', group.notLoaded ? unknown : none));
+      block.appendChild(el('div', 'wf-empty muted', group.notLoaded ? unknown(false) : none));
     }
 
     // Each group gets its own scale. A shared one would squeeze a 200 ms screen into a sliver
