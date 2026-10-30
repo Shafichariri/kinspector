@@ -574,6 +574,26 @@ in §5 → "Order from here". None touches public API, the schema or a golden in
   changing what `seq` means or when it is assigned. *Surfaces:* daemon (findings, and so the page, MCP
   and the CLI). S.
 
+*The entry below was found on 2026-10-30 by QA, outside any item, while the design note for
+`item:producer-react-native` was being checked. Placed by the product owner the same day, at the
+maintainer's ruling, straight before that item in §5 → "Order from here".*
+
+- **MCP says a discarded body was no body.** *Ticket label:* `item:mcp-discarded-body-text`. *The
+  user and the problem:* an agent calling `get_body` on a redirect hop or a retried attempt. The row
+  carries `resBodyOmitted: "discarded"` and `resBytes` 0, and MCP answers "This res had no body.",
+  because `explainMissingBody` in `mcp/TransactionTools.kt` checks the byte count before the recorded
+  reason. QA reproduced it live. It breaks `docs/decisions/capture.md`'s rule, "Both UIs check the
+  recorded reason **before** the byte count", on the surface an agent reads, and the agent takes the
+  answer as a fact about the server. *Why now:* it is a false fact, it is small, and
+  `item:producer-react-native` depends on it, because that item's surface ticket reorders the same
+  function for `streaming` at 0. *Acceptance criteria:* for a `discarded` row at 0 bytes, `get_body`
+  says the body was discarded when Ktor cancelled the hop, never that there was no body; every
+  recorded reason is checked before the byte count, so a `streaming` or `contentType` row at 0 does
+  not read as "no body" either; a row with no reason and 0 bytes still says it had no body; a test for
+  each, proven red against today's order. *Out of scope:* the producer's `streaming` wording, which is
+  `item:producer-react-native`'s; the web UI and exports, which already check the reason first.
+  *Surfaces:* MCP. **Size:** S.
+
 ### Open questions
 
 - **The 150 ms conflation window** and **the 2 MB signal ring budget** are guesses, and
@@ -776,7 +796,8 @@ straight to tickets.
 | 39 | A file in `src/iosMain` of core or noop fails the build | §3 → Guards | `item:guard-ios-main-compiled` | XS | L | no |
 | 40 | Interrupted probes leave their export temp directories | §3 → Guards | `item:guard-export-temp-cleanup` | XS | S | no |
 | 41 | MCP registry listing | §6 → Candidates | `item:mcp-registry-listing` | XS, plus the maintainer's time | S, after the 1.4.0 tag | no; the maintainer picks the registries |
-| 42 | The React Native producer | §7 | `item:producer-react-native` | L | New lane J (`producers/js/`), which is idle, so its design and its four measurements can start now; if the first measurement fails, its `BodyOmission` constant goes to L, then D (replay, MCP, exports), then W (the omission text and the replay note); CI, both workflows and `AGENTS.md` go to S; each behind the rows already in its lane | yes: four measurements first: XHR upload progress as the true multipart size (decides whether a new `BodyOmission` constant is needed), Hermes `TextEncoder`, the canary in Hermes bytecode (does not gate), iOS gzip `Content-Length` |
+| 41a | MCP says a discarded body was no body | §3 → Bugs found, not fixed | `item:mcp-discarded-body-text` | S | D. Before `item:producer-react-native`, which depends on it: the producer's surface ticket reorders the same function | no |
+| 42 | The React Native producer | §7 | `item:producer-react-native` | L | New lane J (`producers/js/`), which is idle, so it can start now. The `streaming` kdoc and mirror cases go to L, then D (MCP, exports), then W (the omission text and the replay note). CI, both workflows and `AGENTS.md` go to S. Each part waits behind the rows already in its lane, and the MCP text waits for `item:mcp-discarded-body-text` | design gate passed 2026-10-30. Still to measure: iOS upload progress, Hermes `TextEncoder`, the canary in Hermes bytecode (does not gate), iOS gzip `Content-Length` |
 | 43 | Screen signals from React Navigation | §7 | `item:producer-react-native-screens` | S | J, after `item:producer-react-native`'s transport | yes: React Navigation 7's container-ref event names, read from source |
 
 **Why this order.** The diff's default answer, `0 routes` changed, can be false when a key was removed,
@@ -799,9 +820,15 @@ What was left unordered, and what is not worth doing, is recorded with each entr
 (§7). They go after every false-fact row, by this table's own rule: they add coverage and correct
 nothing a user is shown. A React Native app records no session at all, and the web UI says it is
 waiting for an app, which is true. They are not stuck behind those rows, though. Lane J is new:
-`producers/js/` and nothing else. It has no other work, so the design note and the four measurements
-can start at once. Only the schema constant, if the first measurement makes it necessary, and its
-daemon, MCP and web parts queue in L, D and W. The CI, workflow and `AGENTS.md` edits queue in S. The screens row is S and comes second, because it needs the first row's transport.
+`producers/js/` and nothing else. It has no other work, so the producer can start at once. Only its
+`streaming` changes in the model, the daemon, MCP and the web UI queue in L, D and W, and the CI,
+workflow and `AGENTS.md` edits queue in S.
+
+**One row added 2026-10-30 by the product owner, at the maintainer's design-gate ruling:**
+`item:mcp-discarded-body-text`, labelled 41a so no row is renumbered. It goes straight before
+`item:producer-react-native`, in lane D. It is a false fact an agent reads today, and the producer
+depends on it: the producer's surface ticket reorders the same function, so fixing it inside the
+producer would bury a bug fix in a feature. The screens row is S and comes second, because it needs the first row's transport.
 `item:producer-node` and `item:producer-browser` are left unplaced, with their blockers recorded in §7.
 The maintainer ruled on §7's overturns on 2026-10-30 (§7 → "Decided 2026-10-30"), so both rows may
 start.
@@ -1555,11 +1582,13 @@ the list.
    still holds: the app never blocks on, waits for or meaningfully allocates because of the
    inspector. The first item restates how. The mechanism the contract names is Kotlin's, and the rule
    it protects is not.
-6. **True sizes, only if a measurement fails.** `docs/schema.md` says `reqBytes` is the "**True**
-   body size", and `exports.md` says "`bodySize` is deliberately *not* `-1`". This is overturned only
-   if XHR upload progress cannot give the true size of a multipart request (the first item's first
-   measurement). Then a FormData row's `reqBytes` is 0 and means unknown, and HAR writes `-1`. If the
-   measurement succeeds, nothing is overturned.
+6. **True sizes.** `docs/schema.md` says `reqBytes` is the "**True** body size", and `exports.md`
+   says "`bodySize` is deliberately *not* `-1`". The first measurement found that XHR upload progress
+   gives a true size only when a progress event arrives, and on Android one sometimes does not. So a
+   FormData row whose size was not measured carries `reqBytes` 0 with the existing `streaming`
+   omission, where 0 means "not measured", and HAR writes `-1`. Kotlin's OkHttp path already writes
+   `streaming` with 0 for one-shot and duplex bodies (`InspectorOkHttpInterceptor.kt`), so this records
+   a meaning the archive already holds.
 
 *Kept:*
 
@@ -1583,13 +1612,16 @@ The maintainer ruled on each one on 2026-10-30.
   workflow, is published with `--latest=false`, and is a file in the daemon zip.
 - **No adapter modules: kept.** The screens item stays a recipe the harness owns. The open question
   about shipping the helper is closed.
-- **True sizes: not overturned yet. Measure first.** The first measurement in
-  `item:producer-react-native`'s design note is whether XHR upload progress (the `total` on
-  `xhr.upload` progress events, or the final progress event) gives the true size of a multipart
-  request on both iOS and Android in React Native 0.79.
-  - If it does, `reqBytes` stays a true size, reported when the upload completes, and no new
-    constant is needed for size.
-  - Only if it is unreliable do the "size unknown" `BodyOmission` constant and this overturn apply.
+- **True sizes: measured, then overturned, with `streaming` instead of a new constant.** The ruling
+  first said to measure. Measurement 1 then found that on Android upload progress events fire only
+  sometimes: none arrived in one run of three, and none over `adb reverse`. When one fires, its
+  `total` is true. iOS is not yet measured. *(Design gate, decided by the maintainer on 2026-10-30.)*
+  - A FormData request's `reqBytes` is the upload-progress `total` when a progress event arrived, and
+    0 otherwise, meaning "not measured". Its `reqBodyOmitted` is the existing `streaming`.
+  - No new `BodyOmission` constant is added. The planned "size unknown" constant is dropped.
+  - `Replay.kt` refuses `streaming` whatever `reqBytes` is, so a replayed multipart POST cannot go out
+    empty.
+  - So the true-size overturn applies: 0 can mean unknown, and HAR writes `-1`.
 - **Enforced, not conventional: overturned for JavaScript, and only through the harness.** There is no
   `__DEV__` refusal guard. Production safety for the JavaScript producer rests on the harness not
   injecting the file. The JavaScript canary stays, and the bundle check is documented for consumers
@@ -1598,7 +1630,23 @@ The maintainer ruled on each one on 2026-10-30.
   and the item goes on.
 - **One dedicated worker: overturned as written.** The contract's aim is restated for single-threaded
   JavaScript.
-- **Not ruled:** the capture letter. It stays open (below).
+- **The capture letter: 4d, "JavaScript producers"** (design gate, 2026-10-30).
+
+### Decided 2026-10-30 — the design gate for `item:producer-react-native`
+
+The maintainer ruled on the design note's questions on 2026-10-30. The request-size ruling is in the
+true-sizes bullet above. The capture letter is 4d. The others:
+
+- **iOS.** The maintainer installs CocoaPods. The iOS measurements and device acceptance follow, on
+  the simulator.
+- **No sample React Native app in the repository.** The device proof comes from a scratch app and is
+  recorded in `docs/STATUS.md`.
+- **`AGENTS.md` makes room by moving two paragraphs.** "The lettered rows…" moves to
+  `docs/decisions/capture.md`, and the `--write-locks` trap moves to `docs/decisions/repository.md`.
+  The reviewed reframe text is adopted.
+- **No redaction in the JavaScript producer's first version.**
+- **Re-sign stays checked by default.** When the producer refuses a `signReq`, its error names the
+  fix: untick re-signing and replay without it.
 
 **Production safety for Kotlin apps is unchanged and still enforced. For JavaScript it is a convention
 the consumer's harness owns, not something Inspector enforces.** The two layers in `AGENTS.md` are a
@@ -1610,8 +1658,8 @@ only where the consumer runs them. Nothing may describe the producer as enforced
 build.
 
 **Where it sits in the capture lettering.** This is a new capture mechanism alongside 4a (OkHttp) and
-4c (proxy). The product owner proposes **4d, JavaScript producers**, with the React Native, Node and
-browser producers as its three parts. 4b keeps its letter. **The maintainer decides the letter.**
+4c (proxy). It is **4d, JavaScript producers**, decided by the maintainer on 2026-10-30, with the React
+Native, Node and browser producers as its three parts. 4b keeps its letter.
 `docs/decisions/capture.md` gets the paragraph when the design lands, written by the architect.
 
 **Order within this section, by value per hour.** The React Native producer is the request itself, and
@@ -1630,8 +1678,8 @@ their calls reaches Inspector. Nothing dials the daemon, so no session is record
 says it is waiting for an app, which is true. This is missing coverage, not a false fact.
 
 **Why now.** This is the first request from a team outside the Kotlin stack. Everything it needs on
-the host side is already built and verified. The work is one file, plus one schema constant if the
-first measurement below fails.
+the host side is already built and verified. The work is one file, plus a change to what the existing
+`streaming` omission is allowed to mean.
 
 **Shape (agreed with the plan; the architect owns the details).** The producer lives in a plain folder
 outside Gradle, `producers/js/`. It is vanilla JavaScript with no build step and no npm dependencies,
@@ -1642,13 +1690,14 @@ React Native's single XHR interceptor slot. React Native 0.79's `fetch` is the w
 over XHR with `responseType='blob'`, so one hook covers both axios and `fetch`. The plan verified that
 fact. The design note restates it with the source it was read from.
 
-**Design first, starting with four measurements.** None of these is verified, and each one can change
-the design:
+**Design first: four measurements, the gate passed 2026-10-30.** The first is measured on Android
+and ruled on. The rest are not verified yet, and each one can still change the design:
 
 1. **First:** whether XHR upload progress (the `total` on `xhr.upload` progress events, or the final
    progress event) gives the true size of a multipart request on both iOS and Android in React
-   Native 0.79. This decides which branch of the request-size criterion below applies (ruled
-   2026-10-30).
+   Native 0.79. **Android measured 2026-10-30:** progress events fire only sometimes, and their
+   `total` is true when one does. The maintainer ruled on the result (§7 → "Decided 2026-10-30").
+   **iOS is not yet measured**, and follows on the simulator once CocoaPods is installed.
 2. Whether Hermes has `TextEncoder`. It is needed for byte sizes and the UTF-8 check.
 3. Whether a canary string survives Hermes bytecode. **This does not gate the item** (ruled
    2026-10-30). If the canary does not survive, the bundle check documented for consumers changes to
@@ -1661,39 +1710,33 @@ the design:
   `getModulesRunBeforeMainModule`, **and** pull the module into the graph. A listed module that is not
   already in the bundle never runs (`getAppendScripts.js`). The producer is proven to run in a
   bundle built that way, and proven not to run when only the first step is taken.
-- *Coverage.* On an Android emulator, an axios GET and a raw `fetch()` multipart POST from a sample
-  React Native app each arrive in the archive as one row, with method, URL with port, status, timing
+- *Coverage.* On an Android emulator and an iOS simulator, an axios GET and a raw `fetch()` multipart
+  POST from a scratch React Native app (not committed here) each arrive in the archive as one row, with method, URL with port, status, timing
   and headers. The web UI's list, the path tab and MCP `list_transactions` show them alongside each
-  other.
+  other. The run is recorded in `docs/STATUS.md`, with each platform named.
 - *Bodies.* Bodies are capped at 256 KB. A blob response is sliced to 256 KB **before** `FileReader`,
   because React Native's `FileReader` reads the whole blob. A 2 MB response yields a 256 KB body and
   a true `resBytes` (or a recorded reason why the size is unknown), and the app receives all 2 MB
   unchanged.
-- *Request size for FormData and Blob bodies, by the first measurement's result.* A Blob body's size
-  is known (`Blob.size`), so it is reported as a true `reqBytes` in either branch.
-  - **If upload progress gives the true size on both platforms:** a FormData request's `reqBytes` is
-    that true size, reported when the upload completes, and its body carries the existing omission
-    reason for a body not captured. No new constant is added. A test with a known multipart payload
-    reads the same `reqBytes` on an iOS simulator and an Android emulator, and the replay guard
-    (`service/Replay.kt`, `CONTENT_TYPE && reqBytes > 0`) refuses it because the size is above 0.
-  - **Only if it is unreliable on either platform (the fallback):** the true-size overturn in the list
-    at the top of §7 applies, and `:inspector-model` gains a new `BodyOmission` constant for "a body
-    was sent and its size cannot be measured". This is additive, on an open string. Per `capture.md`,
-    "If a new code path can drop a body, give it a `BodyOmission` constant". Without it the producer
-    would have to send `reqBytes: 0` with `contentType`, which the replay guard lets through, and a
-    replayed multipart POST would go out with an empty body and no warning. With the constant in
-    place:
-    - replay refuses with a message naming the reason;
-    - the web UI (detail and the replay editor's note), MCP's missing-body text and the HTML,
-      Markdown and HAR exports say "body sent, not captured, size unknown", never "empty", and HAR's
-      `bodySize` is `-1`;
-    - no mirror reads `BodyOmission`, so there is no case file. `duplicateGroups` keys on both byte
-      counts, and the note says whether two size-unknown uploads may read as a repeat.
+- *Request size for FormData and Blob bodies (ruled 2026-10-30).* A Blob body's size is known
+  (`Blob.size`), so it is reported as a true `reqBytes`. A FormData request carries
+  `reqBodyOmitted: "streaming"`, and its `reqBytes` is the upload-progress `total` when a progress
+  event arrived, else 0, meaning "not measured". No new `BodyOmission` constant is added.
+  - `reqBytes` equals the server's `Content-Length` when a progress event arrived, and is 0 with
+    `streaming` otherwise, on each platform measured.
+  - The `streaming` guard in `service/Replay.kt` refuses it, whatever `reqBytes` is.
+  - `BodyOmission.STREAMING`'s kdoc changes to "its size is reported when known".
+  - `docs/schema.md` and `docs/decisions/exports.md` are amended for `streaming` at 0: 0 there means
+    not measured, and HAR's `bodySize` is `-1`.
+  - The web UI (detail and the replay editor's note), MCP's missing-body text and the HTML, Markdown
+    and HAR exports say the body was sent and not captured, and that its size was not measured. They
+    never say "empty", because `streaming` outranks a zero byte count on every surface, as
+    `DISCARDED` does. MCP's text depends on `item:mcp-discarded-body-text`, which fixes the same
+    check first.
+  - A `streaming` row at 0 never joins a repeat group. `mirror-cases/duplicates.json` gains cases for
+    it, run by both the Kotlin tests and `check-web-static.js`.
 
-    Each of these is proven red. *For the architect:* `STREAMING` says its size is reported, which a
-    FormData body cannot honour in this branch. The constant covers FormData only, and like
-    `DISCARDED` it outranks a zero byte count on every surface. The note also decides what a daemon
-    older than the constant does with such a row.
+  Each of these is proven red.
 - *Wire discipline.*
   - There is one `WireMsg` per WebSocket frame and never an array frame. The daemon decodes one
     message per frame, and today it drops a failure with only a stderr line.
@@ -1709,10 +1752,12 @@ the design:
 - *Requests from the daemon.* The producer answers `signReq` with a `signRes` carrying `error`, never
   silence. An app that ignores the request makes a replay hang for 30 s and then fail, and if the
   JavaScript app is the only one connected, every re-signed replay of a session with no app of its
-  own goes to it (`liveApps.sole()`). It answers `signalReq` with `signalErr` naming what is
+  own goes to it (`liveApps.sole()`). The error names the fix: untick re-signing and replay without
+  it (re-sign stays checked by default, ruled 2026-10-30). It answers `signalReq` with `signalErr` naming what is
   registered, per `docs/schema.md`. A test covers each case.
 - *The spec.* `docs/schema.md` gains `signReq` and `signRes` (today they are only in `Wire.kt`), and
-  its `reqBodyOmitted` row gains `discarded`; that doc is now a second implementation's spec.
+  its `reqBodyOmitted` row gains `discarded` and says `streaming` may carry 0; that doc is now a
+  second implementation's spec.
 - *Production safety, a convention the harness owns (ruled 2026-10-30).* The producer has no
   `__DEV__` guard. It is safe in a release build only because the consumer's harness does not inject
   it there.
@@ -1758,22 +1803,23 @@ the design:
     the following. Inspector is a host tool with many producers. Its primary support is for Compose
     Multiplatform apps and JavaScript (React Native) apps. Production safety is enforced for Kotlin
     and is a harness convention for JavaScript. `AGENTS.md` also adds `producers/js/` to the "Not
-    modules" line. **`AGENTS.md` has a 15,000-byte cap with roughly 378 bytes left at `af854e9`**, so
-    the rewrite either fits or moves text out to a decision file, and `:repo-checks` stays green.
+    modules" line. **`AGENTS.md` has a 15,000-byte cap with roughly 378 bytes left at `af854e9`.** Room
+    is made as ruled on 2026-10-30: "The lettered rows…" moves to `docs/decisions/capture.md` and the
+    `--write-locks` trap to `docs/decisions/repository.md`, each word for word, and `:repo-checks`
+    stays green. The reviewed reframe text is the one used.
     None of these files is edited before this item's docs work.
   - The producer file stays under the 600-line budget.
   - `docs/DAEMON.md` names the new omission reason.
 
-**Out of scope.** An overlay inside a React Native app. WebSocket and socket.io frames. Traffic from
+**Out of scope.** An overlay inside a React Native app. Redaction, in this first version (ruled
+2026-10-30). A sample React Native app in the repository. WebSocket and socket.io frames. Traffic from
 native SDKs. WebViews. Physical iPhones. An npm package. Batched frames. Any LAN route.
 
-**Surfaces.** A new producer in `producers/js/`; `:inspector-model` (one constant, only in the fallback branch); the daemon (replay
-refusal, and in the fallback MCP's missing-body text and exports); the web UI (in the fallback, the
-omission text and the replay note);
-`docs/schema.md`; CI; release. **No public Kotlin API** beyond the
-constant. The architect confirms whether any golden in `api/` covers `:inspector-model`'s constants.
-If one does, it is part of the item. **Size:** L, the product owner's guess and the architect's, with the four
-measurements first. It is smaller if the first measurement succeeds.
+**Surfaces.** A new producer in `producers/js/`; `:inspector-model` (the `STREAMING` kdoc, and no new constant); the daemon (MCP's
+missing-body text, exports); the web UI (the omission text and the replay note); `mirror-cases/`;
+`docs/decisions/exports.md`;
+`docs/schema.md`; CI; release. **No public Kotlin API change.** **Size:** L, the product owner's guess and the architect's, with the
+remaining measurements first.
 
 ### Screen signals from React Navigation
 
@@ -1843,6 +1889,8 @@ until the advisory is decided.
 ### Deliberately not doing
 
 - **A shipped React Navigation helper.** "No adapter modules" was kept on 2026-10-30.
+- **A new `BodyOmission` constant for a FormData size.** The existing `streaming` carries it (ruled
+  2026-10-30).
 - **A `__DEV__` refusal in the producer.** The maintainer chose on 2026-10-30 to rest release safety
   for JavaScript on the harness alone, with the canary and a documented bundle check.
 - **An npm package or a Maven artifact for the producer.** One vendorable file is what the consumer
@@ -1857,7 +1905,6 @@ until the advisory is decided.
 
 ### Open questions for the maintainer
 
-- **The capture letter.** The product owner proposes 4d. The maintainer decides.
 - **The browser producer and `item:control-boundary-advisory`.** The browser producer waits on that
   advisory. What the producers need from its fix is recorded there.
 
