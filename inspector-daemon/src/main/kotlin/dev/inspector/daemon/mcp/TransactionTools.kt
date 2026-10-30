@@ -143,8 +143,14 @@ internal class TransactionTools(
         val omitted = if (side == "req") txn.reqBodyOmitted else txn.resBodyOmitted
         val bytes = if (side == "req") txn.reqBytes else txn.resBytes
         val contentType = if (side == "req") txn.reqContentType else txn.resContentType
+        // A recorded reason outranks the byte count. A discarded hop reports zero bytes because
+        // nothing was read from it, so the zero-byte answer checked first would state as fact that
+        // it was empty: the one thing capture could not determine.
         return when {
-            bytes == 0L -> "This $side had no body."
+            omitted == dev.inspector.model.BodyOmission.DISCARDED ->
+                "The $side body was not read: the client discarded this attempt to make the next " +
+                    "one, as it does for a redirect hop or a retried attempt. That does not mean " +
+                    "it was empty."
             omitted == dev.inspector.model.BodyOmission.CONTENT_TYPE ->
                 "The $side body was not captured: content type ${contentType ?: "was not declared"} " +
                     "is outside the capture allowlist. $bytes bytes were sent. " +
@@ -152,6 +158,10 @@ internal class TransactionTools(
             omitted == dev.inspector.model.BodyOmission.STREAMING ->
                 "The $side body ($bytes bytes) was streamed and never held in memory, so it was " +
                     "counted rather than captured."
+            // BodyOmission is an open set, so an archive from a newer app can carry a reason this
+            // build has no text for. Name it as the Markdown export does; it is still a reason.
+            omitted != null -> "The $side body was not captured (`$omitted`). $bytes bytes were recorded."
+            bytes == 0L -> "This $side had no body."
             else -> "The $side body ($bytes bytes) is not in the archive."
         }
     }

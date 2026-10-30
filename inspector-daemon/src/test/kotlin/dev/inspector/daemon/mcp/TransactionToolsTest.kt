@@ -4,6 +4,8 @@ import dev.inspector.daemon.archive.TimelineEntry
 import dev.inspector.daemon.marker
 import dev.inspector.daemon.signal
 import dev.inspector.daemon.txn
+import dev.inspector.daemon.writeSession
+import dev.inspector.model.BodyOmission
 import kotlinx.serialization.json.Json
 import dev.inspector.model.SignalTags
 import kotlinx.serialization.json.jsonArray
@@ -25,6 +27,62 @@ class TransactionToolsTest : McpToolsFixture() {
     fun get_body_explains_an_absent_body_rather_than_implying_there_was_none() {
         val text = callTool("get_body", """{"id":"aaaa1111","side":"req"}""")
         assertContains(text, "no body")
+    }
+
+    @Test
+    fun get_body_reads_the_recorded_omission_before_the_byte_count() {
+        // A discarded hop reports zero bytes because nothing was read from it, so a zero-byte
+        // shortcut checked first would call it empty: the one thing capture could not determine.
+        val id = "2026-08-17T09-00-00_app_dev_debug"
+        writeSession(
+            config, id, "2026-08-17T09:00:00.000Z",
+            listOf(
+                txn("eeee5555", status = 302).copy(resBodyOmitted = BodyOmission.DISCARDED),
+                txn("ffff6666"),
+            ),
+        )
+
+        val discarded = callTool("get_body", """{"session":"$id","id":"eeee5555","side":"res"}""")
+        assertContains(discarded, "not read")
+        assertContains(discarded, "discarded")
+        assertContains(discarded, "does not mean it was empty")
+        assertFalse("had no body" in discarded, discarded)
+
+        val empty = callTool("get_body", """{"session":"$id","id":"ffff6666","side":"res"}""")
+        assertEquals("This res had no body.", empty)
+    }
+
+    /** The `res` answer for one row recorded with [omitted] and zero response bytes. */
+    private fun absentResBodyAtZero(omitted: String): String {
+        val id = "2026-08-17T10-00-00_app_dev_debug"
+        writeSession(
+            config, id, "2026-08-17T10:00:00.000Z",
+            listOf(txn("abab7777").copy(resBodyOmitted = omitted)),
+        )
+        return callTool("get_body", """{"session":"$id","id":"abab7777","side":"res"}""")
+    }
+
+    @Test
+    fun get_body_does_not_call_a_streamed_body_at_zero_bytes_empty() {
+        val text = absentResBodyAtZero(BodyOmission.STREAMING)
+        assertContains(text, "streamed")
+        assertFalse("had no body" in text, text)
+    }
+
+    @Test
+    fun get_body_does_not_call_an_allowlist_omission_at_zero_bytes_empty() {
+        val text = absentResBodyAtZero(BodyOmission.CONTENT_TYPE)
+        assertContains(text, "capture allowlist")
+        assertFalse("had no body" in text, text)
+    }
+
+    @Test
+    fun get_body_names_an_omission_reason_this_build_does_not_know() {
+        // BodyOmission is an open string set: an archive written by a newer app can carry a
+        // reason this daemon has no text for, and that is still a recorded reason, not an empty body.
+        val text = absentResBodyAtZero("someFutureReason")
+        assertContains(text, "not captured (`someFutureReason`)")
+        assertFalse("had no body" in text, text)
     }
 
     @Test

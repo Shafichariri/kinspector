@@ -574,25 +574,7 @@ in §5 → "Order from here". None touches public API, the schema or a golden in
   changing what `seq` means or when it is assigned. *Surfaces:* daemon (findings, and so the page, MCP
   and the CLI). S.
 
-*The entry below was found on 2026-10-30 by QA, outside any item, while the design note for
-`item:producer-react-native` was being checked. Placed by the product owner the same day, at the
-maintainer's ruling, straight before that item in §5 → "Order from here".*
-
-- **MCP says a discarded body was no body.** *Ticket label:* `item:mcp-discarded-body-text`. *The
-  user and the problem:* an agent calling `get_body` on a redirect hop or a retried attempt. The row
-  carries `resBodyOmitted: "discarded"` and `resBytes` 0, and MCP answers "This res had no body.",
-  because `explainMissingBody` in `mcp/TransactionTools.kt` checks the byte count before the recorded
-  reason. QA reproduced it live. It breaks `docs/decisions/capture.md`'s rule, "Both UIs check the
-  recorded reason **before** the byte count", on the surface an agent reads, and the agent takes the
-  answer as a fact about the server. *Why now:* it is a false fact, it is small, and
-  `item:producer-react-native` depends on it, because that item's surface ticket reorders the same
-  function for `streaming` at 0. *Acceptance criteria:* for a `discarded` row at 0 bytes, `get_body`
-  says the body was discarded when Ktor cancelled the hop, never that there was no body; every
-  recorded reason is checked before the byte count, so a `streaming` or `contentType` row at 0 does
-  not read as "no body" either; a row with no reason and 0 bytes still says it had no body; a test for
-  each, proven red against today's order. *Out of scope:* the producer's `streaming` wording, which is
-  `item:producer-react-native`'s; the web UI and exports, which already check the reason first.
-  *Surfaces:* MCP. **Size:** S.
+- ~~**MCP says a discarded body was no body.**~~ Done 2026-10-30, see `ROADMAP-DONE.md` → §3 → Bugs found, not fixed. *Ticket label:* `item:mcp-discarded-body-text`.
 
 ### Open questions
 
@@ -796,7 +778,6 @@ straight to tickets.
 | 39 | A file in `src/iosMain` of core or noop fails the build | §3 → Guards | `item:guard-ios-main-compiled` | XS | L | no |
 | 40 | Interrupted probes leave their export temp directories | §3 → Guards | `item:guard-export-temp-cleanup` | XS | S | no |
 | 41 | MCP registry listing | §6 → Candidates | `item:mcp-registry-listing` | XS, plus the maintainer's time | S, after the 1.4.0 tag | no; the maintainer picks the registries |
-| 41a | MCP says a discarded body was no body | §3 → Bugs found, not fixed | `item:mcp-discarded-body-text` | S | D. Before `item:producer-react-native`, which depends on it: the producer's surface ticket reorders the same function | no |
 | 42 | The React Native producer | §7 | `item:producer-react-native` | L | New lane J (`producers/js/`), which is idle, so it can start now. The `streaming` kdoc and mirror cases go to L, then D (MCP, exports), then W (the omission text and the replay note). CI, both workflows and `AGENTS.md` go to S. Each part waits behind the rows already in its lane, and the MCP text waits for `item:mcp-discarded-body-text` | design gate passed 2026-10-30. Still to measure: iOS upload progress, Hermes `TextEncoder`, the canary in Hermes bytecode (does not gate), iOS gzip `Content-Length` |
 | 43 | Screen signals from React Navigation | §7 | `item:producer-react-native-screens` | S | J, after `item:producer-react-native`'s transport | yes: React Navigation 7's container-ref event names, read from source |
 
