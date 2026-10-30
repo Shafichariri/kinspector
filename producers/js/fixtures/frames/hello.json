@@ -1,0 +1,16 @@
+{
+  "scenario": {
+    "about": "A start() naming every client field: the hello is the first frame and carries them as given.",
+    "start": {
+      "appId": "dev.example.app",
+      "appVersion": "1.4.0",
+      "platform": "ios-simulator",
+      "device": "iPhone 16",
+      "osVersion": "18.4",
+      "buildType": "debug"
+    }
+  },
+  "frames": [
+    {"type":"hello","client":{"v":1,"appId":"dev.example.app","appVersion":"1.4.0","platform":"ios-simulator","device":"iPhone 16","osVersion":"18.4","buildType":"debug"}}
+  ]
+}

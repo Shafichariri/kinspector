@@ -36,8 +36,9 @@ test('neither reactNative nor platform is refused', () => {
     "[inspector] not started: pass reactNative: require('react-native') or platform");
 });
 
-test('Android without platform is refused until emulator detection lands', () => {
-  const reactNative = { Platform: { OS: 'android', constants: { Model: 'sdk_gphone64_arm64' } } };
+// Android without platform resolves from Platform.constants; emulator.test.js covers it.
+test('a reactNative that is neither Android nor iOS is refused', () => {
+  const reactNative = { Platform: { OS: 'web', constants: {} } };
   refused({ appId: 'a', appVersion: '1', reactNative },
     "[inspector] not started: pass reactNative: require('react-native') or platform");
 });

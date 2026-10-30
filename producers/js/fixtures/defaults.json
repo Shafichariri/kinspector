@@ -1,0 +1,33 @@
+{
+  "captureContentTypes": [
+    "application/json",
+    "text/",
+    "application/xml",
+    "application/x-www-form-urlencoded",
+    "application/problem+json",
+    "application/graphql",
+    "application/x-ndjson",
+    "application/javascript",
+    "application/jwt"
+  ],
+  "bodyCaptureMaxBytes": 262144,
+  "signals": { "maxPayloadBytes": 65536 },
+  "contentTypeCases": [
+    { "contentType": "application/json", "captures": true },
+    { "contentType": "application/json; charset=utf-8", "captures": true },
+    { "contentType": "Application/JSON", "captures": true },
+    { "contentType": "text/html", "captures": true },
+    { "contentType": "text/plain;charset=UTF-8", "captures": true },
+    { "contentType": "application/x-www-form-urlencoded", "captures": true },
+    { "contentType": "application/graphql-response+json", "captures": true },
+    { "contentType": "application/vnd.api+json", "captures": true },
+    { "contentType": "image/svg+xml", "captures": true },
+    { "contentType": "application/jwt", "captures": true },
+    { "contentType": "image/png", "captures": false },
+    { "contentType": "application/octet-stream", "captures": false },
+    { "contentType": "multipart/form-data; boundary=x", "captures": false },
+    { "contentType": "application/jsonp", "captures": true },
+    { "contentType": "", "captures": false },
+    { "contentType": null, "captures": false }
+  ]
+}

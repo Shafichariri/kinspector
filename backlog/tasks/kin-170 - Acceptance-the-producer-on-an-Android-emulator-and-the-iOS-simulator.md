@@ -4,6 +4,7 @@ title: 'Acceptance: the producer on an Android emulator and the iOS simulator'
 status: To Do
 assignee: []
 created_date: '2026-10-30 13:37'
+updated_date: '2026-10-30 15:30'
 labels:
   - 'item:producer-react-native'
 dependencies:
@@ -73,3 +74,9 @@ A case that cannot be run is recorded as Not verified, with the reason, and is n
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+QA note from KIN-163 (non-blocking): the RN Android hello sends device: "unknown" although Platform.constants.Model is available. Decide before the device proof. Also see the KIN-164 note on the untested JS device rule.
+<!-- SECTION:NOTES:END -->

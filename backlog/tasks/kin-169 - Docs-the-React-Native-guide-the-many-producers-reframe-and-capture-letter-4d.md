@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-30 13:37'
+updated_date: '2026-10-30 15:30'
 labels:
   - 'item:producer-react-native'
 dependencies:
@@ -141,3 +142,9 @@ ordinal: 169000
 - [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+QA note from KIN-163 (non-blocking): with Platform.OS 'web' the refusal says 'pass reactNative: require("react-native") or platform' although reactNative was passed. The wording should say the OS is neither Android nor iOS.
+<!-- SECTION:NOTES:END -->

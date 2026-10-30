@@ -30,7 +30,7 @@ const FLUSH_CHARS = 256 * 1024;
 const SOCKET_HIGH_WATER = 1024 * 1024;
 const MIN_BACKOFF_MS = 250; // StreamSink.kt's MIN_BACKOFF_MS and MAX_BACKOFF_MS
 const MAX_BACKOFF_MS = 5000;
-const SIGNAL_PAYLOAD_CAP = 65536; // SignalPolicy.maxPayloadBytes
+const SIGNAL_PAYLOAD_CAP = 65536; // SignalPolicy.maxPayloadBytes; held to it by fixtures/defaults.json
 const ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '::1', '[::1]', '10.0.2.2'];
 
 const SIGN_ERROR = "this app's JavaScript producer cannot regenerate per-request headers. " +
@@ -114,6 +114,27 @@ function base64(bytes) {
       (left > 1 ? B64[(n >> 6) & 63] : '=') + (left > 2 ? B64[n & 63] : '=');
   }
   return out;
+}
+
+// ---- Android emulator detection ----------------------------------------------------------------
+// EmulatorDetection.kt's rule, minus what React Native cannot see. Platform.constants carries
+// Fingerprint, Model, Brand and Manufacturer (AndroidInfoModule.kt:55-58, RN 0.79.6) and no
+// HARDWARE, BOARD, DEVICE or PRODUCT, so the product and device are read out of the fingerprint,
+// brand/product/device:release/..., and the Kotlin checks run over the five fields that gives.
+// Kotlin's sturdiest rule, the hardware, is out of reach: an image only it catches reads as a
+// device here. fixtures/emulator-profiles.json holds both runners to the same profiles.
+function lower(v) { return v == null ? '' : String(v).toLowerCase(); }
+function startsWithAny(v, prefixes) { return prefixes.some((p) => v.startsWith(p)); }
+
+function looksLikeEmulator(constants) {
+  const fingerprint = lower(constants.Fingerprint);
+  const [, product = '', device = ''] = fingerprint.split(':')[0].split('/');
+  const model = lower(constants.Model);
+  return startsWithAny(device, ['emu64', 'generic', 'vsoc_', 'vbox86']) ||
+    startsWithAny(product, ['sdk', 'google_sdk', 'aosp_cf', 'vbox86', 'emulator']) ||
+    startsWithAny(lower(constants.Brand), ['generic']) ||
+    startsWithAny(fingerprint, ['generic', 'unknown']) ||
+    ['emulator', 'android sdk built for', 'sdk_gphone'].some((s) => model.indexOf(s) >= 0);
 }
 
 function randomId() {
@@ -326,6 +347,8 @@ function createProducer(deps) {
     if (os === 'ios') {
       return refuse("on iOS pass platform: 'ios-simulator' to start(). It cannot be detected without a native module.");
     }
+    // The platform decides the default host, so this runs before the host is chosen.
+    if (os === 'android') return looksLikeEmulator(rn.Platform.constants || {}) ? 'android-emulator' : 'android-device';
     return refuse("pass reactNative: require('react-native') or platform");
   }
 
@@ -474,5 +497,8 @@ module.exports = {
   },
   stop() { if (instance !== null) instance.stop(); },
   // For the tests in producers/js/test; not part of the consumer surface.
-  _test: { createProducer, utf8Length, utf8Prefix, utf8Decode, base64, CANARY, RING_FRAMES, RING_CHARS, FLUSH_CHARS, SOCKET_HIGH_WATER },
+  _test: {
+    createProducer, utf8Length, utf8Prefix, utf8Decode, base64, CANARY,
+    RING_FRAMES, RING_CHARS, FLUSH_CHARS, SOCKET_HIGH_WATER, SIGNAL_PAYLOAD_CAP,
+  },
 };

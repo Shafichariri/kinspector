@@ -24,9 +24,24 @@ load-bearing. `ro.kernel.qemu` would be the obvious signal and every AVD still s
 `android.os.SystemProperties` is not in the SDK — verified against `android-36` — and
 `Build.HARDWARE` is its public mirror, so there is nothing to gain from the hidden-API path.
 
-Every emulator profile in `EmulatorDetectionTest` was transcribed from `adb shell getprop` on a
-booted image rather than invented; add a real one when a new image family appears. The
-physical-device profiles are the exception and the test says so — no phone has been attached.
+Every emulator profile in `producers/js/fixtures/emulator-profiles.json`, which
+`EmulatorDetectionTest` reads, was transcribed from `adb shell getprop` on a booted image rather
+than invented; add a real one when a new image family appears. The physical-device profiles are
+the exception and the file says so in each one's `provenance` — no phone has been attached — as do
+the two `constructed` cases that isolate one rule.
+
+**The JavaScript producer runs the same rule over five fields, and the profiles are shared so the
+two cannot part silently.** React Native's `Platform.constants` carries `Fingerprint`, `Model`,
+`Brand` and `Manufacturer` (`AndroidInfoModule.kt:55-58`, 0.79.6) and none of `HARDWARE`, `BOARD`,
+`DEVICE` or `PRODUCT`. So the producer reads the product and device out of the fingerprint,
+`brand/product/device:release/...`, and applies `looksLikeEmulator`'s device, product, brand,
+fingerprint and model checks to them. The decision matters as much as in Kotlin: an Android app that
+passes `reactNative` and no `platform` dials `10.0.2.2` exactly when the rule says emulator. The
+sturdiest Kotlin rule, the hardware, is out of reach, so an image that only it catches reads as a
+device in JS. That is why each profile carries an answer per runner, `kotlin` and `js`, and a
+`jsReason` where they differ: "hardware alone is enough" is `kotlin: true`, `js: false`, because RN
+exposes no `HARDWARE`. Every real emulator image in the file fires for both runners. Pinned by
+`EmulatorDetectionTest` and `emulator.test.js`, which runs each profile through `start()`.
 
 The iOS side no longer asks whether `SIMULATOR_DEVICE_NAME` is in the environment. That was a
 sound tell with an unfalsifiable half: nothing proves its absence means hardware, and nobody has

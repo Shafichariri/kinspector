@@ -27,3 +27,4 @@ node --test producers/js/test/*.test.js           # the producer against a scrip
 |---|---|
 | `producers/js/inspector-producer.js` | The vendorable file. Under 600 lines (`FileBudgetTest`). Its canary is a used top-level reference on purpose. |
 | `producers/js/test/fake-ws.js` | The scripted WebSocket, timers and clocks every test drives the producer with. |
+| `producers/js/fixtures/` | Frames, defaults and emulator profiles that both the JS tests and three Kotlin test tasks read. Its README has the format and names each reader; an edit here needs both suites. |

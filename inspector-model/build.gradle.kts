@@ -55,3 +55,21 @@ class MirrorCasesArgument(
 tasks.named<Test>("jvmTest") {
     jvmArgumentProviders += MirrorCasesArgument(rootProject.file("mirror-cases"))
 }
+
+/*
+ * The JavaScript producer's shared fixtures, passed the same way and for the same reason as the
+ * mirror cases: `ProducerFramesTest` reads `producers/js/fixtures/frames` at run time, so an edited
+ * frame must re-run it. There is no buildSrc, so `:inspector-core` and `:inspector-stream` each
+ * declare the same class in their own scripts.
+ */
+class ProducerFixturesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.producerFixtures=${dir.absolutePath}")
+}
+
+tasks.named<Test>("jvmTest") {
+    jvmArgumentProviders += ProducerFixturesArgument(rootProject.file("producers/js/fixtures"))
+}
