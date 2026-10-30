@@ -776,6 +776,8 @@ straight to tickets.
 | 39 | A file in `src/iosMain` of core or noop fails the build | §3 → Guards | `item:guard-ios-main-compiled` | XS | L | no |
 | 40 | Interrupted probes leave their export temp directories | §3 → Guards | `item:guard-export-temp-cleanup` | XS | S | no |
 | 41 | MCP registry listing | §6 → Candidates | `item:mcp-registry-listing` | XS, plus the maintainer's time | S, after the 1.4.0 tag | no; the maintainer picks the registries |
+| 42 | The React Native producer | §7 | `item:producer-react-native` | L | New lane J (`producers/js/`), which is idle, so its design and its four measurements can start now; if the first measurement fails, its `BodyOmission` constant goes to L, then D (replay, MCP, exports), then W (the omission text and the replay note); CI, both workflows and `AGENTS.md` go to S; each behind the rows already in its lane | yes: four measurements first: XHR upload progress as the true multipart size (decides whether a new `BodyOmission` constant is needed), Hermes `TextEncoder`, the canary in Hermes bytecode (does not gate), iOS gzip `Content-Length` |
+| 43 | Screen signals from React Navigation | §7 | `item:producer-react-native-screens` | S | J, after `item:producer-react-native`'s transport | yes: React Navigation 7's container-ref event names, read from source |
 
 **Why this order.** The diff's default answer, `0 routes` changed, can be false when a key was removed,
 and it reaches three surfaces including the agent's, so it goes first. The waterfall's `no calls` on
@@ -791,6 +793,18 @@ release that has findings in it.
 
 What was left unordered, and what is not worth doing, is recorded with each entry, in §3 and in §6 →
 "Candidates, not ordered".
+
+**Two rows added 2026-10-30 by the product owner**, `item:producer-react-native` and
+`item:producer-react-native-screens`, from the plan the maintainer approved in principle that day
+(§7). They go after every false-fact row, by this table's own rule: they add coverage and correct
+nothing a user is shown. A React Native app records no session at all, and the web UI says it is
+waiting for an app, which is true. They are not stuck behind those rows, though. Lane J is new:
+`producers/js/` and nothing else. It has no other work, so the design note and the four measurements
+can start at once. Only the schema constant, if the first measurement makes it necessary, and its
+daemon, MCP and web parts queue in L, D and W. The CI, workflow and `AGENTS.md` edits queue in S. The screens row is S and comes second, because it needs the first row's transport.
+`item:producer-node` and `item:producer-browser` are left unplaced, with their blockers recorded in §7.
+The maintainer ruled on §7's overturns on 2026-10-30 (§7 → "Decided 2026-10-30"), so both rows may
+start.
 
 **Three rows added 2026-10-23 by the product owner**, from the side findings of
 `item:timeline-seq-ties`'s design, on the maintainer's proxy's proposal (decision
@@ -1480,6 +1494,375 @@ commits.
 
 ---
 
+## 7. Next: a producer for apps that are not Kotlin — planned 2026-10-30
+
+Taken in by the product owner on 2026-10-30, from a plan the maintainer approved in principle. The
+plan was reviewed adversarially on 2026-10-29, and that review found five serious problems and
+eleven smaller ones. Its corrections are part of the items below. The two full items are placed in
+§5 → "Order from here". The two "later" entries and the open questions at the end are not placed.
+
+**Where this comes from.** One real consuming React Native app wants the daemon, the archive,
+the web UI, the path tab, findings and the MCP tools. Its apps use React Native 0.79 with Hermes and
+the New Architecture, axios over XHR, raw `fetch()` for multipart uploads, and React Navigation 7.
+Inspector's capture is Kotlin-only, and the OkHttp route on React Native Android is closed to them
+for three reasons:
+
+- their apps build with a Kotlin older than 2.3, which cannot read 2.3 metadata;
+- it needs edits to app code;
+- it covers Android only.
+
+They also work under four constraints that shape everything below:
+
+- they cannot edit the app repositories, so all tooling is injected from a separate harness, through
+  Metro config (`resolver.resolveRequest`, `serializer.getModulesRunBeforeMainModule`) and
+  `NODE_OPTIONS=--require` preloads;
+- connections are loopback only, with no LAN fallback, ever;
+- there is no network access at install time or at runtime;
+- a single file they can vendor is the preferred way to ship.
+
+**Six recorded decisions are overturned and one is kept, each by the maintainer on 2026-10-30.** They
+are listed here so that no item contradicts one silently. The rulings are in the block that follows
+the list.
+
+*Overturned:*
+
+1. **What Inspector is.** `AGENTS.md` → "What this is" opens "for **Compose Multiplatform apps that
+   use Ktor**", and "What it is not" says it sees "Ktor traffic, plus any OkHttp client the app hands
+   the interceptor to". The closing section below says "capture stays Ktor-client-only until 4c is
+   deliberately chosen". That sentence was already out of date once 4a shipped. *Why reopen it:*
+   everything on the host (the archive, the web UI, findings, the diff, MCP) reads the wire format
+   and has never cared what language produced a row. The capture side is the only part that is
+   Kotlin.
+2. **One implementation of the schema.** `AGENTS.md` → Architecture says `:inspector-model` is shared
+   "on purpose", so that schema types are "literally the same code on device" and on the daemon. A
+   JavaScript producer is a second implementation of the frozen schema on the device side. *Why
+   reopen it:* there is no Kotlin on the device in question. The first item below holds the producer
+   to shared fixtures, with a stricter decode than the archive reader uses, and one round trip
+   through a live daemon.
+3. **The release tag.** `docs/decisions/release.md` says, of a daemon release, "the tag is the
+   trigger, and the only thing that ships this way", and `release.yml` has one trigger, `v*`. The
+   first item below adds a second tag pattern and a second workflow. It also adds a file to the
+   daemon zip, which the daemon job smoke-tests. *Why reopen it:* the producer is not a Maven
+   artifact. Releasing it on the library's tag would tie a 600-line JavaScript file to Central's
+   monthly file limit (§5 → "Release 1.4.0"), even though it uses none of it.
+4. **Enforced, not conventional, for JavaScript.** `AGENTS.md` says production safety "is enforced,
+   not conventional". For the JavaScript producer it is a convention the consumer's harness owns:
+   the file is safe in a release build only because the harness does not inject it, and Inspector
+   cannot enforce that. Kotlin keeps "enforced".
+5. **One dedicated worker.** The efficiency contract in `AGENTS.md` is worded for every producer:
+   capture does a snapshot and a `trySend`, and "one dedicated worker" does the rest. JavaScript has
+   one thread, so a JavaScript producer cannot have that worker. *Why reopen it:* the contract's aim
+   still holds: the app never blocks on, waits for or meaningfully allocates because of the
+   inspector. The first item restates how. The mechanism the contract names is Kotlin's, and the rule
+   it protects is not.
+6. **True sizes, only if a measurement fails.** `docs/schema.md` says `reqBytes` is the "**True**
+   body size", and `exports.md` says "`bodySize` is deliberately *not* `-1`". This is overturned only
+   if XHR upload progress cannot give the true size of a multipart request (the first item's first
+   measurement). Then a FormData row's `reqBytes` is 0 and means unknown, and HAR writes `-1`. If the
+   measurement succeeds, nothing is overturned.
+
+*Kept:*
+
+- **No adapter modules.** `SIGNALS.md` → "Out, deliberately" says "**No adapter modules.** No
+  `inspector-compose-nav`", and the closing section repeats "no adapter modules ship". The plan would
+  have shipped a React Navigation helper. The second item below is a recipe the harness owns instead,
+  plus a generic `signal()` call in the producer.
+
+### Decided 2026-10-30 — the overturns in §7
+
+The maintainer ruled on each one on 2026-10-30.
+
+- **What Inspector is: overturned, with a wider reframe than proposed.** Inspector is a host tool
+  with many producers, and its primary support is for Compose Multiplatform apps and JavaScript
+  (React Native) apps. `AGENTS.md` "What this is" and "What it is not", the closing section's "capture
+  stays Ktor-client-only until 4c", and the README are rewritten to that framing as part of
+  `item:producer-react-native`'s docs work. They are not edited before then.
+- **One implementation of the schema: overturned as written.** Fixtures live under `producers/js/`,
+  with a strict decode and one live round trip.
+- **The release tag: overturned as written.** The producer gets a `producer-js-v*` tag and its own
+  workflow, is published with `--latest=false`, and is a file in the daemon zip.
+- **No adapter modules: kept.** The screens item stays a recipe the harness owns. The open question
+  about shipping the helper is closed.
+- **True sizes: not overturned yet. Measure first.** The first measurement in
+  `item:producer-react-native`'s design note is whether XHR upload progress (the `total` on
+  `xhr.upload` progress events, or the final progress event) gives the true size of a multipart
+  request on both iOS and Android in React Native 0.79.
+  - If it does, `reqBytes` stays a true size, reported when the upload completes, and no new
+    constant is needed for size.
+  - Only if it is unreliable do the "size unknown" `BodyOmission` constant and this overturn apply.
+- **Enforced, not conventional: overturned for JavaScript, and only through the harness.** There is no
+  `__DEV__` refusal guard. Production safety for the JavaScript producer rests on the harness not
+  injecting the file. The JavaScript canary stays, and the bundle check is documented for consumers
+  to run in their own release CI. Whether the canary survives Hermes bytecode is still measured, but
+  the result no longer gates the item. If the canary does not survive, the documented check changes,
+  and the item goes on.
+- **One dedicated worker: overturned as written.** The contract's aim is restated for single-threaded
+  JavaScript.
+- **Not ruled:** the capture letter. It stays open (below).
+
+**Production safety for Kotlin apps is unchanged and still enforced. For JavaScript it is a convention
+the consumer's harness owns, not something Inspector enforces.** The two layers in `AGENTS.md` are a
+Gradle artifact swap and a Kotlin canary, and neither one reaches a JavaScript bundle.
+`check-release-clean.sh` exits "unproven" on any APK (`docs/decisions/release.md`), so it cannot
+vouch for a React Native app. For JavaScript the "swap" is the harness leaving the file out. The
+canary and the bundle check let a consumer verify that in their own release CI, and they verify it
+only where the consumer runs them. Nothing may describe the producer as enforced-safe for a release
+build.
+
+**Where it sits in the capture lettering.** This is a new capture mechanism alongside 4a (OkHttp) and
+4c (proxy). The product owner proposes **4d, JavaScript producers**, with the React Native, Node and
+browser producers as its three parts. 4b keeps its letter. **The maintainer decides the letter.**
+`docs/decisions/capture.md` gets the paragraph when the design lands, written by the architect.
+
+**Order within this section, by value per hour.** The React Native producer is the request itself, and
+nothing below it works without its transport. Screen signals are small once the transport exists, and
+they are what brings the path tab and the diff's per-screen reading to life. Node comes next, because
+it is a second consumer of the same transport and needs no injection. The browser producer comes last.
+It waits on a security decision, and Vite apps were not the request.
+
+### The React Native producer
+
+*Ticket label:* `item:producer-react-native`
+
+**The user and the problem.** A web UI user on a Mac, or an agent over MCP, debugging a React Native
+app. That app's team cannot add a Kotlin dependency and cannot edit the app's source. Today none of
+their calls reaches Inspector. Nothing dials the daemon, so no session is recorded, and the web UI
+says it is waiting for an app, which is true. This is missing coverage, not a false fact.
+
+**Why now.** This is the first request from a team outside the Kotlin stack. Everything it needs on
+the host side is already built and verified. The work is one file, plus one schema constant if the
+first measurement below fails.
+
+**Shape (agreed with the plan; the architect owns the details).** The producer lives in a plain folder
+outside Gradle, `producers/js/`. It is vanilla JavaScript with no build step and no npm dependencies,
+and its tests run under `node`, the way `site/`, `scripts/` and the web UI already work. There is no
+module-graph, twin or golden-file change. The "release twin" is that the harness does not inject the
+file. It wraps `XMLHttpRequest.prototype` (`open`, `setRequestHeader`, `send`) rather than taking
+React Native's single XHR interceptor slot. React Native 0.79's `fetch` is the whatwg-fetch polyfill
+over XHR with `responseType='blob'`, so one hook covers both axios and `fetch`. The plan verified that
+fact. The design note restates it with the source it was read from.
+
+**Design first, starting with four measurements.** None of these is verified, and each one can change
+the design:
+
+1. **First:** whether XHR upload progress (the `total` on `xhr.upload` progress events, or the final
+   progress event) gives the true size of a multipart request on both iOS and Android in React
+   Native 0.79. This decides which branch of the request-size criterion below applies (ruled
+   2026-10-30).
+2. Whether Hermes has `TextEncoder`. It is needed for byte sizes and the UTF-8 check.
+3. Whether a canary string survives Hermes bytecode. **This does not gate the item** (ruled
+   2026-10-30). If the canary does not survive, the bundle check documented for consumers changes to
+   one that can see, or the guide says plainly that it cannot, and the item goes on. A check that
+   cannot see is never described as one that passed.
+4. How `Content-Length` behaves on iOS for gzip responses. That decides what `resBytes` claims.
+
+**Acceptance criteria.**
+- *Injection.* The producer's guide tells the harness to do two things: list the module in Metro's
+  `getModulesRunBeforeMainModule`, **and** pull the module into the graph. A listed module that is not
+  already in the bundle never runs (`getAppendScripts.js`). The producer is proven to run in a
+  bundle built that way, and proven not to run when only the first step is taken.
+- *Coverage.* On an Android emulator, an axios GET and a raw `fetch()` multipart POST from a sample
+  React Native app each arrive in the archive as one row, with method, URL with port, status, timing
+  and headers. The web UI's list, the path tab and MCP `list_transactions` show them alongside each
+  other.
+- *Bodies.* Bodies are capped at 256 KB. A blob response is sliced to 256 KB **before** `FileReader`,
+  because React Native's `FileReader` reads the whole blob. A 2 MB response yields a 256 KB body and
+  a true `resBytes` (or a recorded reason why the size is unknown), and the app receives all 2 MB
+  unchanged.
+- *Request size for FormData and Blob bodies, by the first measurement's result.* A Blob body's size
+  is known (`Blob.size`), so it is reported as a true `reqBytes` in either branch.
+  - **If upload progress gives the true size on both platforms:** a FormData request's `reqBytes` is
+    that true size, reported when the upload completes, and its body carries the existing omission
+    reason for a body not captured. No new constant is added. A test with a known multipart payload
+    reads the same `reqBytes` on an iOS simulator and an Android emulator, and the replay guard
+    (`service/Replay.kt`, `CONTENT_TYPE && reqBytes > 0`) refuses it because the size is above 0.
+  - **Only if it is unreliable on either platform (the fallback):** the true-size overturn in the list
+    at the top of §7 applies, and `:inspector-model` gains a new `BodyOmission` constant for "a body
+    was sent and its size cannot be measured". This is additive, on an open string. Per `capture.md`,
+    "If a new code path can drop a body, give it a `BodyOmission` constant". Without it the producer
+    would have to send `reqBytes: 0` with `contentType`, which the replay guard lets through, and a
+    replayed multipart POST would go out with an empty body and no warning. With the constant in
+    place:
+    - replay refuses with a message naming the reason;
+    - the web UI (detail and the replay editor's note), MCP's missing-body text and the HTML,
+      Markdown and HAR exports say "body sent, not captured, size unknown", never "empty", and HAR's
+      `bodySize` is `-1`;
+    - no mirror reads `BodyOmission`, so there is no case file. `duplicateGroups` keys on both byte
+      counts, and the note says whether two size-unknown uploads may read as a repeat.
+
+    Each of these is proven red. *For the architect:* `STREAMING` says its size is reported, which a
+    FormData body cannot honour in this branch. The constant covers FormData only, and like
+    `DISCARDED` it outranks a zero byte count on every surface. The note also decides what a daemon
+    older than the constant does with such a row.
+- *Wire discipline.*
+  - There is one `WireMsg` per WebSocket frame and never an array frame. The daemon decodes one
+    message per frame, and today it drops a failure with only a stderr line.
+  - `mono` is an integer, because `performance.now()` must be rounded. A fractional `mono` is a decode
+    failure, so every row would be dropped in silence.
+  - The send queue is bounded and drops the oldest entry, and it counts what it drops.
+  - Reconnects back off from 250 ms to 5 s and send `resumeSessionId`.
+  - A test proves that a dead daemon never blocks or throws into the app.
+- *The efficiency contract, restated honestly.* JavaScript has one thread, so the "dedicated worker"
+  cannot be copied. The design note states what the producer does on the app's thread instead:
+  a metadata snapshot, then an enqueue, with body reads off the call's own path. It also states which
+  costs remain. That paragraph goes into the producer's guide and into `capture.md`.
+- *Requests from the daemon.* The producer answers `signReq` with a `signRes` carrying `error`, never
+  silence. An app that ignores the request makes a replay hang for 30 s and then fail, and if the
+  JavaScript app is the only one connected, every re-signed replay of a session with no app of its
+  own goes to it (`liveApps.sole()`). It answers `signalReq` with `signalErr` naming what is
+  registered, per `docs/schema.md`. A test covers each case.
+- *The spec.* `docs/schema.md` gains `signReq` and `signRes` (today they are only in `Wire.kt`), and
+  its `reqBodyOmitted` row gains `discarded`; that doc is now a second implementation's spec.
+- *Production safety, a convention the harness owns (ruled 2026-10-30).* The producer has no
+  `__DEV__` guard. It is safe in a release build only because the consumer's harness does not inject
+  it there.
+  - The guide says, in these words or plainer: "For JavaScript, keeping the producer out of a release
+    build is a convention your harness owns. Inspector does not enforce it." It also says that Kotlin
+    apps keep the enforced artifact swap.
+  - A JavaScript canary string is in the file.
+  - The guide documents a bundle check, separate from `check-release-clean.sh`, for consumers to run
+    in their own release CI. It finds the canary in a bundle that has the producer injected and finds
+    nothing in one without it, and it has a `--self-test`, like the existing guard. Both directions
+    are proven in this repository. Measurement 3 decides what format the check reads. If Hermes
+    strips the canary, the guide says what the check can and cannot see.
+  - Nothing in the guide, the README or `AGENTS.md` calls the JavaScript producer's release safety
+    enforced.
+- *Loopback.* The producer dials loopback or the Android emulator alias only. A configured host
+  outside those is refused at start with a message, and there is no fallback.
+- *Platform.* `SessionMeta.platform` is taken from config. On Android, if config does not give it,
+  the emulator is detected from `Platform.constants`. iOS cannot detect a simulator without a native
+  module, so there config must supply it, and the guide says so.
+- *Schema parity.* Shared JSON fixtures (a scenario and the frame it must produce) live in a
+  folder under `producers/js/`, not in `mirror-cases/`, where an unknown rule fails both runners. The
+  Kotlin test declares that folder an `@InputDirectory` (`shared-rules.md`):
+  - the JavaScript test asserts that the producer emits each frame;
+  - a Kotlin test decodes each frame with a **strict** `Json`. `InspectorJson` has
+    `ignoreUnknownKeys = true` and would swallow a misspelt key;
+  - the same test checks values: `id` is eight lowercase hex characters, `reqBodyOmitted` is a known
+    constant, and required fields are present rather than defaulted;
+  - each check is proven red.
+
+  One CI step also runs the producer against a real daemon and reads the archive back.
+  `scripts/lib/ingest-client.js` is the precedent.
+- *Release.* Nothing goes to Maven Central. The file ships as a GitHub release asset and inside the
+  daemon zip, with a sha256, and there is no npm package. A separate tag, `producer-js-v*`, has its
+  own small workflow. The plan verified that this pattern does not match `release.yml`'s `v*`, and
+  a new `:repo-checks` test proves it; none reads the workflows today. Producer releases are published with `--latest=false`, because the
+  README and `docs/ACCESS.md` link `/releases/latest` for the daemon zip. The daemon job's smoke test
+  checks that the file is in the zip.
+- *Docs and budgets.*
+  - The producer has a guide, versioned the way `INTEGRATION.md` is, because it is handed to another
+    team as a file.
+  - *The reframe (ruled 2026-10-30).* `AGENTS.md` "What this is" and "What it is not", the closing
+    section's "capture stays Ktor-client-only until 4c" (below), and the README are rewritten to say
+    the following. Inspector is a host tool with many producers. Its primary support is for Compose
+    Multiplatform apps and JavaScript (React Native) apps. Production safety is enforced for Kotlin
+    and is a harness convention for JavaScript. `AGENTS.md` also adds `producers/js/` to the "Not
+    modules" line. **`AGENTS.md` has a 15,000-byte cap with roughly 378 bytes left at `af854e9`**, so
+    the rewrite either fits or moves text out to a decision file, and `:repo-checks` stays green.
+    None of these files is edited before this item's docs work.
+  - The producer file stays under the 600-line budget.
+  - `docs/DAEMON.md` names the new omission reason.
+
+**Out of scope.** An overlay inside a React Native app. WebSocket and socket.io frames. Traffic from
+native SDKs. WebViews. Physical iPhones. An npm package. Batched frames. Any LAN route.
+
+**Surfaces.** A new producer in `producers/js/`; `:inspector-model` (one constant, only in the fallback branch); the daemon (replay
+refusal, and in the fallback MCP's missing-body text and exports); the web UI (in the fallback, the
+omission text and the replay note);
+`docs/schema.md`; CI; release. **No public Kotlin API** beyond the
+constant. The architect confirms whether any golden in `api/` covers `:inspector-model`'s constants.
+If one does, it is part of the item. **Size:** L, the product owner's guess and the architect's, with the four
+measurements first. It is smaller if the first measurement succeeds.
+
+### Screen signals from React Navigation
+
+*Ticket label:* `item:producer-react-native-screens`
+
+**The user and the problem.** The same web UI user or agent. Once the React Native producer exists,
+calls arrive with no screens between them, so the path tab is empty and the waterfall has no columns.
+The consuming apps pass no `onStateChange` to their navigation container, and the team cannot add
+one.
+
+**Why now.** It is small once the transport exists, and the path tab is the view that answers "what
+was the user doing when this call went out". Without screens that question has no answer.
+
+**Shape, kept inside the "no adapter modules" rule.** The producer exposes a generic
+`signal(tag, name, data)`, the JavaScript form of the Kotlin call. The producer's guide carries a
+**recipe**, which lives in the harness and not in Inspector. The recipe is a resolver shim that hooks
+`createNavigationContainerRef`, or the container's ref events, and emits a `screen` signal when
+navigation commits. That is lighter than wrapping `NavigationContainer`. Emitting at commit is the
+rule `INTEGRATION.md` §12c already states for Kotlin apps (`docs/decisions/shared-rules.md`, "strictly
+by start"). The maintainer kept "No adapter modules" on 2026-10-30, so Inspector ships no helper
+file.
+
+**Design first.** React Navigation 7's container-ref event names are **not verified**. The design note
+reads them from the pinned source before it names any of them.
+
+**Acceptance criteria.**
+- With the recipe in a harness, the sample React Native app's three-screen route shows as three
+  stations on the path tab, with each call under the screen it was sent from. MCP `timeline` lists the
+  same `screen` signals in the same order.
+- A tap that navigates and fires a call in the same millisecond sorts by `seq`.
+  `item:producer-react-native`'s design decides whether the producer assigns `seq`, on calls and
+  signals alike. If it does not, the guide says ties fall back to
+  `mono`.
+- A test drives the recipe against a stand-in container with the verified event shape, and is proven
+  red with the hook removed.
+- `signal()` goes through the producer's bounded queue, and never blocks or throws into the app.
+
+**Out of scope.** `state` signals, `signalReq` providers, nested navigators beyond what the commit
+event already reports, and any Inspector file that imports React Navigation.
+
+**Surfaces.** `producers/js/` and its guide. No Kotlin, schema or golden change. **Size:** S. It
+depends on `item:producer-react-native`'s transport.
+
+### Later: a Node producer for outbound calls
+
+*Ticket label:* `item:producer-node`. **Not placed, and not a full item.** It uses Node's built-in
+`diagnostics_channel` (`http.client.*` and `undici:request:*`, all present on Node 23.3), so nothing
+is monkey-patched and another `--require` preload sees nothing. It needs a new `platform` value, such
+as `node`. **Size:** M, the architect's estimate. Its known blockers, any one of which could change its scope:
+
+- `http.client.response.finish` fires when the response headers arrive, not when the body ends.
+- undici 6.21 has no body channels, so the first slice is metadata only, with no sizes and no bodies.
+- Node's own `WebSocket` raises undici events, so the producer must exclude its own `/ingest` socket
+  and its reconnects.
+- CI runs Node 22, whose channels have not been checked.
+
+Decide after `item:producer-react-native` ships, by whether the consuming team asks for backend calls
+in the same archive.
+
+### Later, lowest: a browser producer
+
+*Ticket label:* `item:producer-browser`. **Not placed, and not a full item.** It is the React Native
+producer without React Native, for Vite and React web apps. **It must not start before
+`item:control-boundary-advisory` is decided.** The reason is in the advisory. **Size:** not sized
+until the advisory is decided.
+
+### Deliberately not doing
+
+- **A shipped React Navigation helper.** "No adapter modules" was kept on 2026-10-30.
+- **A `__DEV__` refusal in the producer.** The maintainer chose on 2026-10-30 to rest release safety
+  for JavaScript on the harness alone, with the canary and a documented bundle check.
+- **An npm package or a Maven artifact for the producer.** One vendorable file is what the consumer
+  asked for, and a registry adds a network fetch they cannot make.
+- **Batched or array frames.** The daemon decodes one message per frame, and a batch that fails to
+  decode loses every row in it.
+- **A LAN fallback when loopback fails.** `docs/decisions/devices-and-stream.md` explains why widening
+  the bind is the wrong answer, and an archive holds unredacted credentials by default.
+- **Reusing `check-release-clean.sh` for JavaScript bundles.** It cannot see dex or Hermes bytecode,
+  and a guard that cannot see must not be described as one that passed.
+- **Covering native SDK traffic or WebViews from JavaScript.** That remains 4c, which is not started.
+
+### Open questions for the maintainer
+
+- **The capture letter.** The product owner proposes 4d. The maintainer decides.
+- **The browser producer and `item:control-boundary-advisory`.** The browser producer waits on that
+  advisory. What the producers need from its fix is recorded there.
+
+---
+
 ## What this document does not overturn
 
 The constraints in `docs/decisions/`, indexed in `AGENTS.md` → "Non-obvious decisions — do not
@@ -1487,3 +1870,9 @@ The constraints in `docs/decisions/`, indexed in `AGENTS.md` → "Non-obvious de
 In particular: capture stays Ktor-client-only until 4c is deliberately chosen, the filter grammar
 is frozen for v1, production safety remains two layers and non-negotiable, Inspector learns
 nothing about app domain concepts, and no adapter modules ship.
+
+*(2026-10-30, the product owner: "capture stays Ktor-client-only" has been out of date since 4a. The
+maintainer overturned it on 2026-10-30, with a wider reframe: Inspector is a host tool with many
+producers, with primary support for Compose Multiplatform and JavaScript (React Native) apps; see §7
+→ "Decided 2026-10-30". This sentence is rewritten by `item:producer-react-native`'s docs work, not
+before. "No adapter modules ship" was kept.)*
