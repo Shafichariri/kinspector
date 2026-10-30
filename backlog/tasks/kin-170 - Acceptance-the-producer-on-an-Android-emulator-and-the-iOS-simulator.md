@@ -38,8 +38,9 @@ No product code. It is device acceptance on the scratch React Native 0.79.6 app 
 ## What is proven, on each platform unless stated
 | Area | What must be shown |
 |---|---|
-| **Injection** (`getAppendScripts.js:16-18`) | The producer runs in a bundle built with both Metro steps, and does **not** run when only step 1 is taken: Metro's log never shows `[inspector] connected to …`. |
-| **Canary** | Present in a release build that injects the producer through the side-effect import. `inspector-bundle-check.js` exits 1 on it, and 0 on a release build without the producer. Android: the APK and `index.android.bundle` (Hermes bytecode). iOS: the bundle and `.hbc`. |
+| **Injection** (`getAppendScripts.js:16-18`) | The producer runs in a bundle built with both Metro steps, the guide's way: step 2 is a side-effect import of `inspector-producer-xhr.js`, which pulls in the core (the two-file split, KIN-164). It does **not** run when only step 1 is taken: Metro's log never shows `[inspector] connected to …`. On Android only, step 2 importing the core instead of capture shows the "nothing is captured" line in Metro's log and in LogBox. |
+| **Canary** | Present in a release build that injects the producer through that side-effect import of capture. It is the core's canary, carried in through capture's `require`. `inspector-bundle-check.js` exits 1 on it, and 0 on a release build without the producer. Android: the APK and `index.android.bundle` (Hermes bytecode). iOS: the bundle and `.hbc`. |
+| **Stalled daemon** (KIN-162's bound table, F1) | Connect, `kill -STOP` the daemon, then emit 2000 signals of 10 KB. Record the app's memory before, at 30 s and at 90 s, and when, if ever, the producer's `stats().state` leaves `connected`. **Android emulator:** confirms or corrects the 16 MiB okhttp close and the 10 s or 60 s failure. **iOS simulator:** measures what SocketRocket 0.7.1 holds; read `Pods/SocketRocket/SocketRocket/SRWebSocket.m` first and quote its buffer handling. Recorded, not judged. The guide's efficiency paragraph states the result. |
 | **Coverage** | An axios GET and a raw `fetch()` multipart POST each arrive as one row with method, URL with port, status, timing and headers. They show in the web UI's list, on the path tab and in MCP `list_transactions`. |
 | **Bodies** | A 2 MB response yields a 256 KB body and a true `resBytes`, and the app receives all 2 MB unchanged. |
 | **FormData size** (measurement 1, re-run) | With a file-URI part: `reqBytes` equals the server's `Content-Length` when a progress event arrived, and is 0 with `streaming` otherwise. iOS for the first time. |
@@ -62,6 +63,8 @@ A case that cannot be run is recorded as Not verified, with the reason, and is n
 - [ ] #7 Hermes's longest producer macrotask on the 2 MB response is recorded
 - [ ] #8 Fast Refresh and full-reload behaviour are recorded, and the guide's sentence matches them
 - [ ] #9 Every result is in docs/STATUS.md with its evidence; anything not run is recorded as Not verified with the reason
+- [ ] #10 The bundles in #1 and #6 inject the producer through a side-effect import of inspector-producer-xhr.js; on Android, importing the core instead shows the 'nothing is captured' line
+- [ ] #11 With the daemon stopped by kill -STOP, the app's memory and the producer's state are recorded at 0, 30 and 90 s on the Android emulator and on the iOS simulator, with SRWebSocket.m's buffer handling quoted, and docs/REACT-NATIVE.md states the result
 <!-- AC:END -->
 
 ## Definition of Done

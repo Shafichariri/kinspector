@@ -58,7 +58,7 @@ ordinal: 169000
 
 | Section | Text |
 |---|---|
-| What this is | "A network inspector that lives on the host. Producers in an app stream its calls to a daemon on the developer's machine, and the archive, web UI, findings, diff and MCP read one wire format whichever producer wrote a row. Primary support: **Compose Multiplatform apps using Ktor** (Kotlin libraries, with an in-app overlay) and **React Native apps** (one JavaScript file the team's harness injects; no overlay)." |
+| What this is | "A network inspector that lives on the host. Producers in an app stream its calls to a daemon on the developer's machine, and the archive, web UI, findings, diff and MCP read one wire format whichever producer wrote a row. Primary support: **Compose Multiplatform apps using Ktor** (Kotlin libraries, with an in-app overlay) and **React Native apps** (two JavaScript files the team's harness injects; no overlay)." The words "one JavaScript file" were accepted at the gate. The two-file split (maintainer, 2026-10-30) changes them to "two JavaScript files", one byte more. |
 | What it is not: scope bullet, appended | "The JavaScript producer sees XMLHttpRequest and fetch on the JS thread only: not image loads, native modules or SDKs, WebViews, or redirects the native stack follows." |
 | What it is not: production bullet | "Not shipped to production, ever. For Kotlin this is enforced (Production safety below). For JavaScript it is a convention the consuming team's harness owns; Inspector cannot enforce it, and nothing may say it does." |
 | Production safety heading | "## Production safety — two layers, Kotlin only", plus: "Neither layer reaches a JavaScript bundle. The producer stays out of a release build only because the harness does not inject it; its canary and inspector-bundle-check.js let the consumer verify that in their own release CI, where they run it (docs/decisions/release.md)." |
@@ -70,6 +70,7 @@ ordinal: 169000
 ## README and ROADMAP
 - **README:** the same framing.
 - **`docs/ROADMAP.md`'s closing section:** "capture stays Ktor-client-only until 4c is deliberately chosen" is rewritten to the many-producers framing.
+- **`docs/ROADMAP.md` §7:** "The work is one file" and the not-doing bullet "One vendorable file is what the consumer asked for" are corrected to the ruling. The producer is two vendorable files, the core and capture, still with no package and no registry. The consumer's own constraint, "a single file they can vendor is the preferred way to ship", stays as they stated it.
 
 ## capture.md
 - **4d paragraph.** Add "**4d — JavaScript producers.**" beside 4a, 4b and 4c. It covers the React Native producer (this item), with Node and the browser later.
@@ -79,9 +80,17 @@ ordinal: 169000
 **Version line:** "Document version: v1 — <date>", with a changelog section, versioned the way `INTEGRATION.md` is.
 
 **What the guide covers:**
+- **vendoring:**
+  - copy `inspector-producer.js` and `inspector-producer-xhr.js` into one folder of the harness, both from one release; `SHA256SUMS` lists both;
+  - capture `require`s `./inspector-producer.js`, so the two must sit side by side under those names;
+  - a mismatched pair says so in Metro's log and captures nothing;
 - the two Metro steps in **one code block**:
   - step 1 appends the module to `getModulesRunBeforeMainModule` after `InitializeCore`, never replacing the list;
-  - step 2 is a side-effect import, commented `// required: without this the module is listed but never runs`;
+  - step 2 is a side-effect import **of `inspector-producer-xhr.js`**, commented `// required: without this the module is listed but never runs`. That one import pulls in the core;
+  - `start({...})` is called on `require('./inspector-producer.js')`, in the same block;
+- the two `console.error` lines a broken install shows, verbatim from KIN-164:
+  - "nothing is captured: inspector-producer-xhr.js was not loaded…" means step 2 imports the core instead of capture;
+  - "not capturing: … Copy both files from one release." means the two files come from different releases;
 - the convention sentence, verbatim from the item: "For JavaScript, keeping the producer out of a release build is a convention your harness owns. Inspector does not enforce it." It also says Kotlin apps keep the enforced artifact swap;
 - `start()` options;
 - iOS needs `platform: 'ios-simulator'`;
@@ -93,7 +102,11 @@ ordinal: 169000
 - no 150 ms signal merge and no dedup;
 - `streaming` at 0 means the upload's size was not measured;
 - the minimum daemon line: "Use daemon <version> or later. An older daemon shows an upload whose size was not measured as empty; it still refuses to replay it.";
-- the efficiency paragraph;
+- the efficiency paragraph, with KIN-162's bound table:
+  - the producer's own queue is about 16 MB at worst;
+  - on Android, okhttp holds at most 16 MiB more and then closes the socket;
+  - on iOS, the socket's buffer has no bound the producer can see while a daemon is attached but not reading (stopped with Ctrl-Z, for example), with KIN-170's simulator measurement;
+  - "Do not leave the daemon suspended while the app runs.";
 - the bundle check, with its measured basis;
 - the re-sign note: untick "regenerate per-request headers (re-sign)" to replay a JS app's call.
 
@@ -114,7 +127,10 @@ ordinal: 169000
 - [ ] #3 The README and the ROADMAP closing section say Inspector is a host tool with many producers, with primary support for Compose Multiplatform and React Native apps
 - [ ] #4 capture.md carries '4d — JavaScript producers.' beside 4a, 4b and 4c
 - [ ] #5 docs/REACT-NATIVE.md v1 covers every point the ticket lists, including the convention sentence verbatim, and nothing in it, the README or AGENTS.md calls JavaScript release safety enforced
-- [ ] #6 The guide shows both Metro steps in one code block, with step 2 a side-effect import commented as required
+- [ ] #6 The guide shows both Metro steps in one code block, with step 2 a side-effect import of inspector-producer-xhr.js commented as required, and start() called on inspector-producer.js
+- [ ] #9 The guide says to vendor both files side by side from one release, and quotes the 'nothing is captured' and 'not capturing' lines with what each means
+- [ ] #10 The guide's efficiency paragraph carries the queue and socket bounds per runtime, including that iOS has no bound the producer can see while the daemon is attached but not reading
+- [ ] #11 AGENTS.md's reframe says two JavaScript files, and ROADMAP §7 no longer calls the producer one file
 - [ ] #7 docs/README.md indexes the guide; INTEGRATION.md is not bumped
 - [ ] #8 docs/STATUS.md records measurements 1, 2, 3, 4, 6 and 7 with evidence, Android and iOS separately
 <!-- AC:END -->

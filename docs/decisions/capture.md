@@ -183,3 +183,22 @@ isn't one.
 connection pool that outlive the test. Leaking them made *unrelated* Ktor test classes fail
 intermittently: a 1 MB response arriving empty, a redirect chain losing a hop. Call
 `dispatcher.executorService.shutdown()` and `connectionPool.evictAll()` in teardown.
+
+**JavaScript producers.** `producers/js/inspector-producer.js` is a second implementation of the
+wire format on the device side, and the daemon reads its frames with the same Kotlin serializer
+that reads `StreamSink`'s, so two rules that Kotlin gets for free are the producer's to keep. Every
+Long on the wire is a JSON integer: `performance.now()` is fractional on a device, and a `mono` of
+`1234.5` does not decode as a `Long`, so the daemon drops the whole frame, and the app is never
+told. `mono` is therefore `Math.floor` of it, clamped so it never steps back, and `seq` is taken
+straight after it from one counter for calls and signals, which on one thread is program order.
+And a full JavaScript reload is a new session: `mono` restarts with the bundle, so a reloaded app
+resuming the old session would file new rows before rows they came after. `resumeSessionId` is
+held in memory only, sent on a reconnect within one load, and never persisted. `transport.test.js`
+pins both: integers through a fractional clock that also steps back, and no `resumeSessionId` in
+the first `hello` of a fresh load.
+The producer stops handing frames to the socket while its `bufferedAmount` is above 1 MiB, so a
+daemon that is attached but not reading leaves them in the bounded ring, which drops and counts,
+rather than in the socket's unbounded buffer; it gates on `bufferedAmount` only where it is a
+number, because React Native 0.79.6 never assigns it, so undefined is no information. Both
+directions are pinned in `transport.test.js`: "the socket's buffer stops at the high-water mark" and
+"an undefined bufferedAmount never holds the queue".

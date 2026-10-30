@@ -52,7 +52,8 @@ ordinal: 167000
 | Rule | Why |
 |---|---|
 | The canary is assigned at module top level: `globalThis.__INSPECTOR_PRODUCER__ = { canary: CANARY, version }` (transport ticket). | It is a used reference, so its presence is tied to the module running. |
-| The guide's step 2 is a **side-effect** import or `require`, never a named import. It sits in one code block with step 1, commented `// required: without this the module is listed but never runs`. | An unused binding drops the whole module. |
+| The guide's step 2 is a **side-effect** import or `require`, never a named import. It imports the capture file, `inspector-producer-xhr.js`, which pulls in the core (KIN-164). It sits in one code block with step 1, commented `// required: without this the module is listed but never runs`. | An unused binding drops the whole module. Capture's `require` of the core is a used binding, so the core and its canary survive with it. |
+| **One canary, in the core** (`inspector-producer.js`). The capture file holds none. | Every bundle holding producer code holds the core, because capture requires it. The check therefore proves that producer code is in the bundle. It does not prove that capture is, and need not: a release bundle with the core alone already fails. |
 | `getModulesRunBeforeMainModule` **appends** after `InitializeCore` and never replaces the list. | The default list is `[InitializeCore]`. |
 
 ## `inspector-bundle-check.js <paths…>` and `--self-test`

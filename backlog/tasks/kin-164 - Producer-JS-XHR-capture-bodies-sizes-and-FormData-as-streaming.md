@@ -11,8 +11,13 @@ dependencies:
   - KIN-163
 modified_files:
   - producers/js/inspector-producer.js
+  - producers/js/inspector-producer-xhr.js
+  - producers/js/AGENTS.md
   - producers/js/test/fake-xhr.js
   - producers/js/test/xhr.test.js
+  - producers/js/test/pair.test.js
+  - producers/js/test/version.test.js
+  - producers/js/test/defaults.test.js
   - producers/js/fixtures/frames
   - docs/decisions/capture.md
 type: feature
@@ -37,7 +42,45 @@ ordinal: 164000
 **Measurement numbers are the ROADMAP's:** 1 upload, 2 TextEncoder, 3 canary, 4 Content-Length. The note added 6 (performance.now) and 7 (fetch→XHR).
 
 ## This ticket builds
-The capture half of `inspector-producer.js`, its `test/fake-xhr.js` and its transaction fixtures.
+The capture file `inspector-producer-xhr.js`, the hook in the core that it attaches to, `test/fake-xhr.js` and the transaction fixtures.
+
+## Two files (ruled by the maintainer 2026-10-30, against the architect's budget-entry recommendation)
+The producer is two vendorable files. Each stays under the 600-line `FileBudgetTest` cap, so `structure/budgets.txt` gets no entry.
+
+| File | Holds | Lines, estimated |
+|---|---|---|
+| `inspector-producer.js`, the **core** | transport, config, the emulator rule (KIN-163), `signal()`, both replies, the ring and the `bufferedAmount` gate (KIN-172), the UTF-8 and base64 helpers, the canary, `PRODUCER_VERSION`, and the capture hook below | about 535, headroom about 65 |
+| `inspector-producer-xhr.js`, **capture** | the XHR wrap, URL parsing, the allowlist and body cap, body and size capture, FormData, building the `txn` frame | about 300, headroom about 300 |
+
+**Dependency direction: capture requires the core, and the core never requires capture.**
+- `inspector-producer-xhr.js` begins `const core = require('./inspector-producer.js')` and calls `core._attach(install, PRODUCER_VERSION)` at module top level. Under measurement 3 a binding that is used survives, so importing the capture file as a side effect pulls in both files. That import is the guide's step 2 (KIN-169).
+- A capture file vendored without the core fails Metro's resolution at build time, which is loud enough.
+- The core imports nothing of capture's, so the core alone loads, connects and sends signals.
+
+**The hook.**
+- `_attach(install, version)` registers `install`. `start()` calls each registered `install` with an internal context after it has started:
+  - the hot-path pieces: `stamp`, `enqueue`, `randomId`, `now`, `wallNow`, `setTimeout`, `log`, `XMLHttpRequest` from deps;
+  - the UTF-8 and base64 helpers. **They are passed, not copied: one copy in the core.**
+- A capture attached after `start()` is installed at once.
+- The registry is reachable through `deps`, so a test can run the core with no capture attached.
+- `_attach` is not consumer surface. `config.test.js` keeps the public keys `start`, `signal`, `stats` and `stop`, and allows only underscored internals beyond them.
+
+**A core vendored alone is told loudly that it captures nothing.**
+- On the first `helloAck` of the producer's life, if no capture is attached, the core logs once with `console.error`, so LogBox shows it:
+  `[inspector] nothing is captured: inspector-producer-xhr.js was not loaded. Import it as the guide's step 2 shows; it loads inspector-producer.js itself.`
+- **Why `helloAck` and not `start()`:** by then every module the bundle runs before main has loaded, so the order of the import and the `start()` call cannot raise a false alarm. The line also lands beside `connected to …`, which is where the guide tells the reader to look.
+- This widens the ladder's "only refusals use `console.error`" to the two capture lines in this section.
+
+**One version for the pair.**
+- Both files declare `const PRODUCER_VERSION = '<x.y.z>'`. Rename the core's `VERSION`; `globalThis.__INSPECTOR_PRODUCER__.version` reads it.
+- `_attach` compares the two versions. On a mismatch it installs nothing and logs once with `console.error`:
+  `[inspector] not capturing: inspector-producer-xhr.js is <a> but inspector-producer.js is <b>. Copy both files from one release.`
+- `version.test.js` reads both constants from source and fails when they differ. KIN-168's tag check reads the same two constants.
+
+**One canary, in the core.** The capture file holds none.
+- Every bundle that holds producer code holds the core: capture requires it, and the core alone is the core.
+- So one used top-level canary covers every case, and KIN-167's check, which reads it from `inspector-producer.js`, needs no change.
+- The check proves producer code is in the bundle. It does not prove capture is, and it does not need to.
 
 ## The XHR wrap
 **Source facts**, read from React Native 0.79.6:
@@ -56,7 +99,7 @@ The capture half of `inspector-producer.js`, its `test/fake-xhr.js` and its tran
 | Rows | **Exactly one `txn` frame per XHR**, sent at `loadend`. The archive is append-only (`SessionWriter.append`), so a second frame would be a second row. |
 | URL | The producer's own regex, because RN's `URL` lacks `hostname`/`port`.<br>`port` only when explicit and not the default.<br>Host lowercased; IPv6 keeps its brackets.<br>An empty path is `/`; the fragment is dropped. |
 | Request body | **string:** captured if allowlisted, cap 256 KB; `reqBytes` is the chunked UTF-8 count.<br>**ArrayBuffer or view:** `byteLength`.<br>**Blob:** `blob.size`, read sliced and only if allowlisted.<br>**FormData:** below. |
-| Allowlist | `BodyCapture.kt:34-41`: prefix match plus `+json`/`+xml`. The embedded copy is held by `defaults.json`. |
+| Allowlist | `BodyCapture.kt:34-41`: prefix match plus `+json`/`+xml`. The embedded copy, in `inspector-producer-xhr.js`, is held to `defaults.json` by `defaults.test.js`. |
 | Response body | **`''` or `'text'`:** `responseText`.<br>**`'blob'`:** `resBytes` is `blob.size`; then `slice(0, cap)` before `FileReader`. Not allowlisted: no read, and `contentType`.<br>**`'arraybuffer'`:** `byteLength`.<br>**`'json'`:** `_response`. |
 | `resBytes` | The decoded size the app received. **`Content-Length` is never read:** on Android, OkHttp's transparent gzip strips it, along with `Content-Encoding` (measurement 4). |
 | Errors | `load` gives the status.<br>`error`, `timeout` and `abort` give `status: null` and `error`:<br>- `XMLHttpRequestError: <_response message>`<br>- `TimeoutError: after <n> ms`<br>- `AbortError`<br>`ms` is an integer. |
@@ -100,6 +143,7 @@ Replay refuses both rows through `Replay.kt:97`, which refuses `streaming` regar
 | The efficiency contract restated. | the sync-path spy |
 | FormData is `streaming`, with `total` when a progress event was seen and 0 otherwise. | the FormData cases |
 | `resBytes` is the decoded size, and `Content-Length` is never read. | — |
+| **The producer is two files, and capture requires the core.** Ruled 2026-10-30. Do not merge the files back over the line cap, and do not make the core require capture. One side-effect import of capture pulls in both. The core alone says loudly that it captures nothing. There is one canary, in the core, and one `PRODUCER_VERSION` that both files must agree on. | `pair.test.js`, `version.test.js` |
 
 ## Tests (each shown red)
 | File | Holds | Red by |
@@ -107,6 +151,9 @@ Replay refuses both rows through `Replay.kt:97`, which refuses `streaming` regar
 | `xhr.test.js`, both event models | one frame per XHR; GET fields; the 2 MB blob (slice before read, the app's blob identical, `resBytes` 2 MB, truncated); FormData with and without an event; Blob `reqBytes`; error, timeout and abort give `status: null`; the app's `on*` handlers fire first; no double wrap; the sync path reads no body; the chunked count yields between chunks | a whole-blob read; status 0 kept; a synchronous read; a one-shot count |
 | `fixtures.test.js` | transaction frames added: GET, FormData both ways, 2 MB blob, each error kind | as in the fixtures ticket |
 | `:inspector-model` `ProducerFramesTest` | decodes the new frames strictly (no new code) | — |
+| `pair.test.js` | the core with no capture attached logs the "nothing is captured" line once, at the first `helloAck`, and not again after a reconnect; core plus capture logs no such line; a capture attached after `start()` wraps at once; mismatched versions log the "not capturing" line and leave `XMLHttpRequest.prototype` unwrapped; the capture file holds no `INSPECTOR_JS_CANARY_` string | the no-capture check deleted; the version comparison deleted |
+| `version.test.js` | `PRODUCER_VERSION` read from both files' source is present and equal | one file's version bumped |
+| `defaults.test.js` (extended from KIN-163) | capture's embedded allowlist and 262144 cap equal `defaults.json`, and its predicate gives each content-type case's answer | one embedded allowlist entry changed |
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -122,8 +169,13 @@ Replay refuses both rows through `Replay.kt:97`, which refuses `streaming` regar
 - [ ] #9 Text bodies are counted in chunks of 64 Ki chars per macrotask
 - [ ] #10 fake-xhr.js covers both RN event models and every xhr.test.js case runs on both
 - [ ] #11 Transaction fixtures decode under ProducerFramesTest
-- [ ] #12 capture.md carries the five JavaScript-producer paragraphs listed in the ticket
+- [ ] #12 capture.md carries the six JavaScript-producer paragraphs listed in the ticket
 - [ ] #13 Each test in the ticket's table is shown red as stated, then restored
+- [ ] #14 The XHR capture is in inspector-producer-xhr.js, which requires ./inspector-producer.js and registers through _attach; inspector-producer.js requires nothing of it; both files are under 600 lines with no budgets.txt entry
+- [ ] #15 With no capture attached, the first helloAck logs '[inspector] nothing is captured: inspector-producer-xhr.js was not loaded. Import it as the guide's step 2 shows; it loads inspector-producer.js itself.' once with console.error; with capture attached it does not
+- [ ] #16 Both files declare PRODUCER_VERSION; on a mismatch capture installs nothing and logs the 'not capturing' line in the ticket; version.test.js fails when the two differ
+- [ ] #17 The canary is only in inspector-producer.js, and the UTF-8 and base64 helpers exist only there; capture receives them through the hook
+- [ ] #18 producers/js/AGENTS.md's key-files table lists both files, each under 600 lines, and says capture requires the core
 <!-- AC:END -->
 
 ## Definition of Done

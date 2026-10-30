@@ -42,7 +42,7 @@ One CI step that runs the real producer against a real daemon and reads the arch
 - `scripts/lib/ingest-client.js` **exports** its `LOOPBACK` and `checkHost` guards, and the round trip `require`s them. Reused, not copied.
 - Every host ends in `.invalid`.
 
-**`producers/js/test/live-roundtrip.js`** runs the real producer over `fake-xhr.js` and Node's global `WebSocket`. It sends:
+**`producers/js/test/live-roundtrip.js`** runs the real producer, both files, over `fake-xhr.js` and Node's global `WebSocket`. It loads the pair the way the guide does: `require('../inspector-producer-xhr.js')`, which pulls in the core, then `start()` on `inspector-producer.js` (the two-file split, KIN-164). It sends:
 - a GET;
 - FormData twice, once with an upload progress event and once without;
 - a 2 MB blob response;

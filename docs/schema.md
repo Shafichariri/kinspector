@@ -44,7 +44,7 @@ catching usually live in the attempts a "one row per call" view would hide.
 | `reqHeaders` / `resHeaders` | map<string, list<string>> | Post-redaction. |
 | `reqBodyRef` / `resBodyRef` | string? | Host-relative, e.g. `bodies/7f3a.req`. Null on the wire; the daemon fills it in — **and must be filled in before the row is broadcast to live viewers**, or they see the body as absent. |
 | `reqBodyTruncated` / `resBodyTruncated` | bool | Body hit `bodyCaptureMaxBytes`. |
-| `reqBodyOmitted` / `resBodyOmitted` | string? | Why a body is absent: `contentType`, `streaming`. Null when the body was captured or there was none. Consumers must render this rather than guessing a reason. |
+| `reqBodyOmitted` / `resBodyOmitted` | string? | Why a body is absent: `contentType`, `streaming`, `discarded` (a redirect hop or retried attempt the client dropped before its body was read, so its zero bytes mean unknown, not empty). Null when the body was captured or there was none. Consumers must render this rather than guessing a reason. |
 | `reqContentType` / `resContentType` | string? | For requests, read from the outgoing body when the header is absent — Ktor keeps it there, not in the builder's headers. |
 | `redacted` | list<string> | e.g. `header:authorization`, `query:token`, `body:$.password`. |
 | `seq` | long? | Capture order on the device — one counter shared by calls, signals and markers, taken beside `mono`. Breaks ties within one millisecond, where a tap and the navigation it triggers routinely land; see [Same-millisecond ties](#same-millisecond-ties). Absent on rows from before it existed. |
@@ -235,6 +235,8 @@ JSON text frames over `WS /ingest`, discriminated by `"type"`.
 | `signal` | device → daemon | `Signal` + inline payload |
 | `signalReq` | daemon → device | `requestId`, `tag`, `name` |
 | `signalErr` | device → daemon | `requestId`, `error` |
+| `signReq` | daemon → device | `requestId`, `method`, `url`: regenerate per-request headers for a replay |
+| `signRes` | device → daemon | `requestId`, `headers`, or `error` when the app cannot sign |
 | `bye` | device → daemon | none |
 
 ### Rules
@@ -257,9 +259,23 @@ JSON text frames over `WS /ingest`, discriminated by `"type"`.
   advertisement in v1: discovery is the error path, so `signalErr` must name what *is* registered
   — `no provider for cache/orders; registered: cache/response, cache/prefs`.
 - **A failed pull leaves no row.** Errors are replies, never archived rows.
-- **Transactions recorded while disconnected are not replayed** in v1. They remain visible in
-  the device ring buffer only. Candidate for v2.
+- **Frames recorded while disconnected are queued and sent after the next `helloAck`.** The
+  queue is bounded and drops the oldest, counting each drop (Kotlin: 512 frames; JavaScript: 512
+  frames and 8 Mi chars). A frame already handed to the socket when it died is lost and **not**
+  counted, on both producers: neither can tell it from one the daemon received.
 - An abrupt socket close must be handled identically to `bye`.
+
+### Second implementations
+
+`StreamSink` gets these rules from `InspectorJson`. A producer in another language, such as
+`producers/js/`, has to keep them itself, because the daemon decodes its frames with the same
+serializer and drops a frame that fails, without telling the app.
+
+- **One message per frame.** One JSON object per WebSocket text frame, never an array of them.
+- **Longs are integers.** `mono`, `ms`, `reqBytes`, `resBytes`, `seq` and `bytes` are JSON
+  integers. A fractional value, `1234.5` or `1234.0`, does not decode as a `Long`, so **the whole
+  frame is dropped**. A clock that returns fractional milliseconds is floored before it is sent.
+- **`seq` comes from one counter** for every frame the producer captures, taken right after `mono`.
 
 ---
 

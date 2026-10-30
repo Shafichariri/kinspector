@@ -18,8 +18,9 @@ import kotlinx.serialization.Serializable
  *   backpressure reaching the app.
  * - Bodies ride inline on [Txn] rather than being written to device storage. The daemon writes
  *   them to `bodies/` and rewrites the `*BodyRef` fields. This keeps the device free of file I/O.
- * - Transactions recorded while disconnected are NOT replayed on reconnect in v1. They stay
- *   visible in the device ring buffer only.
+ * - Frames recorded while disconnected wait in the producer's bounded, drop-oldest queue and are
+ *   sent after the next [HelloAck]. A frame already handed to a socket that then dies is lost and
+ *   not counted as dropped.
  */
 @Serializable
 sealed interface WireMsg

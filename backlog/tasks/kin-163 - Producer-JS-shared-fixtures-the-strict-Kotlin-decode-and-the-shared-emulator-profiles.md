@@ -51,6 +51,14 @@ ordinal: 163000
 - the JS emulator rule;
 - the JS embedded defaults that `defaults.json` holds.
 
+**Which file (the two-file split, ruled 2026-10-30; see KIN-164).** Both go in the **core**, `inspector-producer.js`:
+- the emulator rule, because it decides `platform`, and `platform` decides `start()`'s default host. A consumer running the core alone must still dial the right address;
+- of the defaults, only the 65536 signal payload cap, which `signal()` uses.
+
+The content-type allowlist and the 262144 body cap belong to capture. They are embedded in `inspector-producer-xhr.js`, and their JS checks are written in KIN-164, where that file is created. This ticket still writes them into `defaults.json`, and `ProducerDefaultsTest` still holds Kotlin to all three.
+
+**Headroom:** the core is about 480 lines after KIN-172. This ticket adds about 30, and KIN-164's hook adds about 25. That leaves about 65 under the 600-line cap. No `structure/budgets.txt` entry.
+
 ## Emulator rule (Android `platform` when config gives none)
 - **What RN exposes:** `Fingerprint`, `Model`, `Brand` (and `Manufacturer`), per React Native 0.79.6 `AndroidInfoModule.kt:55-58`. There is no `HARDWARE`, `BOARD`, `DEVICE` or `PRODUCT`.
 - **What JS does:** takes the product and device from the fingerprint (`brand/product/device:release/...`) and applies `EmulatorDetection.kt:59-72` over five fields.
@@ -67,7 +75,7 @@ ordinal: 163000
 | `EmulatorDetectionTest` (`:inspector-stream`) | Iterates the JSON's `kotlin` expectations with all seven fields. Zero profiles fails. | one expectation flipped |
 | `fixtures.test.js` | The producer emits exactly each fixture's `frames`, driven with deterministic clock and id deps. Includes a signal over 64 KB whose cut splits a multibyte character, so it goes as `dataB64`. | `Math.floor` removed |
 | `emulator.test.js` | The JS rule gives each profile's `js` expectation. | the fingerprint-derived product removed |
-| `defaults.test.js` | The producer's embedded allowlist, cap and payload cap equal `defaults.json`, and its predicate gives each case's answer. | one embedded entry changed |
+| `defaults.test.js` | The core's embedded payload cap equals `defaults.json`. KIN-164 extends this file with the capture file's allowlist, body cap and predicate. | the embedded payload cap changed |
 
 ## Decision paragraph (devices-and-stream.md)
 - **Add:** a paragraph on the five-field emulator rule and the shared profiles.
@@ -86,6 +94,7 @@ ordinal: 163000
 - [ ] #7 On Android without platform, start() with reactNative labels an emulator android-emulator and dials 10.0.2.2 by default
 - [ ] #8 devices-and-stream.md carries the five-field rule and names the JSON file
 - [ ] #9 Each test in the ticket's table is shown red as stated, then restored
+- [ ] #10 The JS emulator rule and the embedded 65536 payload cap are in inspector-producer.js, which stays under 600 lines with no budgets.txt entry
 <!-- AC:END -->
 
 ## Definition of Done

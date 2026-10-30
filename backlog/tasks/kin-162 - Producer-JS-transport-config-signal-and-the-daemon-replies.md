@@ -1,9 +1,11 @@
 ---
 id: KIN-162
 title: 'Producer JS: transport, config, signal() and the daemon replies'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@engineer'
 created_date: '2026-10-30 13:35'
+updated_date: '2026-10-30 14:27'
 labels:
   - 'item:producer-react-native'
 dependencies: []
@@ -61,7 +63,8 @@ Decision files: `docs/decisions/capture.md`, `release.md`, `devices-and-stream.m
 ```
 producers/js/
   AGENTS.md + CLAUDE.md -> AGENTS.md   module-guide shape: names decision files, no **-led paragraph
-  inspector-producer.js       the vendorable file, CommonJS, < 600 lines
+  inspector-producer.js       the core (this ticket): transport, config, signal(), the canary; CommonJS, < 600 lines
+  inspector-producer-xhr.js   the capture (KIN-164): requires the core; CommonJS, < 600 lines
   inspector-bundle-check.js   consumer release-CI check, < 600 lines
   fixtures/README.md
   fixtures/frames/*.json      { "scenario": {...}, "frames": [ <WireMsg>, ... ] }
@@ -74,7 +77,7 @@ docs/REACT-NATIVE.md          consumer guide, versioned like INTEGRATION.md
 ```
 
 **CI, `web` job, before Gradle** (Node 22, `ci.yml:128-130`):
-1. `node -e "process.exit(typeof WebSocket==='function'?0:1)"` — no CI step opens a `WebSocket` today;
+1. `node -e "process.exit(typeof WebSocket==='function'?0:1)"` — checked first and by name, because the job's `site` measurement already opens Node's global `WebSocket` (`scripts/lib/measure-cdp.js:88,118`, reached by `measure-web-ui.js --only site`), and the producer's live round trip (KIN-166) will. The producer's unit tests use `fake-ws.js`, not the global;
 2. `node --test producers/js/test/*.test.js`, a shell glob of explicit files.
 
 Every test that iterates fixtures fails on zero.
@@ -93,8 +96,18 @@ Android emulator detection from `Platform.constants` comes with the shared profi
 ## Efficiency contract (the parts this ticket owns)
 | Where | Work |
 |---|---|
-| Memory | A ring of 512 frames **and** 8 Mi chars, whichever binds first, dropping the oldest. Worst case about 16 MB at 2 bytes per char; Kotlin's is 512 × 512 KB = 256 MB. |
-| Flush | At most 256 Ki chars of frames per tick. |
+| Memory | A ring of 512 frames **and** 8 Mi chars, whichever binds first, dropping the oldest. **The producer's own queue** is therefore about 16 MB at worst, at 2 bytes per char; Kotlin's is 512 × 512 KB = 256 MB. What the platform's socket buffers after `ws.send` is not in that figure; see the bound table below. |
+| Flush | At most 256 Ki chars of frames per tick. Where `ws.bufferedAmount` is a number, flushing waits while it is above 1 MiB (KIN-172). |
+
+**What the socket holds beyond the queue** (architect, 2026-10-30, ruled by the maintainer; the gate is built in KIN-172):
+
+| Runtime | Producer's queue | Socket buffer after `ws.send` |
+|---|---|---|
+| Node, browsers | about 16 MB | 1 MiB plus one frame: `bufferedAmount` is maintained there, and the gate holds frames in the ring, which drops the oldest and counts it. |
+| React Native 0.79.6, Android | about 16 MB | At most 16 MiB of UTF-8. `WebSocket_old.js:92` and `WebSocket_new.js:92` declare `bufferedAmount` and nothing assigns it, so the gate sees `undefined` and does nothing. okhttp 4.9.2's `RealWebSocket.send` calls `close(1001)` once its queue would pass 16777216 bytes, and drops every later send silently; `WebSocketModule.kt:219-242` ignores the result. JS hears of it when okhttp fails the socket: probably within 10 s (`writeTimeout`, `WebSocketModule.kt:84`, read from bytecode, not measured), at most 60 s (`CANCEL_AFTER_CLOSE_MILLIS`). Frames sent in that window are lost and not counted, as for any dying socket. |
+| React Native 0.79.6, iOS | about 16 MB | **No bound the producer can see.** `RCTWebSocketModule.mm:104-107` hands strings to SocketRocket 0.7.1 and ignores the result; its buffer was not read (no pods installed). Measured on the simulator in KIN-170. |
+
+A drain signal that would bound iOS needs a wire change (a `ping`/`pong` pair). It is a ROADMAP row, not part of this item.
 
 **What is not claimed:** that any of this is free. The dedicated worker is Kotlin's mechanism. The aim is unchanged: the app never blocks, waits or meaningfully allocates.
 
@@ -168,24 +181,61 @@ Integers on the wire, and a reload is a new session. Pinned by `transport.test.j
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 producers/js/ exists with AGENTS.md, its CLAUDE.md symlink and inspector-producer.js under 600 lines; :repo-checks stays green
-- [ ] #2 Every frame the producer sends is one JSON object per WebSocket send, never an array, and hello is the first
-- [ ] #3 Frames are flushed only after helloAck; a reconnect sends resumeSessionId; backoff runs 250, 500, 1000, 2000, 4000, 5000 ms and resets on helloAck
-- [ ] #4 The send queue holds at most 512 frames and 8 Mi chars, drops the oldest, and stats().dropped counts every drop
-- [ ] #5 A dead or refusing daemon never blocks or throws into the app
+- [x] #1 producers/js/ exists with AGENTS.md, its CLAUDE.md symlink and inspector-producer.js under 600 lines; :repo-checks stays green
+- [x] #2 Every frame the producer sends is one JSON object per WebSocket send, never an array, and hello is the first
+- [x] #3 Frames are flushed only after helloAck; a reconnect sends resumeSessionId; backoff runs 250, 500, 1000, 2000, 4000, 5000 ms and resets on helloAck
+- [x] #4 The send queue holds at most 512 frames and 8 Mi chars, drops the oldest, and stats().dropped counts every drop
+- [x] #5 A dead or refusing daemon never blocks or throws into the app
 - [ ] #6 mono, ms, reqBytes, resBytes, seq and bytes are JSON integers, and seq is one counter for calls and signals taken right after mono
-- [ ] #7 signReq is answered with a signRes carrying the requestId and the exact error text in the ticket; signalReq with a signalErr reading 'no provider for <tag>/<name>; registered: none'
-- [ ] #8 start() refuses a host outside 127.0.0.1, localhost, ::1 and 10.0.2.2, iOS without platform, and Android with neither reactNative nor platform, each with its exact [inspector] line, installs nothing and never throws
-- [ ] #9 signal() over 64 KB sends the prefix bytes with dataTruncated, as text when valid UTF-8 and as dataB64 when the cut splits a character
-- [ ] #10 The canary is assigned at module top level to globalThis.__INSPECTOR_PRODUCER__
-- [ ] #11 CI's web job checks typeof WebSocket and runs node --test over producers/js/test before Gradle
-- [ ] #12 docs/schema.md gains signReq and signRes, lists discarded, states the second-implementation rules and the corrected disconnected-queue rule; Wire.kt:21-22 is corrected
-- [ ] #13 Each test in the ticket's table is shown red as stated, then restored
+- [x] #7 signReq is answered with a signRes carrying the requestId and the exact error text in the ticket; signalReq with a signalErr reading 'no provider for <tag>/<name>; registered: none'
+- [x] #8 start() refuses a host outside 127.0.0.1, localhost, ::1 and 10.0.2.2, iOS without platform, and Android with neither reactNative nor platform, each with its exact [inspector] line, installs nothing and never throws
+- [x] #9 signal() over 64 KB sends the prefix bytes with dataTruncated, as text when valid UTF-8 and as dataB64 when the cut splits a character
+- [x] #10 The canary is assigned at module top level to globalThis.__INSPECTOR_PRODUCER__
+- [x] #11 CI's web job checks typeof WebSocket and runs node --test over producers/js/test before Gradle
+- [x] #12 docs/schema.md gains signReq and signRes, lists discarded, states the second-implementation rules and the corrected disconnected-queue rule; Wire.kt:21-22 is corrected
+- [x] #13 Each test in the ticket's table is shown red as stated, then restored
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
 - [ ] #1 Every acceptance criterion is Verified in the qa-verifier's table, with the command and the decisive line of output
-- [ ] #2 Each new guard was proven in both directions: broken, seen failing, restored
+- [x] #2 Each new guard was proven in both directions: broken, seen failing, restored
 - [ ] #3 No client, employer or product name in the ticket, the diff, or the commit message
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Built by bob, ready for QA. Not committed.
+
+Files: producers/js/{AGENTS.md, CLAUDE.md -> AGENTS.md, inspector-producer.js (465 lines), test/fake-ws.js, test/transport.test.js, test/replies.test.js, test/config.test.js, test/utf8.test.js}; .github/workflows/ci.yml (two steps in the web job, after Set up Node, before any Gradle step); docs/schema.md; inspector-model/.../Wire.kt (comment only); docs/decisions/capture.md (the **JavaScript producers.** paragraph, appended at the end).
+
+Green: node --test producers/js/test/*.test.js -> tests 41, pass 41, fail 0 (Node 23.3.0 locally; no Node-23-only API used). node scripts/check-web-static.js -> 151 checks, 0 failed. ./gradlew :repo-checks:test :inspector-model:jvmTest -> BUILD SUCCESSFUL; the repo-checks suites ran fresh (AgentGuideTest 5, DecisionsTest 5, FileBudgetTest 1, NoTodoTest 1, all 0 failures) with producers/ listed by git ls-files --others.
+
+Red, each by mutating the real file and restoring it byte-identical (cmp), re-run against the final file:
+- backoff cap removed (backoffMs * 2 uncapped): transport fail 1, 'backoff runs ...' got 8000, 16000, 32000 where 5000 was expected
+- drop removed (the ring's while loop deleted): transport fail 3, dropped 0 where 88 was expected; char test kept 12031182 chars; the log ladder lost the first-drop line
+- two frames joined (flush sends '[a,b]'): transport fail 7; first is 'one object per send: [{"type":"signal"...' actual false
+- flush unbounded (budget break deleted): transport fail 1, 'drained over 1 ticks'
+- signReq handler deleted: replies fail 1 (sent 1 where 2 expected); signalReq handler deleted: replies fail 1
+- allowlist removed: config fail 5, one for each refused host (start returned true)
+- chars counted instead of bytes (utf8Length returns end - from): utf8 fail 4, 'café' 4 where 5 was expected
+- CI WebSocket step: node --no-experimental-websocket -e <check> exits 1; without the flag it exits 0
+
+Also measured: the built :inspector-model classes run through InspectorJson from a small Java probe. mono 1234 decodes; 1234.5 and 1234.0 throw JsonDecodingException 'Unexpected symbol . in numeric literal at path: $.signal.mono'; an array frame throws 'Expected JsonObject, but had JsonArray'. Every frame kind the producer sends (hello, signal small/object/truncated-text/truncated-b64, signRes, signalErr, bye) decodes as its WireMsg type. This backs schema.md's new 'Second implementations' rules.
+
+Choices the ticket left open, for QA and the architect:
+- The first-drop log line had no exact text. It reads '[inspector] the queue is full while the daemon is away; dropping the oldest calls', once per outage, and only during an outage. A drop while connected is counted in stats().dropped but not logged.
+- start() also refuses with console.error, beyond the three listed refusals: missing appId/appVersion strings ('not started: pass appId and appVersion as strings'), a port that is not 1..65535, a missing XMLHttpRequest ('not started: XMLHttpRequest is not available here', which the ticket requires to return false), and a missing WebSocket.
+- Android without platform refuses with the reactNative line ('pass reactNative: require(...) or platform') even when reactNative is passed, until KIN-163 adds the Platform.constants rule in platformFrom(). iOS is told by reactNative.Platform.OS === 'ios'.
+- device/osVersion default to 'unknown' when config gives none; nothing is read from reactNative yet.
+- stop() sends bye only once acked, closes the socket, clears timers and discards the queue without flushing it. stats().dropped is cumulative for the producer's life.
+- signal(tag, name) with data undefined sends no payload and no bytes; null is a payload ('null').
+- Test seam: module.exports._test = { createProducer(deps), utf8Length, utf8Prefix, utf8Decode, base64, CANARY, RING_FRAMES, RING_CHARS, FLUSH_CHARS }. Not consumer surface; config.test.js holds the public keys to exactly start, signal, stats, stop.
+
+Headroom risk for KIN-164: the file is 465 of 600 lines, leaving 135 lines for the XHR wrap, the allowlist predicate and KIN-163's emulator rule.
+
+Not run: :repo-checks covers the folder, but there is no Gradle task for the JS tests, so only CI's web job runs them. check-client-names.sh was not run (no terms file in this session). No device or Hermes run: measurements 2, 3 and 6 are the ROADMAP's, not mine.
+
+QA final (Doug), after fix rounds. Live checks against a real daemon: resume after restart with the same session id; ring keeps the newest 512 (archive 517 rows, o1499..a5, seq/mono in order); log lines print once each; replay re-sign refused in 172 ms (430 ms under a full ring) versus the 30 s timeout; signals/request gives 502 'no provider for cache/orders; registered: none'; >64 KB signals arrive byte-exact as prefix bytes, dataB64 on a split character; every test guard red in a snapshot. Suites: node --test producers/js/test/*.test.js 44/44; check-web-static.js 151/0; :repo-checks:test 39/0; :inspector-model:jvmTest 172/0. AC #6 stays unticked: Verified for mono, seq and bytes; ms, reqBytes and resBytes are not observable until KIN-164 adds txn frames. DoD #1 and #3 stay unticked: DoD #1 needs AC #6; the name scan (8 terms, no match) ran in QA round 1 only, so rerun it before commit. Not verified: Node 22 (none on the machine), Hermes, devices.
+<!-- SECTION:NOTES:END -->
