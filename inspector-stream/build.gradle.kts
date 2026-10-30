@@ -66,6 +66,8 @@ tasks.withType<Test>().named { it == "testAndroidHostTest" }.configureEach {
     // The same golden file as jvmTest, read and never written: see the regenerate property below.
     inputs.files(rootProject.layout.projectDirectory.file("api/inspector-stream-public-api.txt"))
         .withPathSensitivity(PathSensitivity.RELATIVE)
+    // EmulatorDetectionTest reads its profiles from the producer's fixtures; the class is below.
+    jvmArgumentProviders += ProducerFixturesArgument(rootProject.file("producers/js/fixtures"))
 }
 
 // Gradle's own -D lands on the daemon, not the forked test JVM, so forward it explicitly. To jvmTest
@@ -74,4 +76,18 @@ private val regenerateApi = providers.systemProperty("inspector.api.regenerate")
 
 tasks.named<Test>("jvmTest") {
     systemProperty("inspector.api.regenerate", regenerateApi.get())
+}
+
+/*
+ * The JavaScript producer's shared fixtures, read at run time from outside this module, so the
+ * folder is a declared input: an edited fixture must re-run the test, and the path is relative so
+ * the cache survives a checkout elsewhere. No buildSrc, so each reader declares its own copy of
+ * this class; `inspector-model/build.gradle.kts` has the reasoning.
+ */
+class ProducerFixturesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.producerFixtures=${dir.absolutePath}")
 }

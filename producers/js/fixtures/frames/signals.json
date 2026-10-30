@@ -1,0 +1,25 @@
+{
+  "scenario": {
+    "about": "Signals with each payload kind. The clock is fractional and steps back once: mono is floored and never decreases, and seq counts in program order.",
+    "start": {
+      "appId": "dev.example.app",
+      "appVersion": "1.4.0",
+      "platform": "android-device"
+    },
+    "steps": [
+      {"now":1500.75,"signal":["screen","Home"],"data":{"tab":"orders"}},
+      {"now":1499.2,"signal":["state","CartViewModel"],"data":"loading"},
+      {"now":1502.9,"signal":["session","logout"]},
+      {"now":1503,"signal":["cache","prefs"],"data":null},
+      {"now":1504.5,"signal":["state","Profile"],"data":{"name":"Zoë 🙂","items":[1,2.5,true]}}
+    ]
+  },
+  "frames": [
+    {"type":"hello","client":{"v":1,"appId":"dev.example.app","appVersion":"1.4.0","platform":"android-device","device":"unknown","osVersion":"unknown","buildType":"debug"}},
+    {"type":"signal","signal":{"v":1,"id":"00000000","ts":"2026-10-30T12:00:00.000Z","mono":1500,"tag":"screen","name":"Home","bytes":16,"seq":1},"data":"{\"tab\":\"orders\"}"},
+    {"type":"signal","signal":{"v":1,"id":"00000001","ts":"2026-10-30T12:00:00.000Z","mono":1500,"tag":"state","name":"CartViewModel","bytes":9,"seq":2},"data":"\"loading\""},
+    {"type":"signal","signal":{"v":1,"id":"00000002","ts":"2026-10-30T12:00:00.000Z","mono":1502,"tag":"session","name":"logout","seq":3}},
+    {"type":"signal","signal":{"v":1,"id":"00000003","ts":"2026-10-30T12:00:00.000Z","mono":1503,"tag":"cache","name":"prefs","bytes":4,"seq":4},"data":"null"},
+    {"type":"signal","signal":{"v":1,"id":"00000004","ts":"2026-10-30T12:00:00.000Z","mono":1504,"tag":"state","name":"Profile","bytes":41,"seq":5},"data":"{\"name\":\"Zoë 🙂\",\"items\":[1,2.5,true]}"}
+  ]
+}

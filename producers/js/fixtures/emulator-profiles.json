@@ -1,0 +1,154 @@
+{
+  "profiles": [
+    {
+      "name": "the AVD that produced the mislabelled sessions",
+      "provenance": "transcribed",
+      "note": "ro.* from a booted API 34 AVD. An archive on this machine holds 18 sessions from this exact image recorded as android-device, which is the defect the Kotlin rule exists for.",
+      "build": {
+        "hardware": "ranchu",
+        "board": "goldfish_arm64",
+        "device": "emu64a",
+        "product": "sdk_gphone64_arm64",
+        "brand": "google",
+        "model": "sdk_gphone64_arm64",
+        "fingerprint": "google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.050/12077443:userdebug/dev-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "the newest AVD image",
+      "provenance": "transcribed",
+      "note": "ro.* from a booted API 37 AVD. Different device and product strings from the API 34 image, which is the churn the old marketing-string match could not survive.",
+      "build": {
+        "hardware": "ranchu",
+        "board": "goldfish_arm64",
+        "device": "emu64a16k",
+        "product": "sdk_gphone16k_arm64",
+        "brand": "google",
+        "model": "sdk_gphone16k_arm64",
+        "fingerprint": "google/sdk_gphone16k_arm64/emu64a16k:17/CP31.260623.012/16064790:user/dev-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "the strings the old check looked for",
+      "provenance": "transcribed",
+      "note": "An older AVD, the shape the replaced check was written against. Keeping it passing is the whole reason the marketing-string rules were kept rather than deleted.",
+      "build": {
+        "hardware": "goldfish_x86",
+        "board": "goldfish_x86",
+        "device": "generic_x86",
+        "product": "sdk_google_phone_x86",
+        "brand": "generic_x86",
+        "model": "Android SDK built for x86",
+        "fingerprint": "generic_x86/sdk_google_phone_x86/generic_x86:8.0.0/OSR1.170901.032/1:user/release-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "hardware alone is enough",
+      "provenance": "constructed",
+      "note": "Every other field blank, so this asserts the ro.hardware rule and nothing else. It is the rule that is meant to hold when image branding changes again.",
+      "build": {
+        "hardware": "ranchu",
+        "board": "",
+        "device": "",
+        "product": "",
+        "brand": "",
+        "model": "",
+        "fingerprint": ""
+      },
+      "expect": { "kotlin": true, "js": false, "jsReason": "RN exposes no HARDWARE" }
+    },
+    {
+      "name": "the product alone is enough",
+      "provenance": "constructed",
+      "note": "Every field blank but the product, which JS reads out of the fingerprint. On every real image here the device or the model fires as well, so without this nothing would show that the product is read at all; it does for the product what 'hardware alone is enough' does for the hardware.",
+      "build": {
+        "hardware": "",
+        "board": "",
+        "device": "",
+        "product": "sdk_gphone64_arm64",
+        "brand": "",
+        "model": "",
+        "fingerprint": "acme/sdk_gphone64_arm64/phone:14/UE1A.230829.050/12077443:userdebug/dev-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "Cuttlefish",
+      "provenance": "transcribed",
+      "note": "Cuttlefish, Android's own cloud emulator. Its brand and fingerprint carry no emulator tell, so in JS the device and product taken from the fingerprint are what fire.",
+      "build": {
+        "hardware": "cutf_cvm",
+        "board": "cutf_cvm",
+        "device": "vsoc_arm64",
+        "product": "aosp_cf_arm64_phone",
+        "brand": "Android",
+        "model": "Cuttlefish arm64 phone",
+        "fingerprint": "Android/aosp_cf_arm64_phone/vsoc_arm64:14/UPB5.230623.003/1:userdebug/test-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "Genymotion",
+      "provenance": "transcribed",
+      "note": "Genymotion, which is VirtualBox underneath.",
+      "build": {
+        "hardware": "vbox86",
+        "board": "unknown",
+        "device": "vbox86p",
+        "product": "vbox86p",
+        "brand": "generic",
+        "model": "Custom Phone - 11.0.0 - API 30 - 1080x1920",
+        "fingerprint": "generic/vbox86p/vbox86p:11/RSR1.201013.001/6903271:userdebug/test-keys"
+      },
+      "expect": { "kotlin": true, "js": true }
+    },
+    {
+      "name": "a Pixel",
+      "provenance": "representative",
+      "note": "Representative vendor values, not transcribed from attached hardware: no phone has been attached. ro.hardware is the SoC codename, never a QEMU board.",
+      "build": {
+        "hardware": "zuma",
+        "board": "zuma",
+        "device": "husky",
+        "product": "husky",
+        "brand": "google",
+        "model": "Pixel 8 Pro",
+        "fingerprint": "google/husky/husky:14/UD1A.230803.041/10808477:user/release-keys"
+      },
+      "expect": { "kotlin": false, "js": false }
+    },
+    {
+      "name": "a Samsung",
+      "provenance": "representative",
+      "note": "Representative vendor values, not transcribed from attached hardware. ro.hardware is the vendor platform.",
+      "build": {
+        "hardware": "qcom",
+        "board": "kalama",
+        "device": "dm3q",
+        "product": "dm3qxxx",
+        "brand": "samsung",
+        "model": "SM-S918B",
+        "fingerprint": "samsung/dm3qxxx/dm3q:14/UP1A.231005.007/S918BXXU4BWLB:user/release-keys"
+      },
+      "expect": { "kotlin": false, "js": false }
+    },
+    {
+      "name": "nothing known",
+      "provenance": "constructed",
+      "note": "A JVM unit test against the stock android.jar sees null for every Build field. The answer there is uninformative either way; what matters is that it is an answer.",
+      "build": {
+        "hardware": null,
+        "board": null,
+        "device": null,
+        "product": null,
+        "brand": null,
+        "model": null,
+        "fingerprint": null
+      },
+      "expect": { "kotlin": false, "js": false }
+    }
+  ]
+}

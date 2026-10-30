@@ -1,0 +1,23 @@
+{
+  "scenario": {
+    "about": "Android with reactNative and no platform: Platform.constants of the API 34 AVD in emulator-profiles.json label it android-emulator. Unnamed fields default.",
+    "start": {
+      "appId": "dev.example.app",
+      "appVersion": "1.4.0",
+      "reactNative": {
+        "Platform": {
+          "OS": "android",
+          "constants": {
+            "Fingerprint": "google/sdk_gphone64_arm64/emu64a:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+            "Model": "sdk_gphone64_arm64",
+            "Brand": "google",
+            "Manufacturer": "Google"
+          }
+        }
+      }
+    }
+  },
+  "frames": [
+    {"type":"hello","client":{"v":1,"appId":"dev.example.app","appVersion":"1.4.0","platform":"android-emulator","device":"unknown","osVersion":"unknown","buildType":"debug"}}
+  ]
+}

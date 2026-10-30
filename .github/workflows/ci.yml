@@ -129,6 +129,16 @@ jobs:
         with:
           node-version: '22'
 
+      # Node's global WebSocket: the JavaScript producer dials the daemon with a global WebSocket, and
+      # the `site` measurement below drives Chrome through it (scripts/lib/measure-cdp.js). Checked
+      # first, so a runner Node without it fails here, by name, rather than inside the `site` measurement.
+      - name: Node has a global WebSocket
+        run: node -e "process.exit(typeof WebSocket==='function'?0:1)"
+
+      # A shell glob of explicit files, so the helpers in producers/js/test are never run as tests.
+      - name: JavaScript producer tests
+        run: node --test producers/js/test/*.test.js
+
       - name: Static web checks — network call sites, stylesheet audits, parser, mirror cases
         run: node scripts/check-web-static.js
 

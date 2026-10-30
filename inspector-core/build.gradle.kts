@@ -105,3 +105,21 @@ private val regenerateApi = providers.systemProperty("inspector.api.regenerate")
 tasks.named<Test>("jvmTest") {
     systemProperty("inspector.api.regenerate", regenerateApi.get())
 }
+
+/*
+ * The JavaScript producer's shared fixtures, read at run time from outside this module, so the
+ * folder is a declared input: an edited fixture must re-run the test, and the path is relative so
+ * the cache survives a checkout elsewhere. No buildSrc, so each reader declares its own copy of
+ * this class; `inspector-model/build.gradle.kts` has the reasoning.
+ */
+class ProducerFixturesArgument(
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    val dir: File,
+) : CommandLineArgumentProvider {
+    override fun asArguments(): Iterable<String> = listOf("-Dinspector.producerFixtures=${dir.absolutePath}")
+}
+
+tasks.named<Test>("jvmTest") {
+    jvmArgumentProviders += ProducerFixturesArgument(rootProject.file("producers/js/fixtures"))
+}

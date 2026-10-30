@@ -2339,6 +2339,32 @@ Not verified. Placed by the product owner on 2026-10-22, checked in Chrome and a
 
   cost: not recorded — built in the 2026-10-22/23 coordinated run, one developer session, no QA before merge; QA after merge, 1 round
 
+*The entry below was found on 2026-10-30 by QA, outside any item, while the design note for
+`item:producer-react-native` was being checked. Placed by the product owner the same day, at the
+maintainer's ruling, straight before that item in §5 → "Order from here".*
+
+- ~~**MCP says a discarded body was no body.**~~ **Done, 2026-10-30.** KIN-161 and KIN-171 are Done on QA's pass, two tickets, one round, not yet committed or merged at this close. *Ticket label:* `item:mcp-discarded-body-text`. *The
+  user and the problem:* an agent calling `get_body` on a redirect hop or a retried attempt. The row
+  carries `resBodyOmitted: "discarded"` and `resBytes` 0, and MCP answers "This res had no body.",
+  because `explainMissingBody` in `mcp/TransactionTools.kt` checks the byte count before the recorded
+  reason. QA reproduced it live. It breaks `docs/decisions/capture.md`'s rule, "Both UIs check the
+  recorded reason **before** the byte count", on the surface an agent reads, and the agent takes the
+  answer as a fact about the server. *Why now:* it is a false fact, it is small, and
+  `item:producer-react-native` depends on it, because that item's surface ticket reorders the same
+  function for `streaming` at 0. *Acceptance criteria:* for a `discarded` row at 0 bytes, `get_body`
+  says the body was discarded when Ktor cancelled the hop, never that there was no body; every
+  recorded reason is checked before the byte count, so a `streaming` or `contentType` row at 0 does
+  not read as "no body" either; a row with no reason and 0 bytes still says it had no body; a test for
+  each, proven red against today's order. *Out of scope:* the producer's `streaming` wording, which is
+  `item:producer-react-native`'s; the web UI and exports, which already check the reason first.
+  *Surfaces:* MCP. **Size:** S.
+
+  **What was built and learned.** `explainMissingBody` in `mcp/TransactionTools.kt` now reads the recorded omission before the byte count, as `capture.md` says both UIs do. Three things came of it. (1) `discarded` at 0 bytes says the side's body "was not read: the client discarded this attempt to make the next one" and "does not mean it was empty"; QA saw "This res had no body." from a daemon built at the base and the new text from the fixed one, over real MCP. (2) `streaming` and `contentType` at 0 bytes no longer read as "no body" either. That was already true of the code after KIN-161's reorder, but nothing pinned it, so KIN-171 added the two tests; `streaming` reads "…was streamed and never held in memory…" and `contentType` reads "…outside the capture allowlist. 0 bytes were sent…". (3) QA found a gap the roadmap criteria did not name: `BodyOmission` is an open string set, and a reason this build does not know (`someFutureReason`) at 0 bytes still read "had no body". It now reads "The res body was not captured (`someFutureReason`). 0 bytes were recorded.", as the Markdown export does. **An intended behaviour change:** an unknown reason with bytes above 0 now names the reason instead of "is not in the archive". A row with no reason at 0 bytes still says "This res had no body."; the unchanged rows (content type at 1234 B, streaming at 9999 B, no reason at 77 B, a captured body, discarded) read identically. The guards were proven red by QA: three ways in KIN-161's snapshot, and for KIN-171 four failed against `main`'s order, one with the branch removed, one with the reason text dropped, three with the unknown reason ordered before the known ones. `:inspector-daemon:test` 620 passed, 0 failed; `:repo-checks:test` 39 passed, 0 failed. The new unit tests cover the `res` side only; the `req` side was checked live.
+
+  **Left open.** (a) *A follow-up candidate for the product owner.* The DISCARDED wording "to make the next one" may be false when an app cancels its own call, because `teeBody` records DISCARDED then too. It was not reproduced. The Markdown export's "discarded this attempt before reading its body" holds in every case, so aligning MCP to it is the suggestion. (b) A content-type row with no declared type reads "content type was not declared is outside the capture allowlist", which is ungrammatical; it predates the item and `KIN-165` inherits it. The client-name scan was not run by QA (no term list); the conductor runs it before commit.
+
+  cost: 6 calls (engineer 2, QA 2, delivery-tracker 2), ~0.45M tokens, ~45 min, Small, 2 rounds
+
 ---
 
 ## 4. ~~Maven Central~~ — done, 1.0.1 published 2026-09-21
@@ -2440,6 +2466,7 @@ tag cut before any of this existed.
 | ~~`#/txn/<id>` has a visible way back~~ **Done, 2026-10-23** (KIN-141, PR #183, merge `abb3622`; one round of QA) *(was row 28)* | §3 → Bugs found | `item:web-txn-page-way-back` | S |
 | ~~A brushed stretch under a filter says older matches may be in it~~ **Done, 2026-10-23** (KIN-142, PR #184, merge `2af3168`; one round of QA) *(was row 29)* | §3 → Bugs found | `item:web-stretch-says-older-matches` | S |
 | ~~The Central bundle ships only what Central requires~~ **Done, 2026-10-23** (no ticket, PR #179, merge `936dbbf`; one round of QA) *(was row 13g)* | §6 → Release 1.4.0 | `item:central-bundle-trim` | S |
+| ~~MCP says a discarded body was no body~~ **Done, 2026-10-30** (KIN-161, KIN-171; QA passed, not yet committed at this close) *(was row 41a)* | §3 → Bugs found | `item:mcp-discarded-body-text` | S |
 
 ### Phase E — one `timeline()`, so MCP agrees with the model
 
